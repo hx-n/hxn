@@ -178,7 +178,7 @@ fn c_method(library: &Library, interface: &Interface, method: &Method) -> String
         Type::Bool => (Some("i32"), format!("Ok(i32::from({call}))")),
         Type::I32 => (Some("i32"), format!("Ok({call})")),
         Type::F64 => (Some("f64"), format!("Ok({call})")),
-        Type::Str => (Some("Buf"), format!("Ok(Buf::from({call}))")),
+        Type::Str | Type::Bytes => (Some("Buf"), format!("Ok(Buf::from({call}))")),
         Type::Handle { .. } => (
             Some("RawHandle"),
             handed(library, method, &call, "Handle::into_raw"),
@@ -190,7 +190,6 @@ fn c_method(library: &Library, interface: &Interface, method: &Method) -> String
             Some("RawHandle"),
             format!("Ok(Handle::into_raw(AtomicFlag::into_int({call})))"),
         ),
-        Type::Bytes => unreachable!("not a result type"),
     };
     let out_argument = match out {
         Some(ty) => {
@@ -334,10 +333,10 @@ fn hl_letter(library: &Library, ty: &Type) -> String {
         Type::I32 => String::from("i"),
         Type::F64 => String::from("d"),
         // A result: UTF-16 bytes for `String.fromUCS2`.
-        Type::Str => String::from("B"),
+        // Bytes are the VM's own, with their length written beside them.
+        Type::Str | Type::Bytes => String::from("B"),
         Type::Handle { interface, .. } => format!("X{}_", abstract_name(library, interface)),
         Type::AtomicInt | Type::AtomicBool => format!("X{}_", cell_abstract(library)),
-        Type::Bytes => unreachable!("not a result type"),
     }
 }
 
@@ -414,6 +413,11 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
             Type::Void => unreachable!("not a parameter type"),
         }
     }
+    if method.returns == Type::Bytes {
+        // The VM's bytes do not say how long they are.
+        params.push(String::from("out: *mut i32"));
+        signature.push_str("Ri");
+    }
     let mut call = call(interface, method, &arguments);
     if method.blocking {
         // Everything the call reads was copied or borrowed above.
@@ -432,7 +436,12 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
             "*mut Managed",
             format!("Ok(manage(AtomicFlag::into_int({call})))"),
         ),
-        Type::Bytes => unreachable!("not a result type"),
+        Type::Bytes => (
+            "*mut vbyte",
+            format!(
+                "let data = {call};\n            if out.is_null() {{\n                return Err(Fault::Null.into());\n            }}\n            *out = i32::try_from(data.len()).map_err(|_| Fault::TooLarge)?;\n            Ok(bytes(&data))"
+            ),
+        ),
     };
     body.push(result);
     let name = export(library, &interface.name, &method.name);
@@ -458,7 +467,7 @@ pub fn hl_adapter(library: &Library, core: &str) -> String {
     out.push_str("#[allow(unused_imports)]\nuse std::sync::atomic::AtomicI32;\n\n");
     out.push_str("#[allow(unused_imports)]\nuse hxn_abi::{AtomicFlag, Fault, memory};\n");
     out.push_str(
-        "#[allow(unused_imports)]\nuse hxn_hl::{Managed, blocking, define_prim, handle, manage, prim, slice, string, utf16, vbyte, vstring};\n",
+        "#[allow(unused_imports)]\nuse hxn_hl::{Managed, blocking, bytes, define_prim, handle, manage, prim, slice, string, utf16, vbyte, vstring};\n",
     );
     out.push_str(&imports(library, core));
     for interface in &library.interfaces {

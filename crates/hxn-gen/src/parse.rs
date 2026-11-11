@@ -330,6 +330,9 @@ impl Scope<'_> {
                 "a cell the library keeps is returned as `Arc<AtomicI32>` or `Arc<AtomicFlag>`",
             );
         }
+        if wrapped(ty, "Vec").and_then(path_name).as_deref() == Some("u8") {
+            return Ok((Type::Bytes, false));
+        }
         let plain = match path_name(ty).as_deref() {
             Some("bool") => Type::Bool,
             Some("i32") => Type::I32,
@@ -338,7 +341,7 @@ impl Scope<'_> {
             _ => {
                 return error(
                     ty.span(),
-                    "a result is one of (), bool, i32, f64, String, Arc<AtomicI32>, Arc<AtomicFlag>, an interface or an Option of one, or a Result of these",
+                    "a result is one of (), bool, i32, f64, String, Vec<u8>, Arc<AtomicI32>, Arc<AtomicFlag>, an interface or an Option of one, or a Result of these",
                 );
             }
         };

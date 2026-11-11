@@ -54,6 +54,12 @@ impl Counter {
         }
     }
 
+    /// `count` bytes, each the value's low byte. Fails for a negative count.
+    pub fn fill(&self, count: i32) -> Result<Vec<u8>, &'static str> {
+        let count = usize::try_from(count).map_err(|_| "a negative count")?;
+        Ok(vec![self.value.to_le_bytes()[0]; count])
+    }
+
     /// Adds to the value and returns it. Fails if it would overflow. A
     /// locked counter leaves the value as it is.
     pub fn add(&mut self, amount: i32) -> Result<i32, Overflow> {

@@ -70,6 +70,8 @@ filesystem `#include "counter.h"` would then find the generated one.
 - A function exposed to Haxe takes `&self`, `&mut self` or `self`, or no
   receiver. `self` by value closes the Haxe object. `new` is the constructor.
   No generics.
+- Text is taken as `&str` and returned as `String`; bytes are taken as
+  `&[u8]` and returned as `Vec<u8>`.
 - Another interface is taken as `&T` or `&mut T` and returned as `T`, with
   `Option` for one that may be absent. It is never taken by value and never
   returned by reference.
@@ -158,6 +160,8 @@ filesystem `#include "counter.h"` would then find the generated one.
   tests/counter/run.sh emcc
   tests/counter/run.sh gen-hl <vm>
   tests/counter/run.sh gen-cpp
+  tests/counter/run.sh gen-wasm <ash>
+  tests/counter/run.sh gen-emcc
   ```
 
   Ash is run in its hybrid, JIT and interpreter modes, which differ in how

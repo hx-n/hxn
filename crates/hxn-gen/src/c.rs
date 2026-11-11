@@ -30,11 +30,10 @@ fn declaration(library: &Library, interface: &Interface, method: &Method) -> Str
         Type::Void => {}
         Type::Bool | Type::I32 => params.push(String::from("int32_t *out")),
         Type::F64 => params.push(String::from("double *out")),
-        Type::Str => params.push(String::from("hxn_buf *out")),
+        Type::Str | Type::Bytes => params.push(String::from("hxn_buf *out")),
         Type::Handle { .. } | Type::AtomicInt | Type::AtomicBool => {
             params.push(String::from("hxn_handle **out"));
         }
-        Type::Bytes => unreachable!("not a result type"),
     }
     params.push(String::from("hxn_buf *err"));
     format!(
@@ -144,10 +143,14 @@ fn glue(library: &Library, interface: &Interface, method: &Method) -> String {
             Some("hxn_buf out = HXN_BUF_EMPTY;"),
             Some("hxn::take_string(out)"),
         ),
+        Type::Bytes => (
+            "Array<unsigned char>",
+            Some("hxn_buf out = HXN_BUF_EMPTY;"),
+            Some("hxn::take_bytes(out)"),
+        ),
         Type::Handle { .. } | Type::AtomicInt | Type::AtomicBool => {
             ("void *", Some("hxn_handle *out = 0;"), Some("out"))
         }
-        Type::Bytes => unreachable!("not a result type"),
     };
     if let Some(out) = out {
         locals.push(String::from(out));

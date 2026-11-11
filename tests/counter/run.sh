@@ -9,11 +9,13 @@
 # haxe/Generated.hx:
 #   run.sh gen-hl [vm]
 #   run.sh gen-cpp
+#   run.sh gen-wasm [ash]
+#   run.sh gen-emcc
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "$here/../.." && pwd)"
-runtime="${1:?usage: run.sh hl [vm] | cpp | wasm [ash] | emcc | gen-hl [vm] | gen-cpp}"
+runtime="${1:?usage: run.sh hl [vm] | cpp | wasm [ash] | emcc | gen-hl [vm] | gen-cpp | gen-wasm [ash] | gen-emcc}"
 work="$root/target/counter-$runtime"
 mkdir -p "$work"
 
@@ -71,48 +73,64 @@ case "$runtime" in
 			-D COUNTER_LIB="$root/target/debug/libcounter.a"
 		"$work/Main" | tee "$work/out.txt"
 		;;
-	wasm)
+	wasm | gen-wasm)
 		ash="$(command -v "${2:-ash}")"
+		if [ "$runtime" = gen-wasm ]; then
+			generate
+			package=counter-gen-hl archive=libcounter_gen_hl.a main=Generated
+			adapter="$work/gen/hl/adapter.rs" classes="$work/gen/haxe/hl"
+		else
+			package=counter-hl archive=libcounter_hl.a main=Main
+			adapter="$here/hl/src/lib.rs" classes="$here/haxe/hl"
+		fi
 		# A side module is position-independent, which the shipped std is not,
 		# so std is rebuilt; only the archive is built, since nothing here can
 		# link a wasm library whose imports are the program's.
 		RUSTFLAGS="-C relocation-model=pic -C target-feature=+mutable-globals" \
-			cargo rustc --manifest-path "$root/Cargo.toml" -p counter-hl --crate-type staticlib \
+			cargo rustc --manifest-path "$root/Cargo.toml" -p "$package" --crate-type staticlib \
 			--target wasm32-wasip1 -Z build-std=std,panic_abort
 		lld="$(rustc --print sysroot)/lib/rustlib/$(rustc -vV | sed -n 's/^host: //p')/bin/rust-lld"
 		exports=()
 		while read -r resolver; do
 			exports+=("--export=$resolver")
-		done < <(tr '\n' ' ' < "$here/hl/src/lib.rs" | grep -o 'define_prim!( *hlp_[a-z_]*' | sed 's/define_prim!( *//')
+		done < <(tr '\n' ' ' < "$adapter" | grep -o 'define_prim!( *hlp_[a-z0-9_]*' | sed 's/define_prim!( *//')
 		# Undefined symbols become imports the program answers when it loads this.
 		"$lld" -flavor wasm --experimental-pic -shared --no-entry --gc-sections --no-export-dynamic \
 			--unresolved-symbols=import-dynamic "${exports[@]}" \
-			--whole-archive "$root/target/wasm32-wasip1/debug/libcounter_hl.a" --no-whole-archive \
+			--whole-archive "$root/target/wasm32-wasip1/debug/$archive" --no-whole-archive \
 			-o "$work/counter.wasm"
-		haxe -D wasm -cp "$root/haxe" -cp "$here/haxe" -cp "$here/haxe/hl" -main Main -hl "$work/main.hl"
+		haxe -D wasm -cp "$root/haxe" -cp "$here/haxe" -cp "$classes" -main "$main" -hl "$work/main.hl"
 		cd "$work"
 		# Ash finds the library beside the output and exports what it imports.
 		# With fibers a Haxe thread that waits suspends and lets the others run.
 		ASH_WASM_FIBERS=1 "$ash" --build main.wasm --target wasm32-wasip1 main.hl
 		"$ash" run main.wasm | tee "$work/out.txt"
 		;;
-	emcc)
+	emcc | gen-emcc)
+		if [ "$runtime" = gen-emcc ]; then
+			generate
+			package=counter-gen-c archive=libcounter_gen.a main=Generated
+			include="$work/gen/include" classes="$work/gen/haxe/cpp"
+		else
+			package=counter-c archive=libcounter.a main=Main
+			include="$here/c" classes="$here/haxe/cpp"
+		fi
 		command -v emcc >/dev/null || { echo "emcc is not on PATH; source emsdk_env.sh first" >&2; exit 2; }
 		# hxcpp takes CXX from the environment in place of emcc.
 		unset CC CXX
 		# Aborting panics, and a std rebuilt to match: the shipped one unwinds
 		# with wasm exceptions, which hxcpp's JavaScript-based ones cannot link.
 		RUSTFLAGS="-C panic=abort" \
-			cargo build --manifest-path "$root/Cargo.toml" -p counter-c \
+			cargo build --manifest-path "$root/Cargo.toml" -p "$package" \
 			--target wasm32-unknown-emscripten -Z build-std=std,panic_abort
 		# hxcpp assumes the host's 64 bits, and its UTF-16 strings reach for a
 		# Windows-only call under Emscripten.
-		haxe -D wasm -cp "$root/haxe" -cp "$here/haxe" -cp "$here/haxe/cpp" -main Main -cpp "$work" \
+		haxe -D wasm -cp "$root/haxe" -cp "$here/haxe" -cp "$classes" -main "$main" -cpp "$work" \
 			-D emscripten -D HXCPP_M32 -D disable_unicode_strings \
 			-D HXN_INCLUDE="$root/include" \
-			-D COUNTER_INCLUDE="$here/c" \
-			-D COUNTER_LIB="$root/target/wasm32-unknown-emscripten/debug/libcounter.a"
-		node "$work/Main.js" | tee "$work/out.txt"
+			-D COUNTER_INCLUDE="$include" \
+			-D COUNTER_LIB="$root/target/wasm32-unknown-emscripten/debug/$archive"
+		node "$work/$main.js" | tee "$work/out.txt"
 		;;
 	*)
 		echo "unknown runtime: $runtime" >&2

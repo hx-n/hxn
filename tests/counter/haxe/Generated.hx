@@ -220,6 +220,10 @@ class Generated {
 		check("empty text", counter.label("") == "=42");
 		check("bytes in", counter.sum(haxe.io.Bytes.ofHex("01020304ff")) == 265);
 		check("empty bytes", counter.sum(haxe.io.Bytes.alloc(0)) == 0);
+		var filled = counter.fill(3);
+		check("bytes out", filled.length == 3 && filled.get(0) == 42 && filled.get(2) == 42 && counter.sum(filled) == 126);
+		check("no bytes out", counter.fill(0).length == 0);
+		throws("a failure in place of bytes", () -> counter.fill(-1), "negative count");
 		check("a bool out", counter.isPositive());
 		check("a float in and out", counter.scaled(0.5) == 21);
 		counter.set(5, true);

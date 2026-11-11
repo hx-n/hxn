@@ -139,15 +139,18 @@ fn hl_native(interface: &Interface, method: &Method) -> String {
             Type::Void => unreachable!("not a parameter type"),
         }
     }
+    if method.returns == Type::Bytes {
+        // Where the library writes how many bytes it returned.
+        params.push(String::from("out:hl.Ref<Int>"));
+    }
     let (ty, body) = match &method.returns {
         Type::Void => (String::from("Void"), "{}"),
         Type::Bool => (String::from("Bool"), "\n\t\treturn false;"),
         Type::I32 => (String::from("Int"), "\n\t\treturn 0;"),
         Type::F64 => (String::from("Float"), "\n\t\treturn 0.;"),
-        Type::Str => (String::from("hl.Bytes"), "\n\t\treturn null;"),
+        Type::Str | Type::Bytes => (String::from("hl.Bytes"), "\n\t\treturn null;"),
         Type::Handle { interface: of, .. } => (hl_raw(of, &interface.name), "\n\t\treturn null;"),
         Type::AtomicInt | Type::AtomicBool => (String::from("CellRaw"), "\n\t\treturn null;"),
-        Type::Bytes => unreachable!("not a result type"),
     };
     let separator = if body == "{}" { " " } else { "" };
     format!(
@@ -180,6 +183,9 @@ fn hl_method(interface: &Interface, method: &Method) -> String {
             _ => arguments.push(name),
         }
     }
+    if method.returns == Type::Bytes {
+        arguments.push(String::from("outLength"));
+    }
     let call = format!(
         "Native.{}({})",
         local(&interface.name, &method.name),
@@ -201,6 +207,9 @@ fn hl_method(interface: &Interface, method: &Method) -> String {
         Type::Void => out.push_str(&format!("\n\t\t{call};\n")),
         Type::Str => out.push_str(&format!(
             "\n\t\treturn @:privateAccess String.fromUCS2({call});\n"
+        )),
+        Type::Bytes => out.push_str(&format!(
+            " {{\n\t\tvar outLength = 0;\n\t\tvar data = {call};\n\t\treturn @:privateAccess new haxe.io.Bytes(data, outLength);\n\t}}\n"
         )),
         Type::Handle {
             interface: of,
@@ -398,6 +407,10 @@ fn cpp_method(library: &Library, interface: &Interface, method: &Method) -> Stri
                 } else {
                     String::from("return owner.cell();")
                 });
+            }
+            Type::Bytes => {
+                body.push(format!("var data:haxe.io.BytesData = {call};"));
+                body.push(String::from("return haxe.io.Bytes.ofData(data);"));
             }
             _ => body.push(format!("return {call};")),
         }

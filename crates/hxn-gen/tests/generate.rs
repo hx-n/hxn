@@ -181,7 +181,7 @@ fn says_where_and_why_something_cannot_cross() {
         ),
         ("pub fn eat(&self, value: Thing) {}", "not by value"),
         (
-            "pub fn items(&self) -> Vec<u8> { todo!() }",
+            "pub fn items(&self) -> Vec<i32> { todo!() }",
             "a result is one of",
         ),
         (
@@ -586,6 +586,34 @@ fn a_shared_value_is_never_borrowed_exclusively() {
     let error = parse("thing", clash).unwrap_err();
     assert_eq!(error.line, 5);
     assert!(error.message.contains("is the weak reference to `Thing`"));
+}
+
+#[test]
+fn bytes_come_back_with_their_length() {
+    let source = "#[hxn::interface]\npub struct Disk;\n\n#[hxn::methods]\nimpl Disk {\n    pub fn read(&self, sector: i32) -> Result<Vec<u8>, String> { todo!() }\n}\n";
+    let library = parse("store", source).unwrap();
+    assert_eq!(library.interfaces[0].methods[0].returns, Type::Bytes);
+
+    let c = hxn_gen::c_adapter(&library, "store_core");
+    assert!(c.contains("out: *mut Buf, err: *mut Buf"));
+    assert!(c.contains("Ok(Buf::from(this.read(sector)?))"));
+    let glue = hxn_gen::cpp_glue(&library);
+    assert!(glue.contains("inline Array<unsigned char> disk_read(void *self, int sector)"));
+    assert!(glue.contains("return hxn::take_bytes(out);"));
+
+    // HashLink's bytes do not carry a length, so it is written beside them.
+    let hl = hxn_gen::hl_adapter(&library, "store_core");
+    assert!(hl.contains("this: *mut Managed, sector: i32, out: *mut i32) -> *mut vbyte"));
+    assert!(hl.contains("\"PXstore_disk_iRi_B\""));
+    assert!(hl.contains("*out = i32::try_from(data.len()).map_err(|_| Fault::TooLarge)?;"));
+
+    let haxe = &hxn_gen::haxe_hl(&library)[0].text;
+    assert!(haxe.contains("disk_read(self:DiskRaw, sector:Int, out:hl.Ref<Int>):hl.Bytes"));
+    assert!(haxe.contains("public function read(sector:Int):haxe.io.Bytes"));
+    assert!(haxe.contains("return @:privateAccess new haxe.io.Bytes(data, outLength);"));
+    let haxe = &hxn_gen::haxe_cpp(&library)[0].text;
+    assert!(haxe.contains("return haxe.io.Bytes.ofData(data);"));
+    assert!(hxn_gen::manifest(&library).contains("\"returns\": \"bytes\""));
 }
 
 // The fixture's manifest is committed, as a library's would be, so a change

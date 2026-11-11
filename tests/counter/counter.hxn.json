@@ -15,6 +15,15 @@
           "blocking": false
         },
         {
+          "name": "fill",
+          "docs": "`count` bytes, each the value's low byte. Fails for a negative count.",
+          "kind": "method",
+          "params": [{ "name": "count", "type": "i32" }],
+          "returns": "bytes",
+          "fallible": true,
+          "blocking": false
+        },
+        {
           "name": "add",
           "docs": "Adds to the value and returns it. Fails if it would overflow. A\nlocked counter leaves the value as it is.",
           "kind": "mutating",

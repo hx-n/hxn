@@ -67,7 +67,8 @@ pub struct Param {
 }
 
 /// The types that cross. A parameter is borrowed for the call and a result
-/// is handed over, so `Str` is `&str` coming in and `String` going out, and
+/// is handed over, so `Str` is `&str` coming in and `String` going out,
+/// `Bytes` is `&[u8]` and `Vec<u8>`, and
 /// an interface is `&T` or `&mut T` coming in and `T` going out. A shared
 /// interface may also be `Arc<T>` either way.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
