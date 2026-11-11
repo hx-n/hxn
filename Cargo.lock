@@ -43,6 +43,8 @@ name = "hxn-future"
 version = "0.1.0"
 dependencies = [
  "hxn-abi",
+ "krio-core",
+ "krio-runtime",
 ]
 
 [[package]]
@@ -51,4 +53,17 @@ version = "0.1.0"
 dependencies = [
  "hl_abi",
  "hxn-abi",
+]
+
+[[package]]
+name = "krio-core"
+version = "0.1.0"
+source = "git+https://github.com/darmie/krio?rev=ecf740f8de98965d3c0f238b4d22636318821836#ecf740f8de98965d3c0f238b4d22636318821836"
+
+[[package]]
+name = "krio-runtime"
+version = "0.1.0"
+source = "git+https://github.com/darmie/krio?rev=ecf740f8de98965d3c0f238b4d22636318821836#ecf740f8de98965d3c0f238b4d22636318821836"
+dependencies = [
+ "krio-core",
 ]

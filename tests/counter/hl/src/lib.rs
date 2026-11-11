@@ -118,6 +118,12 @@ pub unsafe extern "C" fn counter_greet_later(
 define_prim!(hlp_greet_later, counter_greet_later, "POBi_i_Xhxn_future_");
 
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_sum_later(limit: i32) -> *mut Managed {
+    unsafe { prim(|| Ok(manage(AnyFuture::from(counter_core::sum_later(limit))))) }
+}
+define_prim!(hlp_sum_later, counter_sum_later, "Pi_Xhxn_future_");
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn counter_abandoned() -> *mut Managed {
     unsafe { prim(|| Ok(manage(AnyFuture::from(counter_core::abandoned())))) }
 }

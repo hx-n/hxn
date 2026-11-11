@@ -62,6 +62,12 @@ class Counter {
 		return future.typed(future.takeText);
 	}
 
+	public static function sumLater(limit:Int):hxn.Future<Int> {
+		var future = new FutureHandle();
+		future.raw = untyped __cpp__("counter_glue::sum_later({0})", limit);
+		return future.typed(future.takeInt);
+	}
+
 	public static function abandoned():hxn.Future<Int> {
 		var future = new FutureHandle();
 		future.raw = untyped __cpp__("counter_glue::abandoned()");

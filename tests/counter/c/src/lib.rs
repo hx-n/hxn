@@ -121,6 +121,21 @@ pub unsafe extern "C" fn counter_greet_later(
 }
 
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_sum_later(
+    limit: i32,
+    out: *mut RawHandle,
+    err: *mut Buf,
+) -> Status {
+    unsafe {
+        guard(out, err, || {
+            Ok(Handle::into_raw(AnyFuture::from(counter_core::sum_later(
+                limit,
+            ))))
+        })
+    }
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn counter_abandoned(out: *mut RawHandle, err: *mut Buf) -> Status {
     unsafe {
         guard(out, err, || {

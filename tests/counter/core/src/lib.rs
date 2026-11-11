@@ -4,10 +4,11 @@
 
 use std::fmt;
 use std::sync::atomic::{AtomicI32, Ordering};
+use std::task::Poll;
 use std::thread::sleep;
 use std::time::Duration;
 
-use hxn_future::{Completer, Future, pending, spawn};
+use hxn_future::{Completer, Future, pending, spawn, stepped};
 
 static LIVE: AtomicI32 = AtomicI32::new(0);
 
@@ -66,6 +67,23 @@ pub fn greet_later(name: String, delay: Duration) -> Future<String> {
     spawn(move || {
         sleep(delay);
         Ok::<_, Overflow>(format!("hello {name}"))
+    })
+}
+
+/// The sum of 1 to `limit`, added one term a step.
+pub fn sum_later(limit: i32) -> Future<i32> {
+    let mut total: i32 = 0;
+    let mut next = 1;
+    stepped(move || {
+        if next > limit {
+            return Poll::Ready(Ok(total));
+        }
+        match total.checked_add(next) {
+            Some(sum) => total = sum,
+            None => return Poll::Ready(Err(Overflow)),
+        }
+        next += 1;
+        Poll::Pending
     })
 }
 

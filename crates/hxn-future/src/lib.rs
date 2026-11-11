@@ -15,18 +15,28 @@
 //! completer is dropped first it is rejected as [`Status::CANCELLED`], so a
 //! waiter is never left waiting on nothing.
 //!
-//! A wasm build without threads has nothing to wait on and nowhere to run
-//! work beside its caller. There [`Future::wait`] returns the state at once,
-//! leaving the host to yield and ask again, and [`spawn`] runs its work
-//! before it returns.
+//! # Without threads
+//!
+//! A wasm build without threads has nowhere to run work beside its caller.
+//! There [`spawn`] runs its work before it returns, and work written as
+//! steps with [`stepped`] is queued on the calling thread and advanced by
+//! whoever waits: [`Future::wait`] runs the queue for a short slice and
+//! returns, pending or not, so the host can yield and ask again. The queue
+//! is a `krio` scheduler; [`pump`] runs one round of it directly.
 
 #![forbid(unsafe_code)]
 
 use std::any::Any;
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
+use std::task::Poll;
 use std::time::{Duration, Instant};
 
 use hxn_abi::{Failure, Fault, Status, catch};
+use krio_core::{Suspension, Task};
+
+mod local;
+
+pub use local::pump;
 
 // False for wasm built without atomics, where std has no thread to start and
 // no condition variable to wait on.
@@ -92,11 +102,14 @@ impl<T> Shared<T> {
     }
 
     fn wait(&self, timeout: Option<Duration>) -> State {
+        if !THREADS {
+            return self.wait_driving(timeout);
+        }
         let deadline = timeout.and_then(|timeout| Instant::now().checked_add(timeout));
         let mut slot = self.lock();
         loop {
             let state = slot.state();
-            if state != State::Pending || !THREADS {
+            if state != State::Pending {
                 return state;
             }
             slot = match deadline {
@@ -117,6 +130,20 @@ impl<T> Shared<T> {
                         .0
                 }
             };
+        }
+    }
+
+    // Waiting where nothing else can run: this thread does the queued work
+    // itself, a round at a time, and gives up at the end of its slice so the
+    // host gets the thread back.
+    fn wait_driving(&self, timeout: Option<Duration>) -> State {
+        let slice = timeout.map_or(local::SLICE, |timeout| timeout.min(local::SLICE));
+        let started = Instant::now();
+        loop {
+            let state = self.state();
+            if state != State::Pending || !local::pump() || started.elapsed() >= slice {
+                return self.state();
+            }
         }
     }
 
@@ -190,7 +217,7 @@ impl<T> Future<T> {
 
     /// Blocks until the future is settled or `timeout` has passed, and
     /// returns its state then. `None` waits without limit. Without threads
-    /// it does not block.
+    /// it runs queued work for a short slice instead of blocking.
     pub fn wait(&self, timeout: Option<Duration>) -> State {
         self.shared.wait(timeout)
     }
@@ -233,6 +260,62 @@ where
         settle();
     }
     future
+}
+
+/// Work done a step at a time: `step` is called until it returns
+/// [`Poll::Ready`], and that result settles the future. A panic rejects it.
+///
+/// The first step runs before this returns, so work that finishes at once
+/// never waits for anyone. With threads the rest runs on a thread of its
+/// own. Without them it is queued on this thread and advances only while the
+/// host waits on a future from this library or calls [`pump`], which is what
+/// lets one thread interleave it with everything else.
+pub fn stepped<T, E>(step: impl FnMut() -> Poll<Result<T, E>> + Send + 'static) -> Future<T>
+where
+    T: Send + 'static,
+    E: Into<Failure> + 'static,
+{
+    let (completer, future) = pending();
+    let mut task = Stepped { step, completer };
+    if task.step().is_done() {
+        return future;
+    }
+    if THREADS {
+        // If no thread starts, the task is dropped and the future cancelled.
+        let _ = std::thread::Builder::new().spawn(move || {
+            while !task.step().is_done() {
+                std::thread::yield_now();
+            }
+        });
+    } else {
+        local::queue(Box::new(task));
+    }
+    future
+}
+
+struct Stepped<S, T> {
+    step: S,
+    completer: Completer<T>,
+}
+
+impl<S, T, E> Task for Stepped<S, T>
+where
+    S: FnMut() -> Poll<Result<T, E>>,
+    E: Into<Failure>,
+{
+    fn step(&mut self) -> Suspension {
+        match catch(|| Ok((self.step)())) {
+            Ok(Poll::Pending) => Suspension::Yielded,
+            Ok(Poll::Ready(result)) => {
+                self.completer.settle(result.map_err(Into::into));
+                Suspension::Completed
+            }
+            Err(panic) => {
+                self.completer.reject(panic);
+                Suspension::Completed
+            }
+        }
+    }
 }
 
 trait Erased: Send + Sync {
@@ -420,5 +503,132 @@ mod tests {
         };
         assert!(!completer.resolve(Reenters(again)));
         drop(future.take());
+    }
+
+    #[test]
+    fn stepped_work_settles_with_its_last_step() {
+        let mut total = 0;
+        let mut next = 1;
+        let sum = stepped(move || {
+            total += next;
+            next += 1;
+            if next > 100 {
+                Poll::Ready(Ok::<_, Failure>(total))
+            } else {
+                Poll::Pending
+            }
+        });
+        assert_eq!(sum.wait(None), State::Resolved);
+        assert_eq!(sum.take(), Ok(5050));
+
+        let at_once = stepped(|| Poll::Ready(Ok::<_, Failure>("first step")));
+        assert_eq!(at_once.state(), State::Resolved);
+
+        let failed = stepped(|| Poll::Ready("x".parse::<i32>()));
+        assert_eq!(failed.take().unwrap_err().status, Status::ERROR);
+
+        let mut calls = 0;
+        let panicked = stepped(move || -> Poll<Result<i32, Failure>> {
+            calls += 1;
+            if calls == 3 {
+                panic!("on the third step");
+            }
+            Poll::Pending
+        });
+        assert_eq!(panicked.wait(None), State::Rejected);
+        assert_eq!(
+            panicked.take(),
+            Err(Failure::new(Status::PANIC, "on the third step"))
+        );
+    }
+
+    // What `stepped` does where there are no threads, on this thread's queue.
+    fn queued<T: Send + 'static>(
+        step: impl FnMut() -> Poll<Result<T, Failure>> + 'static,
+    ) -> Future<T> {
+        let (completer, future) = pending();
+        local::queue(Box::new(Stepped { step, completer }));
+        future
+    }
+
+    fn counting(to: i32) -> impl FnMut() -> Poll<Result<i32, Failure>> {
+        let mut at = 0;
+        move || {
+            at += 1;
+            if at == to {
+                Poll::Ready(Ok(at))
+            } else {
+                Poll::Pending
+            }
+        }
+    }
+
+    #[test]
+    fn waiting_drives_queued_work_a_round_at_a_time() {
+        let future = queued(counting(3));
+        assert_eq!(future.state(), State::Pending);
+        assert_eq!(
+            future.shared.wait_driving(Some(Duration::ZERO)),
+            State::Pending
+        );
+        assert_eq!(
+            future.shared.wait_driving(Some(Duration::ZERO)),
+            State::Pending
+        );
+        assert_eq!(
+            future.shared.wait_driving(Some(Duration::ZERO)),
+            State::Resolved
+        );
+        assert_eq!(future.take(), Ok(3));
+        assert!(!pump());
+    }
+
+    #[test]
+    fn a_wait_without_limit_finishes_short_work_and_gives_up_on_long() {
+        let short = queued(counting(500));
+        assert_eq!(short.shared.wait_driving(None), State::Resolved);
+
+        let endless = queued(|| Poll::<Result<(), Failure>>::Pending);
+        let started = Instant::now();
+        assert_eq!(endless.shared.wait_driving(None), State::Pending);
+        assert!(started.elapsed() >= local::SLICE);
+        assert!(started.elapsed() < Duration::from_secs(2));
+    }
+
+    #[test]
+    fn queued_work_takes_turns() {
+        let order = Arc::new(Mutex::new(Vec::new()));
+        let record = |name: &'static str, steps: i32| {
+            let order = order.clone();
+            let mut inner = counting(steps);
+            queued(move || {
+                order.lock().unwrap().push(name);
+                inner()
+            })
+        };
+        let first = record("a", 2);
+        let second = record("b", 3);
+        assert_eq!(second.shared.wait_driving(None), State::Resolved);
+        assert_eq!(first.state(), State::Resolved);
+        assert_eq!(*order.lock().unwrap(), ["a", "b", "a", "b", "b"]);
+    }
+
+    #[test]
+    fn a_step_may_queue_work_and_may_not_drive_it() {
+        let mut inner = None;
+        let outer = queued(move || match &inner {
+            None => {
+                // A round is under way, so this one cannot start another.
+                assert!(!pump());
+                inner = Some(queued(counting(2)));
+                Poll::Pending
+            }
+            Some(future) => match future.state() {
+                State::Pending => Poll::Pending,
+                _ => Poll::Ready(future.take()),
+            },
+        });
+        assert_eq!(outer.shared.wait_driving(None), State::Resolved);
+        assert_eq!(outer.take(), Ok(2));
     }
 }

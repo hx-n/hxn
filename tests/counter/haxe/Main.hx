@@ -95,6 +95,20 @@ class Main {
 			total += future.await();
 		check('many at once: $total', total == 328350);
 
+		// Work done in steps: on its own thread, or by this one as it waits.
+		var sum = Counter.sumLater(20000);
+		#if wasm
+		check("stepped work is still pending when the call returns", !sum.isReady());
+		#end
+		check("and finishes while it is awaited", sum.await() == 200010000);
+		check("work that finishes in its first step is ready at once", Counter.sumLater(0).isReady());
+		throws("a step can fail", () -> Counter.sumLater(70000).await(), "counter overflow");
+		var sums = [for (i in 0...20) Counter.sumLater(1000 + i)];
+		var all = 0;
+		for (future in sums)
+			all += future.await() - 500500;
+		check('stepped work interleaves: $all', all == 191330);
+
 		#if !emscripten
 		// Settled from Haxe, after the call that made the future has returned.
 		// hxcpp under Emscripten has no second thread to settle it from.
@@ -128,7 +142,10 @@ class Main {
 		var future = promise.future();
 		future.then(value -> {
 			check("then delivers a later settle", value == 7);
-			finish();
+			Counter.sumLater(5000).then(sum -> {
+				check("then delivers stepped work", sum == 12502500);
+				finish();
+			});
 		});
 		check("which had not happened yet", !future.isReady());
 		sys.thread.Thread.current().events.run(() -> check("the loop settles it", promise.resolve(7)));

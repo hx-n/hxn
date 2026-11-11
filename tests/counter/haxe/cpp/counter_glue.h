@@ -66,6 +66,13 @@ inline void *greet_later(::String name, int milliseconds) {
 	return out;
 }
 
+inline void *sum_later(int limit) {
+	hxn_handle *out = 0;
+	hxn_buf err = HXN_BUF_EMPTY;
+	hxn::check(counter_sum_later(limit, &out, &err), err);
+	return out;
+}
+
 inline void *abandoned() {
 	hxn_handle *out = 0;
 	hxn_buf err = HXN_BUF_EMPTY;

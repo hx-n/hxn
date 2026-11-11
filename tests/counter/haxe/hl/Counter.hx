@@ -31,6 +31,9 @@ private class Native {
 	public static function greet_later(name:String, milliseconds:Int):RawFuture
 		return null;
 
+	public static function sum_later(limit:Int):RawFuture
+		return null;
+
 	public static function abandoned():RawFuture
 		return null;
 
@@ -88,6 +91,9 @@ class Counter {
 
 	public static function greetLater(name:String, milliseconds:Int):hxn.Future<String>
 		return future(Native.greet_later(name, milliseconds), raw -> @:privateAccess String.fromUCS2(Native.future_take_text(raw)));
+
+	public static function sumLater(limit:Int):hxn.Future<Int>
+		return future(Native.sum_later(limit), raw -> Native.future_take_int(raw));
 
 	public static function abandoned():hxn.Future<Int>
 		return future(Native.abandoned(), raw -> Native.future_take_int(raw));

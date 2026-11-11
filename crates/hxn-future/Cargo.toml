@@ -8,6 +8,8 @@ repository.workspace = true
 
 [dependencies]
 hxn-abi = { workspace = true }
+krio-core = { workspace = true }
+krio-runtime = { workspace = true }
 
 [lints]
 workspace = true

@@ -13,6 +13,8 @@ hxn-abi = { path = "crates/hxn-abi" }
 hxn-hl = { path = "crates/hxn-hl" }
 hxn-future = { path = "crates/hxn-future" }
 hl_abi = { git = "https://github.com/rayzor-blade/hl_abi" }
+krio-core = { git = "https://github.com/darmie/krio", rev = "ecf740f8de98965d3c0f238b4d22636318821836" }
+krio-runtime = { git = "https://github.com/darmie/krio", rev = "ecf740f8de98965d3c0f238b4d22636318821836" }
 
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "deny"
