@@ -57,6 +57,7 @@ in [design.md](design.md); this is the checklist.
 | whether it asked for a collection | `<library>_memory_wanted` |
 | C header | `<library>_abi.h` |
 | hxcpp glue header | `<library>_glue.h`, namespace `<library>_glue` |
+| hxcpp extern class over the glue | `Hxn<Library>Native`, each function under its glue name |
 | Haxe method | the Rust name in camel case |
 | Haxe class a binding needs beside the library's own | `Hxn<Library><Role>`: `HxnCounterMemory` |
 

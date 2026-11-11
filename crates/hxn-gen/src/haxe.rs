@@ -9,8 +9,8 @@ use crate::later;
 use crate::lent;
 use crate::model::{Interface, Library, Method, Type};
 use crate::names::{
-    abstract_name, camel, cell_abstract, cell_class, has_receiver, local, memory_class, release,
-    weak_abstract, weak_class,
+    abstract_name, camel, cell_abstract, cell_class, has_receiver, local, memory_class,
+    native_class, weak_abstract, weak_class,
 };
 
 /// A generated file: its path relative to a class path, and its text.
@@ -397,9 +397,8 @@ fn cpp_weak(library: &Library, interface: &Interface) -> String {
     let of = &interface.name;
     let name = weak_class(of);
     format!(
-        "{HEADER}@:headerInclude(\"{library}_glue.h\")\n/** A reference to a `{of}` that does not keep it alive. **/\nclass {name} {{\n\t@:noCompletion @:unreflective public var raw:cpp.RawPointer<cpp.Void>;\n\n\t// Runs inside a collection: it may free, and may not touch the Haxe heap.\n\tstatic function finalize(self:{name}):Void {{\n\t\tuntyped __cpp__(\"{release}((hxn_handle *){{0}})\", self.raw);\n\t}}\n\n\t@:noCompletion public static function adopt():{name}\n\t\treturn Type.createEmptyInstance({name});\n\n\t@:noCompletion public function own():Void\n\t\tcpp.vm.Gc.setFinalizer(this, cpp.Function.fromStaticFunction(finalize));\n\n{UPGRADE_DOCS}\tpublic function upgrade():Null<{of}> {{\n\t\tvar made = {of}.adopt();\n\t\tmade.raw = untyped __cpp__(\"{library}_glue::{upgrade}({{0}})\", raw);\n\t\tif (untyped __cpp__(\"{{0}} == 0\", made.raw))\n\t\t\treturn null;\n\t\tmade.own();\n\t\treturn made;\n\t}}\n\n\t/** Releases the reference now. The collector does it otherwise. **/\n\tpublic function close():Void\n\t\tuntyped __cpp__(\"{library}_glue::{close}({{0}})\", raw);\n}}\n",
-        library = library.name,
-        release = release(library),
+        "{HEADER}/** A reference to a `{of}` that does not keep it alive. **/\nclass {name} {{\n\t@:noCompletion @:unreflective public var raw:cpp.RawPointer<cpp.Void>;\n\n\t// Runs inside a collection: it may free, and may not touch the Haxe heap.\n\tstatic function finalize(self:{name}):Void {{\n\t\t{native}.release(self.raw);\n\t}}\n\n\t@:noCompletion public static function adopt():{name}\n\t\treturn Type.createEmptyInstance({name});\n\n\t@:noCompletion public function own():Void\n\t\tcpp.vm.Gc.setFinalizer(this, cpp.Function.fromStaticFunction(finalize));\n\n{UPGRADE_DOCS}\tpublic function upgrade():Null<{of}> {{\n\t\tvar made = {of}.adopt();\n\t\tmade.raw = {native}.{upgrade}(raw);\n\t\tif (made.raw == null)\n\t\t\treturn null;\n\t\tmade.own();\n\t\treturn made;\n\t}}\n\n\t/** Releases the reference now. The collector does it otherwise. **/\n\tpublic function close():Void\n\t\t{native}.{close}(raw);\n}}\n",
+        native = native_class(library),
         upgrade = local(of, "weak_upgrade"),
         close = local(of, "weak_close"),
     )
@@ -419,18 +418,14 @@ fn cpp_method(library: &Library, interface: &Interface, method: &Method) -> Stri
             // Null goes through as null whether or not the library takes
             // one. hxcpp does not check a null object before reading its field.
             Type::Handle { .. } => {
-                before.push(format!(
-                    "var {name}Raw:cpp.RawPointer<cpp.Void> = untyped __cpp__(\"0\");"
-                ));
+                before.push(format!("var {name}Raw:cpp.RawPointer<cpp.Void> = null;"));
                 before.push(format!(
                     "if ({name} != null)\n\t\t\t{name}Raw = {name}.raw;"
                 ));
                 arguments.push(format!("{name}Raw"));
             }
             Type::AtomicInt | Type::AtomicBool => {
-                before.push(format!(
-                    "var {name}Raw:cpp.RawPointer<Int> = untyped __cpp__(\"0\");"
-                ));
+                before.push(format!("var {name}Raw:cpp.RawPointer<Int> = null;"));
                 before.push(format!(
                     "if ({name} != null)\n\t\t\t{name}Raw = {name}.pointer.raw;"
                 ));
@@ -443,15 +438,12 @@ fn cpp_method(library: &Library, interface: &Interface, method: &Method) -> Stri
             _ => arguments.push(name),
         }
     }
-    let places: Vec<String> = (0..arguments.len()).map(|n| format!("{{{n}}}")).collect();
-    let mut code = vec![format!(
-        "\"{}_glue::{}({})\"",
-        library.name,
+    let call = format!(
+        "{}.{}({})",
+        native_class(library),
         local(&interface.name, &method.name),
-        places.join(", ")
-    )];
-    code.extend(arguments);
-    let call = format!("untyped __cpp__({})", code.join(", "));
+        arguments.join(", ")
+    );
 
     let mut body = before;
     if method.constructor {
@@ -468,9 +460,7 @@ fn cpp_method(library: &Library, interface: &Interface, method: &Method) -> Stri
                 body.push(format!("var made = {of}.adopt();"));
                 body.push(format!("made.raw = {call};"));
                 if *nullable {
-                    body.push(String::from(
-                        "if (untyped __cpp__(\"{0} == 0\", made.raw))\n\t\t\treturn null;",
-                    ));
+                    body.push(String::from("if (made.raw == null)\n\t\t\treturn null;"));
                 }
                 body.push(String::from("made.own();"));
                 body.push(String::from("return made;"));
@@ -499,8 +489,7 @@ fn cpp_method(library: &Library, interface: &Interface, method: &Method) -> Stri
                 body.push(format!("return made.{}();", later::maker(carried)));
             }
             Type::Bytes => {
-                body.push(format!("var data:haxe.io.BytesData = {call};"));
-                body.push(String::from("return haxe.io.Bytes.ofData(data);"));
+                body.push(format!("return haxe.io.Bytes.ofData({call});"));
             }
             _ => body.push(format!("return {call};")),
         }
@@ -512,16 +501,9 @@ fn cpp_method(library: &Library, interface: &Interface, method: &Method) -> Stri
 }
 
 fn cpp_module(library: &Library, interface: &Interface) -> String {
-    let upper = library.name.to_uppercase();
     let name = &interface.name;
+    let native = native_class(library);
     let mut out = String::from(HEADER);
-    // Where the headers and the library are is the build's to say, through
-    // defines. hxcpp links its own exceptions under Emscripten but does not
-    // compile for them unless told.
-    out.push_str(&format!(
-        "@:buildXml('\n<files id=\"haxe\">\n\t<compilerflag value=\"-I${{HXN_INCLUDE}}\"/>\n\t<compilerflag value=\"-I${{{upper}_INCLUDE}}\"/>\n</files>\n<section if=\"emscripten\">\n\t<compiler id=\"emscripten\" exe=\"emcc\">\n\t\t<flag value=\"-fexceptions\"/>\n\t</compiler>\n</section>\n<target id=\"haxe\">\n\t<lib name=\"${{{upper}_LIB}}\"/>\n\t<lib name=\"-lpthread\" if=\"linux\"/>\n\t<lib name=\"-ldl\" if=\"linux\"/>\n</target>\n')\n@:headerInclude(\"{}_glue.h\")\n",
-        library.name
-    ));
     out.push_str(&docs(&interface.docs, ""));
     // A weighed object is counted from the moment it owns its value.
     let own = if interface.weighed {
@@ -530,9 +512,8 @@ fn cpp_module(library: &Library, interface: &Interface) -> String {
         "\n\t\tcpp.vm.Gc.setFinalizer(this, cpp.Function.fromStaticFunction(finalize));\n"
     };
     out.push_str(&format!(
-        "class {name} {{\n\t@:noCompletion @:unreflective public var raw:cpp.RawPointer<cpp.Void>;\n{meter}\n\t// Runs inside a collection: it may free, and may not touch the Haxe heap.\n\tstatic function finalize(self:{name}):Void {{\n\t\tuntyped __cpp__(\"{release}((hxn_handle *){{0}})\", self.raw);\n\t}}\n\n\t/** An object that owns nothing yet: its maker sets `raw`, then calls `own`. **/\n\t@:noCompletion public static function adopt():{name}\n\t\treturn Type.createEmptyInstance({name});\n\n\t/** Has the collector release the value this now holds. **/\n\t@:noCompletion public function own():Void{own}",
+        "class {name} {{\n\t@:noCompletion @:unreflective public var raw:cpp.RawPointer<cpp.Void>;\n{meter}\n\t// Runs inside a collection: it may free, and may not touch the Haxe heap.\n\tstatic function finalize(self:{name}):Void {{\n\t\t{native}.release(self.raw);\n\t}}\n\n\t/** An object that owns nothing yet: its maker sets `raw`, then calls `own`. **/\n\t@:noCompletion public static function adopt():{name}\n\t\treturn Type.createEmptyInstance({name});\n\n\t/** Has the collector release the value this now holds. **/\n\t@:noCompletion public function own():Void{own}",
         meter = meter(library),
-        release = release(library)
     ));
     for method in &interface.methods {
         out.push('\n');
@@ -540,17 +521,15 @@ fn cpp_module(library: &Library, interface: &Interface) -> String {
     }
     if interface.shared {
         out.push_str(&format!(
-            "\n{SAME_DOCS}\tpublic function same(other:Null<{name}>):Bool {{\n\t\tvar otherRaw:cpp.RawPointer<cpp.Void> = untyped __cpp__(\"0\");\n\t\tif (other != null)\n\t\t\totherRaw = other.raw;\n\t\treturn untyped __cpp__(\"{library}_glue::{same}({{0}}, {{1}})\", raw, otherRaw);\n\t}}\n\n{WEAK_DOCS}\tpublic function weak():{weak_class} {{\n\t\tvar made = {weak_class}.adopt();\n\t\tmade.raw = untyped __cpp__(\"{library}_glue::{weak}({{0}})\", raw);\n\t\tmade.own();\n\t\treturn made;\n\t}}\n",
-            library = library.name,
+            "\n{SAME_DOCS}\tpublic function same(other:Null<{name}>):Bool {{\n\t\tvar otherRaw:cpp.RawPointer<cpp.Void> = null;\n\t\tif (other != null)\n\t\t\totherRaw = other.raw;\n\t\treturn {native}.{same}(raw, otherRaw);\n\t}}\n\n{WEAK_DOCS}\tpublic function weak():{weak_class} {{\n\t\tvar made = {weak_class}.adopt();\n\t\tmade.raw = {native}.{weak}(raw);\n\t\tmade.own();\n\t\treturn made;\n\t}}\n",
             same = local(name, "same"),
             weak = local(name, "weak"),
             weak_class = weak_class(name),
         ));
     }
     out.push_str(&format!(
-        "\n{}\tpublic function close():Void\n\t\tuntyped __cpp__(\"{}_glue::{}({{0}})\", raw);\n}}\n",
+        "\n{}\tpublic function close():Void\n\t\t{native}.{}(raw);\n}}\n",
         close_docs(interface),
-        library.name,
         local(name, "close")
     ));
     out
@@ -592,8 +571,8 @@ fn hl_memory(library: &Library) -> String {
 
 fn cpp_memory(library: &Library) -> String {
     format!(
-        "{HEADER}@:headerInclude(\"{library}_glue.h\")\n/**\n\t{MEMORY_DOCS}\n**/\nclass {name} {{\n\tstatic function held():Float {{\n\t\tvar bytes:Float = untyped __cpp__(\"{library}_memory_held()\");\n\t\treturn bytes;\n\t}}\n\n\tstatic function wanted():Bool {{\n\t\tvar asked:Bool = untyped __cpp__(\"{library}_memory_wanted() != 0\");\n\t\treturn asked;\n\t}}\n\n\tpublic static final meter = new hxn.Gc.Meter(held, wanted);\n}}\n",
-        library = library.name,
+        "{HEADER}/**\n\t{MEMORY_DOCS}\n**/\nclass {name} {{\n\tpublic static final meter = new hxn.Gc.Meter(() -> {native}.memory_held(), () -> {native}.memory_wanted());\n}}\n",
+        native = native_class(library),
         name = memory_class(library),
     )
 }
@@ -625,7 +604,121 @@ pub fn haxe_cpp(library: &Library) -> Vec<File> {
         path: format!("{}.hx", memory_class(library)),
         text: cpp_memory(library),
     });
+    files.push(File {
+        path: format!("{}.hx", native_class(library)),
+        text: cpp_natives(library),
+    });
     files
+}
+
+// What the extern class calls a handle: a pointer hxcpp does not look into.
+const CPP_HANDLE: &str = "Handle";
+
+/// A declaration in the extern class: the glue function `name`.
+pub(crate) fn cpp_extern(library: &Library, name: &str, params: &str, returns: &str) -> String {
+    format!(
+        "\t@:native(\"{}_glue::{name}\") static function {name}({params}):{returns};\n",
+        library.name
+    )
+}
+
+fn cpp_native(library: &Library, interface: &Interface, method: &Method) -> String {
+    let mut params = Vec::new();
+    if has_receiver(method) {
+        params.push(format!("self:{CPP_HANDLE}"));
+    }
+    for param in &method.params {
+        let ty = match &param.ty {
+            Type::Bool => String::from("Bool"),
+            Type::I32 => String::from("Int"),
+            Type::F64 => String::from("Float"),
+            Type::Str => String::from("String"),
+            Type::Bytes => String::from("haxe.io.BytesData"),
+            Type::Handle { .. } => String::from(CPP_HANDLE),
+            Type::AtomicInt | Type::AtomicBool => String::from("cpp.RawPointer<Int>"),
+            // The wrapper the binding makes, not the function the user passed.
+            Type::Lent {
+                params: taken,
+                returns,
+            } => lent::haxe_native_type(taken, returns),
+            Type::Void | Type::Future(_) | Type::Stream(_) | Type::Signal(_) => {
+                unreachable!("not a parameter type")
+            }
+        };
+        params.push(format!("{}:{ty}", camel(&param.name)));
+    }
+    let returns = match &method.returns {
+        Type::Void => "Void",
+        Type::Bool => "Bool",
+        Type::I32 => "Int",
+        Type::F64 => "Float",
+        Type::Str => "String",
+        Type::Bytes => "haxe.io.BytesData",
+        Type::Lent { .. } => unreachable!("not a result type"),
+        // A handle: an object's, a cell's, or a result over time's.
+        _ => CPP_HANDLE,
+    };
+    cpp_extern(
+        library,
+        &local(&interface.name, &method.name),
+        &params.join(", "),
+        returns,
+    )
+}
+
+// The extern class every hxcpp class of the library calls its glue through.
+// It is also where the build is told what to include and link.
+fn cpp_natives(library: &Library) -> String {
+    let upper = library.name.to_uppercase();
+    let this = format!("self:{CPP_HANDLE}");
+    let mut out = String::from(HEADER);
+    // Where the headers and the library are is the build's to say, through
+    // defines. hxcpp links its own exceptions under Emscripten but does not
+    // compile for them unless told.
+    out.push_str(&format!(
+        "private typedef Handle = cpp.RawPointer<cpp.Void>;\n\n/** The library's functions, as its glue header declares them. **/\n@:buildXml('\n<files id=\"haxe\">\n\t<compilerflag value=\"-I${{HXN_INCLUDE}}\"/>\n\t<compilerflag value=\"-I${{{upper}_INCLUDE}}\"/>\n</files>\n<section if=\"emscripten\">\n\t<compiler id=\"emscripten\" exe=\"emcc\">\n\t\t<flag value=\"-fexceptions\"/>\n\t</compiler>\n</section>\n<target id=\"haxe\">\n\t<lib name=\"${{{upper}_LIB}}\"/>\n\t<lib name=\"-lpthread\" if=\"linux\"/>\n\t<lib name=\"-ldl\" if=\"linux\"/>\n</target>\n')\n@:include(\"{}_glue.h\")\n@:noCompletion extern class {} {{\n",
+        library.name,
+        native_class(library)
+    ));
+    out.push_str(&cpp_extern(library, "release", &this, "Void"));
+    out.push_str(&cpp_extern(library, "memory_held", "", "Float"));
+    out.push_str(&cpp_extern(library, "memory_wanted", "", "Bool"));
+    for interface in &library.interfaces {
+        let name = &interface.name;
+        for method in &interface.methods {
+            out.push_str(&cpp_native(library, interface, method));
+        }
+        out.push_str(&cpp_extern(library, &local(name, "close"), &this, "Void"));
+        if interface.shared {
+            let other = format!("{this}, other:{CPP_HANDLE}");
+            out.push_str(&cpp_extern(library, &local(name, "same"), &other, "Bool"));
+            for method in ["weak", "weak_upgrade"] {
+                out.push_str(&cpp_extern(
+                    library,
+                    &local(name, method),
+                    &this,
+                    CPP_HANDLE,
+                ));
+            }
+            out.push_str(&cpp_extern(
+                library,
+                &local(name, "weak_close"),
+                &this,
+                "Void",
+            ));
+        }
+    }
+    if library.returns_cells() {
+        out.push_str(&cpp_extern(
+            library,
+            "atomic_cell",
+            &this,
+            "cpp.RawPointer<Int>",
+        ));
+    }
+    out.push_str(&later::cpp_natives(library));
+    out.push_str("}\n");
+    out
 }
 
 // The class that owns a cell the library handed over. An `hxn.AtomicInt`
@@ -634,9 +727,8 @@ fn cpp_cell(library: &Library) -> String {
     let name = cell_class(library);
     let mut out = String::from(HEADER);
     out.push_str(&format!(
-        "@:headerInclude(\"{library}_glue.h\")\n@:noCompletion class {name} {{\n\t@:unreflective public var raw:cpp.RawPointer<cpp.Void>;\n\n\t// Runs inside a collection: it may free, and may not touch the Haxe heap.\n\tstatic function finalize(self:{name}):Void {{\n\t\tuntyped __cpp__(\"{release}((hxn_handle *){{0}})\", self.raw);\n\t}}\n\n\tpublic static function adopt():{name}\n\t\treturn Type.createEmptyInstance({name});\n\n\tpublic function own():Void\n\t\tcpp.vm.Gc.setFinalizer(this, cpp.Function.fromStaticFunction(finalize));\n\n\t/** The cell, kept alive by this. **/\n\tpublic function cell():hxn.AtomicInt {{\n\t\tvar address:cpp.RawPointer<Int> = untyped __cpp__(\"{library}_glue::atomic_cell({{0}})\", raw);\n\t\treturn hxn.AtomicInt.over(cpp.Pointer.fromRaw(address), this);\n\t}}\n}}\n",
-        library = library.name,
-        release = release(library),
+        "@:noCompletion class {name} {{\n\t@:unreflective public var raw:cpp.RawPointer<cpp.Void>;\n\n\t// Runs inside a collection: it may free, and may not touch the Haxe heap.\n\tstatic function finalize(self:{name}):Void {{\n\t\t{native}.release(self.raw);\n\t}}\n\n\tpublic static function adopt():{name}\n\t\treturn Type.createEmptyInstance({name});\n\n\tpublic function own():Void\n\t\tcpp.vm.Gc.setFinalizer(this, cpp.Function.fromStaticFunction(finalize));\n\n\t/** The cell, kept alive by this. **/\n\tpublic function cell():hxn.AtomicInt {{\n\t\treturn hxn.AtomicInt.over(cpp.Pointer.fromRaw({native}.atomic_cell(raw)), this);\n\t}}\n}}\n",
+        native = native_class(library),
     ));
     out
 }

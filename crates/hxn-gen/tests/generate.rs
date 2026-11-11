@@ -1,4 +1,13 @@
-use hxn_gen::{Receiver, Type, parse};
+use hxn_gen::{File, Library, Receiver, Type, parse};
+
+// The hxcpp classes less the extern class they call the glue through, which
+// HashLink has no file for: each of its classes declares its own natives.
+fn cpp_classes(library: &Library) -> Vec<File> {
+    let mut files = hxn_gen::haxe_cpp(library);
+    let native = files.pop().unwrap();
+    assert!(native.text.contains("extern class Hxn"), "{}", native.path);
+    files
+}
 
 const SOURCE: &str = r#"
 /// A device that plays sound.
@@ -281,11 +290,44 @@ fn names_follow_each_language() {
     );
     assert!(haxe.text.contains("public function isOpen():Bool"));
     assert!(haxe.text.contains("public function close():Void"));
+
+    // hxcpp calls the glue through one extern class, which also tells the
+    // build what to include and link.
+    let cpp = hxn_gen::haxe_cpp(&library);
+    let native = &cpp.last().unwrap();
+    assert_eq!(native.path, "HxnAudioNative.hx");
+    assert!(native.text.contains("@:include(\"audio_glue.h\")"));
+    assert!(native.text.contains("<lib name=\"${AUDIO_LIB}\"/>"));
     assert!(
-        hxn_gen::haxe_cpp(&library)[0]
-            .text
-            .contains("@:headerInclude(\"audio_glue.h\")")
+        native.text.contains(
+            "@:native(\"audio_glue::release\") static function release(self:Handle):Void;"
+        )
     );
+    for file in &cpp {
+        assert!(!file.text.contains("__cpp__"), "{}", file.path);
+        for (at, _) in file.text.match_indices("HxnAudioNative.") {
+            let called = file.text[at + "HxnAudioNative.".len()..]
+                .split('(')
+                .next()
+                .unwrap();
+            assert!(
+                native.text.contains(&format!("static function {called}(")),
+                "{called} in {}",
+                file.path
+            );
+        }
+    }
+    let glue = hxn_gen::cpp_glue(&library);
+    for (at, _) in native.text.match_indices("@:native(\"audio_glue::") {
+        let declared = native.text[at + "@:native(\"audio_glue::".len()..]
+            .split('"')
+            .next()
+            .unwrap();
+        assert!(
+            glue.contains(&format!(" {declared}(")) || glue.contains(&format!("*{declared}(")),
+            "{declared}"
+        );
+    }
 }
 
 #[test]
@@ -397,7 +439,7 @@ fn what_a_library_holds_is_read_and_a_weighed_object_checks_it() {
     assert!(header.contains("double audio_memory_held(void);"));
     assert!(header.contains("int32_t audio_memory_wanted(void);"));
 
-    for files in [hxn_gen::haxe_hl(&library), hxn_gen::haxe_cpp(&library)] {
+    for files in [hxn_gen::haxe_hl(&library), cpp_classes(&library)] {
         let memory = files.last().unwrap();
         assert_eq!(memory.path, "HxnAudioMemory.hx");
         assert!(
@@ -519,7 +561,7 @@ fn a_shared_value_is_held_through_an_arc() {
     assert!(glue.contains("inline bool bus_same(void *self, void *other)"));
     assert!(glue.contains("inline void *bus_weak_upgrade(void *self)"));
 
-    for files in [hxn_gen::haxe_hl(&library), hxn_gen::haxe_cpp(&library)] {
+    for files in [hxn_gen::haxe_hl(&library), cpp_classes(&library)] {
         let paths: Vec<_> = files.iter().map(|file| file.path.as_str()).collect();
         assert_eq!(
             paths,
@@ -611,8 +653,18 @@ fn bytes_come_back_with_their_length() {
     assert!(haxe.contains("disk_read(self:DiskRaw, sector:Int, out:hl.Ref<Int>):hl.Bytes"));
     assert!(haxe.contains("public function read(sector:Int):haxe.io.Bytes"));
     assert!(haxe.contains("return @:privateAccess new haxe.io.Bytes(data, outLength);"));
-    let haxe = &hxn_gen::haxe_cpp(&library)[0].text;
-    assert!(haxe.contains("return haxe.io.Bytes.ofData(data);"));
+    let cpp = hxn_gen::haxe_cpp(&library);
+    assert!(
+        cpp[0]
+            .text
+            .contains("return haxe.io.Bytes.ofData(HxnStoreNative.disk_read(raw, sector));")
+    );
+    assert!(
+        cpp.last()
+            .unwrap()
+            .text
+            .contains("static function disk_read(self:Handle, sector:Int):haxe.io.BytesData;")
+    );
     assert!(hxn_gen::manifest(&library).contains("\"returns\": \"bytes\""));
 }
 
@@ -704,7 +756,7 @@ fn results_over_time_are_handles_the_library_answers_for() {
     assert!(glue.contains("inline int signal_wait(void *self, int seen, int milliseconds)"));
     assert!(glue.contains("inline ::String stream_next_text(void *self)"));
 
-    for files in [hxn_gen::haxe_hl(&library), hxn_gen::haxe_cpp(&library)] {
+    for files in [hxn_gen::haxe_hl(&library), cpp_classes(&library)] {
         let paths: Vec<_> = files.iter().map(|file| file.path.as_str()).collect();
         assert_eq!(
             paths,
@@ -870,7 +922,7 @@ impl Mesh {
     assert!(glue.contains("hxn_callback f_lent = { (void *)lent_id_to_b, f.mPtr, 0 };"));
 
     // The Haxe method wraps what it was passed and calls inside `during`.
-    for files in [hxn_gen::haxe_hl(&library), hxn_gen::haxe_cpp(&library)] {
+    for files in [hxn_gen::haxe_hl(&library), cpp_classes(&library)] {
         let mesh = &files[0].text;
         assert!(mesh.contains("public function each(scale:Float, f:(Int, Float) -> Bool):Int {"));
         assert!(mesh.contains("var fGuarded = function(a0:Int, a1:Float):Null<Bool> {"));

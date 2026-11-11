@@ -91,6 +91,11 @@ pub fn cell_class(library: &Library) -> String {
     helper_class(library, "Cell")
 }
 
+/// The hxcpp extern class the glue is called through: `HxnCounterNative`.
+pub fn native_class(library: &Library) -> String {
+    helper_class(library, "Native")
+}
+
 /// The Haxe class that holds the library's meter: `HxnCounterMemory`.
 pub fn memory_class(library: &Library) -> String {
     helper_class(library, "Memory")

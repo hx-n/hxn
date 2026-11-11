@@ -338,6 +338,12 @@ The attributes generate nothing. A macro expanding inside the library could
 not write files or put code into the separate adapter crates, so the generator
 parses the source instead and the attributes only make the markers legal Rust.
 
+A Haxe class is a plain class with the library's public API, the same on both
+runtimes, over natives it calls. On HashLink each class declares its own, as
+an `@:hlNative` class private to its file. On hxcpp one extern class a library
+declares every function of the glue header, typed, and is where the build is
+told what to include and link; no generated class writes C++ inline.
+
 The manifest is JSON, generated, committed and reviewed: a change to it is a
 change to the library's ABI.
 

@@ -8,9 +8,9 @@
 //! Haxe side a class a kind turns such a handle into an `hxn.Future`,
 //! `hxn.Stream` or `hxn.Signal`.
 
-use crate::haxe::File;
+use crate::haxe::{File, cpp_extern};
 use crate::model::{Library, Type};
-use crate::names::{abstract_name, release, snake};
+use crate::names::{abstract_name, native_class, snake};
 use crate::rust::held;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -540,21 +540,17 @@ fn hl_file(library: &Library, kind: Kind, carried: &[Type]) -> File {
 fn cpp_file(library: &Library, kind: Kind, carried: &[Type]) -> File {
     let name = class(library, kind);
     let local = kind.name();
-    let glue = format!("{}_glue", library.name);
+    let native = native_class(library);
     let mut out = format!(
-        "{HEADER}@:headerInclude(\"{glue}.h\")\n/** Owns a {local} the library returned, and makes the `hxn.{title}` over it. **/\n@:noCompletion class {name} {{\n\t@:unreflective public var raw:cpp.RawPointer<cpp.Void>;\n\n\t// Runs inside a collection: it may free, and may not touch the Haxe heap.\n\tstatic function finalize(self:{name}):Void {{\n\t\tuntyped __cpp__(\"{release}((hxn_handle *){{0}})\", self.raw);\n\t}}\n\n\tpublic static function adopt():{name}\n\t\treturn Type.createEmptyInstance({name});\n\n\tpublic function own():Void\n\t\tcpp.vm.Gc.setFinalizer(this, cpp.Function.fromStaticFunction(finalize));\n",
+        "{HEADER}/** Owns a {local} the library returned, and makes the `hxn.{title}` over it. **/\n@:noCompletion class {name} {{\n\t@:unreflective public var raw:cpp.RawPointer<cpp.Void>;\n\n\t// Runs inside a collection: it may free, and may not touch the Haxe heap.\n\tstatic function finalize(self:{name}):Void {{\n\t\t{native}.release(self.raw);\n\t}}\n\n\tpublic static function adopt():{name}\n\t\treturn Type.createEmptyInstance({name});\n\n\tpublic function own():Void\n\t\tcpp.vm.Gc.setFinalizer(this, cpp.Function.fromStaticFunction(finalize));\n",
         title = kind.title(),
-        release = release(library),
     );
     for (call, params, _, _) in calls(kind) {
         let names = names(params);
         let declared: Vec<String> = names.iter().map(|n| format!("{n}:Int")).collect();
-        let places: String = (0..names.len())
-            .map(|n| format!(", {{{}}}", n + 1))
-            .collect();
         let passed: String = names.iter().map(|n| format!(", {n}")).collect();
         out.push_str(&format!(
-            "\n\tfunction {call}({}):Int\n\t\treturn untyped __cpp__(\"{glue}::{local}_{call}({{0}}{places})\", raw{passed});\n",
+            "\n\tfunction {call}({}):Int\n\t\treturn {native}.{local}_{call}(raw{passed});\n",
             declared.join(", ")
         ));
     }
@@ -564,13 +560,13 @@ fn cpp_file(library: &Library, kind: Kind, carried: &[Type]) -> File {
     };
     for carried in carried {
         let title = title(carried);
-        let call = format!("{glue}::{local}_{}_{}({{0}})", kind.take(), suffix(carried));
+        let call = format!("{native}.{local}_{}_{}(raw)", kind.take(), suffix(carried));
         match carried {
             Type::Handle { interface, .. } => out.push_str(&format!(
-                "\n\tfunction take{title}():{interface} {{\n\t\tvar made = {interface}.adopt();\n\t\tmade.raw = untyped __cpp__(\"{call}\", raw);\n\t\tmade.own();\n\t\treturn made;\n\t}}\n"
+                "\n\tfunction take{title}():{interface} {{\n\t\tvar made = {interface}.adopt();\n\t\tmade.raw = {call};\n\t\tmade.own();\n\t\treturn made;\n\t}}\n"
             )),
             _ => out.push_str(&format!(
-                "\n\tfunction take{title}():{}\n\t\treturn untyped __cpp__(\"{call}\", raw);\n",
+                "\n\tfunction take{title}():{}\n\t\treturn {call};\n",
                 haxe_type(carried)
             )),
         }
@@ -623,12 +619,48 @@ pub fn cpp_files(library: &Library) -> Vec<File> {
         .map(|(kind, carried)| cpp_file(library, *kind, carried))
         .collect();
     let name = inbox_class(library);
-    let glue = format!("{}_glue", library.name);
+    let native = native_class(library);
     files.push(File {
         path: format!("{name}.hx"),
         text: format!(
-            "{HEADER}@:headerInclude(\"{glue}.h\")\n/** {INBOX_DOCS} **/\nclass {name} {{\n\tstatic function wait(milliseconds:Int):Bool\n\t\treturn untyped __cpp__(\"{glue}::outbox_wait({{0}})\", milliseconds);\n\n\tstatic function next():Int\n\t\treturn untyped __cpp__(\"{glue}::outbox_next()\");\n\n\tpublic static final inbox = new hxn.Inbox(wait, next);\n}}\n"
+            "{HEADER}/** {INBOX_DOCS} **/\nclass {name} {{\n\tpublic static final inbox = new hxn.Inbox(limit -> {native}.outbox_wait(limit), () -> {native}.outbox_next());\n}}\n"
         ),
     });
     files
+}
+
+/// What the library's hxcpp extern class declares for these.
+pub fn cpp_natives(library: &Library) -> String {
+    let used = used(library);
+    if used.is_empty() {
+        return String::new();
+    }
+    let this = "self:Handle";
+    let mut out = cpp_extern(library, "outbox_wait", "milliseconds:Int", "Bool");
+    out.push_str(&cpp_extern(library, "outbox_next", "", "Int"));
+    for (kind, carried) in &used {
+        let local = kind.name();
+        for (call, params, _, _) in calls(*kind) {
+            let declared: String = names(params).iter().map(|n| format!(", {n}:Int")).collect();
+            out.push_str(&cpp_extern(
+                library,
+                &format!("{local}_{call}"),
+                &format!("{this}{declared}"),
+                "Int",
+            ));
+        }
+        for carried in carried {
+            let returns = match carried {
+                Type::Handle { .. } => String::from("Handle"),
+                other => haxe_type(other),
+            };
+            out.push_str(&cpp_extern(
+                library,
+                &format!("{local}_{}_{}", kind.take(), suffix(carried)),
+                this,
+                &returns,
+            ));
+        }
+    }
+    out
 }

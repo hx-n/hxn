@@ -228,6 +228,12 @@ pub fn cpp_glue(library: &Library) -> String {
         library.name, library.name
     ));
     out.push_str(&lent::cpp_trampolines(library));
+    out.push_str(&format!(
+        "\n// What a finalizer calls: it frees, and touches nothing of the runtime's.\ninline void release(void *self) {{\n\t{release}((hxn_handle *)self);\n}}\n\ninline double memory_held() {{\n\treturn {held}();\n}}\n\ninline bool memory_wanted() {{\n\treturn {wanted}() != 0;\n}}\n",
+        release = release(library),
+        held = held_export(library),
+        wanted = wanted_export(library),
+    ));
     for interface in &library.interfaces {
         for method in &interface.methods {
             out.push('\n');
