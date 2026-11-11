@@ -52,10 +52,10 @@ linked=()
 staticlib() {
 	if [ -n "$exe" ]; then
 		# hxcpp links the static C runtime there, and builds for 32 bits
-		# unless told.
+		# unless told. With symbols, for a debugger to name what crashed.
 		RUSTFLAGS="${RUSTFLAGS:-} -C target-feature=+crt-static" \
 			cargo build --manifest-path "$root/Cargo.toml" -p "$1"
-		linked=(-D HXCPP_M64)
+		linked=(-D HXCPP_M64 -D HXCPP_DEBUG_LINK)
 	else
 		cargo build --manifest-path "$root/Cargo.toml" -p "$1"
 	fi

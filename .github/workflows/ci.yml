@@ -131,4 +131,17 @@ jobs:
       - run: tests/cli/run.sh cpp
       - run: tests/examples/run.sh cpp
       - run: tests/counter/run.sh cpp
-      - run: tests/counter/run.sh gen-cpp
+      - if: ${{ !cancelled() }}
+        run: tests/counter/run.sh gen-cpp
+      # Every thread's stack where a fixture crashed, from the debugger the
+      # Windows SDK brings.
+      - name: Show where a fixture crashed
+        if: failure() && runner.os == 'Windows'
+        run: |
+          printf '%s\n' 'sxe -c ".echo CRASHED; .lastevent; ~*kn 60; q" av' 'g' > "$RUNNER_TEMP/crash.cdb"
+          for program in target/counter-cpp/Main.exe target/counter-gen-cpp/out/Generated.exe; do
+            if [ -f "$program" ]; then
+              echo "== $program"
+              "/c/Program Files (x86)/Windows Kits/10/Debuggers/x64/cdb.exe" -G -cf "$(cygpath -w "$RUNNER_TEMP/crash.cdb")" "$program" || true
+            fi
+          done
