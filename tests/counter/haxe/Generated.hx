@@ -406,6 +406,6 @@ class Generated {
 		#end
 
 		Sys.println(failed == 0 ? 'PASS ($collected)' : 'FAILED $failed');
-		Sys.exit(failed == 0 ? 0 : 1);
+		Finish.exit(failed == 0 ? 0 : 1);
 	}
 }
