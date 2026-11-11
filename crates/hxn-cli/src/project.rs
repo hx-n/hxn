@@ -266,10 +266,13 @@ mod tests {
 
     #[test]
     fn a_checkout_gives_each_crate_its_directory() {
-        let source = Source::Path(PathBuf::from("/work/hxn/crates"));
+        let crates = PathBuf::from("/work/hxn/crates");
+        // Joined as the system joins a path, and quoted for TOML.
+        let expected = quoted(&crates.join("hxn-abi").to_string_lossy());
+        assert!(expected.contains("hxn-abi") && expected.starts_with("\"/work/hxn/crates"));
         assert_eq!(
-            source.dependency("hxn-abi"),
-            "{ path = \"/work/hxn/crates/hxn-abi\" }"
+            Source::Path(crates).dependency("hxn-abi"),
+            format!("{{ path = {expected} }}")
         );
         assert_eq!(
             Source::Registry(String::from("0.3.1")).dependency("hxn-hl"),

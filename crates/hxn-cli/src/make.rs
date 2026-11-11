@@ -412,6 +412,15 @@ pub fn build(
                 for define in ["emscripten", "HXCPP_M32", "disable_unicode_strings"] {
                     arguments.push(("-D", String::from(define)));
                 }
+            } else if cfg!(windows) {
+                // hxcpp builds for 32 bits there unless told, and the
+                // library is built for the host.
+                let bits = if cfg!(target_arch = "aarch64") {
+                    "HXCPP_ARM64"
+                } else {
+                    "HXCPP_M64"
+                };
+                arguments.push(("-D", String::from(bits)));
             }
             let include = text(&out.join("include"));
             let upper = name.to_uppercase();
