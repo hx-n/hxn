@@ -162,6 +162,9 @@ filesystem `#include "counter.h"` would then find the generated one.
   or the one that calls `Loop.sync()`.
 - Waiting from Haxe is done in bounded slices with a short sleep between, so
   runtimes whose other threads run only while one sleeps still make progress.
+- Where two threads each write one atomic and then read the other's, every
+  one of those accesses is `SeqCst`, or the two are made under one lock.
+  With anything weaker both may read the old value.
 
 ## Tests
 
@@ -196,6 +199,10 @@ filesystem `#include "counter.h"` would then find the generated one.
   nothing; what has to be checked is in the fixture.
 - Run a runtime test under a timeout. A wrong wait hangs; it does not fail.
 - Anything concurrent is run repeatedly, on more than one machine.
+- `cargo miri test -p hxn-abi` runs the unsafe core, and
+  `cargo miri test -p hxn-future` finds interleavings a native run does not,
+  the more with `-Zmiri-many-seeds`. Under Miri the tests that count on what
+  fits in a slice of time are skipped: it runs too slowly for them.
 - A test that depends on a runtime's limits says so beside the check it
   skips, with the reason.
 - A check does not depend on when the collector runs by itself: it forces a

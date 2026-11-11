@@ -19,6 +19,8 @@ natively and on wasm. Read these before changing anything:
   `emcc`, and a VM with its options, as in `hl "ash --mode jit"`.
 - **Run runtime tests under a timeout.** A wrong wait hangs; it does not fail.
 - **Repeat anything concurrent**, and on more than one machine if you can.
+  A change to `hxn-abi` or `hxn-future` is also run under Miri
+  (`cargo miri test -p hxn-abi`, `-p hxn-future`).
 - **Say what was not run.** If a runtime was unavailable, report that, not a
   pass.
 - `cargo fmt --all` and `cargo clippy --workspace --all-targets` are clean.

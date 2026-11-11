@@ -20,6 +20,10 @@ const POLLING: u8 = 2;
 const NOTIFIED: u8 = 3;
 const DONE: u8 = 4;
 
+// A step writes `task` and then reads `state`; a wake writes `state` and
+// then reads `task`. Every access is sequentially consistent, so one of the
+// two always sees what the other wrote: with anything weaker both may read
+// the old value, and the task parks with nobody told to wake it.
 struct Wakeup {
     state: AtomicU8,
     // What the workers know the task as, or zero on a thread's own queue,
@@ -34,20 +38,20 @@ impl Wake for Wakeup {
 
     fn wake_by_ref(self: &Arc<Self>) {
         loop {
-            let (seen, next) = match self.state.load(Ordering::Acquire) {
+            let (seen, next) = match self.state.load(Ordering::SeqCst) {
                 IDLE => (IDLE, SCHEDULED),
                 POLLING => (POLLING, NOTIFIED),
                 _ => return,
             };
             if self
                 .state
-                .compare_exchange(seen, next, Ordering::AcqRel, Ordering::Acquire)
+                .compare_exchange(seen, next, Ordering::SeqCst, Ordering::SeqCst)
                 .is_ok()
             {
                 // Only an idle task is waiting to be woken, so the workers
                 // are told once for each time it parks.
                 if seen == IDLE {
-                    reschedule(self.task.load(Ordering::Acquire));
+                    reschedule(self.task.load(Ordering::SeqCst));
                 }
                 return;
             }
@@ -105,11 +109,11 @@ where
     fn step(&mut self) -> Suspension {
         // First, so a wake that finds the task idle knows whom to tell.
         let task = if self.scheduled { current() } else { 0 };
-        self.wakeup.task.store(task, Ordering::Release);
+        self.wakeup.task.store(task, Ordering::SeqCst);
         if self
             .wakeup
             .state
-            .compare_exchange(SCHEDULED, POLLING, Ordering::AcqRel, Ordering::Acquire)
+            .compare_exchange(SCHEDULED, POLLING, Ordering::SeqCst, Ordering::SeqCst)
             .is_err()
         {
             return Suspension::Pending;
@@ -122,10 +126,10 @@ where
                 let woken = self
                     .wakeup
                     .state
-                    .compare_exchange(POLLING, IDLE, Ordering::AcqRel, Ordering::Acquire)
+                    .compare_exchange(POLLING, IDLE, Ordering::SeqCst, Ordering::SeqCst)
                     .is_err();
                 if woken {
-                    self.wakeup.state.store(SCHEDULED, Ordering::Release);
+                    self.wakeup.state.store(SCHEDULED, Ordering::SeqCst);
                     return Suspension::Yielded;
                 }
                 return Suspension::Pending;
@@ -133,7 +137,7 @@ where
             Ok(Poll::Ready(result)) => result.map_err(Into::into),
             Err(panic) => Err(panic),
         };
-        self.wakeup.state.store(DONE, Ordering::Release);
+        self.wakeup.state.store(DONE, Ordering::SeqCst);
         self.completer.settle(result);
         Suspension::Completed
     }
