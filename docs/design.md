@@ -403,7 +403,8 @@ flag.
   adapter's build script names `libhl.lib` and looks for it in `HXN_HL_DIR`,
   which the command sets to the directory the VM is in. A library linked
   into an hxcpp program there is built with the static C runtime hxcpp
-  uses, and the program names the system libraries Rust's own needs.
+  uses, the program names the system libraries Rust's own needs, and hxcpp
+  is told to build for the host's 64 bits, which is not its default.
 - **What is the program's own is said by the crate**, under
   `[package.metadata.hxn]`: its directory and main class, and `haxe-flags`,
   the arguments its compile takes beside hxn's, a `-lib` or a `-D`. The VM
