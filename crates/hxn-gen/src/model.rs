@@ -23,6 +23,9 @@ pub struct Interface {
     /// Marked `#[hxn::interface(weighed)]`: its values hold memory worth
     /// collecting for, so making one checks what the library holds.
     pub weighed: bool,
+    /// Not a struct of the library's: a class that is only where its
+    /// `#[hxn::function]`s are found. Nothing is made of it or released.
+    pub namespace: bool,
     pub methods: Vec<Method>,
 }
 
@@ -44,6 +47,9 @@ pub struct Method {
     pub returns_arc: bool,
     /// The number the function returns, when `returns` is what it crosses as.
     pub returns_number: Option<Number>,
+    /// A function outside an `impl`, marked `#[hxn::function]`: found at the
+    /// crate's root and not on the interface.
+    pub free: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

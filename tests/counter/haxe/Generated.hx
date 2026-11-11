@@ -22,6 +22,19 @@ class Generated {
 		check('$what: $message', message != null && message.indexOf(expected) >= 0);
 	}
 
+	static function functions() {
+		check("a function is a static of the library's own class", Counter.version() == "counter 1");
+		check("or of a class named for it", Tools.clamp(12, 0, 10) == 10 && Tools.halve(5) == 2.5);
+		throws("one that fails", () -> Tools.clamp(1, 5, 0), "low is above high");
+		var first = new Counter(4), second = new Counter(6);
+		check("one that takes objects", Tools.total(first, second) == 10);
+		var made = Tools.startingAt(9);
+		check("one that makes an object", made.add(1) == 10);
+		made.close();
+		first.close();
+		second.close();
+	}
+
 	static function numbers() {
 		check("narrow numbers come back as they went",
 			Numbers.byte(200) == 200 && Numbers.small(-100) == -100 && Numbers.word(60000) == 60000 && Numbers.short(-30000) == -30000);
@@ -373,6 +386,7 @@ class Generated {
 		throws("use after close", () -> counter.add(1), "closed");
 
 		handles();
+		functions();
 		numbers();
 		atomics();
 		shared();

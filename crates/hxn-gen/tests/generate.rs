@@ -1205,3 +1205,154 @@ fn sixty_four_bits_cross_as_themselves() {
     assert!(manifest.contains("{ \"name\": \"nanos\", \"type\": \"i64\" }"));
     assert!(manifest.contains("\"returns\": \"u64\""));
 }
+
+const FUNCTIONS: &str = r#"
+#[hxn::interface]
+pub struct Shelf;
+
+#[hxn::methods]
+impl Shelf {
+    pub fn count(&self) -> i32 { 0 }
+}
+
+/// How many shelves a library may have.
+#[hxn::function]
+pub fn limit() -> i32 { 8 }
+
+#[hxn::function(class = "Shelf")]
+pub fn merged(first: &Shelf, second: &Shelf) -> Shelf { todo!() }
+
+#[hxn::function(class = "Paths")]
+pub fn join(first: &str, second: &str) -> Result<String, String> { todo!() }
+
+pub fn unmarked() {}
+"#;
+
+#[test]
+fn a_function_outside_an_impl_is_a_static_of_a_class() {
+    let library = parse("book_store", FUNCTIONS).unwrap();
+    let names: Vec<_> = library
+        .interfaces
+        .iter()
+        .map(|interface| (interface.name.as_str(), interface.namespace))
+        .collect();
+    // The library's own class and one named on the attribute exist only to
+    // hold functions; the third joins an interface that is there.
+    assert_eq!(
+        names,
+        [("Shelf", false), ("BookStore", true), ("Paths", true)]
+    );
+    let shelf = &library.interfaces[0];
+    assert_eq!(shelf.methods.len(), 2);
+    assert!(!shelf.methods[0].free && shelf.methods[1].free);
+    assert_eq!(
+        library.interfaces[1].methods[0].docs,
+        ["How many shelves a library may have."]
+    );
+
+    // An adapter finds them at the crate's root, by a path.
+    for adapter in [
+        hxn_gen::c_adapter(&library, "store_core"),
+        hxn_gen::hl_adapter(&library, "store_core"),
+    ] {
+        assert!(adapter.contains("use store_core as hxn_library;"));
+        assert!(adapter.contains("use store_core::Shelf;"));
+        assert!(adapter.contains("Ok(hxn_library::limit())"));
+        assert!(adapter.contains("hxn_library::merged(&first, &second)"));
+        assert!(adapter.contains("hxn_library::join("));
+        assert!(adapter.contains("fn book_store_paths_join("));
+        // Nothing is made of such a class, so nothing closes one.
+        assert!(adapter.contains("fn book_store_shelf_close("));
+        assert!(!adapter.contains("book_store_paths_close"));
+        assert!(!adapter.contains("book_store_book_store_close"));
+    }
+    let header = hxn_gen::c_header(&library);
+    assert!(header.contains("hxn_status book_store_book_store_limit(int32_t *out, hxn_buf *err);"));
+    assert!(!header.contains("book_store_paths_close"));
+    let glue = hxn_gen::cpp_glue(&library);
+    assert!(glue.contains("inline int book_store_limit()"));
+    assert!(!glue.contains("paths_close"));
+
+    for files in [hxn_gen::haxe_hl(&library), cpp_classes(&library)] {
+        let paths: Vec<_> = files.iter().map(|file| file.path.as_str()).collect();
+        assert_eq!(paths[..3], ["Shelf.hx", "BookStore.hx", "Paths.hx"]);
+        assert!(
+            files[0]
+                .text
+                .contains("public static function merged(first:Shelf, second:Shelf):Shelf")
+        );
+        let store = &files[1].text;
+        assert!(store.contains("class BookStore {"));
+        assert!(store.contains("/** How many shelves a library may have. **/"));
+        assert!(store.contains("public static function limit():Int"));
+        for part in ["raw", "adopt", "close", "finalize"] {
+            assert!(!store.contains(part), "{part}");
+        }
+        assert!(
+            files[2]
+                .text
+                .contains("public static function join(first:String, second:String):String")
+        );
+    }
+    let native = hxn_gen::haxe_cpp(&library).pop().unwrap().text;
+    assert!(native.contains("static function paths_join(first:String, second:String):String;"));
+    assert!(!native.contains("paths_close"));
+
+    let manifest = hxn_gen::manifest(&library);
+    assert_eq!(manifest.matches("\"namespace\": true").count(), 2);
+}
+
+#[test]
+fn says_what_a_function_outside_an_impl_cannot_be() {
+    let cases = [
+        ("#[hxn::function]\nfn hidden() {}", "has to be `pub`"),
+        (
+            "#[hxn::function]\npub fn new() -> Thing { todo!() }",
+            "has another name",
+        ),
+        (
+            "#[hxn::function(class = \"Thing\")]\npub fn size() -> i32 { 0 }",
+            "`Thing` already has a function named `size`",
+        ),
+        (
+            "#[hxn::function]\npub fn twice() {}\n#[hxn::function]\npub fn twice() {}",
+            "already has a function named `twice`",
+        ),
+        (
+            "#[hxn::function(class = \"Thing\")]\npub fn close() {}",
+            "`close` is what releases the value",
+        ),
+        (
+            "#[hxn::function(class = \"tools\")]\npub fn a() {}",
+            "the name a Haxe class can have",
+        ),
+        (
+            "#[hxn::function(on = \"Tools\")]\npub fn b() {}",
+            "expected `#[hxn::function]`",
+        ),
+        (
+            "#[hxn::function(class = \"Memory\")]\npub fn c() {}",
+            "a name the adapters use",
+        ),
+        ("#[hxn::function]\npub fn d<T>(value: T) {}", "generic"),
+    ];
+    for (function, expected) in cases {
+        let source = format!(
+            "#[hxn::interface]\npub struct Thing;\n\n#[hxn::methods]\nimpl Thing {{\n    pub fn size(&self) -> i32 {{ 0 }}\n}}\n\n{function}\n"
+        );
+        let error = parse("thing", &source).unwrap_err();
+        assert!(
+            error.message.contains(expected),
+            "{function}: {}",
+            error.message
+        );
+    }
+    // A library may be functions and nothing else.
+    let only = parse(
+        "maths",
+        "#[hxn::function]\npub fn double(value: i32) -> i32 { value * 2 }\n",
+    )
+    .unwrap();
+    assert_eq!(only.interfaces[0].name, "Maths");
+    assert!(hxn_gen::hl_adapter(&only, "maths").contains("Ok(hxn_library::double(value))"));
+}

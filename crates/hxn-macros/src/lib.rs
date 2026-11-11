@@ -22,6 +22,13 @@ pub fn methods(_arguments: TokenStream, item: TokenStream) -> TokenStream {
     without_notes(item)
 }
 
+/// Marks a public function outside an `impl` as a static function of a Haxe
+/// class: the one named after the library, or `class = "Name"`.
+#[proc_macro_attribute]
+pub fn function(_arguments: TokenStream, item: TokenStream) -> TokenStream {
+    without_notes(item)
+}
+
 // `#[hxn(...)]` is a `#` and then a bracket group that starts `hxn (`.
 fn is_note(group: &Group) -> bool {
     if group.delimiter() != Delimiter::Bracket {

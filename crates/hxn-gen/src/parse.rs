@@ -8,6 +8,7 @@ use syn::spanned::Spanned;
 use syn::{Attribute, FnArg, ImplItem, Item, Meta, ReturnType, Visibility};
 
 use crate::model::{Error, Interface, Library, Method, Number, Param, Receiver, Type};
+use crate::names::pascal;
 
 fn error<T>(span: Span, message: impl Into<String>) -> Result<T, Error> {
     Err(Error {
@@ -521,8 +522,11 @@ impl Scope<'_> {
         }
     }
 
-    fn method(&self, function: &syn::ImplItemFn) -> Result<Method, Error> {
-        let signature = &function.sig;
+    fn method(
+        &self,
+        signature: &syn::Signature,
+        attributes: &[Attribute],
+    ) -> Result<Method, Error> {
         let name = signature.ident.to_string();
         // A function lent to the call may fail with an error of the caller's
         // choosing, which is the one use a type parameter has here.
@@ -605,7 +609,7 @@ impl Scope<'_> {
                 "`new` is the constructor: no `self`, and it returns the interface",
             );
         }
-        let blocking = is_blocking(&function.attrs)?;
+        let blocking = is_blocking(attributes)?;
         if blocking
             && params
                 .iter()
@@ -618,7 +622,7 @@ impl Scope<'_> {
         }
         Ok(Method {
             name,
-            docs: docs(&function.attrs),
+            docs: docs(attributes),
             receiver,
             params,
             returns,
@@ -629,6 +633,7 @@ impl Scope<'_> {
             returns_number: given(&signature.output)
                 .and_then(|(ty, _)| path_name(ty))
                 .and_then(|name| Number::parse(&name)),
+            free: false,
         })
     }
 }
@@ -780,6 +785,9 @@ fn located<T>(result: Result<T, Error>, source: &Source) -> Result<T, Error> {
 }
 
 // The interfaces a file marks.
+// What the adapters name their own exports after.
+const RESERVED: [&str; 6] = ["Atomic", "Memory", "Future", "Stream", "Signal", "Outbox"];
+
 fn interfaces_of(items: &[Item], interfaces: &mut Vec<Interface>) -> Result<(), Error> {
     for item in items {
         let Item::Struct(item) = item else { continue };
@@ -793,8 +801,7 @@ fn interfaces_of(items: &[Item], interfaces: &mut Vec<Interface>) -> Result<(), 
             return error(item.generics.span(), "a generic struct cannot cross");
         }
         let name = item.ident.to_string();
-        // What the adapters name their own exports after.
-        if ["Atomic", "Memory", "Future", "Stream", "Signal", "Outbox"].contains(&name.as_str()) {
+        if RESERVED.contains(&name.as_str()) {
             return error(
                 item.ident.span(),
                 format!("`{name}` is a name the adapters use; call the interface something else"),
@@ -813,6 +820,7 @@ fn interfaces_of(items: &[Item], interfaces: &mut Vec<Interface>) -> Result<(), 
             docs: docs(&item.attrs),
             shared: notes.shared,
             weighed: notes.weighed,
+            namespace: false,
             methods: Vec::new(),
         });
     }
@@ -876,7 +884,7 @@ fn methods_of(
             if !matches!(function.vis, Visibility::Public(_)) {
                 continue;
             }
-            let method = scope.method(function)?;
+            let method = scope.method(&function.sig, &function.attrs)?;
             if interface.methods.iter().any(|m| m.name == method.name) {
                 return error(
                     function.sig.ident.span(),
@@ -896,6 +904,110 @@ fn methods_of(
 }
 
 // Every interface first, so that a block in one file can name one in another.
+// What `#[hxn::function]` says of a function, if it is marked: the class it
+// is a static of, when that is not the library's own.
+fn function_class(attributes: &[Attribute]) -> Result<Option<Option<String>>, Error> {
+    let Some(attribute) = attributes.iter().find(|a| is_marker(a, "function")) else {
+        return Ok(None);
+    };
+    if matches!(attribute.meta, Meta::Path(_)) {
+        return Ok(Some(None));
+    }
+    let mut class = None;
+    let parsed = attribute.parse_nested_meta(|note| {
+        if !note.path.is_ident("class") {
+            return Err(note.error("unknown note"));
+        }
+        let name: syn::LitStr = note.value()?.parse()?;
+        class = Some(name.value());
+        Ok(())
+    });
+    let named = class.as_deref().is_some_and(|name| {
+        let mut letters = name.chars();
+        letters
+            .next()
+            .is_some_and(|first| first.is_ascii_uppercase())
+            && letters.all(|letter| letter.is_ascii_alphanumeric())
+    });
+    if parsed.is_err() || !named {
+        return error(
+            attribute.span(),
+            "expected `#[hxn::function]` or `#[hxn::function(class = \"Name\")]`, the name a Haxe class can have",
+        );
+    }
+    Ok(Some(class))
+}
+
+// The functions a file marks outside any `impl`, each added to the class it
+// is a static of: an interface's, or one that exists only to hold them.
+fn functions_of(
+    items: &[Item],
+    library: &str,
+    interfaces: &mut Vec<Interface>,
+    names: &[String],
+    shared: &[String],
+) -> Result<(), Error> {
+    for item in items {
+        let Item::Fn(function) = item else { continue };
+        let Some(class) = function_class(&function.attrs)? else {
+            continue;
+        };
+        let name = &function.sig.ident;
+        if !matches!(function.vis, Visibility::Public(_)) {
+            return error(name.span(), "a function exposed to Haxe has to be `pub`");
+        }
+        let class = class.unwrap_or_else(|| pascal(library));
+        if RESERVED.contains(&class.as_str()) {
+            return error(
+                name.span(),
+                format!("`{class}` is a name the adapters use; put the function on another class"),
+            );
+        }
+        if name == "new" {
+            return error(
+                name.span(),
+                "`new` makes an interface's value: a function outside an `impl` has another name",
+            );
+        }
+        let scope = Scope {
+            interfaces: names,
+            shared,
+            own: &class,
+        };
+        let mut method = scope.method(&function.sig, &function.attrs)?;
+        method.free = true;
+        let at = match interfaces.iter().position(|known| known.name == class) {
+            Some(at) => at,
+            None => {
+                interfaces.push(Interface {
+                    name: class.clone(),
+                    docs: Vec::new(),
+                    shared: false,
+                    weighed: false,
+                    namespace: true,
+                    methods: Vec::new(),
+                });
+                interfaces.len() - 1
+            }
+        };
+        let interface = &mut interfaces[at];
+        if interface.methods.iter().any(|m| m.name == method.name) {
+            return error(
+                name.span(),
+                format!("`{class}` already has a function named `{}`", method.name),
+            );
+        }
+        if method.name == "close" && !interface.namespace {
+            return error(
+                name.span(),
+                "`close` is what releases the value, and every interface has one",
+            );
+        }
+        interface.methods.push(method);
+    }
+    Ok(())
+}
+
 fn build(name: &str, sources: &[Source]) -> Result<Library, Error> {
     let mut interfaces: Vec<Interface> = Vec::new();
     for source in sources {
@@ -913,6 +1025,13 @@ fn build(name: &str, sources: &[Source]) -> Result<Library, Error> {
     for source in sources {
         located(
             methods_of(&source.items, &mut interfaces, &names, &shared),
+            source,
+        )?;
+    }
+    // After every `impl`, so a function finds what its class already has.
+    for source in sources {
+        located(
+            functions_of(&source.items, name, &mut interfaces, &names, &shared),
             source,
         )?;
     }

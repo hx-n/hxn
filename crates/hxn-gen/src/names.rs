@@ -101,22 +101,26 @@ pub fn memory_class(library: &Library) -> String {
     helper_class(library, "Memory")
 }
 
-// A class the binding needs beside the library's own: `Hxn<Library><role>`.
-fn helper_class(library: &Library, role: &str) -> String {
-    let mut name = String::from("Hxn");
+/// `audio_tools` as a class is named: `AudioTools`.
+pub fn pascal(name: &str) -> String {
+    let mut out = String::new();
     let mut upper = true;
-    for letter in library.name.chars() {
+    for letter in name.chars() {
         if letter == '_' {
             upper = true;
         } else if upper {
-            name.extend(letter.to_uppercase());
+            out.extend(letter.to_uppercase());
             upper = false;
         } else {
-            name.push(letter);
+            out.push(letter);
         }
     }
-    name.push_str(role);
-    name
+    out
+}
+
+// A class the binding needs beside the library's own: `Hxn<Library><role>`.
+fn helper_class(library: &Library, role: &str) -> String {
+    format!("Hxn{}{role}", pascal(&library.name))
 }
 
 /// Whether `method` is called on a value, as opposed to the type.

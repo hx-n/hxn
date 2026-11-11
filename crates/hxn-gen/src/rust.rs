@@ -19,6 +19,8 @@ fn question(method: &Method) -> &'static str {
 fn call(interface: &Interface, method: &Method, arguments: &[String]) -> String {
     let target = if has_receiver(method) {
         format!("this.{}", method.name)
+    } else if method.free {
+        format!("{LIBRARY}::{}", method.name)
     } else {
         format!("{}::{}", interface.name, method.name)
     };
@@ -339,17 +341,23 @@ fn hl_shared(library: &Library, interface: &Interface) -> String {
     out
 }
 
+// What an adapter calls the library's crate, to reach a function at its
+// root by a path: its name alone could be one of the adapter's own.
+const LIBRARY: &str = "hxn_library";
+
 fn imports(library: &Library, core: &str) -> String {
     let names: Vec<&str> = library
         .interfaces
         .iter()
+        .filter(|interface| !interface.namespace)
         .map(|interface| interface.name.as_str())
         .collect();
-    match names.as_slice() {
+    let types = match names.as_slice() {
         [] => String::new(),
         [name] => format!("use {core}::{name};\n"),
         names => format!("use {core}::{{{}}};\n", names.join(", ")),
-    }
+    };
+    format!("#[allow(unused_imports)]\nuse {core} as {LIBRARY};\n{types}")
 }
 
 /// The adapter over the plain C ABI. `core` is the path the library's items
@@ -370,6 +378,9 @@ pub fn c_adapter(library: &Library, core: &str) -> String {
         for method in &interface.methods {
             out.push('\n');
             out.push_str(&c_method(library, interface, method));
+        }
+        if interface.namespace {
+            continue;
         }
         out.push_str(&format!(
             "\n#[unsafe(no_mangle)]\npub unsafe extern \"C\" fn {name}(this: RawHandle, err: *mut Buf) -> Status {{\n    unsafe {{\n        guard(null_mut::<()>(), err, || {{\n            Handle::<{held}>::from_raw(this)?.take()?;\n            Ok(())\n        }})\n    }}\n}}\n",
@@ -602,6 +613,9 @@ pub fn hl_adapter(library: &Library, core: &str) -> String {
         for method in &interface.methods {
             out.push('\n');
             out.push_str(&hl_method(library, interface, method));
+        }
+        if interface.namespace {
+            continue;
         }
         let name = export(library, &interface.name, "close");
         out.push_str(&format!(

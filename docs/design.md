@@ -346,8 +346,8 @@ things keep the two sides consistent:
 
 ## Generation
 
-`hxn-gen` reads a library's source for the items marked `#[hxn::interface]`
-and `#[hxn::methods]` and writes the manifest, both Rust adapters, the C
+`hxn-gen` reads a library's source for the items marked `#[hxn::interface]`,
+`#[hxn::methods]` and `#[hxn::function]` and writes the manifest, both Rust adapters, the C
 header, the hxcpp glue and the Haxe classes. It starts at the crate's `lib.rs`
 and reads the file of every module declared from there down, so a library is
 laid out as any crate is. Names are the library's, not a module's: the
@@ -356,6 +356,13 @@ adapters find each interface at the crate's root.
 The attributes generate nothing. A macro expanding inside the library could
 not write files or put code into the separate adapter crates, so the generator
 parses the source instead and the attributes only make the markers legal Rust.
+
+A function marked outside an `impl` has no value to belong to, and Haxe has
+no function outside a class, so it becomes a static of one: by default the
+class named after the library, which is an interface's class when the two
+share a name and otherwise one made for the purpose. Such a class has
+nothing behind it: no handle, no `close`, and nothing in the adapters but
+its functions, which they call by a path from the crate's root.
 
 A Haxe class is a plain class with the library's public API, the same on both
 runtimes, over natives it calls. On HashLink each class declares its own, as

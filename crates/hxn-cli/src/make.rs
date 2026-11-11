@@ -267,7 +267,7 @@ pub fn build(project: &Project, target: Target, release: bool) -> Result<Built, 
         hxn_gen::parse_crate(name, &project.source).map_err(|error| error.to_string())?;
     if library.interfaces.is_empty() {
         return Err(format!(
-            "{}: nothing is marked `#[hxn::interface]`",
+            "{}: nothing is marked `#[hxn::interface]` or `#[hxn::function]`",
             project.source.display()
         ));
     }

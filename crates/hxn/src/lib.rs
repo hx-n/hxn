@@ -30,4 +30,4 @@
 
 pub use hxn_abi::memory::collect_soon;
 pub use hxn_abi::{AtomicFlag, Weight};
-pub use hxn_macros::{interface, methods};
+pub use hxn_macros::{function, interface, methods};

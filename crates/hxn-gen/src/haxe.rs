@@ -326,6 +326,9 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
     out
 }
 
+// A class that only holds functions: nothing is made of it.
+const NAMESPACE_DOCS: &str = "/** The library's functions that belong to no object. **/\n";
+
 fn hl_module(library: &Library, interface: &Interface) -> String {
     let name = &interface.name;
     let cells = interface
@@ -333,18 +336,24 @@ fn hl_module(library: &Library, interface: &Interface) -> String {
         .iter()
         .any(|method| matches!(method.returns, Type::AtomicInt | Type::AtomicBool));
     let mut out = String::from(HEADER);
-    out.push_str(&format!(
-        "@:noCompletion typedef {name}Raw = hl.Abstract<\"{}\">;\n",
-        abstract_name(library, name)
-    ));
+    if !interface.namespace {
+        out.push_str(&format!(
+            "@:noCompletion typedef {name}Raw = hl.Abstract<\"{}\">;\n",
+            abstract_name(library, name)
+        ));
+    }
     if cells {
         out.push_str(&format!(
             "private typedef CellRaw = hl.Abstract<\"{}\">;\n",
             cell_abstract(library)
         ));
     }
+    // Under the typedefs, when there are any.
+    if !interface.namespace || cells {
+        out.push('\n');
+    }
     out.push_str(&format!(
-        "\n@:hlNative(\"{}\")\nprivate class Native {{\n",
+        "@:hlNative(\"{}\")\nprivate class Native {{\n",
         library.name
     ));
     for method in &interface.methods {
@@ -363,6 +372,17 @@ fn hl_module(library: &Library, interface: &Interface) -> String {
             weak = local(name, "weak"),
             weak_raw = hl_raw(&weak_class(name), name),
         ));
+    }
+    if interface.namespace {
+        // Each function ends with a blank line; the class does not.
+        out.truncate(out.trim_end().len());
+        out.push_str(&format!("\n}}\n\n{NAMESPACE_DOCS}class {name} {{"));
+        for (index, method) in interface.methods.iter().enumerate() {
+            out.push_str(if index == 0 { "\n" } else { "\n\n" });
+            out.push_str(hl_method(library, interface, method).trim_end());
+        }
+        out.push_str("\n}\n");
+        return out;
     }
     out.push_str(&format!(
         "\tpublic static function {}(self:{name}Raw):Void {{}}\n}}\n\n",
@@ -522,6 +542,15 @@ fn cpp_module(library: &Library, interface: &Interface) -> String {
     let name = &interface.name;
     let native = native_class(library);
     let mut out = String::from(HEADER);
+    if interface.namespace {
+        out.push_str(&format!("{NAMESPACE_DOCS}class {name} {{"));
+        for (index, method) in interface.methods.iter().enumerate() {
+            out.push_str(if index == 0 { "\n" } else { "\n\n" });
+            out.push_str(cpp_method(library, interface, method).trim_end());
+        }
+        out.push_str("\n}\n");
+        return out;
+    }
     out.push_str(&docs(&interface.docs, ""));
     // A weighed object is counted from the moment it owns its value.
     let own = if interface.weighed {
@@ -707,6 +736,9 @@ fn cpp_natives(library: &Library) -> String {
         let name = &interface.name;
         for method in &interface.methods {
             out.push_str(&cpp_native(library, interface, method));
+        }
+        if interface.namespace {
+            continue;
         }
         out.push_str(&cpp_extern(library, &local(name, "close"), &this, "Void"));
         if interface.shared {

@@ -59,6 +59,7 @@ in [design.md](design.md); this is the checklist.
 | hxcpp glue header | `<library>_glue.h`, namespace `<library>_glue` |
 | hxcpp extern class over the glue | `Hxn<Library>Native`, each function under its glue name |
 | Haxe method | the Rust name in camel case |
+| a function outside an `impl` | `<library>_<class>_<function>`, as a function of that class would be |
 | Haxe class a binding needs beside the library's own | `Hxn<Library><Role>`: `HxnCounterMemory` |
 
 An interface is not named `Atomic`, `Memory`, `Future`, `Stream`, `Signal` or
@@ -77,6 +78,13 @@ filesystem `#include "counter.h"` would then find the generated one.
 - A function exposed to Haxe takes `&self`, `&mut self` or `self`, or no
   receiver. `self` by value closes the Haxe object. `new` is the constructor.
   No generics.
+- A function outside an `impl` is marked `#[hxn::function]`. Haxe has no
+  function without a class, so it is a static of one: the class named after
+  the library, `audio_tools` giving `AudioTools`, or the one the attribute
+  names with `class = "Name"`. Either may be an interface's class, which
+  the function then joins, or a class that exists only to hold functions.
+  The function is `pub`, reachable at the crate's root as an interface is,
+  not named `new`, and named once in its class.
 - Text is taken as `&str` and returned as `String`; bytes are taken as
   `&[u8]` and returned as `Vec<u8>`.
 - A number is `i32`, `i64` or `f64`, or one the adapter converts: `i8`,

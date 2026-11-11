@@ -25,7 +25,8 @@ cd greeter
 
 The library lives in `src/lib.rs`. It is ordinary Rust: `#[hxn::interface]`
 exposes a struct to Haxe as a class, and `#[hxn::methods]` exposes its public
-functions as that class's public Haxe methods.
+functions as that class's public Haxe methods. A function outside an `impl`
+is marked `#[hxn::function]` and becomes a static method.
 
 ```rust
 /// Greets people, and counts them.

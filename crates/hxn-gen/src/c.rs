@@ -70,6 +70,9 @@ pub fn c_header(library: &Library) -> String {
         for method in &interface.methods {
             out.push_str(&declaration(library, interface, method));
         }
+        if interface.namespace {
+            continue;
+        }
         out.push_str(&format!(
             "hxn_status {}(hxn_handle *self, hxn_buf *err);\n",
             export(library, &interface.name, "close")
@@ -245,6 +248,9 @@ pub fn cpp_glue(library: &Library) -> String {
         for method in &interface.methods {
             out.push('\n');
             out.push_str(&glue(library, interface, method));
+        }
+        if interface.namespace {
+            continue;
         }
         out.push_str(&format!(
             "\ninline void {}(void *self) {{\n\thxn_buf err = HXN_BUF_EMPTY;\n\thxn::check({}((hxn_handle *)self, &err), err);\n}}\n",

@@ -234,6 +234,15 @@
           "returns": "i32",
           "fallible": true,
           "blocking": false
+        },
+        {
+          "name": "version",
+          "docs": "What the library calls itself. With no class named, a function is a\nstatic of the one named after the library, which here is `Counter`'s.",
+          "kind": "static",
+          "params": [],
+          "returns": "str",
+          "fallible": false,
+          "blocking": false
         }
       ]
     },
@@ -708,6 +717,48 @@
           "params": [{ "name": "count", "type": "usize" }],
           "returns": "usize",
           "fallible": true,
+          "blocking": false
+        }
+      ]
+    },
+    {
+      "name": "Tools",
+      "namespace": true,
+      "methods": [
+        {
+          "name": "clamp",
+          "docs": "`value`, held between `low` and `high`. Fails if they are the wrong way\nround.",
+          "kind": "static",
+          "params": [{ "name": "value", "type": "i32" }, { "name": "low", "type": "i32" }, { "name": "high", "type": "i32" }],
+          "returns": "i32",
+          "fallible": true,
+          "blocking": false
+        },
+        {
+          "name": "total",
+          "docs": "What two counters hold between them.",
+          "kind": "static",
+          "params": [{ "name": "first", "type": "Counter" }, { "name": "second", "type": "Counter" }],
+          "returns": "i32",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "starting_at",
+          "docs": "A counter, made by a function that is no counter's.",
+          "kind": "static",
+          "params": [{ "name": "value", "type": "i32" }],
+          "returns": "Counter",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "halve",
+          "docs": "Half of `value`: a function of a module, on a class of the library's.",
+          "kind": "static",
+          "params": [{ "name": "value", "type": "f64" }],
+          "returns": "f64",
+          "fallible": false,
           "blocking": false
         }
       ]

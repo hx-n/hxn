@@ -74,6 +74,9 @@ fn interface(interface: &Interface) -> String {
     out.push_str(&format!("      \"name\": {},\n", quoted(&interface.name)));
     out.push_str(&docs(&interface.docs, "      "));
     // Each said only when it is.
+    if interface.namespace {
+        out.push_str("      \"namespace\": true,\n");
+    }
     if interface.shared {
         out.push_str("      \"shared\": true,\n");
     }

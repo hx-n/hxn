@@ -20,13 +20,43 @@ use hxn_future::{
 mod blob;
 mod numbers;
 pub use blob::Blob;
-pub use numbers::Numbers;
+// A function in a module is named at the root too.
+pub use numbers::{Numbers, halve};
 
 static LIVE: AtomicI32 = AtomicI32::new(0);
 
 /// How many counters exist. A binding that leaks or double-frees shows here.
 pub fn live() -> i32 {
     LIVE.load(Ordering::SeqCst)
+}
+
+/// What the library calls itself. With no class named, a function is a
+/// static of the one named after the library, which here is `Counter`'s.
+#[hxn::function]
+pub fn version() -> String {
+    String::from("counter 1")
+}
+
+/// `value`, held between `low` and `high`. Fails if they are the wrong way
+/// round.
+#[hxn::function(class = "Tools")]
+pub fn clamp(value: i32, low: i32, high: i32) -> Result<i32, &'static str> {
+    if low > high {
+        return Err("low is above high");
+    }
+    Ok(value.clamp(low, high))
+}
+
+/// What two counters hold between them.
+#[hxn::function(class = "Tools")]
+pub fn total(first: &Counter, second: &Counter) -> i32 {
+    first.value + second.value
+}
+
+/// A counter, made by a function that is no counter's.
+#[hxn::function(class = "Tools")]
+pub fn starting_at(value: i32) -> Counter {
+    Counter::new(value)
 }
 
 /// A number that is added to, with one of each thing a binding carries.

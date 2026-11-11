@@ -63,3 +63,9 @@ impl Numbers {
         Ok(count)
     }
 }
+
+/// Half of `value`: a function of a module, on a class of the library's.
+#[hxn::function(class = "Tools")]
+pub fn halve(value: f64) -> f64 {
+    value / 2.0
+}
