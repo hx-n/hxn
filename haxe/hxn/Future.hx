@@ -41,9 +41,10 @@ class Future<T> {
 
 	/** Waits for the result. Any thread may call it, any number of times. **/
 	public function await():T {
-		// A runtime without threads cannot block in the library: its wait
-		// returns while still pending, and sleeping lets another fiber settle.
-		while (wait(-1) == 0)
+		// In slices, with a sleep between them. Some runtimes run their other
+		// threads only while this one sleeps, and one without threads cannot
+		// block in the library at all: its wait returns while still pending.
+		while (wait(20) == 0)
 			Sys.sleep(0.001);
 		// The library gives the result up once; every caller reads this copy.
 		lock.acquire();

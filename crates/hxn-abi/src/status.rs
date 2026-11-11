@@ -22,6 +22,9 @@ impl Status {
     pub const PENDING: Self = Self(-8);
     /// A future lost everything that could settle it.
     pub const CANCELLED: Self = Self(-9);
+    /// A host callback failed. The host has its own account of why, and
+    /// reports that one once the call returns.
+    pub const CALLBACK: Self = Self(-10);
 
     pub const fn is_ok(self) -> bool {
         self.0 == 0

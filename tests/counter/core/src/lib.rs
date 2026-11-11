@@ -1,6 +1,7 @@
 //! A library small enough to read at a glance, with one of each thing a
 //! binding has to carry: a value with a destructor, a fallible method, text
-//! and bytes in, text out, and results that arrive later.
+//! and bytes in, text out, a function called back, and results that arrive
+//! later.
 
 use std::fmt;
 use std::sync::atomic::{AtomicI32, Ordering};
@@ -38,6 +39,19 @@ impl Counter {
 
     pub fn add(&mut self, amount: i32) -> Result<i32, Overflow> {
         self.value = self.value.checked_add(amount).ok_or(Overflow)?;
+        Ok(self.value)
+    }
+
+    /// Replaces the value with `f` of it, `times` over, and stops at the
+    /// first failure with the value as the last success left it.
+    pub fn apply<E>(
+        &mut self,
+        times: i32,
+        mut f: impl FnMut(i32) -> Result<i32, E>,
+    ) -> Result<i32, E> {
+        for _ in 0..times {
+            self.value = f(self.value)?;
+        }
         Ok(self.value)
     }
 

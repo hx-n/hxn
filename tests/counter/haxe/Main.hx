@@ -67,6 +67,20 @@ class Main {
 		throws("use after close", () -> counter.add(1), "closed");
 
 		Counter.nap(1);
+
+		var applied = new Counter(1);
+		check("a function lent to the library is called with each value", applied.apply(10, value -> value * 2) == 1024);
+		var calls = 0;
+		throws("what it throws reaches the caller", () -> applied.apply(5, value -> {
+			calls++;
+			if (calls == 3)
+				throw "on the third call";
+			return value + 1;
+		}), "on the third call");
+		check('and stops the library there, after $calls calls', calls == 3 && applied.add(0) == 1026);
+		throws("it cannot use the counter that is calling it", () -> applied.apply(1, value -> applied.add(1)), "in use");
+		check("which is free again afterwards", applied.add(0) == 1026);
+		applied.close();
 	}
 
 	static function futures() {

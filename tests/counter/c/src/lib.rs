@@ -3,11 +3,12 @@
 // Every export's contract is the ABI's: arguments are what the host's glue passes.
 #![allow(clippy::missing_safety_doc)]
 
+use std::ffi::c_void;
 use std::ptr::null_mut;
 use std::time::Duration;
 
 use counter_core::{Counter, Promise};
-use hxn_abi::{Buf, Fault, Handle, RawHandle, Slice, Status, guard, release};
+use hxn_abi::{Buf, Callback, Fault, Handle, RawHandle, Slice, Status, guard, release};
 use hxn_future::AnyFuture;
 
 unsafe fn counter<'a>(this: RawHandle) -> Result<&'a Handle<Counter>, Fault> {
@@ -27,6 +28,25 @@ pub unsafe extern "C" fn counter_add(
     err: *mut Buf,
 ) -> Status {
     unsafe { guard(out, err, || Ok(counter(this)?.borrow_mut()?.add(amount)?)) }
+}
+
+type IntToInt = unsafe extern "C" fn(*mut c_void, i32, *mut i32) -> Status;
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_apply(
+    this: RawHandle,
+    times: i32,
+    f: Callback<IntToInt>,
+    out: *mut i32,
+    err: *mut Buf,
+) -> Status {
+    unsafe {
+        guard(out, err, || {
+            counter(this)?
+                .borrow_mut()?
+                .apply(times, |value| f.invoke(value))
+        })
+    }
 }
 
 #[unsafe(no_mangle)]

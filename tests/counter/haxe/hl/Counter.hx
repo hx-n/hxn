@@ -10,6 +10,9 @@ private class Native {
 	public static function add(self:Raw, amount:Int):Int
 		return 0;
 
+	public static function apply(self:Raw, times:Int, f:Int->Null<Int>):Int
+		return 0;
+
 	public static function label(self:Raw, name:String):hl.Bytes
 		return null;
 
@@ -73,6 +76,20 @@ class Counter {
 
 	public function add(amount:Int):Int
 		return Native.add(raw, amount);
+
+	public function apply(times:Int, f:Int->Int):Int {
+		// Native code cannot be thrown through: keep the exception, tell the
+		// library its callback failed, and let `during` throw it afterwards.
+		var guarded = function(value:Int):Null<Int> {
+			try {
+				return f(value);
+			} catch (error:haxe.Exception) {
+				hxn.Callback.failed(error);
+				return null;
+			}
+		};
+		return hxn.Callback.during(() -> Native.apply(raw, times, guarded));
+	}
 
 	public function label(name:String):String
 		return @:privateAccess String.fromUCS2(Native.label(raw, name));

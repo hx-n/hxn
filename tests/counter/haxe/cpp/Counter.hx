@@ -32,6 +32,20 @@ class Counter {
 	public function add(amount:Int):Int
 		return untyped __cpp__("counter_glue::add({0}, {1})", raw, amount);
 
+	public function apply(times:Int, f:Int->Int):Int {
+		// Native code cannot be thrown through: keep the exception, tell the
+		// library its callback failed, and let `during` throw it afterwards.
+		var guarded = function(value:Int):Null<Int> {
+			try {
+				return f(value);
+			} catch (error:haxe.Exception) {
+				hxn.Callback.failed(error);
+				return null;
+			}
+		};
+		return hxn.Callback.during(() -> untyped __cpp__("counter_glue::apply({0}, {1}, {2})", raw, times, guarded));
+	}
+
 	public function label(name:String):String
 		return untyped __cpp__("counter_glue::label({0}, {1})", raw, name);
 

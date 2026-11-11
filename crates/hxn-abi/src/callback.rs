@@ -1,6 +1,7 @@
 use std::ffi::c_void;
+use std::mem::MaybeUninit;
 
-use crate::Fault;
+use crate::{Failure, Fault, Status};
 
 /// A host closure: the function to call, the state to call it with, and how
 /// to let go of that state.
@@ -13,7 +14,9 @@ use crate::Fault;
 /// passed it, which is the only one its runtime is known to accept.
 ///
 /// `call` must return normally. A host exception raised inside it is the
-/// adapter's to catch, because it would otherwise cross Rust frames.
+/// binding's to catch, because it would otherwise cross Rust frames. By
+/// convention a callback returns a [`Status`] and writes its result through
+/// a last `out` parameter, which is the shape [`invoke`](Self::invoke) calls.
 #[repr(C)]
 pub struct Callback<F: Copy> {
     call: Option<F>,
@@ -69,6 +72,34 @@ macro_rules! call {
         }
     };
 }
+
+macro_rules! invoke {
+    ($($arg:ident),*) => {
+        impl<R $(, $arg)*> Callback<unsafe extern "C" fn(*mut c_void $(, $arg)*, *mut R) -> Status> {
+            /// Calls a callback of the conventional shape and returns what
+            /// it wrote, or the status it failed with. After
+            /// [`Status::CALLBACK`] the host has an exception of its own
+            /// waiting, so the library should stop and return the failure.
+            #[allow(non_snake_case, clippy::too_many_arguments)]
+            pub fn invoke(&self $(, $arg: $arg)*) -> Result<R, Failure> {
+                let call = self.func()?;
+                let mut out = MaybeUninit::<R>::uninit();
+                let status = unsafe { call(self.env $(, $arg)*, out.as_mut_ptr()) };
+                if status.is_ok() {
+                    Ok(unsafe { out.assume_init() })
+                } else {
+                    Err(Failure::new(status, "callback failed"))
+                }
+            }
+        }
+    };
+}
+
+invoke!();
+invoke!(A);
+invoke!(A, B);
+invoke!(A, B, C);
+invoke!(A, B, C, D);
 
 call!();
 call!(A);
@@ -128,6 +159,22 @@ mod tests {
         let callback = unsafe { Callback::from_raw(length as Length, std::ptr::null_mut(), None) };
         let call = callback.func().unwrap();
         assert_eq!(unsafe { call(callback.env(), Slice::from("four")) }, 4);
+    }
+
+    unsafe extern "C" fn halve(_: *mut c_void, value: i32, out: *mut i32) -> Status {
+        if value % 2 != 0 {
+            return Status::CALLBACK;
+        }
+        unsafe { out.write(value / 2) };
+        Status::OK
+    }
+
+    #[test]
+    fn invoke_returns_what_was_written_or_the_status() {
+        type Halve = unsafe extern "C" fn(*mut c_void, i32, *mut i32) -> Status;
+        let callback = unsafe { Callback::from_raw(halve as Halve, std::ptr::null_mut(), None) };
+        assert_eq!(callback.invoke(8), Ok(4));
+        assert_eq!(callback.invoke(7).unwrap_err().status, Status::CALLBACK);
     }
 
     #[test]

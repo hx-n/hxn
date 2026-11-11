@@ -7,6 +7,8 @@
 //!   Haxe `String` is UTF-16 here and Rust's is UTF-8.
 //! - [`prim`] throws a failure to Haxe once Rust has let go of everything.
 //! - [`blocking`] lets the collector run while a call waits.
+//! - [`call`], with [`box_i32`] and [`unbox_i32`], calls a Haxe function
+//!   value, which is what a callback's trampoline is made of.
 //!
 //! Like `hl_abi` it imports the runtime's symbols and defines none, so the
 //! library linking it must leave them undefined for the VM to resolve.
@@ -33,6 +35,11 @@ unsafe extern "C" {
     #[cfg(windows)]
     #[link_name = "__imp_hlt_bytes"]
     static mut hlt_bytes_import: *mut hl_type;
+    #[cfg(not(windows))]
+    static mut hlt_i32: hl_type;
+    #[cfg(windows)]
+    #[link_name = "__imp_hlt_i32"]
+    static mut hlt_i32_import: *mut hl_type;
 
     fn hl_gc_alloc_gen(ty: *mut hl_type, size: c_int, flags: c_int) -> *mut c_void;
     fn hl_alloc_dynamic(ty: *mut hl_type) -> *mut vdynamic;
@@ -40,6 +47,8 @@ unsafe extern "C" {
     fn hl_remove_root(slot: *mut c_void);
     fn hl_blocking(blocking: bool);
     fn hl_throw(value: *mut vdynamic) -> !;
+    fn hl_dyn_call(closure: *mut vclosure, args: *mut *mut vdynamic, count: c_int)
+    -> *mut vdynamic;
 }
 
 const MEM_KIND_FINALIZER: c_int = 3;
@@ -241,4 +250,54 @@ pub unsafe fn blocking<T>(body: impl FnOnce() -> T) -> T {
     unsafe { hl_blocking(true) };
     let _leave = Leave;
     body()
+}
+
+/// A Haxe function value. Opaque: it is only handed back to the VM.
+#[allow(non_camel_case_types)]
+#[repr(C)]
+pub struct vclosure {
+    _private: [u8; 0],
+}
+
+unsafe fn i32_type() -> *mut hl_type {
+    #[cfg(windows)]
+    unsafe {
+        hlt_i32_import
+    }
+    #[cfg(not(windows))]
+    {
+        &raw mut hlt_i32
+    }
+}
+
+/// `value` as the VM passes an `Int` it does not know the type of.
+pub fn box_i32(value: i32) -> *mut vdynamic {
+    let boxed = unsafe { hl_alloc_dynamic(i32_type()) };
+    if !boxed.is_null() {
+        unsafe { (*boxed).v.i = value };
+    }
+    boxed
+}
+
+/// The `Int` in a `Null<Int>`, or `None` for null.
+///
+/// # Safety
+/// `value` is null or a live boxed `Int`.
+pub unsafe fn unbox_i32(value: *const vdynamic) -> Option<i32> {
+    if value.is_null() {
+        None
+    } else {
+        Some(unsafe { (*value).v.i })
+    }
+}
+
+/// Calls a Haxe function value and returns its result as the VM boxes it:
+/// null for `Void` or a null.
+///
+/// # Safety
+/// `closure` is live, `args` are boxed as its parameters are typed, and it
+/// does not throw. A binding sees to the last by wrapping what the user
+/// passed: a throw here would jump past every Rust frame on the way out.
+pub unsafe fn call(closure: *mut vclosure, args: &mut [*mut vdynamic]) -> *mut vdynamic {
+    unsafe { hl_dyn_call(closure, args.as_mut_ptr(), args.len() as c_int) }
 }

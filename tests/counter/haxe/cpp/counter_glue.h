@@ -21,6 +21,25 @@ inline int add(void *self, int amount) {
 	return out;
 }
 
+// What the library calls a function of Int->Null<Int> through. The binding's
+// wrapper returns null when the user's function threw.
+inline hxn_status int_to_int(void *env, int value, int *out) {
+	Dynamic result = Dynamic((hx::Object *)env)(value);
+	if (result == null())
+		return HXN_CALLBACK;
+	*out = (int)result;
+	return HXN_OK;
+}
+
+inline int apply(void *self, int times, Dynamic f) {
+	int out = 0;
+	hxn_buf err = HXN_BUF_EMPTY;
+	// Lent: `f` is on this stack for the call, so the library drops nothing.
+	hxn_callback callback = { (void *)int_to_int, f.mPtr, 0 };
+	hxn::check(counter_apply((hxn_handle *)self, times, callback, &out, &err), err);
+	return out;
+}
+
 inline ::String label(void *self, ::String name) {
 	hx::strbuf storage;
 	hxn_buf out = HXN_BUF_EMPTY;

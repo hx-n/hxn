@@ -4,13 +4,17 @@
 // Every export's contract is the ABI's: arguments are what the host's glue passes.
 #![allow(clippy::missing_safety_doc)]
 
+use std::ffi::c_void;
 use std::time::Duration;
 
 use counter_core::{Counter, Promise};
 use hl_abi::{vbyte, vstring};
-use hxn_abi::{Fault, Handle};
+use hxn_abi::{Callback, Fault, Handle, Status};
 use hxn_future::AnyFuture;
-use hxn_hl::{Managed, Root, blocking, define_prim, manage, prim, slice, string, utf16};
+use hxn_hl::{
+    Managed, Root, blocking, box_i32, call, define_prim, manage, prim, slice, string, unbox_i32,
+    utf16, vclosure,
+};
 
 // A side module shares the program's heap, so it allocates from the program.
 #[cfg(target_family = "wasm")]
@@ -32,6 +36,35 @@ pub unsafe extern "C" fn counter_add(this: *mut Managed, amount: i32) -> i32 {
     unsafe { prim(|| Ok(counter(this)?.borrow_mut()?.add(amount)?)) }
 }
 define_prim!(hlp_add, counter_add, "PXhxn_counter_i_i");
+
+type IntToInt = unsafe extern "C" fn(*mut c_void, i32, *mut i32) -> Status;
+
+// What a callback of `Int->Null<Int>` is called through. The binding's
+// wrapper returns null when the user's function threw.
+unsafe extern "C" fn int_to_int(env: *mut c_void, value: i32, out: *mut i32) -> Status {
+    let mut args = [box_i32(value)];
+    match unsafe { unbox_i32(call(env.cast(), &mut args)) } {
+        Some(result) => {
+            unsafe { out.write(result) };
+            Status::OK
+        }
+        None => Status::CALLBACK,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_apply(this: *mut Managed, times: i32, f: *mut vclosure) -> i32 {
+    unsafe {
+        prim(|| {
+            // Lent: the VM keeps `f` alive for the call, so nothing is dropped.
+            let f = Callback::from_raw(int_to_int as IntToInt, f.cast(), None);
+            counter(this)?
+                .borrow_mut()?
+                .apply(times, |value| f.invoke(value))
+        })
+    }
+}
+define_prim!(hlp_apply, counter_apply, "PXhxn_counter_iPi_Ni_i");
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn counter_label(this: *mut Managed, name: *mut vstring) -> *mut vbyte {

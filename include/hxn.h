@@ -20,6 +20,7 @@ typedef int32_t hxn_status;
 #define HXN_TOO_LARGE (-7)
 #define HXN_PENDING (-8)
 #define HXN_CANCELLED (-9)
+#define HXN_CALLBACK (-10)
 
 /* Bytes or UTF-8 text the caller keeps alive for the call. */
 typedef struct hxn_slice {
@@ -55,7 +56,13 @@ static inline void hxn_buf_free(hxn_buf *buf) {
 typedef struct hxn_handle hxn_handle;
 
 /* A host closure. `call` takes `env` first; its real type is the callback's
- * signature. `drop` is null for a callback lent for one call. */
+ * signature, which by convention returns an hxn_status and writes its result
+ * through a last `out` parameter. `drop` is null for a callback lent for one
+ * call.
+ *
+ * `call` must return normally. A binding wraps the host's function so that an
+ * exception is kept (hxn.Callback.failed) and HXN_CALLBACK returned in its
+ * place, then rethrows it after the library has returned. */
 typedef struct hxn_callback {
 	void *call;
 	void *env;
