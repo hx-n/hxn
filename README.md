@@ -102,6 +102,23 @@ Add `--wasm` to build and run the same program as wasm: `hxn run hl --wasm`
 through Ash, and `hxn run cpp --wasm` through hxcpp and Emscripten. Both need
 a nightly Rust toolchain.
 
+`hxn package` builds the library for both runtimes and gathers the classes,
+the headers and the native libraries into one directory, for a Haxe project
+that does not have the Rust source. That directory is a haxelib:
+
+```
+hxn package --release --out ../greeter-haxelib
+haxelib dev greeter ../greeter-haxelib
+haxe -lib greeter -cp src -main Main -hl main.hl
+```
+
+`-lib greeter` runs the macro `hxn.Bind.lib("greeter")`, which picks the
+classes for the target being compiled, tells hxcpp where the headers and the
+library are, and for HashLink puts `greeter.hdll` beside `main.hl`. The
+package holds native libraries for the machine it was made on; run
+`hxn package` into the same directory on another machine, or with `--wasm`,
+to add more.
+
 ## Examples
 
 [examples/](examples) has this library and two more, each a crate and a Haxe

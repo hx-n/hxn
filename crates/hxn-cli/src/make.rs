@@ -13,7 +13,8 @@
 //! | `hl-wasm/<library>.wasm` | the same as a module Ash loads into a wasm program |
 //!
 //! `<runtime>` is `hl` or `cpp`, and `hl-wasm` or `cpp-wasm` for a wasm
-//! build. The library's own crate gains one file, its manifest.
+//! build. The library's own crate gains one file, its manifest. `package/`
+//! beside these is what [`crate::package`] gathers from them.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -64,7 +65,7 @@ impl Target {
 
     // What rustc calls it, where that is not the host. HashLink bytecode
     // becomes wasm through Ash, and hxcpp's C++ through Emscripten.
-    fn triple(self) -> Option<&'static str> {
+    pub fn triple(self) -> Option<&'static str> {
         match (self.wasm, self.runtime) {
             (false, _) => None,
             (true, Runtime::Hl) => Some("wasm32-wasip1"),
@@ -98,11 +99,17 @@ pub struct Built {
     pub arguments: Vec<(&'static str, String)>,
     /// The same, as a file `haxe` takes.
     pub hxml: PathBuf,
+    /// The library's Haxe classes for the runtime, a class path.
+    pub classes: PathBuf,
+    /// `hxn.h` and the library's headers, which hxcpp compiles against.
+    pub include: PathBuf,
+    /// What was built: the library a VM loads, or the archive hxcpp links.
+    pub library: PathBuf,
 }
 
 // Leaves a file that already says this alone, so cargo and haxe rebuild
 // only what changed.
-fn write(path: &Path, text: &str) -> Result<(), String> {
+pub fn write(path: &Path, text: &str) -> Result<(), String> {
     if std::fs::read_to_string(path).is_ok_and(|existing| existing == text) {
         return Ok(());
     }
@@ -195,7 +202,7 @@ fn said(command: &mut Command) -> Option<String> {
 }
 
 // The line of `rustc -vV` that starts with `key`.
-fn rustc_says(key: &str) -> Result<String, String> {
+pub fn rustc_says(key: &str) -> Result<String, String> {
     said(Command::new("rustc").arg("-vV"))
         .and_then(|text| {
             text.lines()
@@ -397,13 +404,16 @@ pub fn build(
     }
     match runtime {
         Runtime::Hl if target.wasm => {
-            side_module(&built, &adapter, &dir.join(format!("{name}.wasm")))?;
+            let module = dir.join(format!("{name}.wasm"));
+            side_module(&built, &adapter, &module)?;
+            built = module;
         }
         Runtime::Hl => {
             // Under the name the Haxe classes ask the VM for.
             let hdll = dir.join(format!("{name}.hdll"));
             std::fs::copy(&built, &hdll)
                 .map_err(|error| format!("{}: {error}", built.display()))?;
+            built = hdll;
         }
         Runtime::Cpp => {
             if target.wasm {
@@ -440,6 +450,9 @@ pub fn build(
         dir,
         arguments,
         hxml,
+        classes: haxe,
+        include: out.join("include"),
+        library: built,
     })
 }
 

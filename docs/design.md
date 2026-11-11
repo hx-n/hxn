@@ -384,7 +384,8 @@ flag.
 | `hxn new <name>` | makes a library, a copy of `examples/greeter`: a crate, and a Haxe program that uses it |
 | `hxn build <hl\|cpp>` | writes the binding for a runtime and builds it |
 | `hxn run <hl\|cpp>` | builds, then compiles and runs the library's Haxe program |
-| `--wasm` on either | does the same for the runtime's wasm form |
+| `hxn package [hl] [cpp]` | builds for both runtimes, or the ones named, and gathers what a Haxe program needs into one directory |
+| `--wasm` on any of these | does the same for the runtime's wasm form |
 
 - **The adapter crates are written, not kept.** A build writes the adapter
   for the runtime as a crate under cargo's target directory, depending on the
@@ -418,6 +419,38 @@ flag.
   and node runs the result. Either way Rust's standard library is rebuilt,
   position-independent for the one and aborting for the other, which takes a
   nightly toolchain; the command says so when it has another.
+
+- **A package is what a Haxe program uses without the library's source.**
+  It is a directory that is also a haxelib:
+
+  | | |
+  |---|---|
+  | `<library>.hxn.json` | the manifest |
+  | `hxn/` | hxn's own Haxe classes |
+  | `binding/hl/`, `binding/cpp/` | the library's generated classes for each runtime |
+  | `include/` | `hxn.h` and the library's headers, for hxcpp |
+  | `native/<triple>/` | the built libraries for one kind of machine, named as Rust names it, or for `wasm32-wasip1` or `wasm32-unknown-emscripten` |
+  | `haxelib.json`, `extraParams.hxml` | its name and version, and the one line that runs `hxn.Bind.lib` |
+
+  Only `native/` differs from one machine to another, so packaging again
+  elsewhere, or with `--wasm`, adds a directory to it.
+- **`hxn.Bind.lib("<library>")` points a compile at a package.** It is a
+  macro run before anything is typed, which a package's `extraParams.hxml`
+  does, so a program's build says `-lib <library>` and nothing of where
+  things are. It finds the package by its manifest on the class path and
+  reads it, refusing a manifest of another version. From the compile's
+  defines it adds `binding/hl` or `binding/cpp` to the class path; for hxcpp
+  it defines where the headers and the archive are, and the word size the
+  archive was built for where hxcpp would assume another; for HashLink it
+  copies the `.hdll`, or the `.wasm` module, beside the program once that is
+  written, which is where the VM's loader and Ash look. The library is the
+  one for the machine compiling, for wasm when `wasm` or `emscripten` is
+  defined, or the one `-D hxn_triple=<triple>` names.
+- **The macro chooses classes; it does not make them.** A library's Haxe
+  classes and the adapter they call are written by one run of the generator,
+  so the names and signatures on the two sides cannot differ. Classes built
+  at compile time from the manifest would be a second emitter, of another
+  version than the one that wrote the adapter in the package.
 
 A library that wants its adapter crates in its own repository, as the fixture
 in `tests/counter` has them, gives each a build script that calls `hxn-gen`.

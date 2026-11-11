@@ -12,6 +12,7 @@ pub const HAXE: &[(&str, &str)] = &[
         "hxn/AtomicInt.hx",
         include_str!("../../../haxe/hxn/AtomicInt.hx"),
     ),
+    ("hxn/Bind.hx", include_str!("../../../haxe/hxn/Bind.hx")),
     (
         "hxn/Callback.hx",
         include_str!("../../../haxe/hxn/Callback.hx"),

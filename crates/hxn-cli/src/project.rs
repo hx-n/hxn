@@ -15,6 +15,9 @@ pub struct Project {
     pub krate: String,
     /// The name its binaries and symbols carry.
     pub library: String,
+    /// The package's version and what it says it is, which its haxelib says too.
+    pub version: String,
+    pub description: String,
     /// The Rust file holding its marked items.
     pub source: PathBuf,
     /// Where its Haxe program is, and that program's main class.
@@ -229,6 +232,8 @@ impl Project {
             package: name.to_owned(),
             krate,
             library,
+            version: text(package, "version").unwrap_or("0.0.0").to_owned(),
+            description: text(package, "description").unwrap_or_default().to_owned(),
             source,
             haxe: dir.join(setting("haxe").unwrap_or("haxe")),
             main: setting("main").unwrap_or("Main").to_owned(),

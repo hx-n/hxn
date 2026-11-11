@@ -7,6 +7,7 @@
 
 mod make;
 mod new;
+mod package;
 mod project;
 mod support;
 
@@ -31,6 +32,12 @@ const USAGE: &str = "usage: hxn <command>
       HXN_VM, names the HashLink-compatible program to run it with, and
       any options for it: --vm \"ash --mode jit\".
 
+  hxn package [hl] [cpp] [--wasm] [--release] [--out <directory>]
+      Builds the library for both runtimes, or the ones named, and gathers
+      what a Haxe program needs of it into one directory: a haxelib that
+      `-lib` names, or a class path beside --macro 'hxn.Bind.lib(\"<name>\")'.
+      Packaging again, on another machine or with --wasm, adds to it.
+
 With --wasm the binding and the program are built for wasm. `hl --wasm` is
 built and run by Ash, which --vm or HXN_VM names if it is not `ash`.
 `cpp --wasm` is built by hxcpp through Emscripten and run by node, or by the
@@ -49,6 +56,7 @@ struct Arguments {
     wasm: bool,
     vm: Option<String>,
     hxn: Option<PathBuf>,
+    out: Option<PathBuf>,
     rest: Vec<String>,
 }
 
@@ -59,6 +67,7 @@ fn arguments(mut given: impl Iterator<Item = String>) -> Result<Arguments, Strin
         wasm: false,
         vm: None,
         hxn: None,
+        out: None,
         rest: Vec::new(),
     };
     while let Some(argument) = given.next() {
@@ -72,6 +81,7 @@ fn arguments(mut given: impl Iterator<Item = String>) -> Result<Arguments, Strin
             "--wasm" => out.wasm = true,
             "--vm" => out.vm = Some(value("--vm")?),
             "--hxn" => out.hxn = Some(PathBuf::from(value("--hxn")?)),
+            "--out" => out.out = Some(PathBuf::from(value("--out")?)),
             flag if flag.starts_with('-') => return Err(format!("unknown option `{flag}`")),
             _ => out.positional.push(argument),
         }
@@ -305,6 +315,44 @@ fn command() -> Result<u8, String> {
             let arguments = arguments(given)?;
             let target = target(&arguments)?;
             run(&Project::read(&here)?, target, arguments)
+        }
+        "package" => {
+            let arguments = arguments(given)?;
+            let named: &[String] = &arguments.positional;
+            let both = [String::from("hl"), String::from("cpp")];
+            let mut targets = Vec::new();
+            for name in if named.is_empty() { &both } else { named } {
+                let runtime = Runtime::parse(name)
+                    .ok_or(format!("unknown runtime `{name}`: it is `hl` or `cpp`"))?;
+                targets.push(Target {
+                    runtime,
+                    wasm: arguments.wasm,
+                });
+            }
+            let project = Project::read(&here)?;
+            let out = match &arguments.out {
+                Some(out) => std::path::absolute(out).map_err(|error| error.to_string())?,
+                None => package::default_directory(&project),
+            };
+            let hashlink = targets
+                .iter()
+                .find_map(|&target| hashlink(&arguments, target));
+            let triples = package::package(
+                &project,
+                &targets,
+                arguments.release,
+                hashlink.as_deref(),
+                &out,
+            )?;
+            let name = &project.library;
+            println!(
+                "Packaged {name} in {}, with what was built for {}.\nAs a haxelib:\n  haxelib dev {name} {}\n  haxe -lib {name} ...\nOr as it is:\n  haxe -cp {} --macro 'hxn.Bind.lib(\"{name}\")' ...",
+                out.display(),
+                triples.join(" and "),
+                out.display(),
+                out.display()
+            );
+            Ok(0)
         }
         "help" | "--help" | "-h" => {
             println!("{USAGE}");

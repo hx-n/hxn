@@ -74,10 +74,10 @@ natively and on wasm. Read these before changing anything:
 | `crates/hxn-gen` | Reads a library's marked source and writes its adapters, header and Haxe classes. |
 | `crates/hxn-cli` | The `hxn` command: makes a library, builds its binding for a runtime, runs its Haxe program. |
 | `include/hxn.h` | The same layouts for C, and what hxcpp glue needs around them. |
-| `haxe/hxn` | The Haxe side: `Future`, `Stream`, `Signal`, `Computed`, `Reactive`, `Inbox`, `Loop`, `Callback`, `AtomicInt`, `AtomicBool`, `Gc`. |
+| `haxe/hxn` | The Haxe side: `Future`, `Stream`, `Signal`, `Computed`, `Reactive`, `Inbox`, `Loop`, `Callback`, `AtomicInt`, `AtomicBool`, `Gc`, and the macro `Bind`. |
 | `examples` | Small libraries to read and run: each a crate, a Haxe program and what it prints. |
 | `tests/counter` | The fixture: a small library bound for every runtime, and the Haxe test they all run. |
-| `tests/cli` | Makes a library with `hxn new` and runs it, as the readme says to. |
+| `tests/cli` | Makes a library with `hxn new`, runs it as the readme says to, and packages it. |
 | `tests/examples` | Runs each example and compares what it prints. |
 
 `internal/` is not part of the repository.
