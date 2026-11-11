@@ -13,6 +13,7 @@
 //!
 //! [`channel`] is the same idea for results that arrive more than once: a
 //! [`Stream`] the library sends to and the host takes from, item by item.
+//! [`signal()`] is for a value that changes, where only the latest matters.
 //!
 //! The result stays in Rust until a Haxe thread takes it. Settling touches no
 //! runtime, so the thread that settles needs no standing with a collector,
@@ -46,12 +47,15 @@ use krio_core::{Suspension, Task};
 pub use hxn_abi::{Failure, Status};
 
 mod local;
+pub mod outbox;
 mod polled;
 #[cfg(not(all(target_family = "wasm", not(target_feature = "atomics"))))]
 mod pool;
+mod signal;
 mod stream;
 
 pub use local::pump;
+pub use signal::{AnySignal, CLOSED, Change, Signal, Source, signal};
 pub use stream::{AnyStream, Flow, Sender, Stream, channel};
 
 // False for wasm built without atomics, where std has no thread to start and
@@ -92,6 +96,7 @@ impl<T> Slot<T> {
 struct Shared<T> {
     slot: Mutex<Slot<T>>,
     settled: Condvar,
+    tag: Arc<outbox::Tag>,
 }
 
 impl<T> Shared<T> {
@@ -112,6 +117,7 @@ impl<T> Shared<T> {
         *slot = Slot::Settled(result);
         drop(slot);
         self.settled.notify_all();
+        outbox::publish(&self.tag);
         for waker in wakers {
             waker.wake();
         }
@@ -266,6 +272,7 @@ pub fn pending<T>() -> (Completer<T>, Future<T>) {
     let shared = Arc::new(Shared {
         slot: Mutex::new(Slot::Pending(Vec::new())),
         settled: Condvar::new(),
+        tag: outbox::Tag::new(),
     });
     let owner = Arc::new(Owner {
         shared: shared.clone(),
@@ -378,6 +385,7 @@ where
 trait Erased: Send + Sync {
     fn state(&self) -> State;
     fn wait(&self, timeout: Option<Duration>) -> State;
+    fn watch(&self) -> i32;
     fn as_any(&self) -> &dyn Any;
 }
 
@@ -388,6 +396,10 @@ impl<T: Send + 'static> Erased for Shared<T> {
 
     fn wait(&self, timeout: Option<Duration>) -> State {
         Shared::wait(self, timeout)
+    }
+
+    fn watch(&self) -> i32 {
+        self.tag.watch()
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -413,6 +425,12 @@ impl AnyFuture {
 
     pub fn wait(&self, timeout: Option<Duration>) -> State {
         self.0.wait(timeout)
+    }
+
+    /// Has the future noted in the [`outbox`] when it is settled, and returns
+    /// the id it is noted under.
+    pub fn watch(&self) -> i32 {
+        self.0.watch()
     }
 
     /// As [`wait`](Self::wait), with the timeout a host passes: milliseconds,
@@ -853,5 +871,53 @@ mod tests {
         }
         assert_eq!(seen, [1, 2, 3]);
         assert_eq!(stream.flow(), Flow::Ended);
+    }
+
+    // The outbox is the library's one queue, so everything about it is
+    // checked in one test: two would take each other's entries.
+    #[test]
+    fn the_host_is_told_what_happened_in_the_order_it_did() {
+        let (unwatched, _future) = pending::<i32>();
+        unwatched.resolve(1);
+
+        let (completer, future) = pending::<i32>();
+        let future = AnyFuture::from(future);
+        let (sender, stream) = channel::<i32>();
+        let stream = AnyStream::from(stream);
+        let (source, value) = signal(0);
+        let value = AnySignal::from(value);
+        let (future, stream, value) = (future.watch(), stream.watch(), value.watch());
+        assert!(!outbox::wait(Some(Duration::ZERO)));
+        assert_eq!(outbox::next(), -1);
+
+        sender.send(1);
+        source.set(1);
+        completer.resolve(5);
+        sender.send(2);
+        source.set(2);
+        assert!(outbox::wait(None));
+        // Each once, however often it changed, in the order they first did.
+        let taken = [
+            outbox::next(),
+            outbox::next(),
+            outbox::next(),
+            outbox::next(),
+        ];
+        assert_eq!(taken, [stream, value, future, -1]);
+
+        // Taken, so the next change is noted again.
+        sender.send(3);
+        drop(source);
+        assert_eq!([outbox::next(), outbox::next()], [stream, value]);
+
+        std::thread::scope(|scope| {
+            scope.spawn(|| {
+                std::thread::sleep(Duration::from_millis(20));
+                sender.close();
+            });
+            assert!(!outbox::wait_millis(1));
+            assert!(outbox::wait_millis(-1));
+        });
+        assert_eq!([outbox::next(), outbox::next()], [stream, -1]);
     }
 }

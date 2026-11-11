@@ -7,10 +7,10 @@
 use std::ffi::c_void;
 use std::time::Duration;
 
-use counter_core::{Counter, Emitter, Promise};
+use counter_core::{Counter, Emitter, Gauge, Promise};
 use hl_abi::{vbyte, vstring};
 use hxn_abi::{Callback, Fault, Handle, Status};
-use hxn_future::{AnyFuture, AnyStream};
+use hxn_future::{AnyFuture, AnySignal, AnyStream, outbox};
 use hxn_hl::{
     Managed, Root, blocking, box_i32, call, define_prim, manage, prim, slice, string, unbox_i32,
     utf16, vclosure,
@@ -334,3 +334,100 @@ pub unsafe extern "C" fn counter_emitter_end(this: *mut Managed) -> bool {
     unsafe { prim(|| Ok(emitter(this)?.borrow()?.end())) }
 }
 define_prim!(hlp_emitter_end, counter_emitter_end, "PXhxn_emitter__b");
+
+unsafe fn signal<'a>(this: *mut Managed) -> Result<&'a Handle<AnySignal>, Fault> {
+    unsafe { hxn_hl::handle(this) }
+}
+
+unsafe fn gauge<'a>(this: *mut Managed) -> Result<&'a Handle<Gauge>, Fault> {
+    unsafe { hxn_hl::handle(this) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_ramp(limit: i32) -> *mut Managed {
+    unsafe { prim(|| Ok(manage(AnySignal::from(counter_core::ramp(limit))))) }
+}
+define_prim!(hlp_ramp, counter_ramp, "Pi_Xhxn_signal_");
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_signal_wait(
+    this: *mut Managed,
+    seen: i32,
+    milliseconds: i32,
+) -> i32 {
+    unsafe {
+        prim(|| {
+            let signal = signal(this)?.borrow()?;
+            Ok(blocking(|| signal.wait_millis(seen, milliseconds)))
+        })
+    }
+}
+define_prim!(hlp_signal_wait, counter_signal_wait, "PXhxn_signal_ii_i");
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_signal_get_int(this: *mut Managed) -> i32 {
+    unsafe { prim(|| signal(this)?.borrow()?.get::<i32>()) }
+}
+define_prim!(
+    hlp_signal_get_int,
+    counter_signal_get_int,
+    "PXhxn_signal__i"
+);
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_gauge_new(initial: i32) -> *mut Managed {
+    unsafe { prim(|| Ok(manage(Gauge::new(initial)))) }
+}
+define_prim!(hlp_gauge_new, counter_gauge_new, "Pi_Xhxn_gauge_");
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_gauge_signal(this: *mut Managed) -> *mut Managed {
+    unsafe {
+        prim(|| {
+            let signal = gauge(this)?.borrow_mut()?.signal().ok_or(Fault::Closed)?;
+            Ok(manage(AnySignal::from(signal)))
+        })
+    }
+}
+define_prim!(
+    hlp_gauge_signal,
+    counter_gauge_signal,
+    "PXhxn_gauge__Xhxn_signal_"
+);
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_gauge_set(this: *mut Managed, value: i32) -> bool {
+    unsafe { prim(|| Ok(gauge(this)?.borrow()?.set(value))) }
+}
+define_prim!(hlp_gauge_set, counter_gauge_set, "PXhxn_gauge_i_b");
+
+// The library's one queue of what it has for the host.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_outbox_wait(milliseconds: i32) -> bool {
+    unsafe { blocking(|| outbox::wait_millis(milliseconds)) }
+}
+define_prim!(hlp_outbox_wait, counter_outbox_wait, "Pi_b");
+
+#[unsafe(no_mangle)]
+pub extern "C" fn counter_outbox_next() -> i32 {
+    outbox::next()
+}
+define_prim!(hlp_outbox_next, counter_outbox_next, "P_i");
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_future_watch(this: *mut Managed) -> i32 {
+    unsafe { prim(|| Ok(future(this)?.borrow()?.watch())) }
+}
+define_prim!(hlp_future_watch, counter_future_watch, "PXhxn_future__i");
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_stream_watch(this: *mut Managed) -> i32 {
+    unsafe { prim(|| Ok(stream(this)?.borrow()?.watch())) }
+}
+define_prim!(hlp_stream_watch, counter_stream_watch, "PXhxn_stream__i");
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_signal_watch(this: *mut Managed) -> i32 {
+    unsafe { prim(|| Ok(signal(this)?.borrow()?.watch())) }
+}
+define_prim!(hlp_signal_watch, counter_signal_watch, "PXhxn_signal__i");

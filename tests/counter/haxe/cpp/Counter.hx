@@ -17,6 +17,9 @@
 ')
 @:headerInclude("counter_glue.h")
 class Counter {
+	/** Where everything this library produces reaches the app. **/
+	public static final inbox = new hxn.Inbox(limit -> untyped __cpp__("counter_glue::outbox_wait({0})", limit), () -> untyped __cpp__("counter_glue::outbox_next()"));
+
 	@:unreflective var raw:cpp.RawPointer<cpp.Void>;
 
 	public function new(start:Int) {
@@ -109,6 +112,12 @@ class Counter {
 		return stream.ofInt();
 	}
 
+	public static function ramp(limit:Int):hxn.Signal<Int> {
+		var signal = new SignalHandle();
+		signal.raw = untyped __cpp__("counter_glue::ramp({0})", limit);
+		return signal.ofInt();
+	}
+
 	public static function abandoned():hxn.Future<Int> {
 		var future = new FutureHandle();
 		future.raw = untyped __cpp__("counter_glue::abandoned()");
@@ -131,7 +140,10 @@ private class FutureHandle {
 	}
 
 	public function typed<T>(take:() -> T):hxn.Future<T>
-		return new hxn.Future(state, wait, take);
+		return new hxn.Future(Counter.inbox, watch, state, wait, take);
+
+	function watch():Int
+		return untyped __cpp__("counter_glue::future_watch({0})", raw);
 
 	function state():Int
 		return untyped __cpp__("counter_glue::future_state({0})", raw);
@@ -218,11 +230,76 @@ private class StreamHandle {
 	}
 
 	public function ofInt():hxn.Stream<Int>
-		return new hxn.Stream(wait, nextInt);
+		return new hxn.Stream(Counter.inbox, watch, wait, nextInt);
+
+	function watch():Int
+		return untyped __cpp__("counter_glue::stream_watch({0})", raw);
 
 	function wait(milliseconds:Int):Int
 		return untyped __cpp__("counter_glue::stream_wait({0}, {1})", raw, milliseconds);
 
 	function nextInt():Int
 		return untyped __cpp__("counter_glue::stream_next_int({0})", raw);
+}
+
+/** A value the Haxe side sets, and follows as a signal. **/
+@:headerInclude("counter_glue.h")
+class Gauge {
+	@:unreflective var raw:cpp.RawPointer<cpp.Void>;
+
+	public function new(initial:Int) {
+		raw = untyped __cpp__("counter_glue::gauge_new({0})", initial);
+		cpp.vm.Gc.setFinalizer(this, cpp.Function.fromStaticFunction(finalize));
+	}
+
+	static function finalize(gauge:Gauge):Void {
+		untyped __cpp__("counter_release((hxn_handle *){0})", gauge.raw);
+	}
+
+	// Kept, so a set made here reaches the signal at once and is not seen
+	// only when the library's results are next delivered.
+	var level:Null<hxn.Signal<Int>>;
+
+	public function signal():hxn.Signal<Int> {
+		if (level == null) {
+			var signal = new SignalHandle();
+			signal.raw = untyped __cpp__("counter_glue::gauge_signal({0})", raw);
+			level = signal.ofInt();
+		}
+		return level;
+	}
+
+	public function set(value:Int):Bool {
+		var taken:Bool = untyped __cpp__("counter_glue::gauge_set({0}, {1})", raw, value);
+		if (taken && level != null)
+			level.set(value);
+		return taken;
+	}
+}
+
+/** Owns a native signal; the Haxe signal follows it through its two calls. **/
+@:headerInclude("counter_glue.h")
+private class SignalHandle {
+	@:unreflective public var raw:cpp.RawPointer<cpp.Void>;
+
+	public function new() {
+		raw = null;
+		cpp.vm.Gc.setFinalizer(this, cpp.Function.fromStaticFunction(finalize));
+	}
+
+	static function finalize(signal:SignalHandle):Void {
+		untyped __cpp__("counter_release((hxn_handle *){0})", signal.raw);
+	}
+
+	public function ofInt():hxn.Signal<Int>
+		return hxn.Reactive.follow(Counter.inbox, watch, wait, getInt);
+
+	function watch():Int
+		return untyped __cpp__("counter_glue::signal_watch({0})", raw);
+
+	function wait(seen:Int, milliseconds:Int):Int
+		return untyped __cpp__("counter_glue::signal_wait({0}, {1}, {2})", raw, seen, milliseconds);
+
+	function getInt():Int
+		return untyped __cpp__("counter_glue::signal_get_int({0})", raw);
 }

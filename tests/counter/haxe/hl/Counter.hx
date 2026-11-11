@@ -3,6 +3,8 @@ private typedef RawFuture = hl.Abstract<"hxn_future">;
 private typedef RawPromise = hl.Abstract<"hxn_promise">;
 private typedef RawStream = hl.Abstract<"hxn_stream">;
 private typedef RawEmitter = hl.Abstract<"hxn_emitter">;
+private typedef RawSignal = hl.Abstract<"hxn_signal">;
+private typedef RawGauge = hl.Abstract<"hxn_gauge">;
 
 @:hlNative("counter")
 private class Native {
@@ -89,9 +91,45 @@ private class Native {
 
 	public static function emitter_end(self:RawEmitter):Bool
 		return false;
+
+	public static function ramp(limit:Int):RawSignal
+		return null;
+
+	public static function signal_wait(self:RawSignal, seen:Int, milliseconds:Int):Int
+		return 0;
+
+	public static function signal_get_int(self:RawSignal):Int
+		return 0;
+
+	public static function gauge_new(initial:Int):RawGauge
+		return null;
+
+	public static function gauge_signal(self:RawGauge):RawSignal
+		return null;
+
+	public static function gauge_set(self:RawGauge, value:Int):Bool
+		return false;
+
+	public static function outbox_wait(milliseconds:Int):Bool
+		return false;
+
+	public static function outbox_next():Int
+		return -1;
+
+	public static function future_watch(self:RawFuture):Int
+		return 0;
+
+	public static function stream_watch(self:RawStream):Int
+		return 0;
+
+	public static function signal_watch(self:RawSignal):Int
+		return 0;
 }
 
 class Counter {
+	/** Where everything this library produces reaches the app. **/
+	public static final inbox = new hxn.Inbox(limit -> Native.outbox_wait(limit), () -> Native.outbox_next());
+
 	final raw:Raw;
 
 	public function new(start:Int)
@@ -163,13 +201,19 @@ class Counter {
 		return streamOfInt(Native.count_up(limit, fail));
 
 	public static function streamOfInt(raw:RawStream):hxn.Stream<Int>
-		return new hxn.Stream(limit -> Native.stream_wait(raw, limit), () -> Native.stream_next_int(raw));
+		return new hxn.Stream(inbox, () -> Native.stream_watch(raw), limit -> Native.stream_wait(raw, limit), () -> Native.stream_next_int(raw));
+
+	public static function ramp(limit:Int):hxn.Signal<Int>
+		return signalOfInt(Native.ramp(limit));
+
+	public static function signalOfInt(raw:RawSignal):hxn.Signal<Int>
+		return hxn.Reactive.follow(inbox, () -> Native.signal_watch(raw), (seen, limit) -> Native.signal_wait(raw, seen, limit), () -> Native.signal_get_int(raw));
 
 	public static function abandoned():hxn.Future<Int>
 		return future(Native.abandoned(), raw -> Native.future_take_int(raw));
 
 	public static function future<T>(raw:RawFuture, take:RawFuture->T):hxn.Future<T>
-		return new hxn.Future(() -> Native.future_state(raw), limit -> Native.future_wait(raw, limit), () -> take(raw));
+		return new hxn.Future(inbox, () -> Native.future_watch(raw), () -> Native.future_state(raw), limit -> Native.future_wait(raw, limit), () -> take(raw));
 }
 
 /** A future the Haxe side settles. **/
@@ -204,4 +248,29 @@ class Emitter {
 
 	public function end():Bool
 		return Native.emitter_end(raw);
+}
+
+/** A value the Haxe side sets, and follows as a signal. **/
+class Gauge {
+	final raw:RawGauge;
+
+	public function new(initial:Int)
+		raw = Native.gauge_new(initial);
+
+	// Kept, so a set made here reaches the signal at once and is not seen
+	// only when the library's results are next delivered.
+	var level:Null<hxn.Signal<Int>>;
+
+	public function signal():hxn.Signal<Int> {
+		if (level == null)
+			level = Counter.signalOfInt(Native.gauge_signal(raw));
+		return level;
+	}
+
+	public function set(value:Int):Bool {
+		var taken = Native.gauge_set(raw, value);
+		if (taken && level != null)
+			level.set(value);
+		return taken;
+	}
 }

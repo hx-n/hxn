@@ -10,7 +10,8 @@ use std::thread::sleep;
 use std::time::Duration;
 
 use hxn_future::{
-    Completer, Failure, Future, Sender, Stream, channel, pending, spawn, spawn_blocking, stepped,
+    Completer, Failure, Future, Sender, Signal, Source, Stream, channel, pending, signal, spawn,
+    spawn_blocking, stepped,
 };
 
 static LIVE: AtomicI32 = AtomicI32::new(0);
@@ -246,5 +247,46 @@ impl Emitter {
 impl Default for Emitter {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Counts from 1 to `limit`, one a step, as a value that changes.
+pub fn ramp(limit: i32) -> Signal<i32> {
+    let (source, ramp) = signal(0);
+    let mut next = 1;
+    drop(stepped(move || {
+        // A reader that has gone is the sign to stop.
+        if next > limit || !source.set(next) {
+            return Poll::Ready(Ok::<_, Failure>(()));
+        }
+        next += 1;
+        Poll::Pending
+    }));
+    ramp
+}
+
+/// A value set from outside the library and read back as a signal, as a
+/// library's own state would be.
+pub struct Gauge {
+    source: Source<i32>,
+    signal: Option<Signal<i32>>,
+}
+
+impl Gauge {
+    pub fn new(initial: i32) -> Self {
+        let (source, signal) = signal(initial);
+        Self {
+            source,
+            signal: Some(signal),
+        }
+    }
+
+    /// The signal, the first time it is asked for.
+    pub fn signal(&mut self) -> Option<Signal<i32>> {
+        self.signal.take()
+    }
+
+    pub fn set(&self, value: i32) -> bool {
+        self.source.set(value)
     }
 }

@@ -2,22 +2,24 @@ package hxn;
 
 import haxe.Exception;
 import sys.thread.Mutex;
-import sys.thread.Thread;
 
 /**
 	One result or failure from an asynchronous native operation.
 
 	`await()` returns the value or throws the failure, blocking the calling
 	thread while letting the collector run. `then()` delivers either one later,
-	on the thread that asked.
+	when the library's results are next delivered: see `Loop`.
 
-	A binding builds one from three calls into its library: the state
+	A binding builds one from its library's `Inbox` and four calls: one that
+	starts the future being noted there and returns its id, the state
 	(0 pending, 1 resolved, 2 rejected), a wait taking a limit in milliseconds
 	(negative for none) and returning the state, and a take that returns the
 	value or throws. The result stays in the library until `take` runs here, so
 	the native thread that settles the future never touches this runtime.
 **/
 class Future<T> {
+	final inbox:Inbox;
+	final watch:() -> Int;
 	final state:() -> Int;
 	final wait:Int->Int;
 	final take:() -> T;
@@ -26,7 +28,9 @@ class Future<T> {
 	var value:Null<T>;
 	var failure:Null<Exception>;
 
-	public function new(state:() -> Int, wait:Int->Int, take:() -> T) {
+	public function new(inbox:Inbox, watch:() -> Int, state:() -> Int, wait:Int->Int, take:() -> T) {
+		this.inbox = inbox;
+		this.watch = watch;
 		this.state = state;
 		this.wait = wait;
 		this.take = take;
@@ -62,53 +66,30 @@ class Future<T> {
 	}
 
 	/**
-		Calls `onValue` or `onError` once the future is settled, from the event
-		loop of the thread that called `then`. The main thread runs its loop
-		when `main` returns; a thread without one cannot call this.
+		Calls `onValue` or `onError` once the future is settled, when the
+		library's results are next delivered: from the event loop of the thread
+		that first asked this library for one, or from `Loop.sync` in an app
+		that drives deliveries itself.
 
-		A failure with no `onError` is thrown from that event loop.
-
-		Where the runtime has threads a helper thread waits for the result.
-		Where it has none (hxcpp under Emscripten, or `-D hxn_no_threads`) the
-		event loop asks for the state on every turn instead.
+		A failure with no `onError` is thrown from there.
 	**/
 	public function then(onValue:T->Void, ?onError:Exception->Void):Void {
-		var events = Thread.current().events;
-		#if (emscripten || hxn_no_threads)
-		// Asked again on every turn of the loop, as an event of its own each
-		// time: the loop has nothing to sleep on while this is outstanding.
-		var poll:Null<() -> Void> = null;
-		poll = () -> {
-			if (wait(0) == 0)
-				events.run(poll);
-			else
-				deliver(onValue, onError);
-		};
-		events.run(poll);
-		#else
-		events.promise();
-		Thread.create(() -> {
-			// Take the result here, so the event loop only has to hand it over.
+		inbox.watch(watch(), () -> {
+			if (state() == 0)
+				return true;
+			var result:Null<T> = null;
+			var error:Null<Exception> = null;
 			try
-				await()
-			catch (_:Exception) {}
-			events.runPromised(() -> deliver(onValue, onError));
+				result = await()
+			catch (e:Exception)
+				error = e;
+			if (error == null)
+				onValue(result);
+			else if (onError != null)
+				onError(error);
+			else
+				throw error;
+			return false;
 		});
-		#end
-	}
-
-	function deliver(onValue:T->Void, onError:Null<Exception->Void>):Void {
-		var result:Null<T> = null;
-		var error:Null<Exception> = null;
-		try
-			result = await()
-		catch (e:Exception)
-			error = e;
-		if (error == null)
-			onValue(result);
-		else if (onError != null)
-			onError(error);
-		else
-			throw error;
 	}
 }

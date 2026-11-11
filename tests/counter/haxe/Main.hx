@@ -48,7 +48,9 @@ class Main {
 
 	static function main() {
 		values();
+		Signals.run(check);
 		futures();
+		frames();
 		continuations();
 		returned = true;
 	}
@@ -185,6 +187,59 @@ class Main {
 		#end
 	}
 
+	// An app with a loop of its own: nothing is delivered until it says so,
+	// and then everything is, in the order the library produced it.
+	static function frames() {
+		hxn.Loop.manual = true;
+		var log = [];
+		var first = new Counter.Promise();
+		var second = new Counter.Promise();
+		var emitter = new Counter.Emitter();
+		first.future().then(value -> log.push('first $value'));
+		second.future().then(value -> log.push('second $value'));
+		emitter.stream().listen(item -> log.push('item $item'), () -> log.push("end"));
+		hxn.Loop.sync();
+		first.resolve(1);
+		emitter.emit(2);
+		second.resolve(3);
+		emitter.end();
+		check('nothing is delivered until the app asks: $log', log.length == 0);
+		hxn.Loop.sync();
+		check('then everything is, in the order it happened: $log', log.join(",") == "first 1,item 2,end,second 3");
+
+		// A frame loop waiting on work the library does in steps.
+		var sum = -1;
+		Counter.sumLater(20000).then(value -> sum = value);
+		var turns = 0;
+		while (sum < 0 && turns++ < 20000) {
+			hxn.Loop.sync();
+			Sys.sleep(0.001);
+		}
+		check('a frame loop is all it takes to finish stepped work: $sum', sum == 200010000);
+
+		// Two values set together are one rerun, and a set made through the
+		// binding is seen at once, not a delivery later.
+		var width = new Counter.Gauge(2);
+		var height = new Counter.Gauge(3);
+		var areas = [];
+		var dispose = hxn.Reactive.root(dispose -> {
+			var w = width.signal(), h = height.signal();
+			hxn.Reactive.effect(() -> areas.push(w.value * h.value));
+			return dispose;
+		});
+		width.set(4);
+		check('a set through the binding is seen at once: $areas', areas.join(",") == "6,12");
+		hxn.Reactive.batch(() -> {
+			width.set(10);
+			height.set(10);
+		});
+		hxn.Loop.sync();
+		check('values set together are one rerun, and delivery adds none: $areas', areas.join(",") == "6,12,100");
+		dispose();
+		check("nothing is left waiting", !hxn.Loop.sync());
+		hxn.Loop.manual = false;
+	}
+
 	// Delivered by this thread's event loop, which runs once `main` returns.
 	static function continuations() {
 		Counter.squareLater(9, 10).then(value -> {
@@ -248,7 +303,58 @@ class Main {
 		var got = [];
 		Counter.countUp(2, true).listen(item -> got.push(item), () -> check("a failed stream does not also end", false), error -> {
 			check('listen delivers a failure after the items: $got', got.join(",") == "1,2" && error.message.indexOf("counter overflow") >= 0);
-			finish();
+			followed();
+		});
+	}
+
+	// A signal that follows a value in the library, with a computed value
+	// and an effect depending on it.
+	static function followed() {
+		var loop = sys.thread.Thread.current().events;
+		var gauge = new Counter.Gauge(5);
+		var seen = [];
+		var dispose = hxn.Reactive.root(dispose -> {
+			var level = gauge.signal();
+			var doubled = new hxn.Computed(() -> level.value * 2);
+			hxn.Reactive.effect(() -> {
+				seen.push(doubled.value);
+				if (doubled.value == 14)
+					loop.run(() -> {
+						check('effects follow a value the library holds: $seen', seen.join(",") == "10,12,14");
+						dispose();
+						check("and stop when their root is disposed", gauge.set(99));
+						ramped();
+					});
+			});
+			return dispose;
+		});
+		check("a followed signal starts at the library's value", seen.join(",") == "10");
+		gauge.set(6);
+		// This runs inside a delivery, which is one batch: the signal has
+		// the value at once and effects rerun when the delivery ends.
+		check('and has a value set here at once: $seen', gauge.signal().peek() == 6 && seen.join(",") == "10");
+		loop.run(() -> gauge.set(7));
+	}
+
+	// A value the library changes by itself, faster than the loop turns.
+	static function ramped() {
+		var loop = sys.thread.Thread.current().events;
+		var values = [];
+		hxn.Reactive.root(dispose -> {
+			var ramp = Counter.ramp(2000);
+			hxn.Reactive.effect(() -> {
+				values.push(ramp.value);
+				if (ramp.value == 2000)
+					loop.run(() -> {
+						var rising = true;
+						for (i in 1...values.length)
+							if (values[i] <= values[i - 1])
+								rising = false;
+						check('a fast value is followed at its latest, ${values.length} of 2000 seen', rising && values.length <= 2001);
+						dispose();
+						finish();
+					});
+			});
 		});
 	}
 

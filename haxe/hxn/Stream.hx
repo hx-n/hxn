@@ -1,29 +1,33 @@
 package hxn;
 
 import haxe.Exception;
-import sys.thread.Thread;
 
 /**
 	Results from a native library that arrive more than once, such as events.
 
 	It reads like any iterator: `for (item in stream)` waits for each item and
 	stops when the stream ends, and a failure that ended it is thrown in its
-	turn. `listen` delivers the same later, on the thread that asked.
+	turn. `listen` delivers the same later, with the library's other results.
 
 	The library never calls a Haxe function to report an item. It queues, and
 	a Haxe thread takes each item and calls what it likes with it, so the
 	native thread that produced the item never touches this runtime.
 
-	A binding builds one from two calls into its library: a wait taking a limit
-	in milliseconds (negative for none) and returning 0 while there is nothing
-	yet, 1 when there is something to take and 2 once the stream has ended, and
-	a take that returns the next item or throws. One reader at a time.
+	A binding builds one from its library's `Inbox` and three calls: one that
+	starts the stream being noted there and returns its id, a wait taking a
+	limit in milliseconds (negative for none) and returning 0 while there is
+	nothing yet, 1 when there is something to take and 2 once the stream has
+	ended, and a take that returns the next item or throws. One reader at a time.
 **/
 class Stream<T> {
+	final inbox:Inbox;
+	final watch:() -> Int;
 	final wait:Int->Int;
 	final take:() -> T;
 
-	public function new(wait:Int->Int, take:() -> T) {
+	public function new(inbox:Inbox, watch:() -> Int, wait:Int->Int, take:() -> T) {
+		this.inbox = inbox;
+		this.watch = watch;
 		this.wait = wait;
 		this.take = take;
 	}
@@ -47,65 +51,32 @@ class Stream<T> {
 	}
 
 	/**
-		Calls `onItem` with each item, from the event loop of the thread that
-		called `listen`, and `onEnd` when the stream ends. A failure that ends
-		it goes to `onError` instead, or is thrown from that loop if there is
-		none. A thread without an event loop cannot call this.
+		Calls `onItem` with each item and `onEnd` when the stream ends, when
+		the library's results are next delivered: see `Loop`. A failure that
+		ends it goes to `onError` instead, or is thrown from there if there is
+		none.
 	**/
 	public function listen(onItem:T->Void, ?onEnd:() -> Void, ?onError:Exception->Void):Void {
-		var events = Thread.current().events;
-		var ended = () -> {
-			if (onEnd != null)
-				onEnd();
-		};
-		var failed = (error:Exception) -> {
-			if (onError != null)
-				onError(error);
-			else
-				throw error;
-		};
-		#if (emscripten || hxn_no_threads)
-		// One item a turn of the loop, so a long stream does not hold it.
-		var poll:Null<() -> Void> = null;
-		poll = () -> {
-			switch wait(0) {
-				case 0:
-					events.run(poll);
-				case 1:
-					var item:T;
-					try {
-						item = take();
-					} catch (error:Exception) {
-						failed(error);
-						return;
-					}
-					events.run(poll);
-					onItem(item);
-				default:
-					ended();
-			}
-		};
-		events.run(poll);
-		#else
-		// Kept until the stream ends, however many items come first.
-		events.promise();
-		Thread.create(() -> {
-			while (true) {
-				if (settle() != 1) {
-					events.runPromised(ended);
-					return;
-				}
+		inbox.watch(watch(), () -> {
+			var flow = wait(0);
+			while (flow == 1) {
 				var item:T;
 				try {
 					item = take();
 				} catch (error:Exception) {
-					events.runPromised(() -> failed(error));
-					return;
+					if (onError == null)
+						throw error;
+					onError(error);
+					return false;
 				}
-				events.promise();
-				events.runPromised(() -> onItem(item));
+				onItem(item);
+				flow = wait(0);
 			}
+			if (flow == 0)
+				return true;
+			if (onEnd != null)
+				onEnd();
+			return false;
 		});
-		#end
 	}
 }

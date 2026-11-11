@@ -223,6 +223,85 @@ inline bool emitter_end(void *self) {
 	return out != 0;
 }
 
+inline void *ramp(int limit) {
+	hxn_handle *out = 0;
+	hxn_buf err = HXN_BUF_EMPTY;
+	hxn::check(counter_ramp(limit, &out, &err), err);
+	return out;
+}
+
+inline int signal_wait(void *self, int seen, int milliseconds) {
+	int out = 0;
+	hxn_buf err = HXN_BUF_EMPTY;
+	hxn_status status;
+	{
+		// The collector may run while this thread waits; it is back before the throw.
+		hxn::Blocking zone;
+		status = counter_signal_wait((hxn_handle *)self, seen, milliseconds, &out, &err);
+	}
+	hxn::check(status, err);
+	return out;
+}
+
+inline int signal_get_int(void *self) {
+	int out = 0;
+	hxn_buf err = HXN_BUF_EMPTY;
+	hxn::check(counter_signal_get_int((hxn_handle *)self, &out, &err), err);
+	return out;
+}
+
+inline void *gauge_new(int initial) {
+	hxn_handle *out = 0;
+	hxn_buf err = HXN_BUF_EMPTY;
+	hxn::check(counter_gauge_new(initial, &out, &err), err);
+	return out;
+}
+
+inline void *gauge_signal(void *self) {
+	hxn_handle *out = 0;
+	hxn_buf err = HXN_BUF_EMPTY;
+	hxn::check(counter_gauge_signal((hxn_handle *)self, &out, &err), err);
+	return out;
+}
+
+inline bool gauge_set(void *self, int value) {
+	int out = 0;
+	hxn_buf err = HXN_BUF_EMPTY;
+	hxn::check(counter_gauge_set((hxn_handle *)self, value, &out, &err), err);
+	return out != 0;
+}
+
+inline bool outbox_wait(int milliseconds) {
+	// The collector may run while this thread waits.
+	hxn::Blocking zone;
+	return counter_outbox_wait(milliseconds) != 0;
+}
+
+inline int outbox_next() {
+	return counter_outbox_next();
+}
+
+inline int future_watch(void *self) {
+	int out = 0;
+	hxn_buf err = HXN_BUF_EMPTY;
+	hxn::check(counter_future_watch((hxn_handle *)self, &out, &err), err);
+	return out;
+}
+
+inline int stream_watch(void *self) {
+	int out = 0;
+	hxn_buf err = HXN_BUF_EMPTY;
+	hxn::check(counter_stream_watch((hxn_handle *)self, &out, &err), err);
+	return out;
+}
+
+inline int signal_watch(void *self) {
+	int out = 0;
+	hxn_buf err = HXN_BUF_EMPTY;
+	hxn::check(counter_signal_watch((hxn_handle *)self, &out, &err), err);
+	return out;
+}
+
 }
 
 #endif

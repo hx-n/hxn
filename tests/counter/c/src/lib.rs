@@ -7,9 +7,9 @@ use std::ffi::c_void;
 use std::ptr::null_mut;
 use std::time::Duration;
 
-use counter_core::{Counter, Emitter, Promise};
+use counter_core::{Counter, Emitter, Gauge, Promise};
 use hxn_abi::{Buf, Callback, Fault, Handle, RawHandle, Slice, Status, guard, release};
-use hxn_future::{AnyFuture, AnyStream};
+use hxn_future::{AnyFuture, AnySignal, AnyStream, outbox};
 
 unsafe fn counter<'a>(this: RawHandle) -> Result<&'a Handle<Counter>, Fault> {
     unsafe { Handle::from_raw(this) }
@@ -366,4 +366,122 @@ pub unsafe extern "C" fn counter_emitter_end(
     err: *mut Buf,
 ) -> Status {
     unsafe { guard(out, err, || Ok(i32::from(emitter(this)?.borrow()?.end()))) }
+}
+
+unsafe fn signal<'a>(this: RawHandle) -> Result<&'a Handle<AnySignal>, Fault> {
+    unsafe { Handle::from_raw(this) }
+}
+
+unsafe fn gauge<'a>(this: RawHandle) -> Result<&'a Handle<Gauge>, Fault> {
+    unsafe { Handle::from_raw(this) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_ramp(limit: i32, out: *mut RawHandle, err: *mut Buf) -> Status {
+    unsafe {
+        guard(out, err, || {
+            Ok(Handle::into_raw(AnySignal::from(counter_core::ramp(limit))))
+        })
+    }
+}
+
+// The caller is in a GC-free zone, so this only waits.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_signal_wait(
+    this: RawHandle,
+    seen: i32,
+    milliseconds: i32,
+    out: *mut i32,
+    err: *mut Buf,
+) -> Status {
+    unsafe {
+        guard(out, err, || {
+            Ok(signal(this)?.borrow()?.wait_millis(seen, milliseconds))
+        })
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_signal_get_int(
+    this: RawHandle,
+    out: *mut i32,
+    err: *mut Buf,
+) -> Status {
+    unsafe { guard(out, err, || signal(this)?.borrow()?.get::<i32>()) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_gauge_new(
+    initial: i32,
+    out: *mut RawHandle,
+    err: *mut Buf,
+) -> Status {
+    unsafe { guard(out, err, || Ok(Handle::into_raw(Gauge::new(initial)))) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_gauge_signal(
+    this: RawHandle,
+    out: *mut RawHandle,
+    err: *mut Buf,
+) -> Status {
+    unsafe {
+        guard(out, err, || {
+            let signal = gauge(this)?.borrow_mut()?.signal().ok_or(Fault::Closed)?;
+            Ok(Handle::into_raw(AnySignal::from(signal)))
+        })
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_gauge_set(
+    this: RawHandle,
+    value: i32,
+    out: *mut i32,
+    err: *mut Buf,
+) -> Status {
+    unsafe {
+        guard(out, err, || {
+            Ok(i32::from(gauge(this)?.borrow()?.set(value)))
+        })
+    }
+}
+
+// The library's one queue of what it has for the host. The caller is in a
+// GC-free zone, so this only waits.
+#[unsafe(no_mangle)]
+pub extern "C" fn counter_outbox_wait(milliseconds: i32) -> i32 {
+    i32::from(outbox::wait_millis(milliseconds))
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn counter_outbox_next() -> i32 {
+    outbox::next()
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_future_watch(
+    this: RawHandle,
+    out: *mut i32,
+    err: *mut Buf,
+) -> Status {
+    unsafe { guard(out, err, || Ok(future(this)?.borrow()?.watch())) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_stream_watch(
+    this: RawHandle,
+    out: *mut i32,
+    err: *mut Buf,
+) -> Status {
+    unsafe { guard(out, err, || Ok(stream(this)?.borrow()?.watch())) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_signal_watch(
+    this: RawHandle,
+    out: *mut i32,
+    err: *mut Buf,
+) -> Status {
+    unsafe { guard(out, err, || Ok(signal(this)?.borrow()?.watch())) }
 }

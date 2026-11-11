@@ -12,6 +12,7 @@ use std::time::{Duration, Instant};
 
 use hxn_abi::{Failure, Fault, Status};
 
+use crate::outbox::{self, Tag};
 use crate::{THREADS, local};
 
 /// Where a stream stands. The values are what a host sees.
@@ -53,6 +54,7 @@ impl<T> Queue<T> {
 struct Shared<T> {
     queue: Mutex<Queue<T>>,
     changed: Condvar,
+    tag: Arc<Tag>,
 }
 
 impl<T> Shared<T> {
@@ -69,6 +71,7 @@ impl<T> Shared<T> {
         queue.end = end;
         drop(queue);
         self.changed.notify_all();
+        outbox::publish(&self.tag);
         true
     }
 }
@@ -112,6 +115,7 @@ impl<T> Sender<T> {
         queue.items.push_back(item);
         drop(queue);
         shared.changed.notify_all();
+        outbox::publish(&shared.tag);
         true
     }
 
@@ -218,6 +222,7 @@ pub fn channel<T>() -> (Sender<T>, Stream<T>) {
             unread: false,
         }),
         changed: Condvar::new(),
+        tag: Tag::new(),
     });
     let owner = Arc::new(Owner {
         shared: shared.clone(),
@@ -228,6 +233,7 @@ pub fn channel<T>() -> (Sender<T>, Stream<T>) {
 trait Erased: Send + Sync {
     fn flow(&self) -> Flow;
     fn wait(&self, timeout: Option<Duration>) -> Flow;
+    fn watch(&self) -> i32;
     fn as_any(&self) -> &dyn std::any::Any;
 }
 
@@ -238,6 +244,10 @@ impl<T: Send + 'static> Erased for Stream<T> {
 
     fn wait(&self, timeout: Option<Duration>) -> Flow {
         Stream::wait(self, timeout)
+    }
+
+    fn watch(&self) -> i32 {
+        self.shared.tag.watch()
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
@@ -262,6 +272,12 @@ impl AnyStream {
 
     pub fn wait(&self, timeout: Option<Duration>) -> Flow {
         self.0.wait(timeout)
+    }
+
+    /// Has the stream noted in the [`outbox`](crate::outbox) when there is
+    /// something to take, and returns the id it is noted under.
+    pub fn watch(&self) -> i32 {
+        self.0.watch()
     }
 
     /// As [`wait`](Self::wait), with the timeout a host passes: milliseconds,

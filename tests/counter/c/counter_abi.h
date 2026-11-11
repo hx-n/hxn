@@ -48,6 +48,26 @@ hxn_status counter_emitter_stream(hxn_handle *self, hxn_handle **out, hxn_buf *e
 hxn_status counter_emitter_emit(hxn_handle *self, int32_t value, int32_t *out, hxn_buf *err);
 hxn_status counter_emitter_end(hxn_handle *self, int32_t *out, hxn_buf *err);
 
+/* Signals: a value that changes. wait takes the version last seen (negative
+ * for none) and returns the version it is at, or -1 once it is final. */
+hxn_status counter_ramp(int32_t limit, hxn_handle **out, hxn_buf *err);
+hxn_status counter_signal_wait(hxn_handle *self, int32_t seen, int32_t milliseconds, int32_t *out, hxn_buf *err);
+hxn_status counter_signal_get_int(hxn_handle *self, int32_t *out, hxn_buf *err);
+
+/* A value the host sets and follows. */
+hxn_status counter_gauge_new(int32_t initial, hxn_handle **out, hxn_buf *err);
+hxn_status counter_gauge_signal(hxn_handle *self, hxn_handle **out, hxn_buf *err);
+hxn_status counter_gauge_set(hxn_handle *self, int32_t value, int32_t *out, hxn_buf *err);
+
+/* The library's one queue of what it has for the host: wait returns 1 when
+ * something is queued, next the id of what is, or -1. The watch calls start
+ * a future, stream or signal being noted there and give its id. */
+int32_t counter_outbox_wait(int32_t milliseconds);
+int32_t counter_outbox_next(void);
+hxn_status counter_future_watch(hxn_handle *self, int32_t *out, hxn_buf *err);
+hxn_status counter_stream_watch(hxn_handle *self, int32_t *out, hxn_buf *err);
+hxn_status counter_signal_watch(hxn_handle *self, int32_t *out, hxn_buf *err);
+
 #ifdef __cplusplus
 }
 #endif
