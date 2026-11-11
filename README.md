@@ -5,8 +5,9 @@
 # hxn
 
 Write a native library once in Rust and use it from Haxe on HashLink, Ash and
-hxcpp, natively and on wasm. The library stays plain Rust: you mark what it
-exposes, and hxn writes the bindings for each runtime.
+hxcpp, natively and on wasm. The library stays plain Rust: you annotate the
+types and methods to expose, and hxn generates the Haxe classes and the native
+glue for each target.
 
 How it works is in [docs/design.md](docs/design.md), and the rules it follows
 in [docs/conventions.md](docs/conventions.md).
@@ -22,7 +23,9 @@ hxn new greeter
 cd greeter
 ```
 
-The library is `src/lib.rs`: plain Rust, with what Haxe may use marked.
+The library lives in `src/lib.rs`. It is ordinary Rust: `#[hxn::interface]`
+exposes a struct to Haxe as a class, and `#[hxn::methods]` exposes its public
+functions as that class's public Haxe methods.
 
 ```rust
 /// Greets people, and counts them.
@@ -57,7 +60,7 @@ impl Greeter {
 }
 ```
 
-`haxe/Main.hx` uses it as a class:
+`haxe/Main.hx` uses the generated class like any other:
 
 ```haxe
 class Main {
@@ -76,7 +79,7 @@ class Main {
 }
 ```
 
-Run it on either runtime:
+Run it on either target:
 
 ```
 hxn run hl
@@ -90,8 +93,9 @@ Hello, Rust!
 refused: nobody to greet
 ```
 
-`hxn build hl` or `hxn build cpp` builds the binding without running anything,
-and prints what to pass `haxe` to compile a program of your own against it.
+`hxn build hl` or `hxn build cpp` generates the Haxe classes and builds the
+native library without running anything, and prints the `haxe` arguments for
+compiling your own program against them.
 
 To work on hxn itself, see [AGENTS.md](AGENTS.md).
 
