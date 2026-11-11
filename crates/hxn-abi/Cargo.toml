@@ -1,0 +1,13 @@
+[package]
+name = "hxn-abi"
+description = "The runtime-neutral core of hxn: what a native library and a Haxe runtime agree on"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+# None, and there must not be any. See the crate docs.
+[dependencies]
+
+[lints]
+workspace = true

@@ -1,0 +1,22 @@
+[package]
+name = "counter-hl"
+description = "counter-core as counter.hdll, for HashLink"
+publish = false
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "counter_hl"
+crate-type = ["cdylib"]
+test = false
+doctest = false
+
+[dependencies]
+counter-core = { path = "../core" }
+hxn-abi = { workspace = true }
+hxn-hl = { workspace = true }
+hl_abi = { workspace = true }
+
+[lints]
+workspace = true

@@ -1,0 +1,20 @@
+[package]
+name = "hxn-hl"
+description = "hxn's HashLink carriers: finalized handles, roots, text and deferred throws"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+# Everything here imports VM symbols, so only a VM can run it. tests/counter
+# exercises it in one.
+test = false
+doctest = false
+
+[dependencies]
+hxn-abi = { workspace = true }
+hl_abi = { workspace = true }
+
+[lints]
+workspace = true
