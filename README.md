@@ -13,16 +13,87 @@ in [docs/conventions.md](docs/conventions.md).
 
 ## Quick setup
 
-You need a recent Rust toolchain, Haxe, and the runtime you want to run on.
+You need Rust, Haxe, and HashLink or hxcpp. Install the `hxn` command and make
+a library with it:
 
 ```
-cargo test --workspace
-tests/counter/run.sh hl <path to hl or ash>
-tests/counter/run.sh cpp
+cargo install --git https://github.com/hx-n/hxn hxn-cli
+hxn new greeter
+cd greeter
 ```
 
-`tests/counter/run.sh` lists its other modes, for wasm and for generated
-bindings. The wasm mode needs a nightly toolchain with `rust-src`.
+The library is `src/lib.rs`: plain Rust, with what Haxe may use marked.
+
+```rust
+/// Greets people, and counts them.
+#[hxn::interface]
+pub struct Greeter {
+    greeting: String,
+    greeted: i32,
+}
+
+#[hxn::methods]
+impl Greeter {
+    pub fn new(greeting: &str) -> Self {
+        Self {
+            greeting: greeting.to_owned(),
+            greeted: 0,
+        }
+    }
+
+    /// A greeting for `name`. Fails for an empty name.
+    pub fn greet(&mut self, name: &str) -> Result<String, &'static str> {
+        if name.is_empty() {
+            return Err("nobody to greet");
+        }
+        self.greeted += 1;
+        Ok(format!("{}, {name}!", self.greeting))
+    }
+
+    /// How many have been greeted.
+    pub fn greeted(&self) -> i32 {
+        self.greeted
+    }
+}
+```
+
+`haxe/Main.hx` uses it as a class:
+
+```haxe
+class Main {
+	static function main() {
+		var greeter = new Greeter("Hello");
+		Sys.println(greeter.greet("Haxe"));
+		Sys.println(greeter.greet("Rust"));
+		Sys.println('${greeter.greeted()} greeted');
+		try {
+			greeter.greet("");
+		} catch (error:haxe.Exception) {
+			Sys.println('refused: ${error.message}');
+		}
+		greeter.close();
+	}
+}
+```
+
+Run it on either runtime:
+
+```
+hxn run hl
+hxn run cpp
+```
+
+```
+Hello, Haxe!
+Hello, Rust!
+2 greeted
+refused: nobody to greet
+```
+
+`hxn build hl` or `hxn build cpp` builds the binding without running anything,
+and prints what to pass `haxe` to compile a program of your own against it.
+
+To work on hxn itself, see [AGENTS.md](AGENTS.md).
 
 ## License
 

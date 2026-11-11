@@ -1,0 +1,20 @@
+[package]
+name = "hxn-cli"
+description = "The hxn command: makes, builds and runs a library written for hxn"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "hxn"
+path = "src/main.rs"
+# The library crate `hxn` documents under the same name.
+doc = false
+
+[dependencies]
+hxn-gen = { workspace = true }
+serde_json = "1"
+
+[lints]
+workspace = true

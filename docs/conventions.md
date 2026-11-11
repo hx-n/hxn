@@ -16,6 +16,11 @@ in [design.md](design.md); this is the checklist.
   runtime. It never selects a runtime with a cargo feature.
 - **Adapter crates are thin.** They hold the generated adapter and nothing a
   library author writes.
+- **`hxn-cli` writes nothing into a library's directory but its manifest.**
+  Everything else it makes goes under cargo's target directory, in
+  `hxn/<library>`.
+- **A Haxe class or header of hxn's own is carried by `hxn-cli`.** One added
+  to `haxe/` is added to its list, which a test checks.
 
 ## The C boundary
 
@@ -157,6 +162,10 @@ filesystem `#include "counter.h"` would then find the generated one.
 
   Ash is run in its hybrid, JIT and interpreter modes, which differ in how
   threads and native calls behave.
+- `tests/cli/run.sh hl <vm>` and `tests/cli/run.sh cpp` make a library with
+  `hxn new` and run it with `hxn run`, as the readme says to.
+- **The readme's example is the one `hxn new` makes.** A test fails when the
+  two differ.
 - Run a runtime test under a timeout. A wrong wait hangs; it does not fail.
 - Anything concurrent is run repeatedly, on more than one machine.
 - A test that depends on a runtime's limits says so beside the check it
@@ -181,4 +190,4 @@ filesystem `#include "counter.h"` would then find the generated one.
   hxn is, not what happened or what is next.
 - An issue has a kind (`bug`, `perf`, `debt`) and an area
   (`area:abi`, `area:hl`, `area:cpp`, `area:future`, `area:reactive`,
-  `area:wasm`, `area:gen`, `area:bind`).
+  `area:wasm`, `area:gen`, `area:bind`, `area:cli`).

@@ -18,10 +18,11 @@
 
 use std::ffi::{c_int, c_void};
 
-use hl_abi::{hl_type, vbyte, vdynamic, vstring};
+use hl_abi::{hl_type, vdynamic};
 use hxn_abi::{Failure, Fault, Handle, RawHandle, Slice, catch, release};
 
-pub use hl_abi::define_prim;
+// What a generated adapter names, so that its crate needs this one alone.
+pub use hl_abi::{define_prim, vbyte, vstring};
 
 unsafe extern "C" {
     // A DLL's data is reached through its import pointer, not linked directly.

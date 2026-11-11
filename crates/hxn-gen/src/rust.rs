@@ -456,10 +456,9 @@ pub fn hl_adapter(library: &Library, core: &str) -> String {
     out.push_str("\n#[allow(unused_imports)]\nuse std::ptr::null_mut;\n\n");
     out.push_str("#[allow(unused_imports)]\nuse std::sync::{Arc, Weak};\n");
     out.push_str("#[allow(unused_imports)]\nuse std::sync::atomic::AtomicI32;\n\n");
-    out.push_str("#[allow(unused_imports)]\nuse hl_abi::{vbyte, vstring};\n");
     out.push_str("#[allow(unused_imports)]\nuse hxn_abi::{AtomicFlag, Fault, memory};\n");
     out.push_str(
-        "#[allow(unused_imports)]\nuse hxn_hl::{Managed, blocking, define_prim, handle, manage, prim, slice, string, utf16};\n",
+        "#[allow(unused_imports)]\nuse hxn_hl::{Managed, blocking, define_prim, handle, manage, prim, slice, string, utf16, vbyte, vstring};\n",
     );
     out.push_str(&imports(library, core));
     for interface in &library.interfaces {

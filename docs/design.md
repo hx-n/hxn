@@ -319,9 +319,37 @@ The attributes generate nothing. A macro expanding inside the library could
 not write files or put code into the separate adapter crates, so the generator
 parses the source instead and the attributes only make the markers legal Rust.
 
-Each thin adapter crate has a build script that writes its adapter from the
-library's source. The manifest is JSON, generated, committed and reviewed: a
-change to it is a change to the library's ABI.
+The manifest is JSON, generated, committed and reviewed: a change to it is a
+change to the library's ABI.
+
+## The command
+
+`hxn` is the generator with the rest of the work around it, so that a library
+is one crate and its author writes no adapter crate, build script or compiler
+flag.
+
+| | |
+|---|---|
+| `hxn new <name>` | makes a library: a crate, and a Haxe program that uses it |
+| `hxn build <hl\|cpp>` | writes the binding for a runtime and builds it |
+| `hxn run <hl\|cpp>` | builds, then compiles and runs the library's Haxe program |
+
+- **The adapter crates are written, not kept.** A build writes the adapter
+  for the runtime as a crate under cargo's target directory, depending on the
+  library by path, and builds it there. The library's own directory gains
+  only its manifest.
+- **The adapter gets hxn from where the library does.** The command asks
+  cargo where the library's `hxn` comes from, a path, a repository or a
+  registry, and names `hxn-abi` and `hxn-hl` from the same place. Two copies
+  of `hxn-abi` would not agree on what a handle is.
+- **The command carries hxn's Haxe classes and C header** and writes them
+  beside the generated ones, so a library needs nothing installed but it.
+- **What a compile needs is written down**, as a file `haxe` takes: the class
+  paths, and for hxcpp where the headers and the library are. `run` passes
+  the same itself.
+
+A library that wants its adapter crates in its own repository, as the fixture
+in `tests/counter` has them, gives each a build script that calls `hxn-gen`.
 
 ## Runtimes
 
