@@ -11,6 +11,7 @@ repository = "https://github.com/hx-n/hxn"
 [workspace.dependencies]
 hxn-abi = { path = "crates/hxn-abi" }
 hxn-hl = { path = "crates/hxn-hl" }
+hxn-future = { path = "crates/hxn-future" }
 hl_abi = { git = "https://github.com/rayzor-blade/hl_abi" }
 
 [workspace.lints.rust]

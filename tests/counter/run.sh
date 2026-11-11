@@ -20,24 +20,28 @@ case "$runtime" in
 		vm="$(command -v "${2:-hl}")"
 		cargo build --manifest-path "$root/Cargo.toml" -p counter-hl
 		cp "$root/target/debug/libcounter_hl.$dylib" "$work/counter.hdll"
-		haxe -cp "$here/haxe" -cp "$here/haxe/hl" -main Main -hl "$work/main.hl"
+		haxe -cp "$root/haxe" -cp "$here/haxe" -cp "$here/haxe/hl" -main Main -hl "$work/main.hl"
 		cd "$work"
 		# The VM resolves a bare library name through the OS loader.
 		vm_dir="$(dirname "$vm")"
 		DYLD_LIBRARY_PATH="$work:$vm_dir${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}" \
 		LD_LIBRARY_PATH="$work:$vm_dir${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
-			"$vm" main.hl
+			"$vm" main.hl | tee "$work/out.txt"
 		;;
 	cpp)
 		cargo build --manifest-path "$root/Cargo.toml" -p counter-c
-		haxe -cp "$here/haxe" -cp "$here/haxe/cpp" -main Main -cpp "$work" \
+		haxe -cp "$root/haxe" -cp "$here/haxe" -cp "$here/haxe/cpp" -main Main -cpp "$work" \
 			-D HXN_INCLUDE="$root/include" \
 			-D COUNTER_INCLUDE="$here/c" \
 			-D COUNTER_LIB="$root/target/debug/libcounter.a"
-		"$work/Main"
+		"$work/Main" | tee "$work/out.txt"
 		;;
 	*)
 		echo "unknown runtime: $runtime" >&2
 		exit 2
 		;;
 esac
+
+# The last checks run from the event loop; a program that ends before them
+# exits cleanly without having passed.
+grep -q '^PASS' "$work/out.txt"

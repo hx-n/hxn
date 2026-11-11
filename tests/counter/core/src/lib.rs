@@ -1,9 +1,13 @@
 //! A library small enough to read at a glance, with one of each thing a
 //! binding has to carry: a value with a destructor, a fallible method, text
-//! and bytes in, text out.
+//! and bytes in, text out, and results that arrive later.
 
 use std::fmt;
 use std::sync::atomic::{AtomicI32, Ordering};
+use std::thread::sleep;
+use std::time::Duration;
+
+use hxn_future::{Future, pending, spawn};
 
 static LIVE: AtomicI32 = AtomicI32::new(0);
 
@@ -49,4 +53,23 @@ impl Drop for Counter {
     fn drop(&mut self) {
         LIVE.fetch_sub(1, Ordering::SeqCst);
     }
+}
+
+pub fn square_later(value: i32, delay: Duration) -> Future<i32> {
+    spawn(move || {
+        sleep(delay);
+        value.checked_mul(value).ok_or(Overflow)
+    })
+}
+
+pub fn greet_later(name: String, delay: Duration) -> Future<String> {
+    spawn(move || {
+        sleep(delay);
+        Ok::<_, Overflow>(format!("hello {name}"))
+    })
+}
+
+/// A future nothing will settle.
+pub fn abandoned() -> Future<i32> {
+    pending().1
 }

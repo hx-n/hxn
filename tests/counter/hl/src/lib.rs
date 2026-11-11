@@ -9,6 +9,7 @@ use std::time::Duration;
 use counter_core::Counter;
 use hl_abi::{vbyte, vstring};
 use hxn_abi::{Fault, Handle};
+use hxn_future::AnyFuture;
 use hxn_hl::{Managed, Root, blocking, define_prim, manage, prim, slice, string, utf16};
 
 unsafe fn counter<'a>(this: *mut Managed) -> Result<&'a Handle<Counter>, Fault> {
@@ -76,3 +77,80 @@ pub unsafe extern "C" fn counter_nap(milliseconds: i32) {
     unsafe { blocking(|| std::thread::sleep(time)) }
 }
 define_prim!(hlp_nap, counter_nap, "Pi_v");
+
+fn delay(milliseconds: i32) -> Duration {
+    Duration::from_millis(milliseconds.max(0) as u64)
+}
+
+unsafe fn future<'a>(this: *mut Managed) -> Result<&'a Handle<AnyFuture>, Fault> {
+    unsafe { hxn_hl::handle(this) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_square_later(value: i32, milliseconds: i32) -> *mut Managed {
+    unsafe {
+        prim(|| {
+            let future = counter_core::square_later(value, delay(milliseconds));
+            Ok(manage(AnyFuture::from(future)))
+        })
+    }
+}
+define_prim!(hlp_square_later, counter_square_later, "Pii_Xhxn_future_");
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_greet_later(
+    name: *mut vstring,
+    milliseconds: i32,
+) -> *mut Managed {
+    unsafe {
+        prim(|| {
+            let name = string(name)?.unwrap_or_default();
+            let future = counter_core::greet_later(name, delay(milliseconds));
+            Ok(manage(AnyFuture::from(future)))
+        })
+    }
+}
+define_prim!(hlp_greet_later, counter_greet_later, "POBi_i_Xhxn_future_");
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_abandoned() -> *mut Managed {
+    unsafe { prim(|| Ok(manage(AnyFuture::from(counter_core::abandoned())))) }
+}
+define_prim!(hlp_abandoned, counter_abandoned, "P_Xhxn_future_");
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_future_state(this: *mut Managed) -> i32 {
+    unsafe { prim(|| Ok(future(this)?.borrow()?.state() as i32)) }
+}
+define_prim!(hlp_future_state, counter_future_state, "PXhxn_future__i");
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_future_wait(this: *mut Managed, milliseconds: i32) -> i32 {
+    unsafe {
+        prim(|| {
+            let future = future(this)?.borrow()?;
+            Ok(blocking(|| future.wait_millis(milliseconds)) as i32)
+        })
+    }
+}
+define_prim!(hlp_future_wait, counter_future_wait, "PXhxn_future_i_i");
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_future_take_int(this: *mut Managed) -> i32 {
+    unsafe { prim(|| future(this)?.borrow()?.take::<i32>()) }
+}
+define_prim!(
+    hlp_future_take_int,
+    counter_future_take_int,
+    "PXhxn_future__i"
+);
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_future_take_text(this: *mut Managed) -> *mut vbyte {
+    unsafe { prim(|| Ok(utf16(&future(this)?.borrow()?.take::<String>()?))) }
+}
+define_prim!(
+    hlp_future_take_text,
+    counter_future_take_text,
+    "PXhxn_future__B"
+);

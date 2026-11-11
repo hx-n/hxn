@@ -18,6 +18,8 @@ typedef int32_t hxn_status;
 #define HXN_BUSY (-5)
 #define HXN_ENCODING (-6)
 #define HXN_TOO_LARGE (-7)
+#define HXN_PENDING (-8)
+#define HXN_CANCELLED (-9)
 
 /* Bytes or UTF-8 text the caller keeps alive for the call. */
 typedef struct hxn_slice {

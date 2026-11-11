@@ -2,6 +2,7 @@
 <files id="haxe">
 	<compilerflag value="-I${HXN_INCLUDE}"/>
 	<compilerflag value="-I${COUNTER_INCLUDE}"/>
+	<compilerflag value="-I${COUNTER_INCLUDE}/../haxe/cpp"/>
 </files>
 <target id="haxe">
 	<lib name="${COUNTER_LIB}"/>
@@ -9,58 +10,7 @@
 	<lib name="-ldl" if="linux"/>
 </target>
 ')
-@:headerCode('
-#include "counter_abi.h"
-
-// Each call returns before its failure is thrown, and frees what it was given.
-namespace counter_glue {
-
-inline void *make(int start) {
-	hxn_handle *out = 0;
-	hxn_buf err = HXN_BUF_EMPTY;
-	hxn::check(counter_new(start, &out, &err), err);
-	return out;
-}
-
-inline int add(void *self, int amount) {
-	int out = 0;
-	hxn_buf err = HXN_BUF_EMPTY;
-	hxn::check(counter_add((hxn_handle *)self, amount, &out, &err), err);
-	return out;
-}
-
-inline ::String label(void *self, ::String name) {
-	hx::strbuf storage;
-	hxn_buf out = HXN_BUF_EMPTY;
-	hxn_buf err = HXN_BUF_EMPTY;
-	hxn::check(counter_label((hxn_handle *)self, hxn::slice(name, storage), &out, &err), err);
-	return hxn::take_string(out);
-}
-
-inline int sum(void *self, Array<unsigned char> data) {
-	int out = 0;
-	hxn_buf err = HXN_BUF_EMPTY;
-	hxn::check(counter_sum((hxn_handle *)self, hxn::slice(data), &out, &err), err);
-	return out;
-}
-
-inline void close(void *self) {
-	hxn_buf err = HXN_BUF_EMPTY;
-	hxn::check(counter_close((hxn_handle *)self, &err), err);
-}
-
-inline void fail() {
-	hxn_buf err = HXN_BUF_EMPTY;
-	hxn::check(counter_fail(&err), err);
-}
-
-inline void nap(int milliseconds) {
-	hxn::Blocking zone;
-	counter_nap(milliseconds);
-}
-
-}
-')
+@:headerInclude("counter_glue.h")
 class Counter {
 	@:unreflective var raw:cpp.RawPointer<cpp.Void>;
 
@@ -94,4 +44,52 @@ class Counter {
 
 	public static function nap(milliseconds:Int):Void
 		untyped __cpp__("counter_glue::nap({0})", milliseconds);
+
+	public static function squareLater(value:Int, milliseconds:Int):hxn.Future<Int> {
+		var future = new FutureHandle();
+		future.raw = untyped __cpp__("counter_glue::square_later({0}, {1})", value, milliseconds);
+		return future.typed(future.takeInt);
+	}
+
+	public static function greetLater(name:String, milliseconds:Int):hxn.Future<String> {
+		var future = new FutureHandle();
+		future.raw = untyped __cpp__("counter_glue::greet_later({0}, {1})", name, milliseconds);
+		return future.typed(future.takeText);
+	}
+
+	public static function abandoned():hxn.Future<Int> {
+		var future = new FutureHandle();
+		future.raw = untyped __cpp__("counter_glue::abandoned()");
+		return future.typed(future.takeInt);
+	}
+}
+
+/** Owns a native future; `hxn.Future` holds it through its three calls. **/
+@:headerInclude("counter_glue.h")
+private class FutureHandle {
+	@:unreflective public var raw:cpp.RawPointer<cpp.Void>;
+
+	public function new() {
+		raw = null;
+		cpp.vm.Gc.setFinalizer(this, cpp.Function.fromStaticFunction(finalize));
+	}
+
+	static function finalize(future:FutureHandle):Void {
+		untyped __cpp__("counter_release((hxn_handle *){0})", future.raw);
+	}
+
+	public function typed<T>(take:() -> T):hxn.Future<T>
+		return new hxn.Future(state, wait, take);
+
+	function state():Int
+		return untyped __cpp__("counter_glue::future_state({0})", raw);
+
+	function wait(milliseconds:Int):Int
+		return untyped __cpp__("counter_glue::future_wait({0}, {1})", raw, milliseconds);
+
+	public function takeInt():Int
+		return untyped __cpp__("counter_glue::future_take_int({0})", raw);
+
+	public function takeText():String
+		return untyped __cpp__("counter_glue::future_take_text({0})", raw);
 }

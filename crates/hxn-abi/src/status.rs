@@ -18,6 +18,10 @@ impl Status {
     pub const BUSY: Self = Self(-5);
     pub const ENCODING: Self = Self(-6);
     pub const TOO_LARGE: Self = Self(-7);
+    /// A future's result was asked for before it had one.
+    pub const PENDING: Self = Self(-8);
+    /// A future lost everything that could settle it.
+    pub const CANCELLED: Self = Self(-9);
 
     pub const fn is_ok(self) -> bool {
         self.0 == 0

@@ -8,11 +8,15 @@ version = "0.1.0"
 dependencies = [
  "counter-core",
  "hxn-abi",
+ "hxn-future",
 ]
 
 [[package]]
 name = "counter-core"
 version = "0.1.0"
+dependencies = [
+ "hxn-future",
+]
 
 [[package]]
 name = "counter-hl"
@@ -21,6 +25,7 @@ dependencies = [
  "counter-core",
  "hl_abi",
  "hxn-abi",
+ "hxn-future",
  "hxn-hl",
 ]
 
@@ -32,6 +37,13 @@ source = "git+https://github.com/rayzor-blade/hl_abi#2046a265f45ebe7a1093e59074d
 [[package]]
 name = "hxn-abi"
 version = "0.1.0"
+
+[[package]]
+name = "hxn-future"
+version = "0.1.0"
+dependencies = [
+ "hxn-abi",
+]
 
 [[package]]
 name = "hxn-hl"

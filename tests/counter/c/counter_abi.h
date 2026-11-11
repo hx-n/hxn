@@ -17,6 +17,15 @@ int32_t counter_live(void);
 hxn_status counter_fail(hxn_buf *err);
 void counter_nap(int32_t milliseconds);
 
+/* Futures: one handle type whatever the result, taken with its own type. */
+hxn_status counter_square_later(int32_t value, int32_t milliseconds, hxn_handle **out, hxn_buf *err);
+hxn_status counter_greet_later(hxn_slice name, int32_t milliseconds, hxn_handle **out, hxn_buf *err);
+hxn_status counter_abandoned(hxn_handle **out, hxn_buf *err);
+hxn_status counter_future_state(hxn_handle *self, int32_t *out, hxn_buf *err);
+hxn_status counter_future_wait(hxn_handle *self, int32_t milliseconds, int32_t *out, hxn_buf *err);
+hxn_status counter_future_take_int(hxn_handle *self, int32_t *out, hxn_buf *err);
+hxn_status counter_future_take_text(hxn_handle *self, hxn_buf *out, hxn_buf *err);
+
 #ifdef __cplusplus
 }
 #endif
