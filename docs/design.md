@@ -253,8 +253,8 @@ nothing else. Events are a stream; state is a signal.
 | Entry point | For | With threads | Without |
 |---|---|---|---|
 | `spawn(async { … })` | work that awaits | a worker pool; polled only when woken | this thread's queue |
-| `stepped(|| …)` | work done a step at a time | a worker pool | this thread's queue |
-| `spawn_blocking(|| …)` | a closure that blocks | a thread of its own | runs before returning |
+| `stepped(\|\| …)` | work done a step at a time | a worker pool | this thread's queue |
+| `spawn_blocking(\|\| …)` | a closure that blocks | a thread of its own | runs before returning |
 
 Work is a `krio` task. With threads it runs on a `krio-parallel` cluster of a
 few workers per library, started on first use, whose idle workers sleep.
