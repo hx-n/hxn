@@ -1,0 +1,224 @@
+# How hxn works, and why
+
+hxn lets a library written in Rust be used from Haxe on several runtimes
+without the library knowing which one it is running under. This document
+describes the approach each part takes and the reason for it. The rules that
+follow from these approaches are in [conventions.md](conventions.md).
+
+## The shape
+
+HashLink, hxcpp and their wasm forms disagree on object layout, garbage
+collection, strings and closures. They agree on plain C calls. So hxn has no
+shared value model. It has:
+
+- **a runtime-neutral core** (`hxn-abi`): the few `#[repr(C)]` shapes a library
+  and a runtime agree on, and the safe Rust side of each;
+- **one adapter per runtime family**: HashLink primitives (`hxn-hl`, over
+  `hl_abi`) and a plain C ABI with C++ glue for hxcpp (`include/hxn.h`);
+- **Haxe classes** with the same public API on every runtime.
+
+A library is one Rust source built once per runtime. It is split into three
+crates so that the library itself compiles once whatever is being built:
+
+| Crate | What it is |
+|---|---|
+| `<name>-core` | The library. Plain Rust, no runtime in it. |
+| `<name>-c` | A thin static library exporting the plain C ABI, for hxcpp. |
+| `<name>-hl` | A thin dynamic library of HashLink primitives. Its archive is also what links into an Ash wasm side module. |
+
+The core never switches runtime with a cargo feature. A feature would compile
+every dependency twice.
+
+## What crosses, and who owns it
+
+| Crossing | Shape | Owner |
+|---|---|---|
+| bytes or UTF-8 text, for one call | `Slice` | the caller |
+| bytes or UTF-8 text, returned | `Buf` | the library, until the host frees it |
+| a Rust value the host holds | `Handle<T>` behind an opaque pointer | the host's collector |
+| a host function, for one call | `Callback` | the host |
+| failure | `Status`, with a message in a `Buf` | - |
+
+Text is UTF-8 at the boundary. HashLink strings are UTF-16, so the HashLink
+adapter converts at the edge, strictly: text that is not valid in its encoding
+is an error, not a replacement character.
+
+A `Buf` carries its own `free` function. Each library is linked with its own
+allocator, and only the one that allocated can release.
+
+## Failures
+
+Nothing unwinds across the boundary in either direction.
+
+- A library function returns a `Result`. The adapter turns `Err` into a status
+  and a message.
+- The runtime's own exception is raised **after** the Rust call has returned
+  and dropped everything it owned. HashLink throws by jumping past frames
+  without running destructors, and a C++ exception must not cross a Rust
+  frame, so the throw is always made by the adapter, never from inside the
+  library.
+- A panic is caught at the boundary and reported as `Status::PANIC`, where the
+  build can catch one. A wasm build aborts on a panic; see the runtime table
+  at the end.
+
+So a thrown error is an ordinary value until the call is over. That is why
+errors work the same in builds that cannot unwind.
+
+## Handles
+
+A `Handle<T>` separates two lifetimes:
+
+- the **value** ends when the host calls `close()`;
+- the **allocation** lives until the host's collector finalizes the object.
+
+A pointer the host can still reach is therefore never dangling, and a use
+after close is an error, not a crash. Each handle carries a type tag, so the
+wrong kind of handle is refused.
+
+A host does not obey `&` and `&mut`: it can call from two threads, or call
+back in from a callback. Borrows are counted at run time, and a conflicting
+one fails with `Busy` instead of waiting or aliasing.
+
+`T` must be `Send`, because a collector finalizes on whichever thread it runs.
+
+## Calling a Haxe function
+
+Native code cannot be thrown through, cannot be called from a thread the
+runtime does not know, and should not keep a host function alive. Three
+approaches follow.
+
+**Lent for the call.** A function passed to a native call is called during
+that call, on the calling thread. The binding wraps it: the wrapper catches an
+exception, keeps it (`hxn.Callback.failed`), and returns the value that tells
+the library its callback failed. The library stops and returns, and the
+binding rethrows the original exception (`hxn.Callback.during`). The catch is
+on the Haxe side, so no trap is needed in native code and it is the same on
+every runtime.
+
+**Kept across calls.** A function needed by later calls is kept in a field of
+the Haxe object and lent to each call that uses it. Native code holds nothing.
+
+**Not rooted in native code.** A root held by native code is invisible to the
+collector, so a function that can reach the object rooting it is never
+collected. Event handlers usually can reach their emitter. Keeping the
+function on the Haxe side leaves every reference where the collector can see
+it, and such cycles are collected normally.
+
+## Results over time
+
+`hxn-future` has three kinds, with a Haxe class for each.
+
+| | Rust | Haxe |
+|---|---|---|
+| one result, later | `pending()` gives a `Completer` and a `Future` | `hxn.Future`: `await()`, `then()` |
+| many results, in order | `channel()` gives a `Sender` and a `Stream` | `hxn.Stream`: an iterator, `listen()` |
+| a value that changes | `signal()` gives a `Source` and a `Signal` | `hxn.Signal`, through `Reactive.follow` |
+
+Two rules hold for all three.
+
+**The result stays in Rust until a Haxe thread takes it.** Settling, sending
+or setting touches no runtime. The thread that does it needs no standing with
+a collector, and nothing of the runtime's has to be kept alive meanwhile.
+
+**The library never calls the host to report something.** It queues or sets;
+the host takes each result on a thread of its own and calls whatever it likes
+with it. This is what makes events work from any thread and on wasm.
+
+A future is settled once and later settles return `false`. If everything that
+could settle it is dropped, it is rejected as cancelled, so a waiter is never
+left waiting on nothing. A stream ends when every sender is dropped, or with a
+failure the reader meets after the items before it. A sender or source learns
+its reader is gone because `send` or `set` returns `false`.
+
+A stream delivers everything, in order. A signal delivers the latest value and
+nothing else. Events are a stream; state is a signal.
+
+## Running work
+
+| Entry point | For | With threads | Without |
+|---|---|---|---|
+| `spawn(async { … })` | work that awaits | a worker pool; polled only when woken | this thread's queue |
+| `stepped(|| …)` | work done a step at a time | a worker pool | this thread's queue |
+| `spawn_blocking(|| …)` | a closure that blocks | a thread of its own | runs before returning |
+
+Work is a `krio` task. With threads it runs on a `krio-parallel` cluster of a
+few workers per library, started on first use, whose idle workers sleep.
+Without threads it is queued on the calling thread (`krio-runtime`) and
+advanced by whoever waits: a wait runs the queue for a short slice and returns,
+pending or not, so the host can yield and ask again.
+
+`spawn` and `stepped` take their first step before returning, so work that
+finishes at once never waits for anyone.
+
+An `hxn_future::Future` can itself be awaited, which is where waking comes
+from: settling it wakes whoever awaits it. A waiting task costs nothing on
+either scheduler.
+
+## Delivery
+
+Everything a library produces reaches the app through one door.
+
+- **Outbox (Rust).** A future, stream or signal the host is watching notes
+  itself in the library's one queue when it has something new, once until the
+  host has looked. Only watched things are queued.
+- **Inbox (Haxe).** `hxn.Inbox`, one per library, drains that queue and calls
+  the watchers for each entry, in the order the library produced them, inside
+  one batch. `Future.then`, `Stream.listen` and `Reactive.follow` are watchers.
+- **Loop.** `hxn.Loop` decides when. By default deliveries come from the Haxe
+  event loop of the thread that first asked. An app with a loop of its own
+  sets `Loop.manual` and calls `Loop.sync()` where it wants them, once a frame
+  for instance; the Haxe event loop is then neither used nor kept alive.
+
+One queue is what preserves order across kinds, lets the app choose the
+moment, and needs one wait for everything.
+
+## Reactivity
+
+`hxn.Signal`, `hxn.Computed` and `hxn.Reactive` give fine-grained reactivity
+in the style of SolidJS. Dependencies are found by running the code, so they
+follow its branches.
+
+The graph is in Haxe, so it is identical on every runtime. It marks on write
+and computes on read: a write marks direct readers dirty and everything below
+them as needing a check, and queues effects; an effect that runs, or a
+computed value that is read, first brings its own sources up to date and
+recomputes only if one changed. A value is computed once however many paths
+lead to it, and never from a mix of old and new.
+
+`Reactive.follow` makes a signal that follows a value held in Rust. Three
+things keep the two sides consistent:
+
+- a delivery is one batch, so effects rerun once however many values arrived;
+- a binding **writes through**: when a set goes through it, it sets the
+  followed signal as well, so code reads its own writes at once;
+- the graph is **pluggable**: `Inbox.follow` takes the sink as a parameter, so
+  an app with a reactive system of its own feeds its own signals.
+
+## Generation
+
+`hxn-gen` reads a library's source for the items marked `#[hxn::interface]`
+and `#[hxn::methods]` and writes the manifest, both Rust adapters, the C
+header, the hxcpp glue and the Haxe classes.
+
+The attributes generate nothing. A macro expanding inside the library could
+not write files or put code into the separate adapter crates, so the generator
+parses the source instead and the attributes only make the markers legal Rust.
+
+Each thin adapter crate has a build script that writes its adapter from the
+library's source. The manifest is JSON, generated, committed and reviewed: a
+change to it is a change to the library's ABI.
+
+## Runtimes
+
+| Runtime | Adapter | Threads | A panic | Notes |
+|---|---|---|---|---|
+| HashLink | `-hl` as an `.hdll` | yes | becomes a thrown error | |
+| Ash, native | the same `.hdll` | yes; cooperative in its interpreter mode | becomes a thrown error | Tested in its hybrid, JIT and interpreter modes. |
+| Ash, wasm | `-hl` as a side module | Haxe threads as fibers; no Rust threads | ends the program | The module takes its allocator from the program. |
+| hxcpp | `-c` with C++ glue | yes | becomes a thrown error | |
+| hxcpp through Emscripten | the same | none | ends the program | hxcpp's collector does not complete a forced collection there. |
+
+Rayzor's plugin ABI informed the manifest, but there is no Rayzor adapter.
+
+Where a runtime has no threads, nothing in hxn blocks or starts one: waits
+return, work is queued on the caller, and delivery asks once a loop turn.
