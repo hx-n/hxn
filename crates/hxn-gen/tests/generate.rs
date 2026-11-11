@@ -51,6 +51,16 @@ impl AudioDevice {
         0
     }
 
+    pub fn play(&self, position: &AtomicI32, cancel: &AtomicFlag) {}
+
+    pub fn level(&self) -> Arc<AtomicI32> {
+        todo!()
+    }
+
+    pub fn muted(&self) -> Arc<AtomicFlag> {
+        todo!()
+    }
+
     fn internal(&self) {}
 }
 
@@ -91,7 +101,10 @@ fn reads_the_marked_items_and_nothing_else() {
             "name",
             "route",
             "duplicate",
-            "finish"
+            "finish",
+            "play",
+            "level",
+            "muted"
         ]
     );
 
@@ -174,6 +187,14 @@ fn says_where_and_why_something_cannot_cross() {
         (
             "pub fn view(&self) -> &Thing { todo!() }",
             "a result cannot borrow",
+        ),
+        (
+            "pub fn keep(&self, cell: Arc<AtomicI32>) {}",
+            "a cell is lent for the call",
+        ),
+        (
+            "pub fn cell(&self) -> AtomicI32 { todo!() }",
+            "returned as `Arc<AtomicI32>`",
         ),
         (
             "pub fn new(&self) -> Self { todo!() }",
@@ -301,6 +322,51 @@ fn objects_are_borrowed_going_in_and_owned_coming_out() {
     );
     assert!(manifest.contains("\"returns\": \"Mixer?\""));
     assert!(manifest.contains("\"kind\": \"consuming\""));
+}
+
+#[test]
+fn cells_are_lent_going_in_and_kept_by_the_library_coming_out() {
+    let library = parse("audio", SOURCE).unwrap();
+    let device = &library.interfaces[0];
+    let play = device.methods.iter().find(|m| m.name == "play").unwrap();
+    assert_eq!(play.params[0].ty, Type::AtomicInt);
+    assert_eq!(play.params[1].ty, Type::AtomicBool);
+    assert!(library.returns_cells());
+
+    let c = hxn_gen::c_adapter(&library, "audio_core");
+    assert!(c.contains("position: *mut i32, cancel: *mut i32"));
+    assert!(c.contains("AtomicFlag::from_ptr(cancel)"));
+    assert!(c.contains("Ok(Handle::into_raw(AtomicFlag::into_int(this.muted())))"));
+    assert!(c.contains("pub unsafe extern \"C\" fn audio_atomic_cell(this: RawHandle, out: *mut *mut i32, err: *mut Buf) -> Status"));
+
+    let hl = hxn_gen::hl_adapter(&library, "audio_core");
+    assert!(hl.contains("\"PXaudio_audio_device_RiRi_v\""));
+    assert!(
+        hl.contains("define_prim!(hlp_atomic_cell, audio_atomic_cell, \"PXaudio_atomic__Ri\");")
+    );
+
+    let header = hxn_gen::c_header(&library);
+    assert!(header.contains("hxn_status audio_audio_device_play(hxn_handle *self, int32_t *position, int32_t *cancel, hxn_buf *err);"));
+    assert!(
+        header.contains(
+            "hxn_status audio_atomic_cell(hxn_handle *self, int32_t **out, hxn_buf *err);"
+        )
+    );
+
+    let haxe = &hxn_gen::haxe_hl(&library)[0].text;
+    assert!(
+        haxe.contains("public function play(position:hxn.AtomicInt, cancel:hxn.AtomicBool):Void")
+    );
+    assert!(haxe.contains("public function muted():hxn.AtomicBool"));
+    assert!(haxe.contains("return hxn.AtomicInt.over(Native.atomic_cell(owner), () -> owner);"));
+
+    let cpp = hxn_gen::haxe_cpp(&library);
+    assert_eq!(cpp.last().unwrap().path, "HxnAudioCell.hx");
+    assert!(cpp[0].text.contains("var owner = HxnAudioCell.adopt();"));
+
+    let manifest = hxn_gen::manifest(&library);
+    assert!(manifest.contains("{ \"name\": \"cancel\", \"type\": \"atomic_flag\" }"));
+    assert!(manifest.contains("\"returns\": \"atomic_i32\""));
 }
 
 // The fixture's manifest is committed, as a library's would be, so a change

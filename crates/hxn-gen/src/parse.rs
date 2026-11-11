@@ -73,11 +73,25 @@ fn path_name(ty: &syn::Type) -> Option<String> {
 
 // `Option<T>` gives `T`.
 fn optional(ty: &syn::Type) -> Option<&syn::Type> {
+    wrapped(ty, "Option")
+}
+
+// The cell `ty` names: `AtomicI32` or `AtomicFlag`.
+fn cell(ty: &syn::Type) -> Option<Type> {
+    match path_name(ty)?.as_str() {
+        "AtomicI32" => Some(Type::AtomicInt),
+        "AtomicFlag" => Some(Type::AtomicBool),
+        _ => None,
+    }
+}
+
+// `wrapper<T>` gives `T`.
+fn wrapped<'a>(ty: &'a syn::Type, wrapper: &str) -> Option<&'a syn::Type> {
     let syn::Type::Path(path) = ty else {
         return None;
     };
     let segment = path.path.segments.last()?;
-    if path.path.segments.len() != 1 || segment.ident != "Option" {
+    if path.path.segments.len() != 1 || segment.ident != wrapper {
         return None;
     }
     let syn::PathArguments::AngleBracketed(arguments) = &segment.arguments else {
@@ -134,6 +148,15 @@ impl Scope<'_> {
             {
                 return Ok(plain(Type::Bytes));
             }
+            if let Some(cell) = cell(&reference.elem) {
+                return Ok(plain(cell));
+            }
+        }
+        if cell(ty).is_some() || wrapped(ty, "Arc").and_then(cell).is_some() {
+            return error(
+                ty.span(),
+                "a cell is lent for the call: take `&AtomicI32` or `&AtomicFlag`",
+            );
         }
         let (borrowed, nullable) = match optional(ty) {
             Some(inner) => (self.borrowed(inner), true),
@@ -161,7 +184,7 @@ impl Scope<'_> {
             Some("f64") => Ok(plain(Type::F64)),
             _ => error(
                 ty.span(),
-                "a parameter is one of bool, i32, f64, &str, &[u8], or `&` or `&mut` of an interface",
+                "a parameter is one of bool, i32, f64, &str, &[u8], &AtomicI32, &AtomicFlag, or `&` or `&mut` of an interface",
             ),
         }
     }
@@ -188,6 +211,15 @@ impl Scope<'_> {
                 "an interface is returned by value: a result cannot borrow",
             );
         }
+        if let Some(cell) = wrapped(ty, "Arc").and_then(cell) {
+            return Ok(cell);
+        }
+        if cell(ty).is_some() {
+            return error(
+                ty.span(),
+                "a cell the library keeps is returned as `Arc<AtomicI32>` or `Arc<AtomicFlag>`",
+            );
+        }
         match path_name(ty).as_deref() {
             Some("bool") => Ok(Type::Bool),
             Some("i32") => Ok(Type::I32),
@@ -195,7 +227,7 @@ impl Scope<'_> {
             Some("String") => Ok(Type::Str),
             _ => error(
                 ty.span(),
-                "a result is one of (), bool, i32, f64, String, an interface or an Option of one, or a Result of these",
+                "a result is one of (), bool, i32, f64, String, Arc<AtomicI32>, Arc<AtomicFlag>, an interface or an Option of one, or a Result of these",
             ),
         }
     }

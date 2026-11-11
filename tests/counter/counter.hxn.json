@@ -16,12 +16,39 @@
         },
         {
           "name": "add",
-          "docs": "Adds to the value and returns it. Fails if it would overflow.",
+          "docs": "Adds to the value and returns it. Fails if it would overflow. A\nlocked counter leaves the value as it is.",
           "kind": "mutating",
           "params": [{ "name": "amount", "type": "i32" }],
           "returns": "i32",
           "fallible": true,
           "blocking": false
+        },
+        {
+          "name": "adds",
+          "docs": "How many adds have been made, as a cell the host reads directly.",
+          "kind": "method",
+          "params": [],
+          "returns": "atomic_i32",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "locked",
+          "docs": "Set to make the counter ignore adds.",
+          "kind": "method",
+          "params": [],
+          "returns": "atomic_flag",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "work",
+          "docs": "Does `units` of work, counting each in `progress`, and stops early\nonce `cancel` is set. Returns how many were done.",
+          "kind": "method",
+          "params": [{ "name": "units", "type": "i32" }, { "name": "progress", "type": "atomic_i32" }, { "name": "cancel", "type": "atomic_flag" }],
+          "returns": "i32",
+          "fallible": false,
+          "blocking": true
         },
         {
           "name": "label",
@@ -135,6 +162,37 @@
           "returns": "void",
           "fallible": false,
           "blocking": true
+        }
+      ]
+    },
+    {
+      "name": "Job",
+      "docs": "Work on a thread of the library's own, watched and stopped through two\ncells.",
+      "methods": [
+        {
+          "name": "new",
+          "docs": "Starts counting to `units`, one a millisecond.",
+          "kind": "constructor",
+          "params": [{ "name": "units", "type": "i32" }],
+          "returns": "Job",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "done",
+          "kind": "method",
+          "params": [],
+          "returns": "atomic_i32",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "stop",
+          "kind": "method",
+          "params": [],
+          "returns": "atomic_flag",
+          "fallible": false,
+          "blocking": false
         }
       ]
     },

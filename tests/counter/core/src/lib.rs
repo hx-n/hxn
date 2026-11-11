@@ -4,11 +4,13 @@
 //! later.
 
 use std::fmt;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::task::Poll;
 use std::thread::sleep;
 use std::time::Duration;
 
+use hxn::AtomicFlag;
 use hxn_future::{
     Completer, Failure, Future, Sender, Signal, Source, Stream, channel, pending, signal, spawn,
     spawn_blocking, stepped,
@@ -25,6 +27,9 @@ pub fn live() -> i32 {
 #[hxn::interface]
 pub struct Counter {
     value: i32,
+    // Cells the host reads and writes without a call.
+    adds: Arc<AtomicI32>,
+    locked: Arc<AtomicFlag>,
 }
 
 #[derive(Debug)]
@@ -42,13 +47,44 @@ impl fmt::Display for Overflow {
 impl Counter {
     pub fn new(start: i32) -> Self {
         LIVE.fetch_add(1, Ordering::SeqCst);
-        Self { value: start }
+        Self {
+            value: start,
+            adds: Arc::new(AtomicI32::new(0)),
+            locked: Arc::new(AtomicFlag::new(false)),
+        }
     }
 
-    /// Adds to the value and returns it. Fails if it would overflow.
+    /// Adds to the value and returns it. Fails if it would overflow. A
+    /// locked counter leaves the value as it is.
     pub fn add(&mut self, amount: i32) -> Result<i32, Overflow> {
+        if self.locked.load() {
+            return Ok(self.value);
+        }
         self.value = self.value.checked_add(amount).ok_or(Overflow)?;
+        self.adds.fetch_add(1, Ordering::SeqCst);
         Ok(self.value)
+    }
+
+    /// How many adds have been made, as a cell the host reads directly.
+    pub fn adds(&self) -> Arc<AtomicI32> {
+        self.adds.clone()
+    }
+
+    /// Set to make the counter ignore adds.
+    pub fn locked(&self) -> Arc<AtomicFlag> {
+        self.locked.clone()
+    }
+
+    /// Does `units` of work, counting each in `progress`, and stops early
+    /// once `cancel` is set. Returns how many were done.
+    #[hxn(blocking)]
+    pub fn work(&self, units: i32, progress: &AtomicI32, cancel: &AtomicFlag) -> i32 {
+        let mut done = 0;
+        while done < units && !cancel.load() {
+            progress.fetch_add(1, Ordering::SeqCst);
+            done += 1;
+        }
+        done
     }
 
     pub fn label(&self, name: &str) -> String {
@@ -133,6 +169,44 @@ impl Counter {
 impl Drop for Counter {
     fn drop(&mut self) {
         LIVE.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
+/// Work on a thread of the library's own, watched and stopped through two
+/// cells.
+#[hxn::interface]
+pub struct Job {
+    done: Arc<AtomicI32>,
+    stop: Arc<AtomicFlag>,
+}
+
+#[hxn::methods]
+impl Job {
+    /// Starts counting to `units`, one a millisecond.
+    pub fn new(units: i32) -> Self {
+        let done = Arc::new(AtomicI32::new(0));
+        let stop = Arc::new(AtomicFlag::new(false));
+        let (counted, stopped) = (done.clone(), stop.clone());
+        // Nobody waits on this work; it is the cells that are watched.
+        drop(spawn_blocking(move || {
+            for _ in 0..units {
+                if stopped.load() {
+                    break;
+                }
+                sleep(Duration::from_millis(1));
+                counted.fetch_add(1, Ordering::SeqCst);
+            }
+            Ok::<_, Failure>(())
+        }));
+        Self { done, stop }
+    }
+
+    pub fn done(&self) -> Arc<AtomicI32> {
+        self.done.clone()
+    }
+
+    pub fn stop(&self) -> Arc<AtomicFlag> {
+        self.stop.clone()
     }
 }
 

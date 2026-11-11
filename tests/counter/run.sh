@@ -35,7 +35,7 @@ case "$runtime" in
 		cargo build --manifest-path "$root/Cargo.toml" -p counter-gen-hl
 		generate
 		cp "$root/target/debug/libcounter_gen_hl.$dylib" "$work/counter.hdll"
-		haxe -cp "$here/haxe" -cp "$work/gen/haxe/hl" -main Generated -hl "$work/main.hl"
+		haxe -cp "$root/haxe" -cp "$here/haxe" -cp "$work/gen/haxe/hl" -main Generated -hl "$work/main.hl"
 		cd "$work"
 		vm_dir="$(dirname "$vm")"
 		DYLD_LIBRARY_PATH="$work:$vm_dir${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}" \
@@ -45,7 +45,7 @@ case "$runtime" in
 	gen-cpp)
 		cargo build --manifest-path "$root/Cargo.toml" -p counter-gen-c
 		generate
-		haxe -cp "$here/haxe" -cp "$work/gen/haxe/cpp" -main Generated -cpp "$work/out" \
+		haxe -cp "$root/haxe" -cp "$here/haxe" -cp "$work/gen/haxe/cpp" -main Generated -cpp "$work/out" \
 			-D HXN_INCLUDE="$root/include" \
 			-D COUNTER_INCLUDE="$work/gen/include" \
 			-D COUNTER_LIB="$root/target/debug/libcounter_gen.a"

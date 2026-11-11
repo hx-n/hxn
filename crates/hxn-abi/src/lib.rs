@@ -7,6 +7,7 @@
 //! | bytes or UTF-8 text, returned | [`Buf`] | the library, until the host frees it |
 //! | a Rust value the host holds | [`Handle`] behind a [`RawHandle`] | the host's collector |
 //! | a host closure | [`Callback`] | the library, until it drops it |
+//! | a cell both sides read and write | `AtomicI32`, [`AtomicFlag`] | whoever made it |
 //! | failure | [`Status`], with a message in a [`Buf`] | - |
 //!
 //! Nothing unwinds across the boundary in either direction: [`guard`] turns a
@@ -20,6 +21,7 @@
 //!
 //! `include/hxn.h` declares the same layouts for C and C++.
 
+mod atomic;
 mod buf;
 mod callback;
 mod guard;
@@ -27,6 +29,7 @@ mod handle;
 mod slice;
 mod status;
 
+pub use atomic::AtomicFlag;
 pub use buf::Buf;
 pub use callback::Callback;
 pub use guard::{catch, guard};

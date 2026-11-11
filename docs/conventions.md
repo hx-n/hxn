@@ -59,6 +59,9 @@ filesystem `#include "counter.h"` would then find the generated one.
 - Another interface is taken as `&T` or `&mut T` and returned as `T`, with
   `Option` for one that may be absent. It is never taken by value and never
   returned by reference.
+- A cell shared with Haxe is an `AtomicI32` or an `hxn::AtomicFlag`, never
+  an `AtomicBool`. It is taken as a reference, lent for the call, and
+  returned as an `Arc`, kept by the library.
 - Errors are a `Result` whose error implements `Display`. Do not panic to
   report a failure: a wasm build cannot catch it.
 - Mark a function that waits with `#[hxn(blocking)]`.
@@ -88,6 +91,8 @@ filesystem `#include "counter.h"` would then find the generated one.
   finalizer frees and does nothing else: it runs inside a collection.
 - **A returned value gets a new object of its interface's class**, which
   becomes its owner only once the library has handed the value over.
+- **A cell the library returns has no `close()`.** The object holding it
+  keeps the memory alive, so its address is good for as long as it is used.
 - **A null object is passed as a null handle**, whether or not the library
   takes one. The library refuses it, with the same error on every runtime;
   hxcpp does not check a null object before reading its field.

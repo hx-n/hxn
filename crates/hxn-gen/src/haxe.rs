@@ -6,7 +6,7 @@
 //! interface, or of a function other than `new`, gets an owner.
 
 use crate::model::{Interface, Library, Method, Type};
-use crate::names::{abstract_name, camel, has_receiver, local, release};
+use crate::names::{abstract_name, camel, cell_abstract, cell_class, has_receiver, local, release};
 
 /// A generated file: its path relative to a class path, and its text.
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -25,6 +25,8 @@ fn haxe_type(ty: &Type) -> String {
         Type::F64 => String::from("Float"),
         Type::Str => String::from("String"),
         Type::Bytes => String::from("haxe.io.Bytes"),
+        Type::AtomicInt => String::from("hxn.AtomicInt"),
+        Type::AtomicBool => String::from("hxn.AtomicBool"),
         Type::Handle {
             interface,
             nullable: false,
@@ -104,6 +106,7 @@ fn hl_native(interface: &Interface, method: &Method) -> String {
             Type::Handle { interface: of, .. } => {
                 params.push(format!("{name}:{}", hl_raw(of, &interface.name)));
             }
+            Type::AtomicInt | Type::AtomicBool => params.push(format!("{name}:hl.Ref<Int>")),
             Type::Void => unreachable!("not a parameter type"),
         }
     }
@@ -114,6 +117,7 @@ fn hl_native(interface: &Interface, method: &Method) -> String {
         Type::F64 => (String::from("Float"), "\n\t\treturn 0.;"),
         Type::Str => (String::from("hl.Bytes"), "\n\t\treturn null;"),
         Type::Handle { interface: of, .. } => (hl_raw(of, &interface.name), "\n\t\treturn null;"),
+        Type::AtomicInt | Type::AtomicBool => (String::from("CellRaw"), "\n\t\treturn null;"),
         Type::Bytes => unreachable!("not a result type"),
     };
     let separator = if body == "{}" { " " } else { "" };
@@ -140,6 +144,9 @@ fn hl_method(interface: &Interface, method: &Method) -> String {
             // one: it is the library that says so, the same on every runtime.
             Type::Handle { .. } => {
                 arguments.push(format!("{name} == null ? null : {name}.raw"));
+            }
+            Type::AtomicInt | Type::AtomicBool => {
+                arguments.push(format!("{name} == null ? null : {name}.pointer"));
             }
             _ => arguments.push(name),
         }
@@ -170,6 +177,14 @@ fn hl_method(interface: &Interface, method: &Method) -> String {
         } => out.push_str(&format!(
             " {{\n\t\tvar made = {call};\n\t\treturn made == null ? null : {of}.adopt(made);\n\t}}\n"
         )),
+        // The cell lives in the library; what it handed over keeps it alive
+        // for as long as the atomic is referenced.
+        Type::AtomicInt => out.push_str(&format!(
+            " {{\n\t\tvar owner = {call};\n\t\treturn hxn.AtomicInt.over(Native.atomic_cell(owner), () -> owner);\n\t}}\n"
+        )),
+        Type::AtomicBool => out.push_str(&format!(
+            " {{\n\t\tvar owner = {call};\n\t\treturn hxn.AtomicBool.over(hxn.AtomicInt.over(Native.atomic_cell(owner), () -> owner));\n\t}}\n"
+        )),
         _ => out.push_str(&format!("\n\t\treturn {call};\n")),
     }
     out
@@ -177,15 +192,33 @@ fn hl_method(interface: &Interface, method: &Method) -> String {
 
 fn hl_module(library: &Library, interface: &Interface) -> String {
     let name = &interface.name;
+    let cells = interface
+        .methods
+        .iter()
+        .any(|method| matches!(method.returns, Type::AtomicInt | Type::AtomicBool));
     let mut out = String::from(HEADER);
     out.push_str(&format!(
-        "@:noCompletion typedef {name}Raw = hl.Abstract<\"{}\">;\n\n@:hlNative(\"{}\")\nprivate class Native {{\n",
-        abstract_name(library, name),
+        "@:noCompletion typedef {name}Raw = hl.Abstract<\"{}\">;\n",
+        abstract_name(library, name)
+    ));
+    if cells {
+        out.push_str(&format!(
+            "private typedef CellRaw = hl.Abstract<\"{}\">;\n",
+            cell_abstract(library)
+        ));
+    }
+    out.push_str(&format!(
+        "\n@:hlNative(\"{}\")\nprivate class Native {{\n",
         library.name
     ));
     for method in &interface.methods {
         out.push_str(&hl_native(interface, method));
         out.push('\n');
+    }
+    if cells {
+        out.push_str(
+            "\tpublic static function atomic_cell(self:CellRaw):hl.Ref<Int>\n\t\treturn null;\n\n",
+        );
     }
     out.push_str(&format!(
         "\tpublic static function {}(self:{name}Raw):Void {{}}\n}}\n\n",
@@ -227,6 +260,15 @@ fn cpp_method(library: &Library, interface: &Interface, method: &Method) -> Stri
                 ));
                 arguments.push(format!("{name}Raw"));
             }
+            Type::AtomicInt | Type::AtomicBool => {
+                before.push(format!(
+                    "var {name}Raw:cpp.RawPointer<Int> = untyped __cpp__(\"0\");"
+                ));
+                before.push(format!(
+                    "if ({name} != null)\n\t\t\t{name}Raw = {name}.pointer.raw;"
+                ));
+                arguments.push(format!("{name}Raw"));
+            }
             _ => arguments.push(name),
         }
     }
@@ -261,6 +303,18 @@ fn cpp_method(library: &Library, interface: &Interface, method: &Method) -> Stri
                 }
                 body.push(String::from("made.own();"));
                 body.push(String::from("return made;"));
+            }
+            Type::AtomicInt | Type::AtomicBool => {
+                // The cell lives in the library; its owner keeps it alive for
+                // as long as the atomic is referenced.
+                body.push(format!("var owner = {}.adopt();", cell_class(library)));
+                body.push(format!("owner.raw = {call};"));
+                body.push(String::from("owner.own();"));
+                body.push(if method.returns == Type::AtomicBool {
+                    String::from("return hxn.AtomicBool.over(owner.cell());")
+                } else {
+                    String::from("return owner.cell();")
+                });
             }
             _ => body.push(format!("return {call};")),
         }
@@ -321,12 +375,32 @@ pub fn haxe_hl(library: &Library) -> Vec<File> {
 
 /// The classes for hxcpp, one file an interface.
 pub fn haxe_cpp(library: &Library) -> Vec<File> {
-    library
+    let mut files: Vec<File> = library
         .interfaces
         .iter()
         .map(|interface| File {
             path: format!("{}.hx", interface.name),
             text: cpp_module(library, interface),
         })
-        .collect()
+        .collect();
+    if library.returns_cells() {
+        files.push(File {
+            path: format!("{}.hx", cell_class(library)),
+            text: cpp_cell(library),
+        });
+    }
+    files
+}
+
+// The class that owns a cell the library handed over. An `hxn.AtomicInt`
+// refers to it, and through it to the memory.
+fn cpp_cell(library: &Library) -> String {
+    let name = cell_class(library);
+    let mut out = String::from(HEADER);
+    out.push_str(&format!(
+        "@:headerInclude(\"{library}_glue.h\")\n@:noCompletion class {name} {{\n\t@:unreflective public var raw:cpp.RawPointer<cpp.Void>;\n\n\t// Runs inside a collection: it may free, and may not touch the Haxe heap.\n\tstatic function finalize(self:{name}):Void {{\n\t\tuntyped __cpp__(\"{release}((hxn_handle *){{0}})\", self.raw);\n\t}}\n\n\tpublic static function adopt():{name}\n\t\treturn Type.createEmptyInstance({name});\n\n\tpublic function own():Void\n\t\tcpp.vm.Gc.setFinalizer(this, cpp.Function.fromStaticFunction(finalize));\n\n\t/** The cell, kept alive by this. **/\n\tpublic function cell():hxn.AtomicInt {{\n\t\tvar address:cpp.RawPointer<Int> = untyped __cpp__(\"{library}_glue::atomic_cell({{0}})\", raw);\n\t\treturn hxn.AtomicInt.over(cpp.Pointer.fromRaw(address), this);\n\t}}\n}}\n",
+        library = library.name,
+        release = release(library),
+    ));
+    out
 }

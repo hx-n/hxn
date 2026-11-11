@@ -64,6 +64,50 @@ class Generated {
 		check("everything made was released", Counter.live() == 0);
 	}
 
+	// Cells both sides read and write with no call between them.
+	static function atomics() {
+		var counter = new Counter(0);
+		var adds = counter.adds();
+		counter.add(1);
+		counter.add(1);
+		check("a cell the library owns is read from here", adds.load() == 2);
+		adds.store(10);
+		counter.add(1);
+		check("and written from here", adds.load() == 11);
+
+		var locked = counter.locked();
+		locked.store(true);
+		check("a flag set here is seen by the library", counter.add(5) == 3 && adds.load() == 11);
+		check("and read back", locked.exchange(false));
+		check("and cleared", counter.add(5) == 8 && adds.load() == 12);
+
+		var progress = new hxn.AtomicInt(0);
+		var cancel = new hxn.AtomicBool(false);
+		check("cells made here are lent to a call", counter.work(1000, progress, cancel) == 1000 && progress.load() == 1000);
+		cancel.store(true);
+		check("and a flag stops it", counter.work(1000, progress, cancel) == 0 && progress.load() == 1000);
+		throws("null where a cell is required", () -> counter.work(1, null, cancel), "null pointer");
+
+		counter.close();
+		check("a cell outlives the object it came from", adds.add(1) == 12 && adds.load() == 13);
+
+		#if !wasm
+		// A thread of the library's own, with no Haxe call in progress.
+		var job = new Job(100000);
+		var done = job.done();
+		var stop = job.stop();
+		var waited = 0;
+		while (done.load() < 5 && waited++ < 5000)
+			Sys.sleep(0.001);
+		stop.store(true);
+		Sys.sleep(0.05);
+		var at = done.load();
+		Sys.sleep(0.05);
+		check('a thread of the library\'s is watched and stopped through two cells: $at', at >= 5 && at < 100000 && done.load() == at);
+		job.close();
+		#end
+	}
+
 	static function main() {
 		var counter = new Counter(40);
 		check("an int in and out", counter.add(2) == 42);
@@ -91,6 +135,7 @@ class Generated {
 		throws("use after close", () -> counter.add(1), "closed");
 
 		handles();
+		atomics();
 
 		#if emscripten
 		// hxcpp's collector does not return from a forced collection under Emscripten.

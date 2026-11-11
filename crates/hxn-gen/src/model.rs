@@ -71,6 +71,22 @@ pub enum Type {
         interface: String,
         nullable: bool,
     },
+    /// A cell both sides read and write: `&AtomicI32` coming in, lent for
+    /// the call, and `Arc<AtomicI32>` going out, kept by the library.
+    AtomicInt,
+    /// The same for a flag: `&AtomicFlag` and `Arc<AtomicFlag>`.
+    AtomicBool,
+}
+
+impl Library {
+    /// Whether any function hands the host a cell, which takes a call of
+    /// the library's own to reach.
+    pub fn returns_cells(&self) -> bool {
+        self.interfaces
+            .iter()
+            .flat_map(|interface| &interface.methods)
+            .any(|method| matches!(method.returns, Type::AtomicInt | Type::AtomicBool))
+    }
 }
 
 impl Type {
@@ -83,6 +99,8 @@ impl Type {
             Self::F64 => String::from("f64"),
             Self::Str => String::from("str"),
             Self::Bytes => String::from("bytes"),
+            Self::AtomicInt => String::from("atomic_i32"),
+            Self::AtomicBool => String::from("atomic_flag"),
             Self::Handle {
                 interface,
                 nullable,

@@ -65,7 +65,7 @@ natively and on wasm. Read these before changing anything:
 | `crates/hxn-future` | Futures, streams, signals, and running work with or without threads. |
 | `crates/hxn-gen` | Reads a library's marked source and writes its adapters, header and Haxe classes. |
 | `include/hxn.h` | The same layouts for C, and what hxcpp glue needs around them. |
-| `haxe/hxn` | The Haxe side: `Future`, `Stream`, `Signal`, `Computed`, `Reactive`, `Inbox`, `Loop`, `Callback`. |
+| `haxe/hxn` | The Haxe side: `Future`, `Stream`, `Signal`, `Computed`, `Reactive`, `Inbox`, `Loop`, `Callback`, `AtomicInt`, `AtomicBool`. |
 | `tests/counter` | The fixture: a small library bound for every runtime, and the Haxe test they all run. |
 
 `internal/` is not part of the repository.

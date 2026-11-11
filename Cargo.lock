@@ -59,6 +59,7 @@ source = "git+https://github.com/rayzor-blade/hl_abi#2046a265f45ebe7a1093e59074d
 name = "hxn"
 version = "0.1.0"
 dependencies = [
+ "hxn-abi",
  "hxn-macros",
 ]
 

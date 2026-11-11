@@ -56,6 +56,34 @@ pub fn abstract_name(library: &Library, interface: &str) -> String {
     format!("{}_{}", library.name, snake(interface))
 }
 
+/// What HashLink knows a cell the library handed over as.
+pub fn cell_abstract(library: &Library) -> String {
+    format!("{}_atomic", library.name)
+}
+
+/// The symbol that gives the address of a cell the library handed over.
+pub fn cell_export(library: &Library) -> String {
+    format!("{}_atomic_cell", library.name)
+}
+
+/// The hxcpp class that owns such a cell: `HxnCounterCell`.
+pub fn cell_class(library: &Library) -> String {
+    let mut name = String::from("Hxn");
+    let mut upper = true;
+    for letter in library.name.chars() {
+        if letter == '_' {
+            upper = true;
+        } else if upper {
+            name.extend(letter.to_uppercase());
+            upper = false;
+        } else {
+            name.push(letter);
+        }
+    }
+    name.push_str("Cell");
+    name
+}
+
 /// Whether `method` is called on a value, as opposed to the type.
 pub fn has_receiver(method: &Method) -> bool {
     method.receiver != Receiver::None

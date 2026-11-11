@@ -37,6 +37,7 @@ every dependency twice.
 | bytes or UTF-8 text, returned | `Buf` | the library, until the host frees it |
 | a Rust value the host holds | `Handle<T>` behind an opaque pointer | the host's collector |
 | a host function, for one call | `Callback` | the host |
+| a cell both sides read and write | an atomic `i32` | whoever made it |
 | failure | `Status`, with a message in a `Buf` | - |
 
 Text is UTF-8 at the boundary. HashLink strings are UTF-16, so the HashLink
@@ -109,6 +110,30 @@ true.
   value from native code has the same cycle problem as rooting a function.
 - **A handle belongs to the library that made it.** One passed to another
   library is refused by the type check.
+
+## Atomics
+
+A Haxe atomic integer and Rust's `AtomicI32` are the same four bytes, and
+each runtime's own atomic operations take a plain address. So a cell is
+shared by sharing its address: each side works on it with its own operations,
+from any thread, and there is no call between them.
+
+| In Rust | Meaning | In Haxe |
+|---|---|---|
+| `&AtomicI32`, `&AtomicFlag` parameter | a cell lent for the call | `hxn.AtomicInt`, `hxn.AtomicBool` |
+| `Arc<AtomicI32>`, `Arc<AtomicFlag>` result | a cell the library keeps | the same, over the library's memory |
+
+- **A lent cell** is one Haxe made. Rust has it for the call only, which the
+  borrow says, so nothing has to keep Haxe's memory alive afterwards. A
+  cancel flag for a call in progress is the usual use.
+- **A kept cell** lives in the library. The Haxe object holds what the
+  library handed over, which keeps the memory alive for as long as the object
+  is referenced; it has no `close()`, so the address cannot outlive it.
+- **A flag is an integer that is 0 or 1.** Haxe has no atomic of one byte,
+  which Rust's `AtomicBool` is, so a flag that crosses is `hxn::AtomicFlag`.
+- `hxn.AtomicInt` has the operations of `haxe.atomic.AtomicInt`. On hxcpp it
+  is one, over the library's memory; on HashLink it calls the VM's atomic
+  primitives directly, because the standard type there owns its storage.
 
 ## Calling a Haxe function
 
