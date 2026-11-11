@@ -17,6 +17,7 @@ thread_local! {
     static SCHEDULER: RefCell<RoundRobin> = RefCell::new(RoundRobin::new());
 }
 
+#[cfg(any(test, all(target_family = "wasm", not(target_feature = "atomics"))))]
 pub(crate) fn queue(task: Box<dyn Task>) {
     ARRIVED.with(|arrived| arrived.borrow_mut().push(task));
 }

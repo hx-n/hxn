@@ -10,6 +10,7 @@ repository.workspace = true
 hxn-abi = { workspace = true }
 krio-core = { workspace = true }
 krio-runtime = { workspace = true }
+krio-parallel = { workspace = true }
 
 [lints]
 workspace = true

@@ -35,6 +35,8 @@ use hxn_abi::{Failure, Fault, Status, catch};
 use krio_core::{Suspension, Task};
 
 mod local;
+#[cfg(not(all(target_family = "wasm", not(target_feature = "atomics"))))]
+mod pool;
 
 pub use local::pump;
 
@@ -266,10 +268,13 @@ where
 /// [`Poll::Ready`], and that result settles the future. A panic rejects it.
 ///
 /// The first step runs before this returns, so work that finishes at once
-/// never waits for anyone. With threads the rest runs on a thread of its
-/// own. Without them it is queued on this thread and advances only while the
-/// host waits on a future from this library or calls [`pump`], which is what
-/// lets one thread interleave it with everything else.
+/// never waits for anyone. With threads the rest goes to the library's pool
+/// of workers. Without them it is queued on this thread and advances only
+/// while the host waits on a future from this library or calls [`pump`],
+/// which is what lets one thread interleave it with everything else.
+///
+/// `Poll::Pending` means there is more to do, not that the work is waiting
+/// on something: a worker takes the next step straight away.
 pub fn stepped<T, E>(step: impl FnMut() -> Poll<Result<T, E>> + Send + 'static) -> Future<T>
 where
     T: Send + 'static,
@@ -280,17 +285,18 @@ where
     if task.step().is_done() {
         return future;
     }
-    if THREADS {
-        // If no thread starts, the task is dropped and the future cancelled.
-        let _ = std::thread::Builder::new().spawn(move || {
-            while !task.step().is_done() {
-                std::thread::yield_now();
-            }
-        });
-    } else {
-        local::queue(Box::new(task));
-    }
+    hand_over(Box::new(task));
     future
+}
+
+#[cfg(not(all(target_family = "wasm", not(target_feature = "atomics"))))]
+fn hand_over(task: Box<dyn Task + Send>) {
+    pool::submit(task);
+}
+
+#[cfg(all(target_family = "wasm", not(target_feature = "atomics")))]
+fn hand_over(task: Box<dyn Task + Send>) {
+    local::queue(task);
 }
 
 struct Stepped<S, T> {
@@ -540,6 +546,25 @@ mod tests {
             panicked.take(),
             Err(Failure::new(Status::PANIC, "on the third step"))
         );
+    }
+
+    #[test]
+    fn the_workers_take_more_work_than_there_are_of_them_and_survive_a_panic() {
+        let panicked = stepped(move || -> Poll<Result<i32, Failure>> {
+            if std::thread::current().name() == Some("hxn-worker") {
+                panic!("on a worker");
+            }
+            Poll::Pending
+        });
+        assert_eq!(panicked.wait(None), State::Rejected);
+
+        let sums: Vec<_> = (0..64)
+            .map(|extra| stepped(counting(1000 + extra)))
+            .collect();
+        for (extra, sum) in sums.iter().enumerate() {
+            assert_eq!(sum.wait(None), State::Resolved);
+            assert_eq!(sum.take(), Ok(1000 + extra as i32));
+        }
     }
 
     // What `stepped` does where there are no threads, on this thread's queue.
