@@ -6,11 +6,16 @@
 
 use std::time::Duration;
 
-use counter_core::Counter;
+use counter_core::{Counter, Promise};
 use hl_abi::{vbyte, vstring};
 use hxn_abi::{Fault, Handle};
 use hxn_future::AnyFuture;
 use hxn_hl::{Managed, Root, blocking, define_prim, manage, prim, slice, string, utf16};
+
+// A side module shares the program's heap, so it allocates from the program.
+#[cfg(target_family = "wasm")]
+#[global_allocator]
+static ALLOCATOR: hl_abi::ProgramAllocator = hl_abi::ProgramAllocator;
 
 unsafe fn counter<'a>(this: *mut Managed) -> Result<&'a Handle<Counter>, Fault> {
     unsafe { hxn_hl::handle(this) }
@@ -153,4 +158,39 @@ define_prim!(
     hlp_future_take_text,
     counter_future_take_text,
     "PXhxn_future__B"
+);
+
+unsafe fn promise<'a>(this: *mut Managed) -> Result<&'a Handle<Promise>, Fault> {
+    unsafe { hxn_hl::handle(this) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_promise_new() -> *mut Managed {
+    unsafe { prim(|| Ok(manage(Promise::new()))) }
+}
+define_prim!(hlp_promise_new, counter_promise_new, "P_Xhxn_promise_");
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_promise_future(this: *mut Managed) -> *mut Managed {
+    unsafe {
+        prim(|| {
+            let future = promise(this)?.borrow_mut()?.future().ok_or(Fault::Closed)?;
+            Ok(manage(AnyFuture::from(future)))
+        })
+    }
+}
+define_prim!(
+    hlp_promise_future,
+    counter_promise_future,
+    "PXhxn_promise__Xhxn_future_"
+);
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_promise_resolve(this: *mut Managed, value: i32) -> bool {
+    unsafe { prim(|| Ok(promise(this)?.borrow()?.resolve(value))) }
+}
+define_prim!(
+    hlp_promise_resolve,
+    counter_promise_resolve,
+    "PXhxn_promise_i_b"
 );

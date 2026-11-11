@@ -26,6 +26,11 @@ hxn_status counter_future_wait(hxn_handle *self, int32_t milliseconds, int32_t *
 hxn_status counter_future_take_int(hxn_handle *self, int32_t *out, hxn_buf *err);
 hxn_status counter_future_take_text(hxn_handle *self, hxn_buf *out, hxn_buf *err);
 
+/* A future the host settles. `out` of resolve is 1 if this call settled it. */
+hxn_status counter_promise_new(hxn_handle **out, hxn_buf *err);
+hxn_status counter_promise_future(hxn_handle *self, hxn_handle **out, hxn_buf *err);
+hxn_status counter_promise_resolve(hxn_handle *self, int32_t value, int32_t *out, hxn_buf *err);
+
 #ifdef __cplusplus
 }
 #endif

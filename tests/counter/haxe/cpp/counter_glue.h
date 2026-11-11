@@ -107,6 +107,27 @@ inline ::String future_take_text(void *self) {
 	return hxn::take_string(out);
 }
 
+inline void *promise_new() {
+	hxn_handle *out = 0;
+	hxn_buf err = HXN_BUF_EMPTY;
+	hxn::check(counter_promise_new(&out, &err), err);
+	return out;
+}
+
+inline void *promise_future(void *self) {
+	hxn_handle *out = 0;
+	hxn_buf err = HXN_BUF_EMPTY;
+	hxn::check(counter_promise_future((hxn_handle *)self, &out, &err), err);
+	return out;
+}
+
+inline bool promise_resolve(void *self, int value) {
+	int out = 0;
+	hxn_buf err = HXN_BUF_EMPTY;
+	hxn::check(counter_promise_resolve((hxn_handle *)self, value, &out, &err), err);
+	return out != 0;
+}
+
 }
 
 #endif

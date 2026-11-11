@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicI32, Ordering};
 use std::thread::sleep;
 use std::time::Duration;
 
-use hxn_future::{Future, pending, spawn};
+use hxn_future::{Completer, Future, pending, spawn};
 
 static LIVE: AtomicI32 = AtomicI32::new(0);
 
@@ -72,4 +72,35 @@ pub fn greet_later(name: String, delay: Duration) -> Future<String> {
 /// A future nothing will settle.
 pub fn abandoned() -> Future<i32> {
     pending().1
+}
+
+/// A future settled from outside the library, as a host callback would.
+pub struct Promise {
+    completer: Completer<i32>,
+    future: Option<Future<i32>>,
+}
+
+impl Promise {
+    pub fn new() -> Self {
+        let (completer, future) = pending();
+        Self {
+            completer,
+            future: Some(future),
+        }
+    }
+
+    /// The future, the first time it is asked for.
+    pub fn future(&mut self) -> Option<Future<i32>> {
+        self.future.take()
+    }
+
+    pub fn resolve(&self, value: i32) -> bool {
+        self.completer.resolve(value)
+    }
+}
+
+impl Default for Promise {
+    fn default() -> Self {
+        Self::new()
+    }
 }

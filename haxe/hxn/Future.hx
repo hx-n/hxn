@@ -41,7 +41,10 @@ class Future<T> {
 
 	/** Waits for the result. Any thread may call it, any number of times. **/
 	public function await():T {
-		wait(-1);
+		// A runtime without threads cannot block in the library: its wait
+		// returns while still pending, and sleeping lets another fiber settle.
+		while (wait(-1) == 0)
+			Sys.sleep(0.001);
 		// The library gives the result up once; every caller reads this copy.
 		lock.acquire();
 		if (!taken) {
@@ -63,25 +66,48 @@ class Future<T> {
 		when `main` returns; a thread without one cannot call this.
 
 		A failure with no `onError` is thrown from that event loop.
+
+		Where the runtime has threads a helper thread waits for the result.
+		Where it has none (hxcpp under Emscripten, or `-D hxn_no_threads`) the
+		event loop asks for the state on every turn instead.
 	**/
 	public function then(onValue:T->Void, ?onError:Exception->Void):Void {
 		var events = Thread.current().events;
+		#if (emscripten || hxn_no_threads)
+		// Asked again on every turn of the loop, as an event of its own each
+		// time: the loop has nothing to sleep on while this is outstanding.
+		var poll:Null<() -> Void> = null;
+		poll = () -> {
+			if (wait(0) == 0)
+				events.run(poll);
+			else
+				deliver(onValue, onError);
+		};
+		events.run(poll);
+		#else
 		events.promise();
 		Thread.create(() -> {
-			var result:Null<T> = null;
-			var error:Null<Exception> = null;
+			// Take the result here, so the event loop only has to hand it over.
 			try
-				result = await()
-			catch (e:Exception)
-				error = e;
-			events.runPromised(() -> {
-				if (error == null)
-					onValue(result);
-				else if (onError != null)
-					onError(error);
-				else
-					throw error;
-			});
+				await()
+			catch (_:Exception) {}
+			events.runPromised(() -> deliver(onValue, onError));
 		});
+		#end
+	}
+
+	function deliver(onValue:T->Void, onError:Null<Exception->Void>):Void {
+		var result:Null<T> = null;
+		var error:Null<Exception> = null;
+		try
+			result = await()
+		catch (e:Exception)
+			error = e;
+		if (error == null)
+			onValue(result);
+		else if (onError != null)
+			onError(error);
+		else
+			throw error;
 	}
 }

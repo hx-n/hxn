@@ -8,7 +8,8 @@ license.workspace = true
 
 [lib]
 name = "counter_hl"
-crate-type = ["cdylib"]
+# The archive is what wasm-ld links into a side module.
+crate-type = ["cdylib", "staticlib"]
 test = false
 doctest = false
 

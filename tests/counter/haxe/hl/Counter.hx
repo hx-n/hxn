@@ -1,5 +1,6 @@
 private typedef Raw = hl.Abstract<"hxn_counter">;
 private typedef RawFuture = hl.Abstract<"hxn_future">;
+private typedef RawPromise = hl.Abstract<"hxn_promise">;
 
 @:hlNative("counter")
 private class Native {
@@ -44,6 +45,15 @@ private class Native {
 
 	public static function future_take_text(self:RawFuture):hl.Bytes
 		return null;
+
+	public static function promise_new():RawPromise
+		return null;
+
+	public static function promise_future(self:RawPromise):RawFuture
+		return null;
+
+	public static function promise_resolve(self:RawPromise, value:Int):Bool
+		return false;
 }
 
 class Counter {
@@ -82,6 +92,20 @@ class Counter {
 	public static function abandoned():hxn.Future<Int>
 		return future(Native.abandoned(), raw -> Native.future_take_int(raw));
 
-	static function future<T>(raw:RawFuture, take:RawFuture->T):hxn.Future<T>
+	public static function future<T>(raw:RawFuture, take:RawFuture->T):hxn.Future<T>
 		return new hxn.Future(() -> Native.future_state(raw), limit -> Native.future_wait(raw, limit), () -> take(raw));
+}
+
+/** A future the Haxe side settles. **/
+class Promise {
+	final raw:RawPromise;
+
+	public function new()
+		raw = Native.promise_new();
+
+	public function future():hxn.Future<Int>
+		return Counter.future(Native.promise_future(raw), raw -> Native.future_take_int(raw));
+
+	public function resolve(value:Int):Bool
+		return Native.promise_resolve(raw, value);
 }

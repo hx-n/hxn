@@ -14,6 +14,11 @@
 //! [`reject`](Completer::reject) wins and later ones return `false`. If every
 //! completer is dropped first it is rejected as [`Status::CANCELLED`], so a
 //! waiter is never left waiting on nothing.
+//!
+//! A wasm build without threads has nothing to wait on and nowhere to run
+//! work beside its caller. There [`Future::wait`] returns the state at once,
+//! leaving the host to yield and ask again, and [`spawn`] runs its work
+//! before it returns.
 
 #![forbid(unsafe_code)]
 
@@ -22,6 +27,13 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
 use hxn_abi::{Failure, Fault, Status, catch};
+
+// False for wasm built without atomics, where std has no thread to start and
+// no condition variable to wait on.
+const THREADS: bool = cfg!(not(all(
+    target_family = "wasm",
+    not(target_feature = "atomics")
+)));
 
 /// Where a future stands. The values are what a host sees.
 #[repr(i32)]
@@ -84,7 +96,7 @@ impl<T> Shared<T> {
         let mut slot = self.lock();
         loop {
             let state = slot.state();
-            if state != State::Pending {
+            if state != State::Pending || !THREADS {
                 return state;
             }
             slot = match deadline {
@@ -177,7 +189,8 @@ impl<T> Future<T> {
     }
 
     /// Blocks until the future is settled or `timeout` has passed, and
-    /// returns its state then. `None` waits without limit.
+    /// returns its state then. `None` waits without limit. Without threads
+    /// it does not block.
     pub fn wait(&self, timeout: Option<Duration>) -> State {
         self.shared.wait(timeout)
     }
@@ -202,17 +215,23 @@ pub fn pending<T>() -> (Completer<T>, Future<T>) {
 }
 
 /// Runs `work` on a thread of its own and settles a future with what it
-/// returns. A panic rejects it.
+/// returns. A panic rejects it. Without threads `work` runs here, and the
+/// future is settled when this returns.
 pub fn spawn<T, E>(work: impl FnOnce() -> Result<T, E> + Send + 'static) -> Future<T>
 where
     T: Send + 'static,
     E: Into<Failure>,
 {
     let (completer, future) = pending();
-    // If no thread starts, the closure is dropped and the future cancelled.
-    let _ = std::thread::Builder::new().spawn(move || {
+    let settle = move || {
         completer.settle(catch(|| work().map_err(Into::into)));
-    });
+    };
+    if THREADS {
+        // If no thread starts, the closure is dropped and the future cancelled.
+        let _ = std::thread::Builder::new().spawn(settle);
+    } else {
+        settle();
+    }
     future
 }
 

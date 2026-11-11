@@ -4,6 +4,11 @@
 	<compilerflag value="-I${COUNTER_INCLUDE}"/>
 	<compilerflag value="-I${COUNTER_INCLUDE}/../haxe/cpp"/>
 </files>
+<section if="emscripten">
+	<compiler id="emscripten" exe="emcc">
+		<flag value="-fexceptions"/>
+	</compiler>
+</section>
 <target id="haxe">
 	<lib name="${COUNTER_LIB}"/>
 	<lib name="-lpthread" if="linux"/>
@@ -92,4 +97,28 @@ private class FutureHandle {
 
 	public function takeText():String
 		return untyped __cpp__("counter_glue::future_take_text({0})", raw);
+}
+
+/** A future the Haxe side settles. **/
+@:headerInclude("counter_glue.h")
+class Promise {
+	@:unreflective var raw:cpp.RawPointer<cpp.Void>;
+
+	public function new() {
+		raw = untyped __cpp__("counter_glue::promise_new()");
+		cpp.vm.Gc.setFinalizer(this, cpp.Function.fromStaticFunction(finalize));
+	}
+
+	static function finalize(promise:Promise):Void {
+		untyped __cpp__("counter_release((hxn_handle *){0})", promise.raw);
+	}
+
+	public function future():hxn.Future<Int> {
+		var future = new FutureHandle();
+		future.raw = untyped __cpp__("counter_glue::promise_future({0})", raw);
+		return future.typed(future.takeInt);
+	}
+
+	public function resolve(value:Int):Bool
+		return untyped __cpp__("counter_glue::promise_resolve({0}, {1})", raw, value);
 }

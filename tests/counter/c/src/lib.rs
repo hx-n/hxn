@@ -6,7 +6,7 @@
 use std::ptr::null_mut;
 use std::time::Duration;
 
-use counter_core::Counter;
+use counter_core::{Counter, Promise};
 use hxn_abi::{Buf, Fault, Handle, RawHandle, Slice, Status, guard, release};
 use hxn_future::AnyFuture;
 
@@ -171,6 +171,43 @@ pub unsafe extern "C" fn counter_future_take_text(
     unsafe {
         guard(out, err, || {
             Ok(future(this)?.borrow()?.take::<String>()?.into())
+        })
+    }
+}
+
+unsafe fn promise<'a>(this: RawHandle) -> Result<&'a Handle<Promise>, Fault> {
+    unsafe { Handle::from_raw(this) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_promise_new(out: *mut RawHandle, err: *mut Buf) -> Status {
+    unsafe { guard(out, err, || Ok(Handle::into_raw(Promise::new()))) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_promise_future(
+    this: RawHandle,
+    out: *mut RawHandle,
+    err: *mut Buf,
+) -> Status {
+    unsafe {
+        guard(out, err, || {
+            let future = promise(this)?.borrow_mut()?.future().ok_or(Fault::Closed)?;
+            Ok(Handle::into_raw(AnyFuture::from(future)))
+        })
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_promise_resolve(
+    this: RawHandle,
+    value: i32,
+    out: *mut i32,
+    err: *mut Buf,
+) -> Status {
+    unsafe {
+        guard(out, err, || {
+            Ok(i32::from(promise(this)?.borrow()?.resolve(value)))
         })
     }
 }

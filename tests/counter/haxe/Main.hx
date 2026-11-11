@@ -55,7 +55,10 @@ class Main {
 
 		throws("a failure is thrown", () -> counter.add(2147483647), "counter overflow");
 		check("and leaves the value usable", counter.add(0) == 42);
+		#if !wasm
+		// A wasm library is built to abort on a panic, which ends the program.
 		throws("a panic is thrown", Counter.fail, "failed on request");
+		#end
 
 		check("one counter alive", Counter.live() == 1);
 		counter.close();
@@ -68,7 +71,10 @@ class Main {
 
 	static function futures() {
 		var square = Counter.squareLater(7, 100);
+		#if !wasm
+		// Without threads the work has already run by the time the call returns.
 		check("a future starts pending", !square.isReady());
+		#end
 		check("await returns the value", square.await() == 49);
 		check("then it is ready", square.isReady() && !square.isRejected());
 		check("await again", square.await() == 49);
@@ -88,6 +94,20 @@ class Main {
 		for (future in many)
 			total += future.await();
 		check('many at once: $total', total == 328350);
+
+		#if !emscripten
+		// Settled from Haxe, after the call that made the future has returned.
+		// hxcpp under Emscripten has no second thread to settle it from.
+		var promise = new Counter.Promise();
+		var later = promise.future();
+		check("a promised future is pending", !later.isReady());
+		sys.thread.Thread.create(() -> {
+			Sys.sleep(0.02);
+			check("the first settle wins", promise.resolve(7));
+			check("and a second is refused", !promise.resolve(8));
+		});
+		check("await sees what another thread settled", later.await() == 7);
+		#end
 	}
 
 	// Delivered by this thread's event loop, which runs once `main` returns.
@@ -97,18 +117,37 @@ class Main {
 			check("from the event loop", returned);
 			Counter.squareLater(100000, 1).then(_ -> check("then took a rejection for a value", false), error -> {
 				check('then delivers the rejection: ${error.message}', error.message.indexOf("counter overflow") >= 0);
-				finish();
+				settledLater();
 			});
 		});
 	}
 
+	// Still pending when `then` is called, and settled by a later turn of the loop.
+	static function settledLater() {
+		var promise = new Counter.Promise();
+		var future = promise.future();
+		future.then(value -> {
+			check("then delivers a later settle", value == 7);
+			finish();
+		});
+		check("which had not happened yet", !future.isReady());
+		sys.thread.Thread.current().events.run(() -> check("the loop settles it", promise.resolve(7)));
+	}
+
 	static function finish() {
+		#if emscripten
+		// hxcpp's collector does not return from a forced collection under
+		// Emscripten, so nothing here can show a finalizer running.
+		var collected = "no collection was run";
+		#else
 		churn(500);
 		collect();
 		var left = Counter.live();
 		check('the collector releases the rest, $left left', left < 50);
+		var collected = '$left of 500 unclosed counters left after a collection';
+		#end
 
-		Sys.println(failed == 0 ? 'PASS ($left of 500 unclosed counters left after a collection)' : 'FAILED $failed');
+		Sys.println(failed == 0 ? 'PASS ($collected)' : 'FAILED $failed');
 		Sys.exit(failed == 0 ? 0 : 1);
 	}
 }
