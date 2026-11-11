@@ -7,9 +7,9 @@ use std::ffi::c_void;
 use std::ptr::null_mut;
 use std::time::Duration;
 
-use counter_core::{Counter, Promise};
+use counter_core::{Counter, Emitter, Promise};
 use hxn_abi::{Buf, Callback, Fault, Handle, RawHandle, Slice, Status, guard, release};
-use hxn_future::AnyFuture;
+use hxn_future::{AnyFuture, AnyStream};
 
 unsafe fn counter<'a>(this: RawHandle) -> Result<&'a Handle<Counter>, Fault> {
     unsafe { Handle::from_raw(this) }
@@ -277,4 +277,93 @@ pub unsafe extern "C" fn counter_promise_doubled(
             Ok(Handle::into_raw(AnyFuture::from(future)))
         })
     }
+}
+
+unsafe fn stream<'a>(this: RawHandle) -> Result<&'a Handle<AnyStream>, Fault> {
+    unsafe { Handle::from_raw(this) }
+}
+
+unsafe fn emitter<'a>(this: RawHandle) -> Result<&'a Handle<Emitter>, Fault> {
+    unsafe { Handle::from_raw(this) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_count_up(
+    limit: i32,
+    fail: i32,
+    out: *mut RawHandle,
+    err: *mut Buf,
+) -> Status {
+    unsafe {
+        guard(out, err, || {
+            let stream = counter_core::count_up(limit, fail != 0);
+            Ok(Handle::into_raw(AnyStream::from(stream)))
+        })
+    }
+}
+
+// The caller is in a GC-free zone, so this only waits.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_stream_wait(
+    this: RawHandle,
+    milliseconds: i32,
+    out: *mut i32,
+    err: *mut Buf,
+) -> Status {
+    unsafe {
+        guard(out, err, || {
+            Ok(stream(this)?.borrow()?.wait_millis(milliseconds) as i32)
+        })
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_stream_next_int(
+    this: RawHandle,
+    out: *mut i32,
+    err: *mut Buf,
+) -> Status {
+    unsafe { guard(out, err, || stream(this)?.borrow()?.next::<i32>()) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_emitter_new(out: *mut RawHandle, err: *mut Buf) -> Status {
+    unsafe { guard(out, err, || Ok(Handle::into_raw(Emitter::new()))) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_emitter_stream(
+    this: RawHandle,
+    out: *mut RawHandle,
+    err: *mut Buf,
+) -> Status {
+    unsafe {
+        guard(out, err, || {
+            let stream = emitter(this)?.borrow_mut()?.stream().ok_or(Fault::Closed)?;
+            Ok(Handle::into_raw(AnyStream::from(stream)))
+        })
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_emitter_emit(
+    this: RawHandle,
+    value: i32,
+    out: *mut i32,
+    err: *mut Buf,
+) -> Status {
+    unsafe {
+        guard(out, err, || {
+            Ok(i32::from(emitter(this)?.borrow()?.emit(value)))
+        })
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_emitter_end(
+    this: RawHandle,
+    out: *mut i32,
+    err: *mut Buf,
+) -> Status {
+    unsafe { guard(out, err, || Ok(i32::from(emitter(this)?.borrow()?.end()))) }
 }

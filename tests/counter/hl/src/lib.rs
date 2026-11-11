@@ -7,10 +7,10 @@
 use std::ffi::c_void;
 use std::time::Duration;
 
-use counter_core::{Counter, Promise};
+use counter_core::{Counter, Emitter, Promise};
 use hl_abi::{vbyte, vstring};
 use hxn_abi::{Callback, Fault, Handle, Status};
-use hxn_future::AnyFuture;
+use hxn_future::{AnyFuture, AnyStream};
 use hxn_hl::{
     Managed, Root, blocking, box_i32, call, define_prim, manage, prim, slice, string, unbox_i32,
     utf16, vclosure,
@@ -266,3 +266,71 @@ define_prim!(
     counter_promise_doubled,
     "PXhxn_promise__Xhxn_future_"
 );
+
+unsafe fn stream<'a>(this: *mut Managed) -> Result<&'a Handle<AnyStream>, Fault> {
+    unsafe { hxn_hl::handle(this) }
+}
+
+unsafe fn emitter<'a>(this: *mut Managed) -> Result<&'a Handle<Emitter>, Fault> {
+    unsafe { hxn_hl::handle(this) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_count_up(limit: i32, fail: bool) -> *mut Managed {
+    unsafe { prim(|| Ok(manage(AnyStream::from(counter_core::count_up(limit, fail))))) }
+}
+define_prim!(hlp_count_up, counter_count_up, "Pib_Xhxn_stream_");
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_stream_wait(this: *mut Managed, milliseconds: i32) -> i32 {
+    unsafe {
+        prim(|| {
+            let stream = stream(this)?.borrow()?;
+            Ok(blocking(|| stream.wait_millis(milliseconds)) as i32)
+        })
+    }
+}
+define_prim!(hlp_stream_wait, counter_stream_wait, "PXhxn_stream_i_i");
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_stream_next_int(this: *mut Managed) -> i32 {
+    unsafe { prim(|| stream(this)?.borrow()?.next::<i32>()) }
+}
+define_prim!(
+    hlp_stream_next_int,
+    counter_stream_next_int,
+    "PXhxn_stream__i"
+);
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_emitter_new() -> *mut Managed {
+    unsafe { prim(|| Ok(manage(Emitter::new()))) }
+}
+define_prim!(hlp_emitter_new, counter_emitter_new, "P_Xhxn_emitter_");
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_emitter_stream(this: *mut Managed) -> *mut Managed {
+    unsafe {
+        prim(|| {
+            let stream = emitter(this)?.borrow_mut()?.stream().ok_or(Fault::Closed)?;
+            Ok(manage(AnyStream::from(stream)))
+        })
+    }
+}
+define_prim!(
+    hlp_emitter_stream,
+    counter_emitter_stream,
+    "PXhxn_emitter__Xhxn_stream_"
+);
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_emitter_emit(this: *mut Managed, value: i32) -> bool {
+    unsafe { prim(|| Ok(emitter(this)?.borrow()?.emit(value))) }
+}
+define_prim!(hlp_emitter_emit, counter_emitter_emit, "PXhxn_emitter_i_b");
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_emitter_end(this: *mut Managed) -> bool {
+    unsafe { prim(|| Ok(emitter(this)?.borrow()?.end())) }
+}
+define_prim!(hlp_emitter_end, counter_emitter_end, "PXhxn_emitter__b");

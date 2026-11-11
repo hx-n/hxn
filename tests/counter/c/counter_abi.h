@@ -36,6 +36,18 @@ hxn_status counter_promise_future(hxn_handle *self, hxn_handle **out, hxn_buf *e
 hxn_status counter_promise_doubled(hxn_handle *self, hxn_handle **out, hxn_buf *err);
 hxn_status counter_promise_resolve(hxn_handle *self, int32_t value, int32_t *out, hxn_buf *err);
 
+/* Streams: read with wait (0 nothing yet, 1 something to take, 2 ended) and
+ * a next of the item's own type. */
+hxn_status counter_count_up(int32_t limit, int32_t fail, hxn_handle **out, hxn_buf *err);
+hxn_status counter_stream_wait(hxn_handle *self, int32_t milliseconds, int32_t *out, hxn_buf *err);
+hxn_status counter_stream_next_int(hxn_handle *self, int32_t *out, hxn_buf *err);
+
+/* A stream the host feeds. `out` of emit and end is 1 if it was taken. */
+hxn_status counter_emitter_new(hxn_handle **out, hxn_buf *err);
+hxn_status counter_emitter_stream(hxn_handle *self, hxn_handle **out, hxn_buf *err);
+hxn_status counter_emitter_emit(hxn_handle *self, int32_t value, int32_t *out, hxn_buf *err);
+hxn_status counter_emitter_end(hxn_handle *self, int32_t *out, hxn_buf *err);
+
 #ifdef __cplusplus
 }
 #endif

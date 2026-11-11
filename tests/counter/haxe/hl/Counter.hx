@@ -1,6 +1,8 @@
 private typedef Raw = hl.Abstract<"hxn_counter">;
 private typedef RawFuture = hl.Abstract<"hxn_future">;
 private typedef RawPromise = hl.Abstract<"hxn_promise">;
+private typedef RawStream = hl.Abstract<"hxn_stream">;
+private typedef RawEmitter = hl.Abstract<"hxn_emitter">;
 
 @:hlNative("counter")
 private class Native {
@@ -66,6 +68,27 @@ private class Native {
 
 	public static function promise_resolve(self:RawPromise, value:Int):Bool
 		return false;
+
+	public static function count_up(limit:Int, fail:Bool):RawStream
+		return null;
+
+	public static function stream_wait(self:RawStream, milliseconds:Int):Int
+		return 0;
+
+	public static function stream_next_int(self:RawStream):Int
+		return 0;
+
+	public static function emitter_new():RawEmitter
+		return null;
+
+	public static function emitter_stream(self:RawEmitter):RawStream
+		return null;
+
+	public static function emitter_emit(self:RawEmitter, value:Int):Bool
+		return false;
+
+	public static function emitter_end(self:RawEmitter):Bool
+		return false;
 }
 
 class Counter {
@@ -121,6 +144,12 @@ class Counter {
 	public static function combinedLater(value:Int, limit:Int):hxn.Future<Int>
 		return future(Native.combined_later(value, limit), raw -> Native.future_take_int(raw));
 
+	public static function countUp(limit:Int, fail = false):hxn.Stream<Int>
+		return streamOfInt(Native.count_up(limit, fail));
+
+	public static function streamOfInt(raw:RawStream):hxn.Stream<Int>
+		return new hxn.Stream(limit -> Native.stream_wait(raw, limit), () -> Native.stream_next_int(raw));
+
 	public static function abandoned():hxn.Future<Int>
 		return future(Native.abandoned(), raw -> Native.future_take_int(raw));
 
@@ -143,4 +172,21 @@ class Promise {
 
 	public function resolve(value:Int):Bool
 		return Native.promise_resolve(raw, value);
+}
+
+/** A stream the Haxe side feeds. **/
+class Emitter {
+	final raw:RawEmitter;
+
+	public function new()
+		raw = Native.emitter_new();
+
+	public function stream():hxn.Stream<Int>
+		return Counter.streamOfInt(Native.emitter_stream(raw));
+
+	public function emit(value:Int):Bool
+		return Native.emitter_emit(raw, value);
+
+	public function end():Bool
+		return Native.emitter_end(raw);
 }

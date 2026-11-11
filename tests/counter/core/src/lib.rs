@@ -9,7 +9,9 @@ use std::task::Poll;
 use std::thread::sleep;
 use std::time::Duration;
 
-use hxn_future::{Completer, Failure, Future, pending, spawn, spawn_blocking, stepped};
+use hxn_future::{
+    Completer, Failure, Future, Sender, Stream, channel, pending, spawn, spawn_blocking, stepped,
+};
 
 static LIVE: AtomicI32 = AtomicI32::new(0);
 
@@ -148,6 +150,63 @@ impl Promise {
 }
 
 impl Default for Promise {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// 1 to `limit`, one a step, and then the end, or a failure in its place.
+pub fn count_up(limit: i32, fail: bool) -> Stream<i32> {
+    let (sender, stream) = channel();
+    let mut next = 1;
+    // Nobody waits on this work; it is the stream that is read.
+    drop(stepped(move || {
+        if next > limit {
+            if fail {
+                sender.fail(Overflow);
+            }
+            return Poll::Ready(Ok::<_, Failure>(()));
+        }
+        // A reader that has gone is the sign to stop.
+        if !sender.send(next) {
+            return Poll::Ready(Ok(()));
+        }
+        next += 1;
+        Poll::Pending
+    }));
+    stream
+}
+
+/// A stream fed from outside the library, as a host's events would be.
+pub struct Emitter {
+    sender: Sender<i32>,
+    stream: Option<Stream<i32>>,
+}
+
+impl Emitter {
+    pub fn new() -> Self {
+        let (sender, stream) = channel();
+        Self {
+            sender,
+            stream: Some(stream),
+        }
+    }
+
+    /// The stream, the first time it is asked for.
+    pub fn stream(&mut self) -> Option<Stream<i32>> {
+        self.stream.take()
+    }
+
+    pub fn emit(&self, value: i32) -> bool {
+        self.sender.send(value)
+    }
+
+    pub fn end(&self) -> bool {
+        self.sender.close()
+    }
+}
+
+impl Default for Emitter {
     fn default() -> Self {
         Self::new()
     }

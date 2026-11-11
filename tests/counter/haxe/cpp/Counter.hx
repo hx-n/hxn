@@ -88,6 +88,12 @@ class Counter {
 		return future.typed(future.takeInt);
 	}
 
+	public static function countUp(limit:Int, fail = false):hxn.Stream<Int> {
+		var stream = new StreamHandle();
+		stream.raw = untyped __cpp__("counter_glue::count_up({0}, {1})", limit, fail);
+		return stream.ofInt();
+	}
+
 	public static function abandoned():hxn.Future<Int> {
 		var future = new FutureHandle();
 		future.raw = untyped __cpp__("counter_glue::abandoned()");
@@ -153,4 +159,55 @@ class Promise {
 
 	public function resolve(value:Int):Bool
 		return untyped __cpp__("counter_glue::promise_resolve({0}, {1})", raw, value);
+}
+
+/** A stream the Haxe side feeds. **/
+@:headerInclude("counter_glue.h")
+class Emitter {
+	@:unreflective var raw:cpp.RawPointer<cpp.Void>;
+
+	public function new() {
+		raw = untyped __cpp__("counter_glue::emitter_new()");
+		cpp.vm.Gc.setFinalizer(this, cpp.Function.fromStaticFunction(finalize));
+	}
+
+	static function finalize(emitter:Emitter):Void {
+		untyped __cpp__("counter_release((hxn_handle *){0})", emitter.raw);
+	}
+
+	public function stream():hxn.Stream<Int> {
+		var stream = new StreamHandle();
+		stream.raw = untyped __cpp__("counter_glue::emitter_stream({0})", raw);
+		return stream.ofInt();
+	}
+
+	public function emit(value:Int):Bool
+		return untyped __cpp__("counter_glue::emitter_emit({0}, {1})", raw, value);
+
+	public function end():Bool
+		return untyped __cpp__("counter_glue::emitter_end({0})", raw);
+}
+
+/** Owns a native stream; `hxn.Stream` holds it through its two calls. **/
+@:headerInclude("counter_glue.h")
+private class StreamHandle {
+	@:unreflective public var raw:cpp.RawPointer<cpp.Void>;
+
+	public function new() {
+		raw = null;
+		cpp.vm.Gc.setFinalizer(this, cpp.Function.fromStaticFunction(finalize));
+	}
+
+	static function finalize(stream:StreamHandle):Void {
+		untyped __cpp__("counter_release((hxn_handle *){0})", stream.raw);
+	}
+
+	public function ofInt():hxn.Stream<Int>
+		return new hxn.Stream(wait, nextInt);
+
+	function wait(milliseconds:Int):Int
+		return untyped __cpp__("counter_glue::stream_wait({0}, {1})", raw, milliseconds);
+
+	function nextInt():Int
+		return untyped __cpp__("counter_glue::stream_next_int({0})", raw);
 }

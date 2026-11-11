@@ -168,6 +168,61 @@ inline bool promise_resolve(void *self, int value) {
 	return out != 0;
 }
 
+inline void *count_up(int limit, bool fail) {
+	hxn_handle *out = 0;
+	hxn_buf err = HXN_BUF_EMPTY;
+	hxn::check(counter_count_up(limit, fail ? 1 : 0, &out, &err), err);
+	return out;
+}
+
+inline int stream_wait(void *self, int milliseconds) {
+	int out = 0;
+	hxn_buf err = HXN_BUF_EMPTY;
+	hxn_status status;
+	{
+		// The collector may run while this thread waits; it is back before the throw.
+		hxn::Blocking zone;
+		status = counter_stream_wait((hxn_handle *)self, milliseconds, &out, &err);
+	}
+	hxn::check(status, err);
+	return out;
+}
+
+inline int stream_next_int(void *self) {
+	int out = 0;
+	hxn_buf err = HXN_BUF_EMPTY;
+	hxn::check(counter_stream_next_int((hxn_handle *)self, &out, &err), err);
+	return out;
+}
+
+inline void *emitter_new() {
+	hxn_handle *out = 0;
+	hxn_buf err = HXN_BUF_EMPTY;
+	hxn::check(counter_emitter_new(&out, &err), err);
+	return out;
+}
+
+inline void *emitter_stream(void *self) {
+	hxn_handle *out = 0;
+	hxn_buf err = HXN_BUF_EMPTY;
+	hxn::check(counter_emitter_stream((hxn_handle *)self, &out, &err), err);
+	return out;
+}
+
+inline bool emitter_emit(void *self, int value) {
+	int out = 0;
+	hxn_buf err = HXN_BUF_EMPTY;
+	hxn::check(counter_emitter_emit((hxn_handle *)self, value, &out, &err), err);
+	return out != 0;
+}
+
+inline bool emitter_end(void *self) {
+	int out = 0;
+	hxn_buf err = HXN_BUF_EMPTY;
+	hxn::check(counter_emitter_end((hxn_handle *)self, &out, &err), err);
+	return out != 0;
+}
+
 }
 
 #endif

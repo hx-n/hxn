@@ -11,6 +11,9 @@
 //! closure that blocks; each returns the future its result settles. A
 //! [`Future`] can itself be awaited, so one operation can be built on others.
 //!
+//! [`channel`] is the same idea for results that arrive more than once: a
+//! [`Stream`] the library sends to and the host takes from, item by item.
+//!
 //! The result stays in Rust until a Haxe thread takes it. Settling touches no
 //! runtime, so the thread that settles needs no standing with a collector,
 //! and nothing of the runtime's has to be kept alive in the meantime.
@@ -46,8 +49,10 @@ mod local;
 mod polled;
 #[cfg(not(all(target_family = "wasm", not(target_feature = "atomics"))))]
 mod pool;
+mod stream;
 
 pub use local::pump;
+pub use stream::{AnyStream, Flow, Sender, Stream, channel};
 
 // False for wasm built without atomics, where std has no thread to start and
 // no condition variable to wait on.
@@ -153,19 +158,8 @@ impl<T> Shared<T> {
     // itself, a round at a time, and gives up at the end of its slice so the
     // host gets the thread back.
     fn wait_driving(&self, timeout: Option<Duration>) -> State {
-        let slice = timeout.map_or(local::SLICE, |timeout| timeout.min(local::SLICE));
-        let started = Instant::now();
-        loop {
-            if self.state() != State::Pending {
-                return self.state();
-            }
-            let round = local::round();
-            // Work that is all waiting on something gets nowhere by being
-            // asked again, so the host may as well have the thread.
-            if !round.left || !round.progressed || started.elapsed() >= slice {
-                return self.state();
-            }
-        }
+        local::drive(timeout, || self.state() != State::Pending);
+        self.state()
     }
 
     fn take(&self) -> Result<T, Failure> {
@@ -838,5 +832,26 @@ mod tests {
         assert_eq!(sum.shared.wait_driving(None), State::Resolved);
         assert_eq!(sum.take(), Ok(7));
         assert!(!pump());
+    }
+
+    #[test]
+    fn waiting_on_a_stream_drives_the_work_that_feeds_it() {
+        let (sender, stream) = channel();
+        let mut next = 0;
+        drop(queued(move || {
+            next += 1;
+            sender.send(next);
+            if next == 3 {
+                Poll::Ready(Ok(()))
+            } else {
+                Poll::Pending
+            }
+        }));
+        let mut seen = Vec::new();
+        while stream.wait_driving(None) == Flow::Ready {
+            seen.push(stream.take().unwrap().unwrap());
+        }
+        assert_eq!(seen, [1, 2, 3]);
+        assert_eq!(stream.flow(), Flow::Ended);
     }
 }

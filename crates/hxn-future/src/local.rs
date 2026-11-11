@@ -2,13 +2,27 @@
 //! thread to do it on.
 
 use std::cell::{Cell, RefCell};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use krio_core::Task;
 use krio_runtime::{RoundRobin, Scheduler};
 
 /// How long a wait keeps this thread before handing it back to the host.
 pub(crate) const SLICE: Duration = Duration::from_millis(4);
+
+/// Runs rounds until `done`, or until there is no point going on: the slice
+/// is used up, nothing is left, or everything left is waiting on something
+/// and would get nowhere by being asked again.
+pub(crate) fn drive(timeout: Option<Duration>, done: impl Fn() -> bool) {
+    let slice = timeout.map_or(SLICE, |timeout| timeout.min(SLICE));
+    let started = Instant::now();
+    while !done() {
+        let round = round();
+        if !round.left || !round.progressed || started.elapsed() >= slice {
+            return;
+        }
+    }
+}
 
 thread_local! {
     // Tasks arrive here and move to the scheduler at the start of a round, so

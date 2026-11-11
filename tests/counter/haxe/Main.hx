@@ -132,6 +132,30 @@ class Main {
 			sumOfAll += future.await();
 		check('many async at once: $sumOfAll', sumOfAll == 43175);
 
+		// Streams: results that arrive more than once, read like an iterator.
+		check("a stream is read item by item", [for (item in Counter.countUp(5)) item].join(",") == "1,2,3,4,5");
+		check("one with nothing in it just ends", [for (item in Counter.countUp(0)) item].length == 0);
+		var read = 0;
+		throws("a stream's failure is thrown in its turn", () -> {
+			for (item in Counter.countUp(3, true))
+				read += item;
+		}, "counter overflow");
+		check('after the items before it: $read', read == 6);
+
+		#if !emscripten
+		var emitter = new Counter.Emitter();
+		var emitted = emitter.stream();
+		sys.thread.Thread.create(() -> {
+			for (i in 0...3) {
+				Sys.sleep(0.005);
+				emitter.emit(i * 10);
+			}
+			emitter.end();
+		});
+		check("items another thread sends arrive in order", [for (item in emitted) item].join(",") == "0,10,20");
+		check("and an ended stream takes no more", !emitter.emit(1));
+		#end
+
 		#if !emscripten
 		// Settled from Haxe, after the call that made the future has returned.
 		// hxcpp under Emscripten has no second thread to settle it from.
@@ -181,10 +205,37 @@ class Main {
 		var doubled = promise.doubled();
 		doubled.then(value -> {
 			check("async work is woken by a later settle", value == 14);
-			finish();
+			listened();
 		});
 		check("and was waiting until then", !doubled.isReady());
 		sys.thread.Thread.current().events.run(() -> check("the loop settles what it awaits", promise.resolve(7)));
+	}
+
+	// Items sent by later turns of the loop, each handed to the listener.
+	static function listened() {
+		var emitter = new Counter.Emitter();
+		var got = [];
+		emitter.stream().listen(item -> got.push(item), () -> {
+			check('listen delivers each item and then the end: $got', got.join(",") == "1,2,3");
+			listenedToFailure();
+		});
+		var loop = sys.thread.Thread.current().events;
+		loop.run(() -> {
+			emitter.emit(1);
+			emitter.emit(2);
+			loop.run(() -> {
+				emitter.emit(3);
+				emitter.end();
+			});
+		});
+	}
+
+	static function listenedToFailure() {
+		var got = [];
+		Counter.countUp(2, true).listen(item -> got.push(item), () -> check("a failed stream does not also end", false), error -> {
+			check('listen delivers a failure after the items: $got', got.join(",") == "1,2" && error.message.indexOf("counter overflow") >= 0);
+			finish();
+		});
 	}
 
 	static function finish() {
