@@ -27,6 +27,7 @@ fn haxe_type(ty: &Type) -> String {
         Type::Void => String::from("Void"),
         Type::Bool => String::from("Bool"),
         Type::I32 => String::from("Int"),
+        Type::I64 => String::from("haxe.Int64"),
         Type::F64 => String::from("Float"),
         Type::Str => String::from("String"),
         Type::Bytes => String::from("haxe.io.Bytes"),
@@ -147,6 +148,7 @@ fn hl_native(library: &Library, interface: &Interface, method: &Method) -> Strin
         match &param.ty {
             Type::Bool => params.push(format!("{name}:Bool")),
             Type::I32 => params.push(format!("{name}:Int")),
+            Type::I64 => params.push(format!("{name}:hl.I64")),
             Type::F64 => params.push(format!("{name}:Float")),
             Type::Str => params.push(format!("{name}:String")),
             Type::Bytes => {
@@ -175,6 +177,7 @@ fn hl_native(library: &Library, interface: &Interface, method: &Method) -> Strin
         Type::Void => (String::from("Void"), "{}"),
         Type::Bool => (String::from("Bool"), "\n\t\treturn false;"),
         Type::I32 => (String::from("Int"), "\n\t\treturn 0;"),
+        Type::I64 => (String::from("hl.I64"), "\n\t\treturn 0;"),
         Type::F64 => (String::from("Float"), "\n\t\treturn 0.;"),
         Type::Str | Type::Bytes => (String::from("hl.Bytes"), "\n\t\treturn null;"),
         Type::Lent { .. } => unreachable!("not a result type"),
@@ -646,6 +649,7 @@ fn cpp_native(library: &Library, interface: &Interface, method: &Method) -> Stri
         let ty = match &param.ty {
             Type::Bool => String::from("Bool"),
             Type::I32 => String::from("Int"),
+            Type::I64 => String::from("cpp.Int64"),
             Type::F64 => String::from("Float"),
             Type::Str => String::from("String"),
             Type::Bytes => String::from("haxe.io.BytesData"),
@@ -666,6 +670,7 @@ fn cpp_native(library: &Library, interface: &Interface, method: &Method) -> Stri
         Type::Void => "Void",
         Type::Bool => "Bool",
         Type::I32 => "Int",
+        Type::I64 => "cpp.Int64",
         Type::F64 => "Float",
         Type::Str => "String",
         Type::Bytes => "haxe.io.BytesData",

@@ -31,6 +31,7 @@ fn narrowed(number: Option<Number>, value: &str) -> String {
     match number {
         None => value.to_owned(),
         Some(Number::U32) => format!("{value} as u32"),
+        Some(Number::U64) => format!("{value} as u64"),
         Some(Number::F32) => format!("{value} as f32"),
         Some(number) => format!(
             "{}::try_from({value}).map_err(|_| Fault::Range)?",
@@ -44,6 +45,7 @@ fn widened(number: Option<Number>, value: &str) -> String {
     match number {
         None => value.to_owned(),
         Some(Number::U32) => format!("{value} as i32"),
+        Some(Number::U64) => format!("{value} as i64"),
         Some(Number::F32) => format!("f64::from({value})"),
         Some(Number::Isize | Number::Usize) => {
             format!("i32::try_from({value}).map_err(|_| Fault::Range)?")
@@ -191,6 +193,7 @@ fn c_method(library: &Library, interface: &Interface, method: &Method) -> String
             // An int at the boundary: C has no one size for a bool.
             Type::Bool => ("i32", format!("{name} != 0")),
             Type::I32 => ("i32", narrowed(param.number, name)),
+            Type::I64 => ("i64", narrowed(param.number, name)),
             Type::F64 => ("f64", narrowed(param.number, name)),
             Type::Str => ("Slice<'_>", format!("{name}.as_str()?")),
             Type::Bytes => ("Slice<'_>", format!("{name}.as_bytes()?")),
@@ -228,6 +231,10 @@ fn c_method(library: &Library, interface: &Interface, method: &Method) -> String
         Type::Bool => (Some("i32"), format!("Ok(i32::from({call}))")),
         Type::I32 => (
             Some("i32"),
+            format!("Ok({})", widened(method.returns_number, &call)),
+        ),
+        Type::I64 => (
+            Some("i64"),
             format!("Ok({})", widened(method.returns_number, &call)),
         ),
         Type::F64 => (
@@ -397,6 +404,7 @@ fn hl_letter(library: &Library, ty: &Type) -> String {
         Type::Void => String::from("v"),
         Type::Bool => String::from("b"),
         Type::I32 => String::from("i"),
+        Type::I64 => String::from("l"),
         Type::F64 => String::from("d"),
         // A result: UTF-16 bytes for `String.fromUCS2`.
         // Bytes are the VM's own, with their length written beside them.
@@ -451,6 +459,11 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
             Type::I32 => {
                 params.push(format!("{name}: i32"));
                 signature.push('i');
+                arguments.push(narrowed(param.number, name));
+            }
+            Type::I64 => {
+                params.push(format!("{name}: i64"));
+                signature.push('l');
                 arguments.push(narrowed(param.number, name));
             }
             Type::F64 => {
@@ -521,6 +534,10 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
         Type::Bool => ("bool", format!("Ok({call})")),
         Type::I32 => (
             "i32",
+            format!("Ok({})", widened(method.returns_number, &call)),
+        ),
+        Type::I64 => (
+            "i64",
             format!("Ok({})", widened(method.returns_number, &call)),
         ),
         Type::F64 => (

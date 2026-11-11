@@ -70,10 +70,10 @@ pub struct Param {
     pub number: Option<Number>,
 }
 
-/// A number Rust has and the boundary does not. It crosses as an `i32` or an
-/// `f64` and the adapter converts it, failing where it does not fit: a
-/// parameter, or a result, and not what a callback or a result over time
-/// carries.
+/// A number Rust has and the boundary does not. It crosses as an `i32`, an
+/// `i64` or an `f64` and the adapter converts it, failing where it does not
+/// fit: a parameter, or a result, and not what a callback or a result over
+/// time carries.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Number {
     I8,
@@ -84,11 +84,13 @@ pub enum Number {
     U32,
     Isize,
     Usize,
+    /// The same 64 bits as the `i64` it crosses as.
+    U64,
     F32,
 }
 
 impl Number {
-    const ALL: [Self; 8] = [
+    const ALL: [Self; 9] = [
         Self::I8,
         Self::I16,
         Self::U8,
@@ -96,6 +98,7 @@ impl Number {
         Self::U32,
         Self::Isize,
         Self::Usize,
+        Self::U64,
         Self::F32,
     ];
 
@@ -114,6 +117,7 @@ impl Number {
             Self::U32 => "u32",
             Self::Isize => "isize",
             Self::Usize => "usize",
+            Self::U64 => "u64",
             Self::F32 => "f32",
         }
     }
@@ -122,6 +126,7 @@ impl Number {
     pub fn wire(self) -> Type {
         match self {
             Self::F32 => Type::F64,
+            Self::U64 => Type::I64,
             _ => Type::I32,
         }
     }
@@ -153,6 +158,9 @@ pub enum Type {
     Void,
     Bool,
     I32,
+    /// A Haxe `haxe.Int64`: a parameter or a result, and not what a
+    /// callback or a result over time carries.
+    I64,
     F64,
     Str,
     Bytes,
@@ -219,6 +227,7 @@ impl Type {
             Self::Void => String::from("void"),
             Self::Bool => String::from("bool"),
             Self::I32 => String::from("i32"),
+            Self::I64 => String::from("i64"),
             Self::F64 => String::from("f64"),
             Self::Str => String::from("str"),
             Self::Bytes => String::from("bytes"),

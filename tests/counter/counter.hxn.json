@@ -606,7 +606,7 @@
     },
     {
       "name": "Numbers",
-      "docs": "Numbers narrower than the two that cross, and the unsigned 32 bits.",
+      "docs": "Numbers narrower than those that cross, the unsigned ones, and 64 bits.",
       "methods": [
         {
           "name": "byte",
@@ -663,6 +663,32 @@
           "kind": "static",
           "params": [{ "name": "by", "type": "isize" }],
           "returns": "isize",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "wide",
+          "kind": "static",
+          "params": [{ "name": "value", "type": "i64" }],
+          "returns": "i64",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "squared",
+          "docs": "`value` times itself, which 32 bits may not hold.",
+          "kind": "static",
+          "params": [{ "name": "value", "type": "i32" }],
+          "returns": "i64",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "inverted_wide",
+          "docs": "Every bit of `bits` turned over, all 64.",
+          "kind": "static",
+          "params": [{ "name": "bits", "type": "u64" }],
+          "returns": "u64",
           "fallible": false,
           "blocking": false
         },

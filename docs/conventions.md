@@ -79,10 +79,16 @@ filesystem `#include "counter.h"` would then find the generated one.
   No generics.
 - Text is taken as `&str` and returned as `String`; bytes are taken as
   `&[u8]` and returned as `Vec<u8>`.
-- A number is `i32` or `f64`, or one the adapter converts: `i8`, `i16`,
-  `u8`, `u16`, `isize` and `usize` are a Haxe `Int`, `u32` a `UInt` with
-  the same bits, `f32` a `Float`. One that does not fit, going in or coming
-  back, fails the call. `i64` and wider do not cross.
+- A number is `i32`, `i64` or `f64`, or one the adapter converts: `i8`,
+  `i16`, `u8`, `u16`, `isize` and `usize` are a Haxe `Int`, `u32` a `UInt`
+  with the same bits, `u64` a `haxe.Int64` with the same bits, `f32` a
+  `Float`. One that does not fit, going in or coming back, fails the call.
+  Nothing wider than 64 bits crosses.
+- **On wasm32 a size is 32 bits.** `i64` and `u64` are 64 bits there as
+  everywhere, so a quantity that can pass 4 GiB, a file's length or a
+  position in one, a count of nanoseconds, is a `u64` or an `i64` and not a
+  `usize`: as a `usize` it would be right natively and wrap in the same
+  library built for wasm.
 - Another interface is taken as `&T` or `&mut T` and returned as `T`, with
   `Option` for one that may be absent. It is never taken by value and never
   returned by reference.

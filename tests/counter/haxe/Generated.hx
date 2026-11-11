@@ -36,6 +36,12 @@ class Generated {
 		var all:UInt = Numbers.inverted(0);
 		var low:UInt = Numbers.inverted(0xF0000000);
 		check('an unsigned 32-bit number keeps its bits: $all', (all : Int) == -1 && (low : Int) == 0x0FFFFFFF && Std.string(all) == "4294967295");
+		var big = haxe.Int64.make(0x12345678, 0x9ABCDEF0);
+		check('a 64-bit number comes back as it went: $big', Numbers.wide(big) == big && Numbers.wide(-big) == -big && Numbers.wide(7) == 7);
+		var squared = Numbers.squared(100000);
+		check('and is not cut to 32 bits: $squared', haxe.Int64.toStr(squared) == "10000000000" && squared.high == 2);
+		var flipped = Numbers.invertedWide(haxe.Int64.make(0, 0xFF));
+		check('an unsigned one keeps its bits: $flipped', flipped.high == -1 && flipped.low == -256);
 		var third = Numbers.third(1);
 		check('a float of single precision: $third', Math.abs(third - 1 / 3) < 1e-7 && third != 1 / 3);
 	}

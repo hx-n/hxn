@@ -177,13 +177,14 @@ fn says_where_and_why_something_cannot_cross() {
         ("pub async fn later(&self) {}", "async"),
         ("pub unsafe fn raw(&self) {}", "unsafe"),
         (
-            "pub fn size(&self, value: u64) {}",
-            "64-bit or wider integer does not cross yet",
+            "pub fn size(&self, value: u128) {}",
+            "wider than 64 bits does not cross",
         ),
         (
-            "pub fn stamp(&self) -> Result<i64, String> { todo!() }",
-            "64-bit or wider integer does not cross yet",
+            "pub fn stamp(&self) -> Result<i128, String> { todo!() }",
+            "wider than 64 bits does not cross",
         ),
+        ("pub fn later(&self) -> Future<i64> { todo!() }", "carries"),
         (
             "pub fn maybe(&self) -> Option<u8> { todo!() }",
             "a result is one of",
@@ -1160,4 +1161,47 @@ fn a_number_crosses_as_one_of_the_two_the_boundary_has() {
     let manifest = hxn_gen::manifest(&library);
     assert!(manifest.contains("{ \"name\": \"level\", \"type\": \"u8\" }"));
     assert!(manifest.contains("\"returns\": \"usize\""));
+}
+
+#[test]
+fn sixty_four_bits_cross_as_themselves() {
+    let source = "#[hxn::interface]\npub struct Clock;\n\n#[hxn::methods]\nimpl Clock {\n    pub fn at(&self, nanos: i64) -> Result<i64, String> { todo!() }\n    pub fn id(&self, salt: u64) -> u64 { todo!() }\n}\n";
+    let library = parse("time", source).unwrap();
+    let methods = &library.interfaces[0].methods;
+    assert_eq!(methods[0].params[0].ty, Type::I64);
+    assert_eq!(methods[0].returns, Type::I64);
+    assert_eq!(methods[1].params[0].number, Some(Number::U64));
+
+    let header = hxn_gen::c_header(&library);
+    assert!(
+        header.contains(
+            "time_clock_at(hxn_handle *self, int64_t nanos, int64_t *out, hxn_buf *err);"
+        )
+    );
+    let glue = hxn_gen::cpp_glue(&library);
+    assert!(glue.contains("inline cpp::Int64 clock_at(void *self, cpp::Int64 nanos)"));
+    let c = hxn_gen::c_adapter(&library, "time_core");
+    assert!(c.contains("nanos: i64, out: *mut i64, err: *mut Buf"));
+    assert!(c.contains("Ok(this.id(salt as u64) as i64)"));
+    let hl = hxn_gen::hl_adapter(&library, "time_core");
+    assert!(hl.contains("this: *mut Managed, nanos: i64) -> i64"));
+    assert!(hl.contains("\"PXtime_clock_l_l\""));
+
+    let hl = &hxn_gen::haxe_hl(&library)[0].text;
+    assert!(hl.contains("clock_at(self:ClockRaw, nanos:hl.I64):hl.I64"));
+    let cpp = hxn_gen::haxe_cpp(&library);
+    assert!(
+        cpp.last()
+            .unwrap()
+            .text
+            .contains("static function clock_at(self:Handle, nanos:cpp.Int64):cpp.Int64;")
+    );
+    for files in [hxn_gen::haxe_hl(&library), cpp_classes(&library)] {
+        let clock = &files[0].text;
+        assert!(clock.contains("public function at(nanos:haxe.Int64):haxe.Int64"));
+        assert!(clock.contains("public function id(salt:haxe.Int64):haxe.Int64"));
+    }
+    let manifest = hxn_gen::manifest(&library);
+    assert!(manifest.contains("{ \"name\": \"nanos\", \"type\": \"i64\" }"));
+    assert!(manifest.contains("\"returns\": \"u64\""));
 }

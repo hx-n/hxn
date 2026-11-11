@@ -347,6 +347,7 @@ impl Scope<'_> {
         match path_name(ty).as_deref() {
             Some("bool") => Ok(plain(Type::Bool)),
             Some("i32") => Ok(plain(Type::I32)),
+            Some("i64") => Ok(plain(Type::I64)),
             Some("f64") => Ok(plain(Type::F64)),
             Some(name) if Number::parse(name).is_some() => {
                 let number = Number::parse(name);
@@ -355,7 +356,7 @@ impl Scope<'_> {
                     ..plain(number.map_or(Type::I32, Number::wire))
                 })
             }
-            Some("i64" | "u64" | "i128" | "u128") => error(ty.span(), WIDE),
+            Some("i128" | "u128") => error(ty.span(), WIDE),
             _ => error(
                 ty.span(),
                 "a parameter is one of bool, a number, &str, &[u8], &AtomicI32, &AtomicFlag, `&` or `&mut` of an interface, or `impl Fn(..) -> Result<T, E>`",
@@ -494,13 +495,14 @@ impl Scope<'_> {
         let plain = match path_name(ty).as_deref() {
             Some("bool") => Type::Bool,
             Some("i32") => Type::I32,
+            Some("i64") => Type::I64,
             Some("f64") => Type::F64,
             Some("String") => Type::Str,
             // Which number it is, `method` reads off the signature.
             Some(name) if Number::parse(name).is_some() => {
                 Number::parse(name).map_or(Type::I32, Number::wire)
             }
-            Some("i64" | "u64" | "i128" | "u128") => return error(ty.span(), WIDE),
+            Some("i128" | "u128") => return error(ty.span(), WIDE),
             _ => {
                 return error(
                     ty.span(),
@@ -631,7 +633,7 @@ impl Scope<'_> {
     }
 }
 
-const WIDE: &str = "a 64-bit or wider integer does not cross yet: Haxe's `Int` is 32 bits. Take or give an `f64`, which holds every integer up to 2^53, or split the value";
+const WIDE: &str = "an integer wider than 64 bits does not cross: Haxe has none. Split the value";
 
 // What a function gives, less the `Result` around it, and whether it had one.
 fn given(output: &ReturnType) -> Option<(&syn::Type, bool)> {

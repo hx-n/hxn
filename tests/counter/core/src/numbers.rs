@@ -1,6 +1,6 @@
 //! Each number a binding converts, given back so a test sees what arrived.
 
-/// Numbers narrower than the two that cross, and the unsigned 32 bits.
+/// Numbers narrower than those that cross, the unsigned ones, and 64 bits.
 #[hxn::interface]
 pub struct Numbers;
 
@@ -34,6 +34,20 @@ impl Numbers {
 
     pub fn negated(by: isize) -> isize {
         -by
+    }
+
+    pub fn wide(value: i64) -> i64 {
+        value
+    }
+
+    /// `value` times itself, which 32 bits may not hold.
+    pub fn squared(value: i32) -> i64 {
+        i64::from(value) * i64::from(value)
+    }
+
+    /// Every bit of `bits` turned over, all 64.
+    pub fn inverted_wide(bits: u64) -> u64 {
+        !bits
     }
 
     /// A third of `value`, to the precision an `f32` has.

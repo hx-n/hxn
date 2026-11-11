@@ -20,6 +20,7 @@ fn declaration(library: &Library, interface: &Interface, method: &Method) -> Str
     for param in &method.params {
         let ty = match &param.ty {
             Type::Bool | Type::I32 => "int32_t ",
+            Type::I64 => "int64_t ",
             Type::F64 => "double ",
             Type::Str | Type::Bytes => "hxn_slice ",
             Type::Handle { .. } => "hxn_handle *",
@@ -35,6 +36,7 @@ fn declaration(library: &Library, interface: &Interface, method: &Method) -> Str
     match &method.returns {
         Type::Void => {}
         Type::Bool | Type::I32 => params.push(String::from("int32_t *out")),
+        Type::I64 => params.push(String::from("int64_t *out")),
         Type::F64 => params.push(String::from("double *out")),
         Type::Str | Type::Bytes => params.push(String::from("hxn_buf *out")),
         Type::Lent { .. } => unreachable!("not a result type"),
@@ -122,6 +124,10 @@ fn glue(library: &Library, interface: &Interface, method: &Method) -> String {
                 params.push(format!("int {name}"));
                 arguments.push(name.clone());
             }
+            Type::I64 => {
+                params.push(format!("cpp::Int64 {name}"));
+                arguments.push(name.clone());
+            }
             Type::F64 => {
                 params.push(format!("double {name}"));
                 arguments.push(name.clone());
@@ -164,6 +170,7 @@ fn glue(library: &Library, interface: &Interface, method: &Method) -> String {
         Type::Void => ("void", None, None),
         Type::Bool => ("bool", Some("int out = 0;"), Some("out != 0")),
         Type::I32 => ("int", Some("int out = 0;"), Some("out")),
+        Type::I64 => ("cpp::Int64", Some("int64_t out = 0;"), Some("out")),
         Type::F64 => ("double", Some("double out = 0;"), Some("out")),
         Type::Str => (
             "::String",

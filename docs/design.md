@@ -40,13 +40,24 @@ every dependency twice.
 | a cell both sides read and write | an atomic `i32` | whoever made it |
 | failure | `Status`, with a message in a `Buf` | - |
 
-Numbers cross as an `i32` or an `f64` and nothing else, which is what every
-runtime has. A library's function may take or give a narrower integer, a
-size, an unsigned 32 bits or an `f32`; its adapter converts on the way, and
-a value that does not fit fails the call with `Status::RANGE` before the
-function runs or after it has returned. So the boundary and the generated
-Haxe are the same whichever of these the Rust says, but for `u32`, which
-Haxe sees as a `UInt`.
+Numbers cross as an `i32`, an `i64` or an `f64` and nothing else, which is
+what every runtime has: a 64-bit integer is `hl.I64` to HashLink and
+`cpp.Int64` to hxcpp, and `haxe.Int64` is that type on both. A library's
+function may also take or give a narrower integer, a size, an unsigned 32 or
+64 bits or an `f32`; its adapter converts on the way, and a value that does
+not fit fails the call with `Status::RANGE` before the function runs or
+after it has returned. So the boundary and the generated Haxe are the same
+whichever of these the Rust says, but for `u32`, which Haxe sees as a
+`UInt`. Haxe has no unsigned 64 bits: a `u64` arrives in a `haxe.Int64` with
+its bits as they were, and reads as negative from 2^63 up.
+
+**On wasm32** pointers are 32 bits and integers are not. An `i64` or a `u64`
+crosses there exactly as it does natively. What changes is `usize` and
+`isize`, which are 32 bits inside the library: they still cross as a Haxe
+`Int`, checked the same way, but arithmetic the library does in one wraps at
+4 GiB where the native build has room. A 64-bit value stays inside the wasm
+module on both wasm runtimes; nothing hxn does hands one to JavaScript,
+where it would be a `BigInt`.
 
 Text is UTF-8 at the boundary. HashLink strings are UTF-16, so the HashLink
 adapter converts at the edge, strictly: text that is not valid in its encoding
