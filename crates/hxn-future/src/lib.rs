@@ -6,6 +6,11 @@
 //! [`AnyFuture`] inside a handle, and asks it for its state, waits on it, and
 //! takes the result. `hxn.Future` is the Haxe side.
 //!
+//! Most libraries never touch a completer. [`spawn`] runs an `async` block,
+//! [`stepped`] runs work written as steps, and [`spawn_blocking`] runs a
+//! closure that blocks; each returns the future its result settles. A
+//! [`Future`] can itself be awaited, so one operation can be built on others.
+//!
 //! The result stays in Rust until a Haxe thread takes it. Settling touches no
 //! runtime, so the thread that settles needs no standing with a collector,
 //! and nothing of the runtime's has to be kept alive in the meantime.
@@ -18,8 +23,8 @@
 //! # Without threads
 //!
 //! A wasm build without threads has nowhere to run work beside its caller.
-//! There [`spawn`] runs its work before it returns, and work written as
-//! steps with [`stepped`] is queued on the calling thread and advanced by
+//! There [`spawn_blocking`] runs its work before it returns, and [`spawn`]
+//! and [`stepped`] queue theirs on the calling thread, to be advanced by
 //! whoever waits: [`Future::wait`] runs the queue for a short slice and
 //! returns, pending or not, so the host can yield and ask again. The queue
 //! is a `krio` scheduler; [`pump`] runs one round of it directly.
@@ -27,14 +32,18 @@
 #![forbid(unsafe_code)]
 
 use std::any::Any;
+use std::pin::Pin;
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
-use std::task::Poll;
+use std::task::{Context, Poll, Waker};
 use std::time::{Duration, Instant};
 
-use hxn_abi::{Failure, Fault, Status, catch};
+use hxn_abi::{Fault, catch};
 use krio_core::{Suspension, Task};
 
+pub use hxn_abi::{Failure, Status};
+
 mod local;
+mod polled;
 #[cfg(not(all(target_family = "wasm", not(target_feature = "atomics"))))]
 mod pool;
 
@@ -57,7 +66,8 @@ pub enum State {
 }
 
 enum Slot<T> {
-    Pending,
+    // With whoever is awaiting it from `async` code.
+    Pending(Vec<Waker>),
     Settled(Result<T, Failure>),
     // The result was taken; what it was is still its state.
     Taken(State),
@@ -66,7 +76,7 @@ enum Slot<T> {
 impl<T> Slot<T> {
     fn state(&self) -> State {
         match self {
-            Self::Pending => State::Pending,
+            Self::Pending(_) => State::Pending,
             Self::Settled(Ok(_)) => State::Resolved,
             Self::Settled(Err(_)) => State::Rejected,
             Self::Taken(state) => *state,
@@ -88,14 +98,18 @@ impl<T> Shared<T> {
 
     fn settle(&self, result: Result<T, Failure>) -> bool {
         let mut slot = self.lock();
-        if !matches!(*slot, Slot::Pending) {
+        let Slot::Pending(wakers) = &mut *slot else {
             // Unlocked before `result` is dropped: its `Drop` is the library's.
             drop(slot);
             return false;
-        }
+        };
+        let wakers = std::mem::take(wakers);
         *slot = Slot::Settled(result);
         drop(slot);
         self.settled.notify_all();
+        for waker in wakers {
+            waker.wake();
+        }
         true
     }
 
@@ -142,8 +156,13 @@ impl<T> Shared<T> {
         let slice = timeout.map_or(local::SLICE, |timeout| timeout.min(local::SLICE));
         let started = Instant::now();
         loop {
-            let state = self.state();
-            if state != State::Pending || !local::pump() || started.elapsed() >= slice {
+            if self.state() != State::Pending {
+                return self.state();
+            }
+            let round = local::round();
+            // Work that is all waiting on something gets nowhere by being
+            // asked again, so the host may as well have the thread.
+            if !round.left || !round.progressed || started.elapsed() >= slice {
                 return self.state();
             }
         }
@@ -154,8 +173,8 @@ impl<T> Shared<T> {
         let state = slot.state();
         match std::mem::replace(&mut *slot, Slot::Taken(state)) {
             Slot::Settled(result) => result,
-            Slot::Pending => {
-                *slot = Slot::Pending;
+            Slot::Pending(wakers) => {
+                *slot = Slot::Pending(wakers);
                 Err(Failure::new(Status::PENDING, "future is still pending"))
             }
             Slot::Taken(_) => Err(Fault::Closed.into()),
@@ -231,10 +250,27 @@ impl<T> Future<T> {
     }
 }
 
+/// Awaiting one gives its result, which no one else can then take.
+impl<T> std::future::Future for Future<T> {
+    type Output = Result<T, Failure>;
+
+    fn poll(self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<Self::Output> {
+        let mut slot = self.shared.lock();
+        if let Slot::Pending(wakers) = &mut *slot {
+            if !wakers.iter().any(|waker| waker.will_wake(context.waker())) {
+                wakers.push(context.waker().clone());
+            }
+            return Poll::Pending;
+        }
+        drop(slot);
+        Poll::Ready(self.shared.take())
+    }
+}
+
 /// A pending future and what settles it.
 pub fn pending<T>() -> (Completer<T>, Future<T>) {
     let shared = Arc::new(Shared {
-        slot: Mutex::new(Slot::Pending),
+        slot: Mutex::new(Slot::Pending(Vec::new())),
         settled: Condvar::new(),
     });
     let owner = Arc::new(Owner {
@@ -243,10 +279,30 @@ pub fn pending<T>() -> (Completer<T>, Future<T>) {
     (Completer { owner }, Future { shared })
 }
 
-/// Runs `work` on a thread of its own and settles a future with what it
-/// returns. A panic rejects it. Without threads `work` runs here, and the
-/// future is settled when this returns.
-pub fn spawn<T, E>(work: impl FnOnce() -> Result<T, E> + Send + 'static) -> Future<T>
+/// Runs `work` and settles a future with its output. A panic rejects it.
+///
+/// It is polled once before this returns, so work that never waits is done
+/// by then. After that it runs on the library's workers, or without threads
+/// on this thread's queue, and only when something it awaits wakes it: an
+/// awaited [`Future`] does, when it is settled.
+pub fn spawn<F, T, E>(work: F) -> Future<T>
+where
+    F: std::future::Future<Output = Result<T, E>> + Send + 'static,
+    T: Send + 'static,
+    E: Into<Failure> + 'static,
+{
+    let (completer, future) = pending();
+    let mut task = polled::Polled::new(work, completer);
+    if !task.step().is_done() {
+        hand_over(Box::new(task.scheduled()));
+    }
+    future
+}
+
+/// Runs `work`, which may block, on a thread of its own and settles a future
+/// with what it returns. A panic rejects it. Without threads `work` runs
+/// here, and the future is settled when this returns.
+pub fn spawn_blocking<T, E>(work: impl FnOnce() -> Result<T, E> + Send + 'static) -> Future<T>
 where
     T: Send + 'static,
     E: Into<Failure>,
@@ -310,6 +366,7 @@ where
     E: Into<Failure>,
 {
     fn step(&mut self) -> Suspension {
+        local::progressed();
         match catch(|| Ok((self.step)())) {
             Ok(Poll::Pending) => Suspension::Yielded,
             Ok(Poll::Ready(result)) => {
@@ -460,16 +517,16 @@ mod tests {
     }
 
     #[test]
-    fn spawn_settles_with_the_result_or_the_panic() {
-        let done = spawn(|| Ok::<_, Failure>(6 * 7));
+    fn spawn_blocking_settles_with_the_result_or_the_panic() {
+        let done = spawn_blocking(|| Ok::<_, Failure>(6 * 7));
         assert_eq!(done.wait(None), State::Resolved);
         assert_eq!(done.take(), Ok(42));
 
-        let failed = spawn(|| "x".parse::<i32>());
+        let failed = spawn_blocking(|| "x".parse::<i32>());
         assert_eq!(failed.wait(None), State::Rejected);
         assert_eq!(failed.take().unwrap_err().status, Status::ERROR);
 
-        let panicked = spawn(|| -> Result<i32, Failure> { panic!("in the worker") });
+        let panicked = spawn_blocking(|| -> Result<i32, Failure> { panic!("in the worker") });
         assert_eq!(panicked.wait(None), State::Rejected);
         assert_eq!(
             panicked.take(),
@@ -567,6 +624,85 @@ mod tests {
         }
     }
 
+    #[test]
+    fn async_work_that_never_waits_is_done_when_spawn_returns() {
+        let done = spawn(async { Ok::<_, Failure>(6 * 7) });
+        assert_eq!(done.state(), State::Resolved);
+        assert_eq!(done.take(), Ok(42));
+        let failed = spawn(async { "x".parse::<i32>() });
+        assert_eq!(failed.state(), State::Rejected);
+    }
+
+    #[test]
+    fn async_work_resumes_when_what_it_awaits_is_settled() {
+        let (completer, inner) = pending::<i32>();
+        let outer = spawn(async move { Ok::<_, Failure>(inner.await? + 1) });
+        assert_eq!(outer.wait(Some(Duration::from_millis(20))), State::Pending);
+        completer.resolve(41);
+        assert_eq!(outer.wait(None), State::Resolved);
+        assert_eq!(outer.take(), Ok(42));
+    }
+
+    #[test]
+    fn async_work_builds_on_the_other_kinds_and_passes_failures_on() {
+        let total = spawn(async {
+            let blocking = spawn_blocking(|| Ok::<_, Failure>(40)).await?;
+            let stepped = stepped(counting(2)).await?;
+            Ok::<_, Failure>(blocking + stepped)
+        });
+        assert_eq!(total.wait(None), State::Resolved);
+        assert_eq!(total.take(), Ok(42));
+
+        let (completer, inner) = pending::<i32>();
+        let outer = spawn(inner);
+        completer.reject(Failure::new(Status(9), "from below"));
+        assert_eq!(outer.wait(None), State::Rejected);
+        assert_eq!(outer.take(), Err(Failure::new(Status(9), "from below")));
+
+        let (completer, gate) = pending::<bool>();
+        let panicked = spawn(async move {
+            if gate.await? {
+                panic!("after waking");
+            }
+            Ok::<_, Failure>(0)
+        });
+        completer.resolve(true);
+        assert_eq!(panicked.wait(None), State::Rejected);
+        assert_eq!(
+            panicked.take(),
+            Err(Failure::new(Status::PANIC, "after waking"))
+        );
+        let after = spawn(stepped(counting(3)));
+        assert_eq!(after.wait(None), State::Resolved);
+    }
+
+    #[test]
+    fn every_wake_reaches_its_task() {
+        for _ in 0..20 {
+            let (completers, outers): (Vec<_>, Vec<_>) = (0..200)
+                .map(|extra| {
+                    let (completer, inner) = pending::<i32>();
+                    let outer = spawn(async move { Ok::<_, Failure>(inner.await? + extra) });
+                    (completer, outer)
+                })
+                .unzip();
+            std::thread::scope(|scope| {
+                for chunk in completers.chunks(50) {
+                    scope.spawn(move || {
+                        for completer in chunk {
+                            completer.resolve(1);
+                        }
+                    });
+                }
+            });
+            for (extra, outer) in outers.iter().enumerate() {
+                // A lost wake would leave this pending for good.
+                assert_eq!(outer.wait(Some(Duration::from_secs(30))), State::Resolved);
+                assert_eq!(outer.take(), Ok(1 + extra as i32));
+            }
+        }
+    }
+
     // What `stepped` does where there are no threads, on this thread's queue.
     fn queued<T: Send + 'static>(
         step: impl FnMut() -> Poll<Result<T, Failure>> + 'static,
@@ -655,5 +791,52 @@ mod tests {
         });
         assert_eq!(outer.shared.wait_driving(None), State::Resolved);
         assert_eq!(outer.take(), Ok(2));
+    }
+
+    fn queued_async<T: Send + 'static>(
+        work: impl std::future::Future<Output = Result<T, Failure>> + 'static,
+    ) -> Future<T> {
+        let (completer, future) = pending();
+        local::queue(Box::new(polled::Polled::new(work, completer)));
+        future
+    }
+
+    #[test]
+    fn queued_async_work_is_polled_only_when_woken() {
+        use std::future::Future as _;
+
+        let polls = Arc::new(AtomicUsize::new(0));
+        let counted = polls.clone();
+        let (completer, inner) = pending::<i32>();
+        let mut inner = Box::pin(inner);
+        let outer = queued_async(std::future::poll_fn(move |context| {
+            counted.fetch_add(1, Ordering::SeqCst);
+            inner.as_mut().poll(context)
+        }));
+        for _ in 0..5 {
+            assert_eq!(
+                outer.shared.wait_driving(Some(Duration::ZERO)),
+                State::Pending
+            );
+        }
+        assert_eq!(outer.shared.wait_driving(None), State::Pending);
+        assert_eq!(polls.load(Ordering::SeqCst), 1);
+
+        completer.resolve(9);
+        assert_eq!(outer.shared.wait_driving(None), State::Resolved);
+        assert_eq!(polls.load(Ordering::SeqCst), 2);
+        assert_eq!(outer.take(), Ok(9));
+    }
+
+    #[test]
+    fn queued_async_and_stepped_work_share_the_queue() {
+        let sum = queued_async(async {
+            let first = queued(counting(3)).await?;
+            let second = queued_async(queued(counting(4))).await?;
+            Ok(first + second)
+        });
+        assert_eq!(sum.shared.wait_driving(None), State::Resolved);
+        assert_eq!(sum.take(), Ok(7));
+        assert!(!pump());
     }
 }

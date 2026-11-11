@@ -109,6 +109,15 @@ class Main {
 			all += future.await() - 500500;
 		check('stepped work interleaves: $all', all == 191330);
 
+		// Async work, built on the two kinds above.
+		check("async work awaits other futures", Counter.combinedLater(7, 100).await() == 5099);
+		throws("and passes their failures on", () -> Counter.combinedLater(100000, 1).await(), "counter overflow");
+		var combined = [for (i in 0...50) Counter.combinedLater(i, 10)];
+		var sumOfAll = 0;
+		for (future in combined)
+			sumOfAll += future.await();
+		check('many async at once: $sumOfAll', sumOfAll == 43175);
+
 		#if !emscripten
 		// Settled from Haxe, after the call that made the future has returned.
 		// hxcpp under Emscripten has no second thread to settle it from.
@@ -144,11 +153,24 @@ class Main {
 			check("then delivers a later settle", value == 7);
 			Counter.sumLater(5000).then(sum -> {
 				check("then delivers stepped work", sum == 12502500);
-				finish();
+				wokenLater();
 			});
 		});
 		check("which had not happened yet", !future.isReady());
 		sys.thread.Thread.current().events.run(() -> check("the loop settles it", promise.resolve(7)));
+	}
+
+	// Async work waiting on something the loop settles later: it is woken,
+	// not asked over and over.
+	static function wokenLater() {
+		var promise = new Counter.Promise();
+		var doubled = promise.doubled();
+		doubled.then(value -> {
+			check("async work is woken by a later settle", value == 14);
+			finish();
+		});
+		check("and was waiting until then", !doubled.isReady());
+		sys.thread.Thread.current().events.run(() -> check("the loop settles what it awaits", promise.resolve(7)));
 	}
 
 	static function finish() {

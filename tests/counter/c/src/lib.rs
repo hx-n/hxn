@@ -136,6 +136,21 @@ pub unsafe extern "C" fn counter_sum_later(
 }
 
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_combined_later(
+    value: i32,
+    limit: i32,
+    out: *mut RawHandle,
+    err: *mut Buf,
+) -> Status {
+    unsafe {
+        guard(out, err, || {
+            let future = counter_core::combined_later(value, limit);
+            Ok(Handle::into_raw(AnyFuture::from(future)))
+        })
+    }
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn counter_abandoned(out: *mut RawHandle, err: *mut Buf) -> Status {
     unsafe {
         guard(out, err, || {
@@ -223,6 +238,23 @@ pub unsafe extern "C" fn counter_promise_resolve(
     unsafe {
         guard(out, err, || {
             Ok(i32::from(promise(this)?.borrow()?.resolve(value)))
+        })
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_promise_doubled(
+    this: RawHandle,
+    out: *mut RawHandle,
+    err: *mut Buf,
+) -> Status {
+    unsafe {
+        guard(out, err, || {
+            let future = promise(this)?
+                .borrow_mut()?
+                .doubled()
+                .ok_or(Fault::Closed)?;
+            Ok(Handle::into_raw(AnyFuture::from(future)))
         })
     }
 }

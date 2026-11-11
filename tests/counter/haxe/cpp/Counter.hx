@@ -68,6 +68,12 @@ class Counter {
 		return future.typed(future.takeInt);
 	}
 
+	public static function combinedLater(value:Int, limit:Int):hxn.Future<Int> {
+		var future = new FutureHandle();
+		future.raw = untyped __cpp__("counter_glue::combined_later({0}, {1})", value, limit);
+		return future.typed(future.takeInt);
+	}
+
 	public static function abandoned():hxn.Future<Int> {
 		var future = new FutureHandle();
 		future.raw = untyped __cpp__("counter_glue::abandoned()");
@@ -122,6 +128,12 @@ class Promise {
 	public function future():hxn.Future<Int> {
 		var future = new FutureHandle();
 		future.raw = untyped __cpp__("counter_glue::promise_future({0})", raw);
+		return future.typed(future.takeInt);
+	}
+
+	public function doubled():hxn.Future<Int> {
+		var future = new FutureHandle();
+		future.raw = untyped __cpp__("counter_glue::promise_doubled({0})", raw);
 		return future.typed(future.takeInt);
 	}
 

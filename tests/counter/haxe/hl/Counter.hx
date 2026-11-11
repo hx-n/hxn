@@ -34,6 +34,9 @@ private class Native {
 	public static function sum_later(limit:Int):RawFuture
 		return null;
 
+	public static function combined_later(value:Int, limit:Int):RawFuture
+		return null;
+
 	public static function abandoned():RawFuture
 		return null;
 
@@ -53,6 +56,9 @@ private class Native {
 		return null;
 
 	public static function promise_future(self:RawPromise):RawFuture
+		return null;
+
+	public static function promise_doubled(self:RawPromise):RawFuture
 		return null;
 
 	public static function promise_resolve(self:RawPromise, value:Int):Bool
@@ -95,6 +101,9 @@ class Counter {
 	public static function sumLater(limit:Int):hxn.Future<Int>
 		return future(Native.sum_later(limit), raw -> Native.future_take_int(raw));
 
+	public static function combinedLater(value:Int, limit:Int):hxn.Future<Int>
+		return future(Native.combined_later(value, limit), raw -> Native.future_take_int(raw));
+
 	public static function abandoned():hxn.Future<Int>
 		return future(Native.abandoned(), raw -> Native.future_take_int(raw));
 
@@ -111,6 +120,9 @@ class Promise {
 
 	public function future():hxn.Future<Int>
 		return Counter.future(Native.promise_future(raw), raw -> Native.future_take_int(raw));
+
+	public function doubled():hxn.Future<Int>
+		return Counter.future(Native.promise_doubled(raw), raw -> Native.future_take_int(raw));
 
 	public function resolve(value:Int):Bool
 		return Native.promise_resolve(raw, value);

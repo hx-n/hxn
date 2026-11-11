@@ -8,7 +8,7 @@ use std::task::Poll;
 use std::thread::sleep;
 use std::time::Duration;
 
-use hxn_future::{Completer, Future, pending, spawn, stepped};
+use hxn_future::{Completer, Failure, Future, pending, spawn, spawn_blocking, stepped};
 
 static LIVE: AtomicI32 = AtomicI32::new(0);
 
@@ -57,14 +57,14 @@ impl Drop for Counter {
 }
 
 pub fn square_later(value: i32, delay: Duration) -> Future<i32> {
-    spawn(move || {
+    spawn_blocking(move || {
         sleep(delay);
         value.checked_mul(value).ok_or(Overflow)
     })
 }
 
 pub fn greet_later(name: String, delay: Duration) -> Future<String> {
-    spawn(move || {
+    spawn_blocking(move || {
         sleep(delay);
         Ok::<_, Overflow>(format!("hello {name}"))
     })
@@ -84,6 +84,16 @@ pub fn sum_later(limit: i32) -> Future<i32> {
         }
         next += 1;
         Poll::Pending
+    })
+}
+
+/// The square of `value` plus the sum of 1 to `limit`, each worked out by
+/// one of the operations above.
+pub fn combined_later(value: i32, limit: i32) -> Future<i32> {
+    spawn(async move {
+        let square = square_later(value, Duration::from_millis(5)).await?;
+        let sum = sum_later(limit).await?;
+        Ok::<_, Failure>(square.checked_add(sum).ok_or(Overflow)?)
     })
 }
 
@@ -110,6 +120,12 @@ impl Promise {
     /// The future, the first time it is asked for.
     pub fn future(&mut self) -> Option<Future<i32>> {
         self.future.take()
+    }
+
+    /// A future of twice the value, in place of the plain one.
+    pub fn doubled(&mut self) -> Option<Future<i32>> {
+        let future = self.future.take()?;
+        Some(spawn(async move { Ok::<_, Failure>(future.await? * 2) }))
     }
 
     pub fn resolve(&self, value: i32) -> bool {

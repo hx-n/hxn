@@ -124,6 +124,21 @@ pub unsafe extern "C" fn counter_sum_later(limit: i32) -> *mut Managed {
 define_prim!(hlp_sum_later, counter_sum_later, "Pi_Xhxn_future_");
 
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_combined_later(value: i32, limit: i32) -> *mut Managed {
+    unsafe {
+        prim(|| {
+            let future = counter_core::combined_later(value, limit);
+            Ok(manage(AnyFuture::from(future)))
+        })
+    }
+}
+define_prim!(
+    hlp_combined_later,
+    counter_combined_later,
+    "Pii_Xhxn_future_"
+);
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn counter_abandoned() -> *mut Managed {
     unsafe { prim(|| Ok(manage(AnyFuture::from(counter_core::abandoned())))) }
 }
@@ -199,4 +214,22 @@ define_prim!(
     hlp_promise_resolve,
     counter_promise_resolve,
     "PXhxn_promise_i_b"
+);
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn counter_promise_doubled(this: *mut Managed) -> *mut Managed {
+    unsafe {
+        prim(|| {
+            let future = promise(this)?
+                .borrow_mut()?
+                .doubled()
+                .ok_or(Fault::Closed)?;
+            Ok(manage(AnyFuture::from(future)))
+        })
+    }
+}
+define_prim!(
+    hlp_promise_doubled,
+    counter_promise_doubled,
+    "PXhxn_promise__Xhxn_future_"
 );

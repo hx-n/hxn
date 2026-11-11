@@ -73,6 +73,13 @@ inline void *sum_later(int limit) {
 	return out;
 }
 
+inline void *combined_later(int value, int limit) {
+	hxn_handle *out = 0;
+	hxn_buf err = HXN_BUF_EMPTY;
+	hxn::check(counter_combined_later(value, limit, &out, &err), err);
+	return out;
+}
+
 inline void *abandoned() {
 	hxn_handle *out = 0;
 	hxn_buf err = HXN_BUF_EMPTY;
@@ -125,6 +132,13 @@ inline void *promise_future(void *self) {
 	hxn_handle *out = 0;
 	hxn_buf err = HXN_BUF_EMPTY;
 	hxn::check(counter_promise_future((hxn_handle *)self, &out, &err), err);
+	return out;
+}
+
+inline void *promise_doubled(void *self) {
+	hxn_handle *out = 0;
+	hxn_buf err = HXN_BUF_EMPTY;
+	hxn::check(counter_promise_doubled((hxn_handle *)self, &out, &err), err);
 	return out;
 }
 

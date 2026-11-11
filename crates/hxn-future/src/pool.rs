@@ -1,12 +1,13 @@
 //! The library's worker threads: a `krio` cluster that stepped work is
 //! submitted to where the build has threads.
 
+use std::cell::Cell;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Condvar, Mutex, OnceLock, PoisonError};
 use std::time::Instant;
 
-use krio_core::{Clock, Task};
-use krio_parallel::{Cluster, Park};
+use krio_core::{Clock, Task, TaskId};
+use krio_parallel::{Cluster, Park, TaskObserver};
 use krio_runtime::{AgentId, ParallelScheduler};
 
 // A library is one of several in a process, each with a pool of its own.
@@ -45,6 +46,37 @@ impl Clock for Elapsed {
     }
 }
 
+thread_local! {
+    static STEPPING: Cell<u64> = const { Cell::new(0) };
+}
+
+// Lets a task learn its own id, which is what a wake is addressed to.
+struct Stepping;
+
+impl TaskObserver for Stepping {
+    fn on_step_begin(&self, task: TaskId, _agent: AgentId) {
+        STEPPING.set(task.0);
+    }
+
+    fn on_step_end(&self, _task: TaskId, _agent: AgentId) {
+        STEPPING.set(0);
+    }
+}
+
+/// The id of the task a worker is stepping on this thread, or zero.
+pub(crate) fn current() -> u64 {
+    STEPPING.get()
+}
+
+/// Puts a task that returned pending back in front of the workers.
+pub(crate) fn wake(task: u64) {
+    if task != 0
+        && let Some(pool) = pool()
+    {
+        pool.wake(TaskId(task));
+    }
+}
+
 type Pool = Cluster<Blocking, Elapsed>;
 
 // `None` if no worker could be started.
@@ -58,11 +90,9 @@ fn pool() -> Option<&'static Arc<Pool>> {
             lock: Mutex::new(()),
             woken: Condvar::new(),
         };
-        let cluster = Arc::new(Cluster::new(
-            workers as u32,
-            parker,
-            Elapsed(Instant::now()),
-        ));
+        let mut cluster = Cluster::new(workers as u32, parker, Elapsed(Instant::now()));
+        cluster.set_observer(Arc::new(Stepping));
+        let cluster = Arc::new(cluster);
         let started = (0..workers as u32)
             .filter(|&agent| {
                 let cluster = cluster.clone();
