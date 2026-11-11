@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/logo.png" alt="hxn" width="280">
+</p>
+
 # hxn
 
 Write a native library once in Rust and use it from Haxe on HashLink, Ash and
