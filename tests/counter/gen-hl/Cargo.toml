@@ -1,0 +1,26 @@
+[package]
+name = "counter-gen-hl"
+description = "counter-core as HashLink primitives, with the adapter hxn-gen writes"
+publish = false
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "counter_gen_hl"
+# The archive is what wasm-ld links into a side module.
+crate-type = ["cdylib", "staticlib"]
+test = false
+doctest = false
+
+[dependencies]
+counter-core = { path = "../core" }
+hxn-abi = { workspace = true }
+hxn-hl = { workspace = true }
+hl_abi = { workspace = true }
+
+[build-dependencies]
+hxn-gen = { workspace = true }
+
+[lints]
+workspace = true

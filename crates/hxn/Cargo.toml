@@ -1,0 +1,13 @@
+[package]
+name = "hxn"
+description = "What a library written for hxn depends on: the attributes that mark its API"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+hxn-macros = { workspace = true }
+
+[lints]
+workspace = true

@@ -7,6 +7,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+hxn = { workspace = true }
 hxn-future = { workspace = true }
 
 [lints]

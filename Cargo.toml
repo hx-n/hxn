@@ -1,6 +1,13 @@
 [workspace]
 resolver = "3"
-members = ["crates/*", "tests/counter/core", "tests/counter/c", "tests/counter/hl"]
+members = [
+    "crates/*",
+    "tests/counter/core",
+    "tests/counter/c",
+    "tests/counter/hl",
+    "tests/counter/gen-c",
+    "tests/counter/gen-hl",
+]
 
 [workspace.package]
 version = "0.1.0"
@@ -12,6 +19,11 @@ repository = "https://github.com/hx-n/hxn"
 hxn-abi = { path = "crates/hxn-abi" }
 hxn-hl = { path = "crates/hxn-hl" }
 hxn-future = { path = "crates/hxn-future" }
+hxn-macros = { path = "crates/hxn-macros" }
+hxn = { path = "crates/hxn" }
+hxn-gen = { path = "crates/hxn-gen" }
+syn = { version = "2", features = ["full"] }
+proc-macro2 = { version = "1", features = ["span-locations"] }
 hl_abi = { git = "https://github.com/rayzor-blade/hl_abi" }
 krio-core = { git = "https://github.com/darmie/krio", rev = "ecf740f8de98965d3c0f238b4d22636318821836" }
 krio-runtime = { git = "https://github.com/darmie/krio", rev = "ecf740f8de98965d3c0f238b4d22636318821836" }

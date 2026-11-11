@@ -1,0 +1,13 @@
+[package]
+name = "hxn-macros"
+description = "The attributes that mark what a library exposes to Haxe; the generator reads them from source"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+proc-macro = true
+
+[lints]
+workspace = true

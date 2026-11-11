@@ -20,6 +20,8 @@ pub fn live() -> i32 {
     LIVE.load(Ordering::SeqCst)
 }
 
+/// A number that is added to, with one of each thing a binding carries.
+#[hxn::interface]
 pub struct Counter {
     value: i32,
 }
@@ -33,17 +35,60 @@ impl fmt::Display for Overflow {
     }
 }
 
+// What the generator exposes. The adapters under `c` and `hl` are written
+// by hand and cover the rest of the file as well.
+#[hxn::methods]
 impl Counter {
     pub fn new(start: i32) -> Self {
         LIVE.fetch_add(1, Ordering::SeqCst);
         Self { value: start }
     }
 
+    /// Adds to the value and returns it. Fails if it would overflow.
     pub fn add(&mut self, amount: i32) -> Result<i32, Overflow> {
         self.value = self.value.checked_add(amount).ok_or(Overflow)?;
         Ok(self.value)
     }
 
+    pub fn label(&self, name: &str) -> String {
+        format!("{name}={}", self.value)
+    }
+
+    pub fn sum(&self, data: &[u8]) -> i32 {
+        data.iter().map(|&byte| i32::from(byte)).sum()
+    }
+
+    pub fn is_positive(&self) -> bool {
+        self.value > 0
+    }
+
+    pub fn scaled(&self, factor: f64) -> f64 {
+        f64::from(self.value) * factor
+    }
+
+    /// Sets the value, or its negation.
+    pub fn set(&mut self, value: i32, negate: bool) {
+        self.value = if negate { -value } else { value };
+    }
+
+    /// How many counters exist.
+    pub fn live() -> i32 {
+        live()
+    }
+
+    /// Panics, to show what a binding makes of that.
+    pub fn fail() {
+        panic!("counter failed on request");
+    }
+
+    /// Sleeps, as a call that waits on something would.
+    #[hxn(blocking)]
+    pub fn nap(milliseconds: i32) {
+        sleep(Duration::from_millis(milliseconds.max(0) as u64));
+    }
+}
+
+impl Counter {
     /// Replaces the value with `f` of it, `times` over, and stops at the
     /// first failure with the value as the last success left it.
     pub fn apply<E>(
@@ -55,14 +100,6 @@ impl Counter {
             self.value = f(self.value)?;
         }
         Ok(self.value)
-    }
-
-    pub fn label(&self, name: &str) -> String {
-        format!("{name}={}", self.value)
-    }
-
-    pub fn sum(&self, data: &[u8]) -> i32 {
-        data.iter().map(|&byte| i32::from(byte)).sum()
     }
 }
 

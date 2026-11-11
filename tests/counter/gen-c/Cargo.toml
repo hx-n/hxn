@@ -1,0 +1,23 @@
+[package]
+name = "counter-gen-c"
+description = "counter-core over the plain C ABI, with the adapter hxn-gen writes"
+publish = false
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "counter_gen"
+crate-type = ["staticlib"]
+test = false
+doctest = false
+
+[dependencies]
+counter-core = { path = "../core" }
+hxn-abi = { workspace = true }
+
+[build-dependencies]
+hxn-gen = { workspace = true }
+
+[lints]
+workspace = true

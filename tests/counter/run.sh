@@ -4,11 +4,16 @@
 #   run.sh cpp
 #   run.sh wasm [ash]  as a side module of an Ash wasm program, run by `ash run`
 #   run.sh emcc        hxcpp through Emscripten, run by node; needs emcc on PATH
+#
+# The same for what hxn-gen writes from the library's source, checked by
+# haxe/Generated.hx:
+#   run.sh gen-hl [vm]
+#   run.sh gen-cpp
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "$here/../.." && pwd)"
-runtime="${1:?usage: run.sh hl [vm] | cpp | wasm [ash] | emcc}"
+runtime="${1:?usage: run.sh hl [vm] | cpp | wasm [ash] | emcc | gen-hl [vm] | gen-cpp}"
 work="$root/target/counter-$runtime"
 mkdir -p "$work"
 
@@ -17,7 +22,35 @@ case "$(uname -s)" in
 	*) dylib=so ;;
 esac
 
+# The header, the glue and the Haxe classes, from the same source the
+# adapter crates build theirs from.
+generate() {
+	cargo run --quiet --manifest-path "$root/Cargo.toml" -p hxn-gen -- \
+		--library counter --source "$here/core/src/lib.rs" --crate counter_core --out "$work/gen" >/dev/null
+}
+
 case "$runtime" in
+	gen-hl)
+		vm="$(command -v "${2:-hl}")"
+		cargo build --manifest-path "$root/Cargo.toml" -p counter-gen-hl
+		generate
+		cp "$root/target/debug/libcounter_gen_hl.$dylib" "$work/counter.hdll"
+		haxe -cp "$here/haxe" -cp "$work/gen/haxe/hl" -main Generated -hl "$work/main.hl"
+		cd "$work"
+		vm_dir="$(dirname "$vm")"
+		DYLD_LIBRARY_PATH="$work:$vm_dir${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}" \
+		LD_LIBRARY_PATH="$work:$vm_dir${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
+			"$vm" main.hl | tee "$work/out.txt"
+		;;
+	gen-cpp)
+		cargo build --manifest-path "$root/Cargo.toml" -p counter-gen-c
+		generate
+		haxe -cp "$here/haxe" -cp "$work/gen/haxe/cpp" -main Generated -cpp "$work/out" \
+			-D HXN_INCLUDE="$root/include" \
+			-D COUNTER_INCLUDE="$work/gen/include" \
+			-D COUNTER_LIB="$root/target/debug/libcounter_gen.a"
+		"$work/out/Generated" | tee "$work/out.txt"
+		;;
 	hl)
 		vm="$(command -v "${2:-hl}")"
 		cargo build --manifest-path "$root/Cargo.toml" -p counter-hl

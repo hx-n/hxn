@@ -1,0 +1,97 @@
+{
+  "hxn": 1,
+  "library": "counter",
+  "interfaces": [
+    {
+      "name": "Counter",
+      "docs": "A number that is added to, with one of each thing a binding carries.",
+      "methods": [
+        {
+          "name": "new",
+          "kind": "constructor",
+          "params": [{ "name": "start", "type": "i32" }],
+          "returns": "self",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "add",
+          "docs": "Adds to the value and returns it. Fails if it would overflow.",
+          "kind": "mutating",
+          "params": [{ "name": "amount", "type": "i32" }],
+          "returns": "i32",
+          "fallible": true,
+          "blocking": false
+        },
+        {
+          "name": "label",
+          "kind": "method",
+          "params": [{ "name": "name", "type": "str" }],
+          "returns": "str",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "sum",
+          "kind": "method",
+          "params": [{ "name": "data", "type": "bytes" }],
+          "returns": "i32",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "is_positive",
+          "kind": "method",
+          "params": [],
+          "returns": "bool",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "scaled",
+          "kind": "method",
+          "params": [{ "name": "factor", "type": "f64" }],
+          "returns": "f64",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "set",
+          "docs": "Sets the value, or its negation.",
+          "kind": "mutating",
+          "params": [{ "name": "value", "type": "i32" }, { "name": "negate", "type": "bool" }],
+          "returns": "void",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "live",
+          "docs": "How many counters exist.",
+          "kind": "static",
+          "params": [],
+          "returns": "i32",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "fail",
+          "docs": "Panics, to show what a binding makes of that.",
+          "kind": "static",
+          "params": [],
+          "returns": "void",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "nap",
+          "docs": "Sleeps, as a call that waits on something would.",
+          "kind": "static",
+          "params": [{ "name": "milliseconds", "type": "i32" }],
+          "returns": "void",
+          "fallible": false,
+          "blocking": true
+        }
+      ]
+    }
+  ]
+}
