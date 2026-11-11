@@ -1,1 +1,1 @@
-{"author":{"id":"585844baa6074d44d241f46aa7c9f21ff46653adf617d7f070fbfe327626c989"},"ops":[{"type":5,"timestamp":1794410645,"nonce":"sZ2K2rftCdcC+zNHh0fdyR6C5u8=","added":["debt","area:bind","area:abi"],"removed":null}]}
+{"author":{"id":"585844baa6074d44d241f46aa7c9f21ff46653adf617d7f070fbfe327626c989"},"ops":[{"type":3,"timestamp":1794411748,"nonce":"uS1SMKM0WOpa+k/+pFqtQ2MmzDM=","message":"Landed in fdac341f17e74a5c0324692255547c2d12a68007. Left open for the points under Open.","files":null}]}
