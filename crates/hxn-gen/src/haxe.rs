@@ -6,7 +6,9 @@
 //! interface, or of a function other than `new`, gets an owner.
 
 use crate::model::{Interface, Library, Method, Type};
-use crate::names::{abstract_name, camel, cell_abstract, cell_class, has_receiver, local, release};
+use crate::names::{
+    abstract_name, camel, cell_abstract, cell_class, has_receiver, local, memory_class, release,
+};
 
 /// A generated file: its path relative to a class path, and its text.
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -77,6 +79,15 @@ fn signature(method: &Method) -> String {
 }
 
 const CLOSE_DOCS: &str = "\t/**\n\t\tReleases the native value now. The collector does it otherwise. Using\n\t\tthis object afterwards throws.\n\t**/\n";
+
+// The library's meter, held by every class so that it exists whichever of
+// them a program uses.
+fn meter(library: &Library) -> String {
+    format!(
+        "\t@:noCompletion static final memory = {}.meter;\n",
+        memory_class(library)
+    )
+}
 
 // What HashLink knows `interface`'s values as, named from `module`.
 fn hl_raw(interface: &str, module: &str) -> String {
@@ -159,7 +170,13 @@ fn hl_method(interface: &Interface, method: &Method) -> String {
     let mut out = docs(&method.docs, "\t");
     out.push_str(&signature(method));
     if method.constructor {
-        out.push_str(&format!("\n\t\traw = {call};\n"));
+        if interface.weighed {
+            out.push_str(&format!(
+                " {{\n\t\traw = {call};\n\t\tmemory.check();\n\t}}\n"
+            ));
+        } else {
+            out.push_str(&format!("\n\t\traw = {call};\n"));
+        }
         return out;
     }
     match &method.returns {
@@ -225,8 +242,14 @@ fn hl_module(library: &Library, interface: &Interface) -> String {
         local(name, "close")
     ));
     out.push_str(&docs(&interface.docs, ""));
+    let check = if interface.weighed {
+        "\t\tmemory.check();\n"
+    } else {
+        ""
+    };
     out.push_str(&format!(
-        "class {name} {{\n\t@:noCompletion public var raw:{name}Raw;\n\n\t/** An object for a value the library returned. **/\n\t@:noCompletion public static function adopt(raw:{name}Raw):{name} {{\n\t\tvar made:{name} = Type.createEmptyInstance({name});\n\t\tmade.raw = raw;\n\t\treturn made;\n\t}}\n"
+        "class {name} {{\n\t@:noCompletion public var raw:{name}Raw;\n{meter}\n\t/** An object for a value the library returned. **/\n\t@:noCompletion public static function adopt(raw:{name}Raw):{name} {{\n\t\tvar made:{name} = Type.createEmptyInstance({name});\n\t\tmade.raw = raw;\n{check}\t\treturn made;\n\t}}\n",
+        meter = meter(library),
     ));
     for method in &interface.methods {
         out.push('\n');
@@ -345,8 +368,15 @@ fn cpp_module(library: &Library, interface: &Interface) -> String {
         library.name
     ));
     out.push_str(&docs(&interface.docs, ""));
+    // A weighed object is counted from the moment it owns its value.
+    let own = if interface.weighed {
+        " {\n\t\tcpp.vm.Gc.setFinalizer(this, cpp.Function.fromStaticFunction(finalize));\n\t\tmemory.check();\n\t}\n"
+    } else {
+        "\n\t\tcpp.vm.Gc.setFinalizer(this, cpp.Function.fromStaticFunction(finalize));\n"
+    };
     out.push_str(&format!(
-        "class {name} {{\n\t@:noCompletion @:unreflective public var raw:cpp.RawPointer<cpp.Void>;\n\n\t// Runs inside a collection: it may free, and may not touch the Haxe heap.\n\tstatic function finalize(self:{name}):Void {{\n\t\tuntyped __cpp__(\"{release}((hxn_handle *){{0}})\", self.raw);\n\t}}\n\n\t/** An object that owns nothing yet: its maker sets `raw`, then calls `own`. **/\n\t@:noCompletion public static function adopt():{name}\n\t\treturn Type.createEmptyInstance({name});\n\n\t/** Has the collector release the value this now holds. **/\n\t@:noCompletion public function own():Void\n\t\tcpp.vm.Gc.setFinalizer(this, cpp.Function.fromStaticFunction(finalize));\n",
+        "class {name} {{\n\t@:noCompletion @:unreflective public var raw:cpp.RawPointer<cpp.Void>;\n{meter}\n\t// Runs inside a collection: it may free, and may not touch the Haxe heap.\n\tstatic function finalize(self:{name}):Void {{\n\t\tuntyped __cpp__(\"{release}((hxn_handle *){{0}})\", self.raw);\n\t}}\n\n\t/** An object that owns nothing yet: its maker sets `raw`, then calls `own`. **/\n\t@:noCompletion public static function adopt():{name}\n\t\treturn Type.createEmptyInstance({name});\n\n\t/** Has the collector release the value this now holds. **/\n\t@:noCompletion public function own():Void{own}",
+        meter = meter(library),
         release = release(library)
     ));
     for method in &interface.methods {
@@ -363,14 +393,37 @@ fn cpp_module(library: &Library, interface: &Interface) -> String {
 
 /// The classes for HashLink, one file an interface.
 pub fn haxe_hl(library: &Library) -> Vec<File> {
-    library
+    let mut files: Vec<File> = library
         .interfaces
         .iter()
         .map(|interface| File {
             path: format!("{}.hx", interface.name),
             text: hl_module(library, interface),
         })
-        .collect()
+        .collect();
+    files.push(File {
+        path: format!("{}.hx", memory_class(library)),
+        text: hl_memory(library),
+    });
+    files
+}
+
+const MEMORY_DOCS: &str = "What the library's values hold that the collector cannot see. A weighed\n\tobject checks it when it is made, and a delivery does.";
+
+fn hl_memory(library: &Library) -> String {
+    format!(
+        "{HEADER}@:hlNative(\"{library}\")\nprivate class Native {{\n\tpublic static function memory_held():Float\n\t\treturn 0.;\n\n\tpublic static function memory_wanted():Bool\n\t\treturn false;\n}}\n\n/**\n\t{MEMORY_DOCS}\n**/\nclass {name} {{\n\tpublic static final meter = new hxn.Gc.Meter(() -> Native.memory_held(), () -> Native.memory_wanted());\n}}\n",
+        library = library.name,
+        name = memory_class(library),
+    )
+}
+
+fn cpp_memory(library: &Library) -> String {
+    format!(
+        "{HEADER}@:headerInclude(\"{library}_glue.h\")\n/**\n\t{MEMORY_DOCS}\n**/\nclass {name} {{\n\tstatic function held():Float {{\n\t\tvar bytes:Float = untyped __cpp__(\"{library}_memory_held()\");\n\t\treturn bytes;\n\t}}\n\n\tstatic function wanted():Bool {{\n\t\tvar asked:Bool = untyped __cpp__(\"{library}_memory_wanted() != 0\");\n\t\treturn asked;\n\t}}\n\n\tpublic static final meter = new hxn.Gc.Meter(held, wanted);\n}}\n",
+        library = library.name,
+        name = memory_class(library),
+    )
 }
 
 /// The classes for hxcpp, one file an interface.
@@ -389,6 +442,10 @@ pub fn haxe_cpp(library: &Library) -> Vec<File> {
             text: cpp_cell(library),
         });
     }
+    files.push(File {
+        path: format!("{}.hx", memory_class(library)),
+        text: cpp_memory(library),
+    });
     files
 }
 

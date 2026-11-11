@@ -17,6 +17,9 @@ pub struct Library {
 pub struct Interface {
     pub name: String,
     pub docs: Vec<String>,
+    /// Marked `#[hxn::interface(weighed)]`: its values hold memory worth
+    /// collecting for, so making one checks what the library holds.
+    pub weighed: bool,
     pub methods: Vec<Method>,
 }
 

@@ -135,6 +135,41 @@ from any thread, and there is no call between them.
   is one, over the library's memory; on HashLink it calls the VM's atomic
   primitives directly, because the standard type there owns its storage.
 
+## Collection
+
+A native value is released by `close()`, or by the collector once its object
+is unreachable. A collector runs when the memory it manages has grown, and an
+object that owns a handle is a few words of that whatever the value behind it
+holds. A program can drop gigabytes of native memory and never be due a
+collection. hxn makes up for that in three ways, and none of them has native
+code call the runtime.
+
+| | Rust | Haxe |
+|---|---|---|
+| collect now | | `hxn.Gc.collect()` |
+| say what a value holds | an `hxn::Weight` kept in the value | `hxn.Gc.budget` |
+| ask for a collection | `hxn::collect_soon()` | honoured at the next check |
+
+- **`hxn.Gc.collect()`** is one call for every runtime's own. It returns
+  false where the runtime cannot be made to collect.
+- **A weight is counted while its value lives.** `Weight` adds to a total when
+  made, follows `set`, and subtracts when dropped, which is at `close()` or
+  finalization. The total is per library, because each library has its own
+  copy of `hxn-abi`.
+- **The binding asks; the library never tells.** Each library's classes share
+  one `hxn.Gc.Meter`, which reads the total. An interface marked
+  `#[hxn::interface(weighed)]` checks the meter whenever one of its objects
+  is made, and every delivery checks it. A check collects when the total has
+  passed `hxn.Gc.budget`, and then not again until it passes twice what was
+  left, so a program whose live values exceed the budget does not collect on
+  every allocation.
+- **A request is a flag.** `collect_soon()` can be called from any thread; the
+  next check takes it and collects.
+- **The policy is hxn's on every runtime.** hxcpp can be told of memory it
+  does not manage, but a release has to be reported too, a finalizer is not
+  allowed to make that call, and reported any later the release is missed by
+  the threshold hxcpp sets during the same collection.
+
 ## Calling a Haxe function
 
 Native code cannot be thrown through, cannot be called from a thread the
@@ -270,7 +305,7 @@ change to it is a change to the library's ABI.
 | Ash, native | the same `.hdll` | yes; cooperative in its interpreter mode | becomes a thrown error | Tested in its hybrid, JIT and interpreter modes. |
 | Ash, wasm | `-hl` as a side module | Haxe threads as fibers; no Rust threads | ends the program | The module takes its allocator from the program. |
 | hxcpp | `-c` with C++ glue | yes | becomes a thrown error | |
-| hxcpp through Emscripten | the same | none | ends the program | hxcpp's collector does not complete a forced collection there. |
+| hxcpp through Emscripten | the same | none | ends the program | hxcpp's collector does not complete a forced collection there, so `hxn.Gc.collect()` does nothing and a meter only counts. |
 
 Rayzor's plugin ABI informed the manifest, but there is no Rayzor adapter.
 

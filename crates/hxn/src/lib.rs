@@ -28,5 +28,6 @@
 //! the marked items and writes the adapter for each runtime, the C header,
 //! and the Haxe classes.
 
-pub use hxn_abi::AtomicFlag;
+pub use hxn_abi::memory::collect_soon;
+pub use hxn_abi::{AtomicFlag, Weight};
 pub use hxn_macros::{interface, methods};

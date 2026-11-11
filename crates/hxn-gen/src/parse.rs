@@ -25,6 +25,24 @@ fn is_marker(attribute: &Attribute, name: &str) -> bool {
     segments == ["hxn", name]
 }
 
+// What `#[hxn::interface(...)]` says of a struct. `weighed` is the only note.
+fn is_weighed(attributes: &[Attribute]) -> Result<bool, Error> {
+    let mut weighed = false;
+    for attribute in attributes.iter().filter(|a| is_marker(a, "interface")) {
+        match &attribute.meta {
+            Meta::Path(_) => {}
+            Meta::List(list) if list.tokens.to_string() == "weighed" => weighed = true,
+            Meta::List(list) => {
+                return error(attribute.span(), format!("unknown note `{}`", list.tokens));
+            }
+            Meta::NameValue(_) => {
+                return error(attribute.span(), "expected `#[hxn::interface(...)]`");
+            }
+        }
+    }
+    Ok(weighed)
+}
+
 fn docs(attributes: &[Attribute]) -> Vec<String> {
     attributes
         .iter()
@@ -336,9 +354,18 @@ pub fn parse(name: &str, source: &str) -> Result<Library, Error> {
         if !item.generics.params.is_empty() {
             return error(item.generics.span(), "a generic struct cannot cross");
         }
+        let name = item.ident.to_string();
+        // What the adapters name their own exports after.
+        if ["Atomic", "Memory"].contains(&name.as_str()) {
+            return error(
+                item.ident.span(),
+                format!("`{name}` is a name the adapters use; call the interface something else"),
+            );
+        }
         interfaces.push(Interface {
-            name: item.ident.to_string(),
+            name,
             docs: docs(&item.attrs),
+            weighed: is_weighed(&item.attrs)?,
             methods: Vec::new(),
         });
     }

@@ -235,6 +235,64 @@
           "blocking": false
         }
       ]
+    },
+    {
+      "name": "Blob",
+      "docs": "Bytes the collector cannot see, which it is told of: to the host, one of\nthese is a few words whatever its size here.",
+      "weighed": true,
+      "methods": [
+        {
+          "name": "new",
+          "kind": "constructor",
+          "params": [{ "name": "size", "type": "i32" }],
+          "returns": "Blob",
+          "fallible": true,
+          "blocking": false
+        },
+        {
+          "name": "size",
+          "kind": "method",
+          "params": [],
+          "returns": "i32",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "resize",
+          "kind": "mutating",
+          "params": [{ "name": "size", "type": "i32" }],
+          "returns": "void",
+          "fallible": true,
+          "blocking": false
+        },
+        {
+          "name": "copy",
+          "docs": "Another blob with the same bytes, as heavy as this one.",
+          "kind": "method",
+          "params": [],
+          "returns": "Blob",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "live",
+          "docs": "How many blobs exist.",
+          "kind": "static",
+          "params": [],
+          "returns": "i32",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "crowded",
+          "docs": "Asks the host to collect at its next chance.",
+          "kind": "static",
+          "params": [],
+          "returns": "void",
+          "fallible": false,
+          "blocking": false
+        }
+      ]
     }
   ]
 }

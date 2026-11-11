@@ -73,6 +73,10 @@ fn interface(interface: &Interface) -> String {
     let mut out = String::from("    {\n");
     out.push_str(&format!("      \"name\": {},\n", quoted(&interface.name)));
     out.push_str(&docs(&interface.docs, "      "));
+    // Said only when it is.
+    if interface.weighed {
+        out.push_str("      \"weighed\": true,\n");
+    }
     if methods.is_empty() {
         out.push_str("      \"methods\": []\n");
     } else {

@@ -108,6 +108,60 @@ class Generated {
 		#end
 	}
 
+	// Out of line, as `churn` is. Returns the most that was held at once.
+	static function pile(count:Int, size:Int):Float {
+		var peak = 0.;
+		for (i in 0...count) {
+			new Blob(size);
+			var held = HxnCounterMemory.meter.held;
+			if (held > peak)
+				peak = held;
+		}
+		return peak;
+	}
+
+	// Memory the collector cannot see, which the library declares. Returns
+	// what it saw, for the summary.
+	static function memory():String {
+		var meter = HxnCounterMemory.meter;
+		var mib = 1024 * 1024;
+		check("nothing is held to begin with", meter.held == 0);
+		var blob = new Blob(mib);
+		check("what a value holds is counted", meter.held == mib && blob.size() == mib);
+		blob.resize(3 * mib);
+		check("and follows its size", meter.held == 3 * mib);
+		var copy = blob.copy();
+		check("a returned value is counted", meter.held == 6 * mib);
+		copy.close();
+		blob.close();
+		check("close stops the count at once", meter.held == 0 && Blob.live() == 0);
+		throws("a constructor that fails", () -> new Blob(-1), "negative size");
+		check("counts nothing", meter.held == 0 && Blob.live() == 0);
+
+		#if emscripten
+		check("no collection can be run", !hxn.Gc.collect());
+		return "no blobs piled";
+		#else
+		check("a collection can be run", hxn.Gc.collect());
+
+		// Dropped without `close`, and nothing here asks for a collection.
+		hxn.Gc.budget = 8 * mib;
+		var peak = pile(400, mib);
+		var left = Blob.live();
+		check('dropped values are collected as they pile up: $left of 400 left, ${peak / mib} MiB held at most', peak <= 16 * mib && left <= 16);
+
+		// Under the budget, so only the library's asking collects these.
+		hxn.Gc.collect();
+		hxn.Gc.budget = 1024 * mib;
+		pile(4, mib);
+		var before = Blob.live();
+		Blob.crowded();
+		hxn.Gc.check();
+		check('a library asks for a collection: $before blobs before, ${Blob.live()} after', before >= 4 && Blob.live() < before);
+		return '${peak / mib} MiB held at most by 400 unclosed blobs of 1 MiB under a budget of 8';
+		#end
+	}
+
 	static function main() {
 		var counter = new Counter(40);
 		check("an int in and out", counter.add(2) == 42);
@@ -136,20 +190,17 @@ class Generated {
 
 		handles();
 		atomics();
+		var held = memory();
 
 		#if emscripten
 		// hxcpp's collector does not return from a forced collection under Emscripten.
-		var collected = "no collection was run";
+		var collected = 'no collection was run; $held';
 		#else
 		churn(500);
-		#if hl
-		hl.Gc.major();
-		#elseif cpp
-		cpp.vm.Gc.run(true);
-		#end
+		hxn.Gc.collect();
 		var left = Counter.live();
 		check('the collector releases the rest, $left left', left < 50);
-		var collected = '$left of 500 unclosed counters left after a collection';
+		var collected = '$left of 500 unclosed counters left after a collection; $held';
 		#end
 
 		Sys.println(failed == 0 ? 'PASS ($collected)' : 'FAILED $failed');

@@ -125,6 +125,8 @@ class Inbox {
 				id = next();
 			}
 		});
+		// What was delivered may have been the last use of something large.
+		Gc.check();
 		if (failure != null)
 			throw failure;
 		return watching > 0;

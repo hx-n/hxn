@@ -43,9 +43,15 @@ in [design.md](design.md); this is the checklist.
 | HashLink primitive resolver | `hlp_<interface>_<method>` |
 | HashLink abstract | `<library>_<interface>` |
 | release for any handle | `<library>_release` |
+| bytes a library's values hold | `<library>_memory_held` |
+| whether it asked for a collection | `<library>_memory_wanted` |
 | C header | `<library>_abi.h` |
 | hxcpp glue header | `<library>_glue.h`, namespace `<library>_glue` |
 | Haxe method | the Rust name in camel case |
+| Haxe class a binding needs beside the library's own | `Hxn<Library><Role>`: `HxnCounterMemory` |
+
+An interface is not named `Atomic` or `Memory`: the adapters name their own
+exports after those.
 
 A C header never has the name of a Haxe class differing only by case. hxcpp
 generates `Counter.h` for a class `Counter`, and on a case-insensitive
@@ -62,6 +68,12 @@ filesystem `#include "counter.h"` would then find the generated one.
 - A cell shared with Haxe is an `AtomicI32` or an `hxn::AtomicFlag`, never
   an `AtomicBool`. It is taken as a reference, lent for the call, and
   returned as an `Arc`, kept by the library.
+- A value that holds much memory keeps an `hxn::Weight` saying how much, and
+  its interface is marked `#[hxn::interface(weighed)]`. The weight is set
+  again when the size changes. Without the mark the weight is counted but
+  making the object checks nothing.
+- A library that wants a collection calls `hxn::collect_soon()`. It does not
+  call the runtime, and does not assume the collection has happened.
 - Errors are a `Result` whose error implements `Display`. Do not panic to
   report a failure: a wasm build cannot catch it.
 - Mark a function that waits with `#[hxn(blocking)]`.
@@ -89,6 +101,10 @@ filesystem `#include "counter.h"` would then find the generated one.
   signal as well.
 - **Every class that owns a handle has `close()` and a finalizer.** The
   finalizer frees and does nothing else: it runs inside a collection.
+- **One `hxn.Gc.Meter` per library**, held by every class of the binding so
+  that it exists whichever of them a program uses. A weighed class checks it
+  once the new object owns its value, never before and never in a finalizer.
+- **A binding collects through `hxn.Gc`**, not through a runtime's own call.
 - **A returned value gets a new object of its interface's class**, which
   becomes its owner only once the library has handed the value over.
 - **A cell the library returns has no `close()`.** The object holding it
@@ -135,6 +151,8 @@ filesystem `#include "counter.h"` would then find the generated one.
 - Anything concurrent is run repeatedly, on more than one machine.
 - A test that depends on a runtime's limits says so beside the check it
   skips, with the reason.
+- A check does not depend on when the collector runs by itself: it forces a
+  collection, or asserts a bound that holds either way.
 - The pure crates have unit tests; `hxn-hl` and the adapters are tested only
   in a real runtime.
 - The fixture's manifest is committed, and a test fails when it no longer

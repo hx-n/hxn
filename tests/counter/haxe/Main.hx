@@ -38,14 +38,6 @@ class Main {
 		}
 	}
 
-	static function collect() {
-		#if hl
-		hl.Gc.major();
-		#elseif cpp
-		cpp.vm.Gc.run(true);
-		#end
-	}
-
 	static function main() {
 		values();
 		Signals.run(check);
@@ -362,11 +354,12 @@ class Main {
 		#if emscripten
 		// hxcpp's collector does not return from a forced collection under
 		// Emscripten, so nothing here can show a finalizer running.
+		check("and hxn says it cannot run one", !hxn.Gc.collect());
 		var collected = "no collection was run";
 		#else
 		churn(500);
 		cycles(500);
-		collect();
+		check("a collection is run", hxn.Gc.collect());
 		var left = Counter.live();
 		check('the collector releases the rest, $left left', left < 50);
 		var collected = '$left of 1000 unclosed counters left after a collection, 500 of them referred to by their own kept function';

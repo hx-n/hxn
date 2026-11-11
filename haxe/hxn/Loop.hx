@@ -30,6 +30,9 @@ class Loop {
 				if (inbox.sync())
 					watching = true;
 		});
+		// A delivery checks the meters; with no library delivering, this does.
+		if (inboxes.length == 0)
+			Gc.check();
 		return watching;
 	}
 }

@@ -66,8 +66,28 @@ pub fn cell_export(library: &Library) -> String {
     format!("{}_atomic_cell", library.name)
 }
 
+/// The symbol that gives the bytes the library's values declare.
+pub fn held_export(library: &Library) -> String {
+    format!("{}_memory_held", library.name)
+}
+
+/// The symbol that says whether the library asked for a collection.
+pub fn wanted_export(library: &Library) -> String {
+    format!("{}_memory_wanted", library.name)
+}
+
 /// The hxcpp class that owns such a cell: `HxnCounterCell`.
 pub fn cell_class(library: &Library) -> String {
+    helper_class(library, "Cell")
+}
+
+/// The Haxe class that holds the library's meter: `HxnCounterMemory`.
+pub fn memory_class(library: &Library) -> String {
+    helper_class(library, "Memory")
+}
+
+// A class the binding needs beside the library's own: `Hxn<Library><role>`.
+fn helper_class(library: &Library, role: &str) -> String {
     let mut name = String::from("Hxn");
     let mut upper = true;
     for letter in library.name.chars() {
@@ -80,7 +100,7 @@ pub fn cell_class(library: &Library) -> String {
             name.push(letter);
         }
     }
-    name.push_str("Cell");
+    name.push_str(role);
     name
 }
 

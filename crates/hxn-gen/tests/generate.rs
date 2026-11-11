@@ -7,7 +7,7 @@ pub struct AudioDevice {
     handle: u64,
 }
 
-#[hxn::interface]
+#[hxn::interface(weighed)]
 pub struct Mixer;
 
 struct NotExposed;
@@ -236,6 +236,18 @@ fn refuses_what_is_marked_wrongly() {
 
     let broken = "pub struct {";
     assert!(parse("thing", broken).unwrap_err().line > 0);
+
+    let noted = "#[hxn::interface(heavy)]\npub struct Thing;\n";
+    let error = parse("thing", noted).unwrap_err();
+    assert_eq!(error.line, 1);
+    assert!(error.message.contains("unknown note `heavy`"));
+
+    for taken in ["Atomic", "Memory"] {
+        let source = format!("#[hxn::interface]\npub struct {taken};\n");
+        let error = parse("thing", &source).unwrap_err();
+        assert_eq!(error.line, 2);
+        assert!(error.message.contains("a name the adapters use"));
+    }
 }
 
 #[test]
@@ -361,12 +373,56 @@ fn cells_are_lent_going_in_and_kept_by_the_library_coming_out() {
     assert!(haxe.contains("return hxn.AtomicInt.over(Native.atomic_cell(owner), () -> owner);"));
 
     let cpp = hxn_gen::haxe_cpp(&library);
-    assert_eq!(cpp.last().unwrap().path, "HxnAudioCell.hx");
+    assert!(cpp.iter().any(|file| file.path == "HxnAudioCell.hx"));
     assert!(cpp[0].text.contains("var owner = HxnAudioCell.adopt();"));
 
     let manifest = hxn_gen::manifest(&library);
     assert!(manifest.contains("{ \"name\": \"cancel\", \"type\": \"atomic_flag\" }"));
     assert!(manifest.contains("\"returns\": \"atomic_i32\""));
+}
+
+#[test]
+fn what_a_library_holds_is_read_and_a_weighed_object_checks_it() {
+    let library = parse("audio", SOURCE).unwrap();
+    assert!(!library.interfaces[0].weighed && library.interfaces[1].weighed);
+
+    // Every library can be asked, whatever it marked.
+    let c = hxn_gen::c_adapter(&library, "audio_core");
+    assert!(c.contains("pub extern \"C\" fn audio_memory_held() -> f64"));
+    assert!(c.contains("pub extern \"C\" fn audio_memory_wanted() -> i32"));
+    let hl = hxn_gen::hl_adapter(&library, "audio_core");
+    assert!(hl.contains("define_prim!(hlp_memory_held, audio_memory_held, \"P_d\");"));
+    assert!(hl.contains("define_prim!(hlp_memory_wanted, audio_memory_wanted, \"P_b\");"));
+    let header = hxn_gen::c_header(&library);
+    assert!(header.contains("double audio_memory_held(void);"));
+    assert!(header.contains("int32_t audio_memory_wanted(void);"));
+
+    for files in [hxn_gen::haxe_hl(&library), hxn_gen::haxe_cpp(&library)] {
+        let memory = files.last().unwrap();
+        assert_eq!(memory.path, "HxnAudioMemory.hx");
+        assert!(
+            memory
+                .text
+                .contains("public static final meter = new hxn.Gc.Meter(")
+        );
+        // Each class holds the meter; only a weighed one checks it.
+        let (device, mixer) = (&files[0].text, &files[1].text);
+        assert!(device.contains("static final memory = HxnAudioMemory.meter;"));
+        assert!(!device.contains("memory.check();"));
+        assert!(mixer.contains("static final memory = HxnAudioMemory.meter;"));
+        assert!(mixer.contains("memory.check();"));
+    }
+
+    // Where a value the library returned gets its owner, on each runtime.
+    let mixer = &hxn_gen::haxe_hl(&library)[1].text;
+    assert!(mixer.contains("made.raw = raw;\n\t\tmemory.check();\n\t\treturn made;"));
+    let mixer = &hxn_gen::haxe_cpp(&library)[1].text;
+    assert!(mixer.contains(
+        "cpp.vm.Gc.setFinalizer(this, cpp.Function.fromStaticFunction(finalize));\n\t\tmemory.check();"
+    ));
+
+    let manifest = hxn_gen::manifest(&library);
+    assert_eq!(manifest.matches("\"weighed\": true").count(), 1);
 }
 
 // The fixture's manifest is committed, as a library's would be, so a change

@@ -10,6 +10,9 @@
 //! | a cell both sides read and write | `AtomicI32`, [`AtomicFlag`] | whoever made it |
 //! | failure | [`Status`], with a message in a [`Buf`] | - |
 //!
+//! [`memory`] is how a library tells the host's collector what its values
+//! hold.
+//!
 //! Nothing unwinds across the boundary in either direction: [`guard`] turns a
 //! panic into a status, and a runtime's own exception is raised by its adapter
 //! after the Rust call has returned.
@@ -26,6 +29,7 @@ mod buf;
 mod callback;
 mod guard;
 mod handle;
+pub mod memory;
 mod slice;
 mod status;
 
@@ -34,6 +38,7 @@ pub use buf::Buf;
 pub use callback::Callback;
 pub use guard::{catch, guard};
 pub use handle::{Handle, Opaque, RawHandle, Ref, RefMut, release};
+pub use memory::Weight;
 pub use slice::{Slice, SliceMut};
 pub use status::{Failure, Fault, Status};
 
