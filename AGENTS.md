@@ -11,9 +11,9 @@ natively and on wasm. Read these before changing anything:
 
 - **Run every runtime.** `cargo test --workspace` covers the pure crates only.
   The rest is `tests/counter/run.sh` in each of its modes: `hl`, `cpp`, `wasm`,
-  `emcc`, `gen-hl`, `gen-cpp`, `gen-wasm`, `gen-emcc`. Run Ash in its hybrid, JIT and interpreter modes
-  (`ash --mode jit`, `ash --mode interp`); they differ in how threads and
-  native calls behave. `tests/cli/run.sh hl` and `cpp` check the `hxn`
+  `emcc`, `gen-hl`, `gen-cpp`, `gen-wasm`, `gen-emcc`. Run Ash in its hybrid,
+  JIT and interpreter modes (`ash --mode jit`, `ash --mode interp`); they
+  differ in how threads and native calls behave. `tests/cli/run.sh hl` and `cpp` check the `hxn`
   command the way the readme uses it.
 - **Run runtime tests under a timeout.** A wrong wait hangs; it does not fail.
 - **Repeat anything concurrent**, and on more than one machine if you can.

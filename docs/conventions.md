@@ -50,6 +50,9 @@ in [design.md](design.md); this is the checklist.
 | a shared interface's own functions | `<library>_<interface>_same`, `_weak`, `_weak_upgrade`, `_weak_close` |
 | weak reference to a shared interface | Haxe class `<Interface>Weak`, HashLink abstract `<library>_<interface>_weak` |
 | release for any handle | `<library>_release` |
+| the library's queue of what is ready | `<library>_outbox_wait`, `<library>_outbox_next` |
+| waiting on and watching a result over time | `<library>_future_wait`, `_future_state`, `_future_watch`; the same for `stream` and `signal` |
+| taking what one carries | `<library>_future_take_<kind>`, `<library>_stream_next_<kind>`, `<library>_signal_get_<kind>`; the kind is `bool`, `int`, `float`, `text` or an interface in snake case |
 | bytes a library's values hold | `<library>_memory_held` |
 | whether it asked for a collection | `<library>_memory_wanted` |
 | C header | `<library>_abi.h` |
@@ -57,8 +60,8 @@ in [design.md](design.md); this is the checklist.
 | Haxe method | the Rust name in camel case |
 | Haxe class a binding needs beside the library's own | `Hxn<Library><Role>`: `HxnCounterMemory` |
 
-An interface is not named `Atomic` or `Memory`: the adapters name their own
-exports after those. Nor is one named `<Interface>Weak` beside a shared
+An interface is not named `Atomic`, `Memory`, `Future`, `Stream`, `Signal` or
+`Outbox`: the adapters name their own exports after those. Nor is one named `<Interface>Weak` beside a shared
 `<Interface>`, and a shared interface has no function named `same` or `weak`.
 
 A C header never has the name of a Haxe class differing only by case. hxcpp
@@ -80,6 +83,11 @@ filesystem `#include "counter.h"` would then find the generated one.
   or `self`, and it is `Send + Sync`. It is taken as `&T` to use it and as
   `Arc<T>` to keep a share, never as `&Arc<T>` or `&mut T`, and returned as
   `T` or `Arc<T>`. `Arc` of an interface not marked shared does not cross.
+- A result that arrives later is returned as a `Future<T>`, a `Stream<T>` or
+  a `Signal<T>` of `hxn-future`, by a function that itself returns at once.
+  It carries `bool`, `i32`, `f64` or `String`; a future or a stream may carry
+  an interface, a shared one as `Arc<T>`. There is no `async fn` across the
+  boundary: the function starts the work with `spawn` and returns its future.
 - A cell shared with Haxe is an `AtomicI32` or an `hxn::AtomicFlag`, never
   an `AtomicBool`. It is taken as a reference, lent for the call, and
   returned as an `Arc`, kept by the library.

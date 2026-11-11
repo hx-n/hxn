@@ -5,6 +5,7 @@
 //! object of its interface's class, which is how a result of another
 //! interface, or of a function other than `new`, gets an owner.
 
+use crate::later;
 use crate::model::{Interface, Library, Method, Type};
 use crate::names::{
     abstract_name, camel, cell_abstract, cell_class, has_receiver, local, memory_class, release,
@@ -28,6 +29,9 @@ fn haxe_type(ty: &Type) -> String {
         Type::F64 => String::from("Float"),
         Type::Str => String::from("String"),
         Type::Bytes => String::from("haxe.io.Bytes"),
+        Type::Future(of) => format!("hxn.Future<{}>", haxe_type(of)),
+        Type::Stream(of) => format!("hxn.Stream<{}>", haxe_type(of)),
+        Type::Signal(of) => format!("hxn.Signal<{}>", haxe_type(of)),
         Type::AtomicInt => String::from("hxn.AtomicInt"),
         Type::AtomicBool => String::from("hxn.AtomicBool"),
         Type::Handle {
@@ -116,7 +120,7 @@ fn hl_raw(interface: &str, module: &str) -> String {
     }
 }
 
-fn hl_native(interface: &Interface, method: &Method) -> String {
+fn hl_native(library: &Library, interface: &Interface, method: &Method) -> String {
     let mut params = Vec::new();
     if has_receiver(method) {
         params.push(format!("self:{}", hl_raw(&interface.name, &interface.name)));
@@ -136,7 +140,9 @@ fn hl_native(interface: &Interface, method: &Method) -> String {
                 params.push(format!("{name}:{}", hl_raw(of, &interface.name)));
             }
             Type::AtomicInt | Type::AtomicBool => params.push(format!("{name}:hl.Ref<Int>")),
-            Type::Void => unreachable!("not a parameter type"),
+            Type::Void | Type::Future(_) | Type::Stream(_) | Type::Signal(_) => {
+                unreachable!("not a parameter type")
+            }
         }
     }
     if method.returns == Type::Bytes {
@@ -151,6 +157,11 @@ fn hl_native(interface: &Interface, method: &Method) -> String {
         Type::Str | Type::Bytes => (String::from("hl.Bytes"), "\n\t\treturn null;"),
         Type::Handle { interface: of, .. } => (hl_raw(of, &interface.name), "\n\t\treturn null;"),
         Type::AtomicInt | Type::AtomicBool => (String::from("CellRaw"), "\n\t\treturn null;"),
+        Type::Future(_) | Type::Stream(_) | Type::Signal(_) => {
+            let (kind, _) = later::of(&method.returns).expect("a result over time");
+            let class = later::class(library, kind);
+            (format!("{class}.{class}Raw"), "\n\t\treturn null;")
+        }
     };
     let separator = if body == "{}" { " " } else { "" };
     format!(
@@ -160,7 +171,7 @@ fn hl_native(interface: &Interface, method: &Method) -> String {
     )
 }
 
-fn hl_method(interface: &Interface, method: &Method) -> String {
+fn hl_method(library: &Library, interface: &Interface, method: &Method) -> String {
     let mut arguments = Vec::new();
     if has_receiver(method) {
         arguments.push(String::from("raw"));
@@ -221,6 +232,14 @@ fn hl_method(interface: &Interface, method: &Method) -> String {
         } => out.push_str(&format!(
             " {{\n\t\tvar made = {call};\n\t\treturn made == null ? null : {of}.adopt(made);\n\t}}\n"
         )),
+        Type::Future(_) | Type::Stream(_) | Type::Signal(_) => {
+            let (kind, carried) = later::of(&method.returns).expect("a result over time");
+            out.push_str(&format!(
+                "\n\t\treturn {}.{}({call});\n",
+                later::class(library, kind),
+                later::maker(carried)
+            ));
+        }
         // The cell lives in the library; what it handed over keeps it alive
         // for as long as the atomic is referenced.
         Type::AtomicInt => out.push_str(&format!(
@@ -256,7 +275,7 @@ fn hl_module(library: &Library, interface: &Interface) -> String {
         library.name
     ));
     for method in &interface.methods {
-        out.push_str(&hl_native(interface, method));
+        out.push_str(&hl_native(library, interface, method));
         out.push('\n');
     }
     if cells {
@@ -288,7 +307,7 @@ fn hl_module(library: &Library, interface: &Interface) -> String {
     ));
     for method in &interface.methods {
         out.push('\n');
-        out.push_str(&hl_method(interface, method));
+        out.push_str(&hl_method(library, interface, method));
     }
     if interface.shared {
         out.push_str(&format!(
@@ -408,6 +427,17 @@ fn cpp_method(library: &Library, interface: &Interface, method: &Method) -> Stri
                     String::from("return owner.cell();")
                 });
             }
+            Type::Future(_) | Type::Stream(_) | Type::Signal(_) => {
+                let (kind, carried) = later::of(&method.returns).expect("a result over time");
+                // Owned only once the library has handed it over.
+                body.push(format!(
+                    "var made = {}.adopt();",
+                    later::class(library, kind)
+                ));
+                body.push(format!("made.raw = {call};"));
+                body.push(String::from("made.own();"));
+                body.push(format!("return made.{}();", later::maker(carried)));
+            }
             Type::Bytes => {
                 body.push(format!("var data:haxe.io.BytesData = {call};"));
                 body.push(String::from("return haxe.io.Bytes.ofData(data);"));
@@ -490,6 +520,7 @@ pub fn haxe_hl(library: &Library) -> Vec<File> {
             text: hl_weak(library, interface),
         });
     }
+    files.extend(later::hl_files(library));
     files.push(File {
         path: format!("{}.hx", memory_class(library)),
         text: hl_memory(library),
@@ -537,6 +568,7 @@ pub fn haxe_cpp(library: &Library) -> Vec<File> {
             text: cpp_weak(library, interface),
         });
     }
+    files.extend(later::cpp_files(library));
     files.push(File {
         path: format!("{}.hx", memory_class(library)),
         text: cpp_memory(library),

@@ -248,6 +248,16 @@ its reader is gone because `send` or `set` returns `false`.
 A stream delivers everything, in order. A signal delivers the latest value and
 nothing else. Events are a stream; state is a signal.
 
+A function exposes one by returning it: `Future<T>`, `Stream<T>` or
+`Signal<T>`, and the Haxe method returns the class of the same name. The
+generated adapter hands each over type-erased, as a handle. So a library has
+one set of exports to wait on and watch a future, whatever it carries and
+whichever function returned it, and one more for each kind of value its
+futures carry, to take it. A future or stream can carry a number, a bool, text
+or an object; an object taken from one is owned by the Haxe side from then on.
+A signal carries a number, a bool or text, because it is read any number of
+times.
+
 ## Running work
 
 | Entry point | For | With threads | Without |

@@ -1,6 +1,7 @@
 //! The two Rust adapters: one over the plain C ABI, for hxcpp, and one of
 //! HashLink primitives. Each is the text of a file a thin crate includes.
 
+use crate::later;
 use crate::model::{Interface, Library, Method, Param, Receiver, Type};
 use crate::names::{
     abstract_name, cell_abstract, cell_export, export, has_receiver, held_export, local, release,
@@ -36,7 +37,7 @@ fn receiver(method: &Method, open: &str) -> Option<String> {
 }
 
 // What a handle of `interface` holds: the value, or an `Arc` of it.
-fn held(library: &Library, interface: &str) -> String {
+pub(crate) fn held(library: &Library, interface: &str) -> String {
     if library.is_shared(interface) {
         format!("Arc<{interface}>")
     } else {
@@ -167,7 +168,9 @@ fn c_method(library: &Library, interface: &Interface, method: &Method) -> String
                 body.push(statement);
                 ("*mut i32", argument)
             }
-            Type::Void => unreachable!("not a parameter type"),
+            Type::Void | Type::Future(_) | Type::Stream(_) | Type::Signal(_) => {
+                unreachable!("not a parameter type")
+            }
         };
         params.push(format!("{name}: {ty}"));
         arguments.push(argument);
@@ -185,6 +188,10 @@ fn c_method(library: &Library, interface: &Interface, method: &Method) -> String
         ),
         // Handed over as the integer cell both kinds are, with the handle
         // keeping it alive.
+        Type::Future(_) | Type::Stream(_) | Type::Signal(_) => {
+            let (kind, _) = later::of(&method.returns).expect("a result over time");
+            (Some("RawHandle"), later::c_result(kind, &call))
+        }
         Type::AtomicInt => (Some("RawHandle"), format!("Ok(Handle::into_raw({call}))")),
         Type::AtomicBool => (
             Some("RawHandle"),
@@ -294,6 +301,7 @@ pub fn c_adapter(library: &Library, core: &str) -> String {
         "#[allow(unused_imports)]\nuse hxn_abi::{AtomicFlag, Buf, Fault, Handle, RawHandle, Slice, Status, guard, memory, release};\n",
     );
     out.push_str(&imports(library, core));
+    out.push_str(later::imports(library));
     for interface in &library.interfaces {
         for method in &interface.methods {
             out.push('\n');
@@ -314,6 +322,7 @@ pub fn c_adapter(library: &Library, core: &str) -> String {
             cell_export(library)
         ));
     }
+    out.push_str(&later::c_adapter(library));
     out.push_str(&format!(
         "\n// What the library's values hold that the host's collector cannot see, and\n// whether the library asked for a collection since the last call.\n#[unsafe(no_mangle)]\npub extern \"C\" fn {held}() -> f64 {{\n    memory::held() as f64\n}}\n\n#[unsafe(no_mangle)]\npub extern \"C\" fn {wanted}() -> i32 {{\n    i32::from(memory::take_request())\n}}\n",
         held = held_export(library),
@@ -337,6 +346,10 @@ fn hl_letter(library: &Library, ty: &Type) -> String {
         Type::Str | Type::Bytes => String::from("B"),
         Type::Handle { interface, .. } => format!("X{}_", abstract_name(library, interface)),
         Type::AtomicInt | Type::AtomicBool => format!("X{}_", cell_abstract(library)),
+        Type::Future(_) | Type::Stream(_) | Type::Signal(_) => {
+            let (kind, _) = later::of(ty).expect("a result over time");
+            format!("X{}_", later::handle_abstract(library, kind))
+        }
     }
 }
 
@@ -410,7 +423,9 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
                 body.push(statement);
                 arguments.push(argument);
             }
-            Type::Void => unreachable!("not a parameter type"),
+            Type::Void | Type::Future(_) | Type::Stream(_) | Type::Signal(_) => {
+                unreachable!("not a parameter type")
+            }
         }
     }
     if method.returns == Type::Bytes {
@@ -431,6 +446,10 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
         Type::F64 => ("f64", format!("Ok({call})")),
         Type::Str => ("*mut vbyte", format!("Ok(utf16(&{call}))")),
         Type::Handle { .. } => ("*mut Managed", handed(library, method, &call, "manage")),
+        Type::Future(_) | Type::Stream(_) | Type::Signal(_) => {
+            let (kind, _) = later::of(&method.returns).expect("a result over time");
+            ("*mut Managed", later::hl_result(kind, &call))
+        }
         Type::AtomicInt => ("*mut Managed", format!("Ok(manage({call}))")),
         Type::AtomicBool => (
             "*mut Managed",
@@ -470,6 +489,7 @@ pub fn hl_adapter(library: &Library, core: &str) -> String {
         "#[allow(unused_imports)]\nuse hxn_hl::{Managed, blocking, bytes, define_prim, handle, manage, prim, slice, string, utf16, vbyte, vstring};\n",
     );
     out.push_str(&imports(library, core));
+    out.push_str(later::imports(library));
     for interface in &library.interfaces {
         let own = abstract_name(library, &interface.name);
         for method in &interface.methods {
@@ -493,6 +513,7 @@ pub fn hl_adapter(library: &Library, core: &str) -> String {
             cell_abstract(library)
         ));
     }
+    out.push_str(&later::hl_adapter(library));
     out.push_str(&format!(
         "\n// What the library's values hold that the VM's collector cannot see, and\n// whether the library asked for a collection since the last call.\n#[unsafe(no_mangle)]\npub extern \"C\" fn {held}() -> f64 {{\n    memory::held() as f64\n}}\ndefine_prim!(hlp_memory_held, {held}, \"P_d\");\n\n#[unsafe(no_mangle)]\npub extern \"C\" fn {wanted}() -> bool {{\n    memory::take_request()\n}}\ndefine_prim!(hlp_memory_wanted, {wanted}, \"P_b\");\n",
         held = held_export(library),

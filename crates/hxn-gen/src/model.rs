@@ -89,9 +89,29 @@ pub enum Type {
     AtomicInt,
     /// The same for a flag: `&AtomicFlag` and `Arc<AtomicFlag>`.
     AtomicBool,
+    /// One result, later: `Future<T>`, a result only.
+    Future(Box<Type>),
+    /// Many results in order: `Stream<T>`, a result only.
+    Stream(Box<Type>),
+    /// A value that changes: `Signal<T>`, a result only.
+    Signal(Box<Type>),
 }
 
 impl Library {
+    /// Whether any function returns a future, a stream or a signal, which
+    /// takes `hxn-future` in the adapter.
+    pub fn returns_later(&self) -> bool {
+        self.interfaces
+            .iter()
+            .flat_map(|interface| &interface.methods)
+            .any(|method| {
+                matches!(
+                    method.returns,
+                    Type::Future(_) | Type::Stream(_) | Type::Signal(_)
+                )
+            })
+    }
+
     /// Whether `interface` is one of the shared ones.
     pub fn is_shared(&self, interface: &str) -> bool {
         self.interfaces
@@ -121,6 +141,9 @@ impl Type {
             Self::Bytes => String::from("bytes"),
             Self::AtomicInt => String::from("atomic_i32"),
             Self::AtomicBool => String::from("atomic_flag"),
+            Self::Future(of) => format!("future<{}>", of.name()),
+            Self::Stream(of) => format!("stream<{}>", of.name()),
+            Self::Signal(of) => format!("signal<{}>", of.name()),
             Self::Handle {
                 interface,
                 nullable,

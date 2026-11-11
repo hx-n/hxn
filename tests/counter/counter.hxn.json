@@ -246,6 +246,135 @@
       ]
     },
     {
+      "name": "Later",
+      "docs": "Results that arrive later, as the generator binds them: a class of\nfunctions, with no value behind it.",
+      "methods": [
+        {
+          "name": "square",
+          "docs": "The square of `value`, after a wait.",
+          "kind": "static",
+          "params": [{ "name": "value", "type": "i32" }, { "name": "milliseconds", "type": "i32" }],
+          "returns": "future<i32>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "greet",
+          "kind": "static",
+          "params": [{ "name": "name", "type": "str" }, { "name": "milliseconds", "type": "i32" }],
+          "returns": "future<str>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "sum",
+          "docs": "The sum of 1 to `limit`, added a term a step.",
+          "kind": "static",
+          "params": [{ "name": "limit", "type": "i32" }],
+          "returns": "future<i32>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "combined",
+          "docs": "`square` and `sum` awaited by one piece of work, and added.",
+          "kind": "static",
+          "params": [{ "name": "value", "type": "i32" }, { "name": "limit", "type": "i32" }],
+          "returns": "future<i32>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "is_even",
+          "kind": "static",
+          "params": [{ "name": "value", "type": "i32" }],
+          "returns": "future<bool>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "half",
+          "kind": "static",
+          "params": [{ "name": "value", "type": "i32" }],
+          "returns": "future<f64>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "counter",
+          "docs": "A counter, made by the work and handed over when it is taken.",
+          "kind": "static",
+          "params": [{ "name": "start", "type": "i32" }],
+          "returns": "future<Counter>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "pot",
+          "docs": "A shared value, likewise.",
+          "kind": "static",
+          "params": [{ "name": "start", "type": "i32" }],
+          "returns": "future<Pot>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "abandoned",
+          "docs": "A future nothing will settle.",
+          "kind": "static",
+          "params": [],
+          "returns": "future<i32>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "checked",
+          "docs": "Refuses a negative limit at once, and is `sum` otherwise.",
+          "kind": "static",
+          "params": [{ "name": "limit", "type": "i32" }],
+          "returns": "future<i32>",
+          "fallible": true,
+          "blocking": false
+        },
+        {
+          "name": "count_up",
+          "docs": "1 to `limit` an item at a time, then the end or, with `fail`, a failure.",
+          "kind": "static",
+          "params": [{ "name": "limit", "type": "i32" }, { "name": "fail", "type": "bool" }],
+          "returns": "stream<i32>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "counters",
+          "docs": "`count` counters, starting at 1, 2 and so on.",
+          "kind": "static",
+          "params": [{ "name": "count", "type": "i32" }],
+          "returns": "stream<Counter>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "ramp",
+          "docs": "A value that climbs from 0 to `limit`.",
+          "kind": "static",
+          "params": [{ "name": "limit", "type": "i32" }],
+          "returns": "signal<i32>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "label",
+          "docs": "The same as text.",
+          "kind": "static",
+          "params": [{ "name": "limit", "type": "i32" }],
+          "returns": "signal<str>",
+          "fallible": false,
+          "blocking": false
+        }
+      ]
+    },
+    {
       "name": "Pot",
       "docs": "A total several things add to. Shared: the library and any number of\nHaxe objects hold the same one, and it lives while any of them does.",
       "shared": true,

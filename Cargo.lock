@@ -25,6 +25,7 @@ version = "0.1.0"
 dependencies = [
  "counter-core",
  "hxn-abi",
+ "hxn-future",
  "hxn-gen",
 ]
 
@@ -35,6 +36,7 @@ dependencies = [
  "counter-core",
  "hl_abi",
  "hxn-abi",
+ "hxn-future",
  "hxn-gen",
  "hxn-hl",
 ]

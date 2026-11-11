@@ -616,6 +616,198 @@ fn bytes_come_back_with_their_length() {
     assert!(hxn_gen::manifest(&library).contains("\"returns\": \"bytes\""));
 }
 
+const LATER: &str = r#"
+#[hxn::interface]
+pub struct Radio;
+
+#[hxn::interface(shared)]
+pub struct Band;
+
+#[hxn::methods]
+impl Radio {
+    pub fn tune(&self, station: &str) -> Future<i32> {
+        todo!()
+    }
+
+    pub fn open(path: &str) -> Result<Future<Radio>, String> {
+        todo!()
+    }
+
+    pub fn band(&self) -> Future<Arc<Band>> {
+        todo!()
+    }
+
+    pub fn titles(&self) -> Stream<String> {
+        todo!()
+    }
+
+    pub fn level(&self) -> Signal<f64> {
+        todo!()
+    }
+
+    pub fn peak(&self) -> Signal<f64> {
+        todo!()
+    }
+}
+"#;
+
+#[test]
+fn results_over_time_are_handles_the_library_answers_for() {
+    let library = parse("fm", LATER).unwrap();
+    assert!(library.returns_later());
+    let methods = &library.interfaces[0].methods;
+    assert_eq!(methods[0].returns, Type::Future(Box::new(Type::I32)));
+    assert_eq!(
+        methods[1].returns,
+        Type::Future(Box::new(handle("Radio", false)))
+    );
+    assert!(methods[1].fallible);
+    assert_eq!(methods[3].returns, Type::Stream(Box::new(Type::Str)));
+    assert_eq!(methods[4].returns, Type::Signal(Box::new(Type::F64)));
+
+    // Handed over erased, and taken by what each carries. One export does
+    // for every function that returns the same.
+    let c = hxn_gen::c_adapter(&library, "fm_core");
+    assert!(c.contains("use hxn_future::{AnyFuture, AnySignal, AnyStream, outbox};"));
+    assert!(c.contains("Ok(Handle::into_raw(AnyFuture::from(this.tune(station.as_str()?))))"));
+    assert!(c.contains("Ok(Handle::into_raw(AnyFuture::from(Radio::open(path.as_str()?)?)))"));
+    assert!(c.contains("pub extern \"C\" fn fm_outbox_next() -> i32"));
+    assert!(c.contains("pub unsafe extern \"C\" fn fm_future_wait(this: RawHandle, milliseconds: i32, out: *mut i32, err: *mut Buf) -> Status"));
+    assert!(c.contains("this.take::<i32>()"));
+    assert!(c.contains("Ok(Handle::into_raw(this.take::<Radio>()?))"));
+    assert!(c.contains("Ok(Handle::into_raw(this.take::<Arc<Band>>()?))"));
+    assert!(c.contains("Ok(Buf::from(this.next::<String>()?))"));
+    assert!(c.contains("pub unsafe extern \"C\" fn fm_signal_wait(this: RawHandle, seen: i32, milliseconds: i32, out: *mut i32, err: *mut Buf) -> Status"));
+    assert_eq!(c.matches("fn fm_signal_get_float(").count(), 1);
+
+    let hl = hxn_gen::hl_adapter(&library, "fm_core");
+    assert!(hl.contains("Ok(manage(AnyStream::from(this.titles())))"));
+    assert!(hl.contains("\"PXfm_radio_OBi__Xfm_future_\""));
+    assert!(hl.contains("define_prim!(hlp_outbox_wait, fm_outbox_wait, \"Pi_b\");"));
+    assert!(hl.contains("define_prim!(hlp_future_wait, fm_future_wait, \"PXfm_future_i_i\");"));
+    assert!(hl.contains("Ok(blocking(|| this.wait_millis(milliseconds)) as i32)"));
+    assert!(hl.contains("define_prim!(hlp_signal_wait, fm_signal_wait, \"PXfm_signal_ii_i\");"));
+    assert!(hl.contains(
+        "define_prim!(hlp_future_take_radio, fm_future_take_radio, \"PXfm_future__Xfm_radio_\");"
+    ));
+    assert!(
+        hl.contains("define_prim!(hlp_stream_next_text, fm_stream_next_text, \"PXfm_stream__B\");")
+    );
+
+    let header = hxn_gen::c_header(&library);
+    assert!(header.contains("int32_t fm_outbox_wait(int32_t milliseconds);"));
+    assert!(header.contains("hxn_status fm_signal_wait(hxn_handle *self, int32_t seen, int32_t milliseconds, int32_t *out, hxn_buf *err);"));
+    assert!(header.contains(
+        "hxn_status fm_future_take_band(hxn_handle *self, hxn_handle **out, hxn_buf *err);"
+    ));
+    let glue = hxn_gen::cpp_glue(&library);
+    assert!(glue.contains("inline int signal_wait(void *self, int seen, int milliseconds)"));
+    assert!(glue.contains("inline ::String stream_next_text(void *self)"));
+
+    for files in [hxn_gen::haxe_hl(&library), hxn_gen::haxe_cpp(&library)] {
+        let paths: Vec<_> = files.iter().map(|file| file.path.as_str()).collect();
+        assert_eq!(
+            paths,
+            [
+                "Radio.hx",
+                "Band.hx",
+                "BandWeak.hx",
+                "HxnFmFuture.hx",
+                "HxnFmStream.hx",
+                "HxnFmSignal.hx",
+                "HxnFmInbox.hx",
+                "HxnFmMemory.hx"
+            ]
+        );
+        let radio = &files[0].text;
+        assert!(radio.contains("public function tune(station:String):hxn.Future<Int>"));
+        assert!(radio.contains("public static function open(path:String):hxn.Future<Radio>"));
+        assert!(radio.contains("public function titles():hxn.Stream<String>"));
+        assert!(radio.contains("public function level():hxn.Signal<Float>"));
+        let future = &files[3].text;
+        for maker in ["ofInt", "ofRadio", "ofBand"] {
+            assert!(future.contains(&format!("function {maker}(")), "{maker}");
+        }
+        assert!(future.contains("new hxn.Future(HxnFmInbox.inbox, "));
+        assert!(
+            files[5]
+                .text
+                .contains("hxn.Reactive.follow(HxnFmInbox.inbox, ")
+        );
+        assert!(
+            files[6]
+                .text
+                .contains("public static final inbox = new hxn.Inbox(")
+        );
+    }
+    let radio = &hxn_gen::haxe_hl(&library)[0].text;
+    assert!(radio.contains("return HxnFmFuture.ofInt(Native.radio_tune(raw, station));"));
+    let radio = &hxn_gen::haxe_cpp(&library)[0].text;
+    assert!(radio.contains("var made = HxnFmStream.adopt();"));
+    assert!(radio.contains("return made.ofText();"));
+
+    let manifest = hxn_gen::manifest(&library);
+    assert!(manifest.contains("\"returns\": \"future<Radio>\""));
+    assert!(manifest.contains("\"returns\": \"signal<f64>\""));
+
+    // A library with none of these names nothing of `hxn-future`.
+    let plain = parse("audio", SOURCE).unwrap();
+    assert!(!plain.returns_later());
+    assert!(!hxn_gen::c_adapter(&plain, "audio_core").contains("hxn_future"));
+    assert!(!hxn_gen::hl_adapter(&plain, "audio_core").contains("outbox"));
+}
+
+#[test]
+fn says_what_a_result_over_time_cannot_carry() {
+    let cases = [
+        (
+            "pub fn done(&self) -> Future<()> { todo!() }",
+            "a future carries one of",
+        ),
+        (
+            "pub fn all(&self) -> Stream<Vec<u8>> { todo!() }",
+            "a stream carries one of",
+        ),
+        (
+            "pub fn now(&self) -> Signal<Thing> { todo!() }",
+            "a signal carries one of",
+        ),
+        (
+            "pub fn other(&self) -> Future<Band> { todo!() }",
+            "carried in its `Arc`: `Future<Arc<Band>>`",
+        ),
+        (
+            "pub fn boxed(&self) -> Stream<Arc<Thing>> { todo!() }",
+            "needs `Thing` marked `#[hxn::interface(shared)]`",
+        ),
+        (
+            "pub fn take(&self, later: Future<i32>) {}",
+            "a parameter is one of",
+        ),
+    ];
+    for (method, expected) in cases {
+        let source = format!(
+            "#[hxn::interface]\npub struct Thing;\n\n#[hxn::interface(shared)]\npub struct Band;\n\n#[hxn::methods]\nimpl Thing {{\n    {method}\n}}\n"
+        );
+        let error = parse("thing", &source).unwrap_err();
+        assert!(
+            error.message.contains(expected),
+            "{method}: {}",
+            error.message
+        );
+        assert_eq!(error.line, 9, "{method}");
+    }
+    for taken in ["Future", "Stream", "Signal", "Outbox"] {
+        let source = format!("#[hxn::interface]\npub struct {taken};\n");
+        assert!(
+            parse("thing", &source)
+                .unwrap_err()
+                .message
+                .contains("a name the adapters use")
+        );
+    }
+}
+
 // The fixture's manifest is committed, as a library's would be, so a change
 // to what it exposes shows up in review. To update it after changing
 // tests/counter/core, run hxn-gen and copy its counter.hxn.json over.

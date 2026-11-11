@@ -1,6 +1,7 @@
 //! The C side of the plain-ABI adapter: a header declaring its exports, and
 //! the C++ glue hxcpp calls them through.
 
+use crate::later;
 use crate::model::{Interface, Library, Method, Type};
 use crate::names::{cell_export, export, has_receiver, held_export, local, release, wanted_export};
 
@@ -22,7 +23,9 @@ fn declaration(library: &Library, interface: &Interface, method: &Method) -> Str
             Type::Str | Type::Bytes => "hxn_slice ",
             Type::Handle { .. } => "hxn_handle *",
             Type::AtomicInt | Type::AtomicBool => "int32_t *",
-            Type::Void => unreachable!("not a parameter type"),
+            Type::Void | Type::Future(_) | Type::Stream(_) | Type::Signal(_) => {
+                unreachable!("not a parameter type")
+            }
         };
         params.push(format!("{ty}{}", param.name));
     }
@@ -31,7 +34,12 @@ fn declaration(library: &Library, interface: &Interface, method: &Method) -> Str
         Type::Bool | Type::I32 => params.push(String::from("int32_t *out")),
         Type::F64 => params.push(String::from("double *out")),
         Type::Str | Type::Bytes => params.push(String::from("hxn_buf *out")),
-        Type::Handle { .. } | Type::AtomicInt | Type::AtomicBool => {
+        Type::Handle { .. }
+        | Type::AtomicInt
+        | Type::AtomicBool
+        | Type::Future(_)
+        | Type::Stream(_)
+        | Type::Signal(_) => {
             params.push(String::from("hxn_handle **out"));
         }
     }
@@ -77,6 +85,7 @@ pub fn c_header(library: &Library) -> String {
             cell_export(library)
         ));
     }
+    out.push_str(&later::c_header(library));
     out.push_str(&format!(
         "\n/* The bytes the library's values hold that the host's collector cannot see,\n * and whether the library asked for a collection since the last call. */\ndouble {}(void);\nint32_t {}(void);\n",
         held_export(library),
@@ -130,7 +139,9 @@ fn glue(library: &Library, interface: &Interface, method: &Method) -> String {
                 params.push(format!("int *{name}"));
                 arguments.push(name.clone());
             }
-            Type::Void => unreachable!("not a parameter type"),
+            Type::Void | Type::Future(_) | Type::Stream(_) | Type::Signal(_) => {
+                unreachable!("not a parameter type")
+            }
         }
     }
     let (returns, out, result) = match &method.returns {
@@ -148,9 +159,12 @@ fn glue(library: &Library, interface: &Interface, method: &Method) -> String {
             Some("hxn_buf out = HXN_BUF_EMPTY;"),
             Some("hxn::take_bytes(out)"),
         ),
-        Type::Handle { .. } | Type::AtomicInt | Type::AtomicBool => {
-            ("void *", Some("hxn_handle *out = 0;"), Some("out"))
-        }
+        Type::Handle { .. }
+        | Type::AtomicInt
+        | Type::AtomicBool
+        | Type::Future(_)
+        | Type::Stream(_)
+        | Type::Signal(_) => ("void *", Some("hxn_handle *out = 0;"), Some("out")),
     };
     if let Some(out) = out {
         locals.push(String::from(out));
@@ -233,6 +247,7 @@ pub fn cpp_glue(library: &Library) -> String {
             cell_export(library)
         ));
     }
+    out.push_str(&later::cpp_glue(library));
     out.push_str("\n}\n\n#endif\n");
     out
 }

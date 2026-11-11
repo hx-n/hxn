@@ -159,6 +159,75 @@ class Generated {
 		check("every pot was released", Pot.live() == 0);
 	}
 
+	// Results the library gives later: waited for here, and delivered.
+	static function later() {
+		check("a future is waited for", Later.square(7, 20).await() == 49);
+		check("a text result", Later.greet("wörld ☃", 1).await() == "hello wörld ☃");
+		check("work done a step at a time", Later.sum(20000).await() == 200010000);
+		check("work that awaits other work", Later.combined(7, 100).await() == 5099);
+		check("a bool and a float", Later.isEven(4).await() && !Later.isEven(3).await() && Later.half(5).await() == 2.5);
+		throws("a failure is thrown from the wait", () -> Later.square(100000, 1).await(), "counter overflow");
+		throws("a future nothing will settle is cancelled", () -> Later.abandoned().await(), "dropped before");
+		throws("a function can refuse before there is a future", () -> Later.checked(-1), "negative limit");
+		check("and give one otherwise", Later.checked(4).await() == 10);
+
+		var before = Counter.live();
+		var made = Later.counter(41).await();
+		check("an object arrives later and is owned here", made.add(1) == 42 && Counter.live() == before + 1);
+		made.close();
+		var pot = Later.pot(5).await();
+		check("so does a shared one", pot.add(1) == 6 && Pot.live() == 1);
+		pot.close();
+		check("and both are released", Counter.live() == before && Pot.live() == 0);
+
+		check("a stream is read item by item", [for (item in Later.countUp(5, false)) item].join(",") == "1,2,3,4,5");
+		check("one with nothing in it just ends", [for (item in Later.countUp(0, false)) item].length == 0);
+		var got = [];
+		throws("a stream that fails gives its items first", () -> {
+			for (item in Later.countUp(3, true))
+				got.push(item);
+		}, "counter overflow");
+		check('and they were $got', got.join(",") == "1,2,3");
+		var total = 0;
+		for (counter in Later.counters(4)) {
+			total += counter.add(0);
+			counter.close();
+		}
+		check("a stream of objects", total == 10 && Counter.live() == before);
+
+		// Delivered where the app says, and to all of these in one batch.
+		hxn.Loop.manual = true;
+		var squared = -1;
+		Later.square(6, 1).then(value -> squared = value);
+		var refused = "";
+		Later.square(100000, 1).then(_ -> {}, error -> refused = error.message);
+		var items = [];
+		var ended = false;
+		Later.countUp(3, false).listen(item -> items.push(item), () -> ended = true);
+		var ramp = Later.ramp(50);
+		var levels = [];
+		var stop = hxn.Reactive.effect(() -> levels.push(ramp.value));
+		var label = Later.label(3);
+		var waited = 0;
+		while ((squared < 0 || refused == "" || !ended || ramp.peek() != 50 || label.peek() != "3") && waited++ < 5000) {
+			hxn.Loop.sync();
+			Sys.sleep(0.001);
+		}
+		check("a continuation is called with the value", squared == 36);
+		check('or with the failure: $refused', refused.indexOf("counter overflow") >= 0);
+		check('a listener gets every item and the end: $items', items.join(",") == "1,2,3" && ended);
+		var rising = true;
+		for (i in 1...levels.length)
+			if (levels[i] <= levels[i - 1])
+				rising = false;
+		// A signal gives the latest value and nothing else, so how many of
+		// the steps were seen depends on how fast the library got there.
+		check('a signal is followed to its last value: $levels', levels[levels.length - 1] == 50 && rising);
+		check("and one of text", label.peek() == "3");
+		stop();
+		hxn.Loop.manual = false;
+	}
+
 	// Out of line, as `churn` is. Returns the most that was held at once.
 	static function pile(count:Int, size:Int):Float {
 		var peak = 0.;
@@ -246,6 +315,7 @@ class Generated {
 		handles();
 		atomics();
 		shared();
+		later();
 		var held = memory();
 
 		#if emscripten

@@ -250,6 +250,106 @@ impl Default for Tally {
     }
 }
 
+fn millis(milliseconds: i32) -> Duration {
+    Duration::from_millis(u64::try_from(milliseconds).unwrap_or(0))
+}
+
+/// Results that arrive later, as the generator binds them: a class of
+/// functions, with no value behind it.
+#[hxn::interface]
+pub struct Later;
+
+#[hxn::methods]
+impl Later {
+    /// The square of `value`, after a wait.
+    pub fn square(value: i32, milliseconds: i32) -> Future<i32> {
+        square_later(value, millis(milliseconds))
+    }
+
+    pub fn greet(name: &str, milliseconds: i32) -> Future<String> {
+        greet_later(name.to_owned(), millis(milliseconds))
+    }
+
+    /// The sum of 1 to `limit`, added a term a step.
+    pub fn sum(limit: i32) -> Future<i32> {
+        sum_later(limit)
+    }
+
+    /// `square` and `sum` awaited by one piece of work, and added.
+    pub fn combined(value: i32, limit: i32) -> Future<i32> {
+        combined_later(value, limit)
+    }
+
+    pub fn is_even(value: i32) -> Future<bool> {
+        spawn_blocking(move || Ok::<_, Overflow>(value % 2 == 0))
+    }
+
+    pub fn half(value: i32) -> Future<f64> {
+        spawn_blocking(move || Ok::<_, Overflow>(f64::from(value) / 2.0))
+    }
+
+    /// A counter, made by the work and handed over when it is taken.
+    pub fn counter(start: i32) -> Future<Counter> {
+        spawn_blocking(move || Ok::<_, Overflow>(Counter::new(start)))
+    }
+
+    /// A shared value, likewise.
+    pub fn pot(start: i32) -> Future<Arc<Pot>> {
+        spawn_blocking(move || Ok::<_, Overflow>(Arc::new(Pot::new(start))))
+    }
+
+    /// A future nothing will settle.
+    pub fn abandoned() -> Future<i32> {
+        abandoned()
+    }
+
+    /// Refuses a negative limit at once, and is `sum` otherwise.
+    pub fn checked(limit: i32) -> Result<Future<i32>, &'static str> {
+        if limit < 0 {
+            return Err("a negative limit");
+        }
+        Ok(sum_later(limit))
+    }
+
+    /// 1 to `limit` an item at a time, then the end or, with `fail`, a failure.
+    pub fn count_up(limit: i32, fail: bool) -> Stream<i32> {
+        count_up(limit, fail)
+    }
+
+    /// `count` counters, starting at 1, 2 and so on.
+    pub fn counters(count: i32) -> Stream<Counter> {
+        let (sender, stream) = channel();
+        let mut next = 1;
+        drop(stepped(move || {
+            if next > count || !sender.send(Counter::new(next)) {
+                return Poll::Ready(Ok::<_, Failure>(()));
+            }
+            next += 1;
+            Poll::Pending
+        }));
+        stream
+    }
+
+    /// A value that climbs from 0 to `limit`.
+    pub fn ramp(limit: i32) -> Signal<i32> {
+        ramp(limit)
+    }
+
+    /// The same as text.
+    pub fn label(limit: i32) -> Signal<String> {
+        let (source, label) = signal(String::from("0"));
+        let mut next = 1;
+        drop(stepped(move || {
+            if next > limit || !source.set(next.to_string()) {
+                return Poll::Ready(Ok::<_, Failure>(()));
+            }
+            next += 1;
+            Poll::Pending
+        }));
+        label
+    }
+}
+
 static POTS: AtomicI32 = AtomicI32::new(0);
 
 /// A total several things add to. Shared: the library and any number of

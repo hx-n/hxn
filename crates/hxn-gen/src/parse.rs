@@ -278,12 +278,85 @@ impl Scope<'_> {
         }
     }
 
+    // `Future<T>`, `Stream<T>` or `Signal<T>`, with what it carries.
+    fn later(&self, ty: &syn::Type) -> Result<Option<Type>, Error> {
+        type Make = fn(Box<Type>) -> Type;
+        let kinds: [(&str, Make); 3] = [
+            ("Future", Type::Future),
+            ("Stream", Type::Stream),
+            ("Signal", Type::Signal),
+        ];
+        for (name, make) in kinds {
+            let Some(carried) = wrapped(ty, name) else {
+                continue;
+            };
+            let plain = match path_name(carried).as_deref() {
+                Some("bool") => Some(Type::Bool),
+                Some("i32") => Some(Type::I32),
+                Some("f64") => Some(Type::F64),
+                Some("String") => Some(Type::Str),
+                _ => None,
+            };
+            if let Some(plain) = plain {
+                return Ok(Some(make(Box::new(plain))));
+            }
+            // A signal is read any number of times, which a value held
+            // by one owner cannot be.
+            let interface = if name == "Signal" {
+                None
+            } else if let Some(interface) = self.interface(carried) {
+                if self.is_shared(&interface) {
+                    return error(
+                        ty.span(),
+                        format!(
+                            "a shared interface is carried in its `Arc`: `{name}<Arc<{interface}>>`"
+                        ),
+                    );
+                }
+                Some(interface)
+            } else if let Some(interface) = self.pointer(carried) {
+                if !self.is_shared(&interface) {
+                    return error(
+                        ty.span(),
+                        format!(
+                            "`Arc<{interface}>` needs `{interface}` marked `#[hxn::interface(shared)]`"
+                        ),
+                    );
+                }
+                Some(interface)
+            } else {
+                None
+            };
+            return match interface {
+                Some(interface) => Ok(Some(make(Box::new(Type::Handle {
+                    interface,
+                    nullable: false,
+                })))),
+                None if name == "Signal" => error(
+                    ty.span(),
+                    "a signal carries one of bool, i32, f64 or String",
+                ),
+                None => error(
+                    ty.span(),
+                    format!(
+                        "a {} carries one of bool, i32, f64, String or an interface",
+                        name.to_lowercase()
+                    ),
+                ),
+            };
+        }
+        Ok(None)
+    }
+
     // The type, and whether it is a shared interface already in its `Arc`.
     fn result(&self, ty: &syn::Type) -> Result<(Type, bool), Error> {
         if let syn::Type::Tuple(tuple) = ty
             && tuple.elems.is_empty()
         {
             return Ok((Type::Void, false));
+        }
+        if let Some(later) = self.later(ty)? {
+            return Ok((later, false));
         }
         let (inner, nullable) = match optional(ty) {
             Some(inner) => (inner, true),
@@ -341,7 +414,7 @@ impl Scope<'_> {
             _ => {
                 return error(
                     ty.span(),
-                    "a result is one of (), bool, i32, f64, String, Vec<u8>, Arc<AtomicI32>, Arc<AtomicFlag>, an interface or an Option of one, or a Result of these",
+                    "a result is one of (), bool, i32, f64, String, Vec<u8>, Arc<AtomicI32>, Arc<AtomicFlag>, an interface or an Option of one, a Future, Stream or Signal, or a Result of these",
                 );
             }
         };
@@ -471,7 +544,7 @@ pub fn parse(name: &str, source: &str) -> Result<Library, Error> {
         }
         let name = item.ident.to_string();
         // What the adapters name their own exports after.
-        if ["Atomic", "Memory"].contains(&name.as_str()) {
+        if ["Atomic", "Memory", "Future", "Stream", "Signal", "Outbox"].contains(&name.as_str()) {
             return error(
                 item.ident.span(),
                 format!("`{name}` is a name the adapters use; call the interface something else"),

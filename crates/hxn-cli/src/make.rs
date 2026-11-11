@@ -92,7 +92,7 @@ const NOTE: &str = "# Written by hxn. Do not edit.\n";
 
 // The manifest of an adapter crate. It names the library and hxn's crates
 // from where the library gets them, and stands outside any workspace.
-fn manifest(project: &Project, runtime: Runtime) -> String {
+fn manifest(project: &Project, runtime: Runtime, later: bool) -> String {
     let (kind, crates): (&str, &[&str]) = match runtime {
         Runtime::Hl => ("cdylib", &["hxn-abi", "hxn-hl"]),
         Runtime::Cpp => ("staticlib", &["hxn-abi"]),
@@ -106,6 +106,13 @@ fn manifest(project: &Project, runtime: Runtime) -> String {
     );
     for name in crates {
         out.push_str(&format!("{name} = {}\n", project.hxn.dependency(name)));
+    }
+    // Named by the adapter of a library with results over time, and by no other.
+    if later {
+        out.push_str(&format!(
+            "hxn-future = {}\n",
+            project.hxn.dependency("hxn-future")
+        ));
     }
     out.push_str("\n[workspace]\n");
     out
@@ -155,7 +162,10 @@ pub fn build(project: &Project, runtime: Runtime, release: bool) -> Result<Built
     }
     let dir = out.join(runtime.name());
     let krate = dir.join("crate");
-    write(&krate.join("Cargo.toml"), &manifest(project, runtime))?;
+    write(
+        &krate.join("Cargo.toml"),
+        &manifest(project, runtime, library.returns_later()),
+    )?;
     let (adapter, classes) = match runtime {
         Runtime::Hl => {
             write(&krate.join("build.rs"), HL_BUILD_SCRIPT)?;
