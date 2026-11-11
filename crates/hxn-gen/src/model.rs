@@ -17,6 +17,9 @@ pub struct Library {
 pub struct Interface {
     pub name: String,
     pub docs: Vec<String>,
+    /// Marked `#[hxn::interface(shared)]`: a handle holds an `Arc` of the
+    /// value, so the library and any number of Haxe objects can hold one.
+    pub shared: bool,
     /// Marked `#[hxn::interface(weighed)]`: its values hold memory worth
     /// collecting for, so making one checks what the library holds.
     pub weighed: bool,
@@ -36,6 +39,9 @@ pub struct Method {
     pub blocking: bool,
     /// `new`, which makes the value a Haxe `new` wraps.
     pub constructor: bool,
+    /// Returns a shared interface as the `Arc` it is already in, and not
+    /// as a value for the adapter to put in one.
+    pub returns_arc: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -56,11 +62,14 @@ pub struct Param {
     pub ty: Type,
     /// For an interface, borrowed as `&mut` and not `&`.
     pub exclusive: bool,
+    /// For a shared interface, taken as `Arc<T>`: a share the library keeps.
+    pub kept: bool,
 }
 
 /// The types that cross. A parameter is borrowed for the call and a result
 /// is handed over, so `Str` is `&str` coming in and `String` going out, and
-/// an interface is `&T` or `&mut T` coming in and `T` going out.
+/// an interface is `&T` or `&mut T` coming in and `T` going out. A shared
+/// interface may also be `Arc<T>` either way.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Type {
     Void,
@@ -82,6 +91,13 @@ pub enum Type {
 }
 
 impl Library {
+    /// Whether `interface` is one of the shared ones.
+    pub fn is_shared(&self, interface: &str) -> bool {
+        self.interfaces
+            .iter()
+            .any(|known| known.shared && known.name == interface)
+    }
+
     /// Whether any function hands the host a cell, which takes a call of
     /// the library's own to reach.
     pub fn returns_cells(&self) -> bool {

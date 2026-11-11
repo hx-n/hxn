@@ -101,15 +101,41 @@ true.
 - **A result is always owned.** There are no borrowed results: a value that
   refers into another cannot be tied to it across the boundary. A child that
   needs its parent holds a shared reference to it.
-- **Sharing is the library's choice.** To hand the same thing out twice, the
-  library returns something clonable, an `Arc` for instance, and each return
-  is a handle of its own. Two Haxe objects may then refer to one value; Haxe
-  object identity is not preserved.
+- **Sharing is the library's choice**, made by marking the interface shared;
+  see below. Without the mark a value has one owner.
 - **Haxe values stay in Haxe.** A library that must remember something of the
   host's is given an id, and the binding keeps the table. Rooting a host
   value from native code has the same cycle problem as rooting a function.
 - **A handle belongs to the library that made it.** One passed to another
   library is refused by the type check.
+
+### Shared values
+
+An interface marked `#[hxn::interface(shared)]` is held through an `Arc`. A
+handle is then one share of the value, and the value lives while the library
+or any Haxe object has one.
+
+| In Rust | Meaning | In Haxe |
+|---|---|---|
+| `&T` parameter | the value, for the call | an object |
+| `Arc<T>` parameter | a share for the library to keep | an object |
+| `T` result | a new value, which the adapter puts in an `Arc` | a new object |
+| `Arc<T>` result | a share of a value the library also keeps | a new object |
+
+- **One Haxe object still owns one handle.** Returning the same value twice
+  gives two objects with a share each, so Haxe object identity says nothing.
+  `same(other)` says whether two objects hold one value.
+- **`close()` gives up one share.** The object is closed; the value goes with
+  its last holder.
+- **`weak()` gives a reference that holds nothing**, a class of its own named
+  `<Interface>Weak`. Its `upgrade()` is a new object with a share, or null
+  once the value is gone. It is how a child refers to its parent without the
+  two keeping each other alive.
+- **Nothing borrows a shared value exclusively.** Its functions take `&self`,
+  and what changes is behind a cell or a lock of the library's own, as in any
+  Rust shared between threads. The value is `Send + Sync`.
+- **Shares held by Haxe objects are released by the collector**, like any
+  handle, so a value the library also holds is unaffected by when that is.
 
 ## Atomics
 

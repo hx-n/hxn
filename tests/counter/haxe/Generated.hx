@@ -108,6 +108,57 @@ class Generated {
 		#end
 	}
 
+	// A value the library and several objects here hold at once.
+	static function shared() {
+		var pot = new Pot(10);
+		var a = new Player(pot);
+		var b = new Player(pot);
+		check("a value kept by two others", a.pay(5) == 15 && b.pay(1) == 16 && pot.total() == 16);
+		check("is one value", Pot.live() == 1 && a.paysInto(pot));
+
+		var again = a.pot();
+		check("the library hands it out again as a new object", again != pot && again.add(0) == 16);
+		check("which holds the same value", again.same(pot) && pot.same(again) && pot.same(pot));
+		var other = pot.split();
+		check("and another value is not the same", !other.same(pot) && other.total() == 16 && Pot.live() == 2);
+		check("nor is none", !pot.same(null));
+		check("a value is told from another by the library too", !a.paysInto(other));
+		throws("null where a shared object is required", () -> a.paysInto(null), "null pointer");
+
+		pot.close();
+		check("closing one object leaves the value to the rest", Pot.live() == 2 && a.pay(1) == 17 && again.total() == 17);
+		throws("but closes that object", () -> pot.total(), "closed");
+
+		check("no share is taken for none", a.moveTo(null) == null && a.paysInto(again));
+		var left = a.moveTo(other);
+		check("a share given to the library is kept", a.paysInto(other) && a.pay(1) == 17 && other.total() == 17);
+		check("and the one it gave up comes back", left != null && left.same(again) && b.paysInto(left));
+		check("an absent shared object in gives none out", a.fuller(null) == null);
+		var fuller = a.fuller(again);
+		check("a value returned plainly is shared by the adapter", fuller != null && fuller.total() == 17 && Pot.live() == 3 && !fuller.same(again));
+		fuller.close();
+		check("and released with its last holder", Pot.live() == 2);
+
+		var weak = again.weak();
+		var found = weak.upgrade();
+		check("a weak reference finds a value still held", found != null && found.same(again));
+		for (holder in [again, left, found])
+			holder.close();
+		check("the library's share keeps it alive", Pot.live() == 2 && b.pay(1) == 18);
+		var last = weak.upgrade();
+		check("and a weak reference still finds it", last != null && last.total() == 18);
+		last.close();
+		b.close();
+		check("until the last holder is gone", Pot.live() == 1 && weak.upgrade() == null);
+		weak.close();
+		throws("a closed weak reference", () -> weak.upgrade(), "closed");
+
+		a.close();
+		check("a share outlives the object that gave it", other.total() == 17 && Pot.live() == 1);
+		other.close();
+		check("every pot was released", Pot.live() == 0);
+	}
+
 	// Out of line, as `churn` is. Returns the most that was held at once.
 	static function pile(count:Int, size:Int):Float {
 		var peak = 0.;
@@ -190,6 +241,7 @@ class Generated {
 
 		handles();
 		atomics();
+		shared();
 		var held = memory();
 
 		#if emscripten

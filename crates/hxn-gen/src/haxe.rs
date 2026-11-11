@@ -8,6 +8,7 @@
 use crate::model::{Interface, Library, Method, Type};
 use crate::names::{
     abstract_name, camel, cell_abstract, cell_class, has_receiver, local, memory_class, release,
+    weak_abstract, weak_class,
 };
 
 /// A generated file: its path relative to a class path, and its text.
@@ -79,6 +80,23 @@ fn signature(method: &Method) -> String {
 }
 
 const CLOSE_DOCS: &str = "\t/**\n\t\tReleases the native value now. The collector does it otherwise. Using\n\t\tthis object afterwards throws.\n\t**/\n";
+
+const SHARED_CLOSE_DOCS: &str = "\t/**\n\t\tGives up this object's share of the value now. The collector does it\n\t\totherwise. The value lives while anything else holds a share. Using\n\t\tthis object afterwards throws.\n\t**/\n";
+
+const SAME_DOCS: &str = "\t/**\n\t\tWhether `other` holds the value this does. Two objects can: each time\n\t\tthe library returns the value, a new object gets a share of it.\n\t**/\n";
+
+const WEAK_DOCS: &str = "\t/** A reference to the value that does not keep it alive. **/\n";
+
+const UPGRADE_DOCS: &str =
+    "\t/** The value, if anything still holds it: a new object with a share of its own. **/\n";
+
+fn close_docs(interface: &Interface) -> &'static str {
+    if interface.shared {
+        SHARED_CLOSE_DOCS
+    } else {
+        CLOSE_DOCS
+    }
+}
 
 // The library's meter, held by every class so that it exists whichever of
 // them a program uses.
@@ -237,6 +255,14 @@ fn hl_module(library: &Library, interface: &Interface) -> String {
             "\tpublic static function atomic_cell(self:CellRaw):hl.Ref<Int>\n\t\treturn null;\n\n",
         );
     }
+    if interface.shared {
+        out.push_str(&format!(
+            "\tpublic static function {same}(self:{name}Raw, other:{name}Raw):Bool\n\t\treturn false;\n\n\tpublic static function {weak}(self:{name}Raw):{weak_raw}\n\t\treturn null;\n\n",
+            same = local(name, "same"),
+            weak = local(name, "weak"),
+            weak_raw = hl_raw(&weak_class(name), name),
+        ));
+    }
     out.push_str(&format!(
         "\tpublic static function {}(self:{name}Raw):Void {{}}\n}}\n\n",
         local(name, "close")
@@ -255,11 +281,45 @@ fn hl_module(library: &Library, interface: &Interface) -> String {
         out.push('\n');
         out.push_str(&hl_method(interface, method));
     }
+    if interface.shared {
+        out.push_str(&format!(
+            "\n{SAME_DOCS}\tpublic function same(other:Null<{name}>):Bool\n\t\treturn Native.{same}(raw, other == null ? null : other.raw);\n\n{WEAK_DOCS}\tpublic function weak():{weak_class}\n\t\treturn {weak_class}.adopt(Native.{weak}(raw));\n",
+            same = local(name, "same"),
+            weak = local(name, "weak"),
+            weak_class = weak_class(name),
+        ));
+    }
     out.push_str(&format!(
-        "\n{CLOSE_DOCS}\tpublic function close():Void\n\t\tNative.{}(raw);\n}}\n",
+        "\n{}\tpublic function close():Void\n\t\tNative.{}(raw);\n}}\n",
+        close_docs(interface),
         local(name, "close")
     ));
     out
+}
+
+// The weak reference to a shared interface's value: a class of its own.
+fn hl_weak(library: &Library, interface: &Interface) -> String {
+    let of = &interface.name;
+    let name = weak_class(of);
+    format!(
+        "{HEADER}@:noCompletion typedef {name}Raw = hl.Abstract<\"{weak_abstract}\">;\n\n@:hlNative(\"{library}\")\nprivate class Native {{\n\tpublic static function {upgrade}(self:{name}Raw):{of}.{of}Raw\n\t\treturn null;\n\n\tpublic static function {close}(self:{name}Raw):Void {{}}\n}}\n\n/** A reference to a `{of}` that does not keep it alive. **/\nclass {name} {{\n\t@:noCompletion public var raw:{name}Raw;\n\n\t@:noCompletion public static function adopt(raw:{name}Raw):{name} {{\n\t\tvar made:{name} = Type.createEmptyInstance({name});\n\t\tmade.raw = raw;\n\t\treturn made;\n\t}}\n\n{UPGRADE_DOCS}\tpublic function upgrade():Null<{of}> {{\n\t\tvar made = Native.{upgrade}(raw);\n\t\treturn made == null ? null : {of}.adopt(made);\n\t}}\n\n\t/** Releases the reference now. The collector does it otherwise. **/\n\tpublic function close():Void\n\t\tNative.{close}(raw);\n}}\n",
+        library = library.name,
+        weak_abstract = weak_abstract(library, of),
+        upgrade = local(of, "weak_upgrade"),
+        close = local(of, "weak_close"),
+    )
+}
+
+fn cpp_weak(library: &Library, interface: &Interface) -> String {
+    let of = &interface.name;
+    let name = weak_class(of);
+    format!(
+        "{HEADER}@:headerInclude(\"{library}_glue.h\")\n/** A reference to a `{of}` that does not keep it alive. **/\nclass {name} {{\n\t@:noCompletion @:unreflective public var raw:cpp.RawPointer<cpp.Void>;\n\n\t// Runs inside a collection: it may free, and may not touch the Haxe heap.\n\tstatic function finalize(self:{name}):Void {{\n\t\tuntyped __cpp__(\"{release}((hxn_handle *){{0}})\", self.raw);\n\t}}\n\n\t@:noCompletion public static function adopt():{name}\n\t\treturn Type.createEmptyInstance({name});\n\n\t@:noCompletion public function own():Void\n\t\tcpp.vm.Gc.setFinalizer(this, cpp.Function.fromStaticFunction(finalize));\n\n{UPGRADE_DOCS}\tpublic function upgrade():Null<{of}> {{\n\t\tvar made = {of}.adopt();\n\t\tmade.raw = untyped __cpp__(\"{library}_glue::{upgrade}({{0}})\", raw);\n\t\tif (untyped __cpp__(\"{{0}} == 0\", made.raw))\n\t\t\treturn null;\n\t\tmade.own();\n\t\treturn made;\n\t}}\n\n\t/** Releases the reference now. The collector does it otherwise. **/\n\tpublic function close():Void\n\t\tuntyped __cpp__(\"{library}_glue::{close}({{0}})\", raw);\n}}\n",
+        library = library.name,
+        release = release(library),
+        upgrade = local(of, "weak_upgrade"),
+        close = local(of, "weak_close"),
+    )
 }
 
 fn cpp_method(library: &Library, interface: &Interface, method: &Method) -> String {
@@ -383,8 +443,18 @@ fn cpp_module(library: &Library, interface: &Interface) -> String {
         out.push('\n');
         out.push_str(&cpp_method(library, interface, method));
     }
+    if interface.shared {
+        out.push_str(&format!(
+            "\n{SAME_DOCS}\tpublic function same(other:Null<{name}>):Bool {{\n\t\tvar otherRaw:cpp.RawPointer<cpp.Void> = untyped __cpp__(\"0\");\n\t\tif (other != null)\n\t\t\totherRaw = other.raw;\n\t\treturn untyped __cpp__(\"{library}_glue::{same}({{0}}, {{1}})\", raw, otherRaw);\n\t}}\n\n{WEAK_DOCS}\tpublic function weak():{weak_class} {{\n\t\tvar made = {weak_class}.adopt();\n\t\tmade.raw = untyped __cpp__(\"{library}_glue::{weak}({{0}})\", raw);\n\t\tmade.own();\n\t\treturn made;\n\t}}\n",
+            library = library.name,
+            same = local(name, "same"),
+            weak = local(name, "weak"),
+            weak_class = weak_class(name),
+        ));
+    }
     out.push_str(&format!(
-        "\n{CLOSE_DOCS}\tpublic function close():Void\n\t\tuntyped __cpp__(\"{}_glue::{}({{0}})\", raw);\n}}\n",
+        "\n{}\tpublic function close():Void\n\t\tuntyped __cpp__(\"{}_glue::{}({{0}})\", raw);\n}}\n",
+        close_docs(interface),
         library.name,
         local(name, "close")
     ));
@@ -401,6 +471,12 @@ pub fn haxe_hl(library: &Library) -> Vec<File> {
             text: hl_module(library, interface),
         })
         .collect();
+    for interface in library.interfaces.iter().filter(|i| i.shared) {
+        files.push(File {
+            path: format!("{}.hx", weak_class(&interface.name)),
+            text: hl_weak(library, interface),
+        });
+    }
     files.push(File {
         path: format!("{}.hx", memory_class(library)),
         text: hl_memory(library),
@@ -440,6 +516,12 @@ pub fn haxe_cpp(library: &Library) -> Vec<File> {
         files.push(File {
             path: format!("{}.hx", cell_class(library)),
             text: cpp_cell(library),
+        });
+    }
+    for interface in library.interfaces.iter().filter(|i| i.shared) {
+        files.push(File {
+            path: format!("{}.hx", weak_class(&interface.name)),
+            text: cpp_weak(library, interface),
         });
     }
     files.push(File {

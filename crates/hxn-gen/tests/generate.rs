@@ -425,6 +425,169 @@ fn what_a_library_holds_is_read_and_a_weighed_object_checks_it() {
     assert_eq!(manifest.matches("\"weighed\": true").count(), 1);
 }
 
+const SHARED: &str = r#"
+#[hxn::interface(shared, weighed)]
+pub struct Bus;
+
+#[hxn::interface]
+pub struct Tap {
+    bus: Arc<Bus>,
+}
+
+#[hxn::methods]
+impl Bus {
+    pub fn new() -> Self {
+        Bus
+    }
+
+    pub fn open() -> Arc<Bus> {
+        todo!()
+    }
+
+    pub fn find(&self, name: &str) -> Option<Arc<Bus>> {
+        None
+    }
+}
+
+#[hxn::methods]
+impl Tap {
+    pub fn new(bus: Arc<Bus>) -> Self {
+        todo!()
+    }
+
+    pub fn reads(&self, bus: &Bus) -> bool {
+        false
+    }
+
+    pub fn rewire(&mut self, bus: Option<Arc<Bus>>, old: Option<&Bus>) -> Option<Bus> {
+        None
+    }
+}
+"#;
+
+#[test]
+fn a_shared_value_is_held_through_an_arc() {
+    let library = parse("audio", SHARED).unwrap();
+    let (bus, tap) = (&library.interfaces[0], &library.interfaces[1]);
+    assert!(bus.shared && bus.weighed && !tap.shared);
+    assert!(library.is_shared("Bus") && !library.is_shared("Tap"));
+    assert!(!bus.methods[0].returns_arc && bus.methods[1].returns_arc);
+    assert_eq!(bus.methods[2].returns, handle("Bus", true));
+    assert!(tap.methods[0].params[0].kept && !tap.methods[1].params[0].kept);
+
+    // A value is put in an `Arc` by the adapter unless it came in one, and a
+    // parameter is the value or a share of it, as the function asked.
+    let c = hxn_gen::c_adapter(&library, "audio_core");
+    assert!(c.contains("Ok(Handle::into_raw(Arc::new(Bus::new())))"));
+    assert!(c.contains("Ok(Handle::into_raw(Bus::open()))"));
+    assert!(c.contains("let this = Handle::<Arc<Bus>>::from_raw(this)?.borrow()?;"));
+    assert!(c.contains("Ok(this.find(name.as_str()?).map_or(null_mut(), Handle::into_raw))"));
+    assert!(c.contains("Tap::new(Arc::clone(&bus))"));
+    assert!(c.contains("Ok(i32::from(this.reads(&bus)))"));
+    assert!(c.contains(
+        "this.rewire(bus.as_deref().cloned(), old.as_deref().map(Arc::as_ref)).map(Arc::new).map_or(null_mut(), Handle::into_raw)"
+    ));
+    assert!(c.contains("Handle::<Arc<Bus>>::from_raw(this)?.take()?;"));
+    assert!(c.contains("Ok(i32::from(Arc::ptr_eq(&this, &other)))"));
+    assert!(c.contains("Ok(Handle::into_raw(Arc::downgrade(&this)))"));
+    assert!(c.contains("let this = Handle::<Weak<Bus>>::from_raw(this)?.borrow()?;"));
+    assert!(c.contains("pub unsafe extern \"C\" fn audio_bus_weak_close("));
+
+    let hl = hxn_gen::hl_adapter(&library, "audio_core");
+    assert!(hl.contains("Ok(manage(Arc::new(Bus::new())))"));
+    assert!(
+        hl.contains("define_prim!(hlp_bus_same, audio_bus_same, \"PXaudio_bus_Xaudio_bus__b\");")
+    );
+    assert!(hl.contains(
+        "define_prim!(hlp_bus_weak, audio_bus_weak, \"PXaudio_bus__Xaudio_bus_weak_\");"
+    ));
+    assert!(hl.contains(
+        "define_prim!(hlp_bus_weak_upgrade, audio_bus_weak_upgrade, \"PXaudio_bus_weak__Xaudio_bus_\");"
+    ));
+    assert!(hl.contains(
+        "define_prim!(hlp_bus_weak_close, audio_bus_weak_close, \"PXaudio_bus_weak__v\");"
+    ));
+
+    let header = hxn_gen::c_header(&library);
+    assert!(header.contains(
+        "hxn_status audio_bus_same(hxn_handle *self, hxn_handle *other, int32_t *out, hxn_buf *err);"
+    ));
+    assert!(header.contains(
+        "hxn_status audio_bus_weak_upgrade(hxn_handle *self, hxn_handle **out, hxn_buf *err);"
+    ));
+    let glue = hxn_gen::cpp_glue(&library);
+    assert!(glue.contains("inline bool bus_same(void *self, void *other)"));
+    assert!(glue.contains("inline void *bus_weak_upgrade(void *self)"));
+
+    for files in [hxn_gen::haxe_hl(&library), hxn_gen::haxe_cpp(&library)] {
+        let paths: Vec<_> = files.iter().map(|file| file.path.as_str()).collect();
+        assert_eq!(
+            paths,
+            ["Bus.hx", "Tap.hx", "BusWeak.hx", "HxnAudioMemory.hx"]
+        );
+        let (bus, tap, weak) = (&files[0].text, &files[1].text, &files[2].text);
+        assert!(bus.contains("public function same(other:Null<Bus>):Bool"));
+        assert!(bus.contains("public function weak():BusWeak"));
+        assert!(bus.contains("Gives up this object's share"));
+        assert!(!tap.contains("function same(") && !tap.contains("function weak("));
+        assert!(weak.contains("public function upgrade():Null<Bus>"));
+        assert!(weak.contains("public function close():Void"));
+    }
+
+    let manifest = hxn_gen::manifest(&library);
+    assert_eq!(manifest.matches("\"shared\": true").count(), 1);
+}
+
+#[test]
+fn a_shared_value_is_never_borrowed_exclusively() {
+    let cases = [
+        (
+            "pub fn set(&mut self) {}",
+            "reached from more than one place",
+        ),
+        ("pub fn end(self) {}", "reached from more than one place"),
+        (
+            "pub fn other(&self, thing: &mut Thing) {}",
+            "reached from more than one place",
+        ),
+        ("pub fn same(&self) {}", "has a `same` of hxn's"),
+        ("pub fn weak(&self) {}", "has a `weak` of hxn's"),
+        (
+            "pub fn take(&self, thing: &Arc<Thing>) {}",
+            "or `Arc<T>` to keep a share",
+        ),
+        (
+            "pub fn keep(&self, plain: Arc<Plain>) {}",
+            "needs `Plain` marked `#[hxn::interface(shared)]`",
+        ),
+        (
+            "pub fn give(&self) -> Arc<Plain> { todo!() }",
+            "needs `Plain` marked `#[hxn::interface(shared)]`",
+        ),
+        (
+            "pub fn boxed(self: Box<Self>) {}",
+            "a receiver is `&self`, `&mut self` or `self`",
+        ),
+    ];
+    for (method, expected) in cases {
+        let source = format!(
+            "#[hxn::interface(shared)]\npub struct Thing;\n\n#[hxn::interface]\npub struct Plain;\n\n#[hxn::methods]\nimpl Thing {{\n    {method}\n}}\n"
+        );
+        let error = parse("thing", &source).unwrap_err();
+        assert!(
+            error.message.contains(expected),
+            "{method}: {}",
+            error.message
+        );
+        assert_eq!(error.line, 9, "{method}");
+    }
+
+    let clash = "#[hxn::interface(shared)]\npub struct Thing;\n\n#[hxn::interface]\npub struct ThingWeak;\n";
+    let error = parse("thing", clash).unwrap_err();
+    assert_eq!(error.line, 5);
+    assert!(error.message.contains("is the weak reference to `Thing`"));
+}
+
 // The fixture's manifest is committed, as a library's would be, so a change
 // to what it exposes shows up in review. To update it after changing
 // tests/counter/core, run hxn-gen and copy its counter.hxn.json over.

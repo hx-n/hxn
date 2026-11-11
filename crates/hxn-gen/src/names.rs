@@ -56,6 +56,16 @@ pub fn abstract_name(library: &Library, interface: &str) -> String {
     format!("{}_{}", library.name, snake(interface))
 }
 
+/// What HashLink knows a weak reference to a shared interface's value as.
+pub fn weak_abstract(library: &Library, interface: &str) -> String {
+    format!("{}_weak", abstract_name(library, interface))
+}
+
+/// The Haxe class of a weak reference to a shared interface's value.
+pub fn weak_class(interface: &str) -> String {
+    format!("{interface}Weak")
+}
+
 /// What HashLink knows a cell the library handed over as.
 pub fn cell_abstract(library: &Library) -> String {
     format!("{}_atomic", library.name)

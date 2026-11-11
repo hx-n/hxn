@@ -61,6 +61,16 @@ pub fn c_header(library: &Library) -> String {
             "hxn_status {}(hxn_handle *self, hxn_buf *err);\n",
             export(library, &interface.name, "close")
         ));
+        if interface.shared {
+            let name = &interface.name;
+            out.push_str(&format!(
+                "/* Whether two handles hold one value, and a weak reference to it: a handle\n * of its own, upgraded to a new handle of the value or to null. */\nhxn_status {same}(hxn_handle *self, hxn_handle *other, int32_t *out, hxn_buf *err);\nhxn_status {weak}(hxn_handle *self, hxn_handle **out, hxn_buf *err);\nhxn_status {upgrade}(hxn_handle *self, hxn_handle **out, hxn_buf *err);\nhxn_status {close}(hxn_handle *self, hxn_buf *err);\n",
+                same = export(library, name, "same"),
+                weak = export(library, name, "weak"),
+                upgrade = export(library, name, "weak_upgrade"),
+                close = export(library, name, "weak_close"),
+            ));
+        }
     }
     if library.returns_cells() {
         out.push_str(&format!(
@@ -193,6 +203,26 @@ pub fn cpp_glue(library: &Library) -> String {
             local(&interface.name, "close"),
             export(library, &interface.name, "close")
         ));
+        if interface.shared {
+            let name = &interface.name;
+            out.push_str(&format!(
+                "\ninline bool {same}(void *self, void *other) {{\n\tint out = 0;\n\thxn_buf err = HXN_BUF_EMPTY;\n\thxn::check({same_export}((hxn_handle *)self, (hxn_handle *)other, &out, &err), err);\n\treturn out != 0;\n}}\n",
+                same = local(name, "same"),
+                same_export = export(library, name, "same"),
+            ));
+            for method in ["weak", "weak_upgrade"] {
+                out.push_str(&format!(
+                    "\ninline void *{}(void *self) {{\n\thxn_handle *out = 0;\n\thxn_buf err = HXN_BUF_EMPTY;\n\thxn::check({}((hxn_handle *)self, &out, &err), err);\n\treturn out;\n}}\n",
+                    local(name, method),
+                    export(library, name, method)
+                ));
+            }
+            out.push_str(&format!(
+                "\ninline void {}(void *self) {{\n\thxn_buf err = HXN_BUF_EMPTY;\n\thxn::check({}((hxn_handle *)self, &err), err);\n}}\n",
+                local(name, "weak_close"),
+                export(library, name, "weak_close")
+            ));
+        }
     }
     if library.returns_cells() {
         out.push_str(&format!(

@@ -237,6 +237,115 @@
       ]
     },
     {
+      "name": "Pot",
+      "docs": "A total several things add to. Shared: the library and any number of\nHaxe objects hold the same one, and it lives while any of them does.",
+      "shared": true,
+      "methods": [
+        {
+          "name": "new",
+          "kind": "constructor",
+          "params": [{ "name": "start", "type": "i32" }],
+          "returns": "Pot",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "add",
+          "docs": "Adds to the total and returns it.",
+          "kind": "method",
+          "params": [{ "name": "amount", "type": "i32" }],
+          "returns": "i32",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "total",
+          "kind": "method",
+          "params": [],
+          "returns": "i32",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "split",
+          "docs": "A pot of its own starting at this one's total, made already shared.",
+          "kind": "method",
+          "params": [],
+          "returns": "Pot",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "live",
+          "docs": "How many pots exist, however many hold each.",
+          "kind": "static",
+          "params": [],
+          "returns": "i32",
+          "fallible": false,
+          "blocking": false
+        }
+      ]
+    },
+    {
+      "name": "Player",
+      "docs": "Something that pays into a pot it keeps a share of.",
+      "methods": [
+        {
+          "name": "new",
+          "kind": "constructor",
+          "params": [{ "name": "pot", "type": "Pot" }],
+          "returns": "Player",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "pay",
+          "docs": "Adds to the pot and returns its total.",
+          "kind": "method",
+          "params": [{ "name": "amount", "type": "i32" }],
+          "returns": "i32",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "pot",
+          "docs": "The pot this pays into: the same one each time.",
+          "kind": "method",
+          "params": [],
+          "returns": "Pot",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "pays_into",
+          "docs": "Whether this pays into `pot`.",
+          "kind": "method",
+          "params": [{ "name": "pot", "type": "Pot" }],
+          "returns": "bool",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "move_to",
+          "docs": "Moves to another pot, or stays for none. Returns the one left behind.",
+          "kind": "mutating",
+          "params": [{ "name": "pot", "type": "Pot?" }],
+          "returns": "Pot?",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "fuller",
+          "docs": "The fuller of this player's pot and another, if there is another.",
+          "kind": "method",
+          "params": [{ "name": "other", "type": "Pot?" }],
+          "returns": "Pot?",
+          "fallible": false,
+          "blocking": false
+        }
+      ]
+    },
+    {
       "name": "Blob",
       "docs": "Bytes the collector cannot see, which it is told of: to the host, one of\nthese is a few words whatever its size here.",
       "weighed": true,

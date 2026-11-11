@@ -25,22 +25,47 @@ fn is_marker(attribute: &Attribute, name: &str) -> bool {
     segments == ["hxn", name]
 }
 
-// What `#[hxn::interface(...)]` says of a struct. `weighed` is the only note.
-fn is_weighed(attributes: &[Attribute]) -> Result<bool, Error> {
-    let mut weighed = false;
+/// What `#[hxn::interface(...)]` says of a struct.
+#[derive(Default)]
+struct Notes {
+    shared: bool,
+    weighed: bool,
+}
+
+fn notes(attributes: &[Attribute]) -> Result<Notes, Error> {
+    let mut notes = Notes::default();
     for attribute in attributes.iter().filter(|a| is_marker(a, "interface")) {
         match &attribute.meta {
             Meta::Path(_) => {}
-            Meta::List(list) if list.tokens.to_string() == "weighed" => weighed = true,
-            Meta::List(list) => {
-                return error(attribute.span(), format!("unknown note `{}`", list.tokens));
+            Meta::List(_) => {
+                let mut unknown = None;
+                let parsed = attribute.parse_nested_meta(|note| {
+                    if note.path.is_ident("shared") {
+                        notes.shared = true;
+                    } else if note.path.is_ident("weighed") {
+                        notes.weighed = true;
+                    } else {
+                        unknown = note.path.get_ident().map(ToString::to_string);
+                        return Err(note.error("unknown note"));
+                    }
+                    Ok(())
+                });
+                if parsed.is_err() {
+                    return error(
+                        attribute.span(),
+                        match unknown {
+                            Some(note) => format!("unknown note `{note}`"),
+                            None => String::from("expected `#[hxn::interface(...)]`"),
+                        },
+                    );
+                }
             }
             Meta::NameValue(_) => {
                 return error(attribute.span(), "expected `#[hxn::interface(...)]`");
             }
         }
     }
-    Ok(weighed)
+    Ok(notes)
 }
 
 fn docs(attributes: &[Attribute]) -> Vec<String> {
@@ -124,6 +149,8 @@ fn wrapped<'a>(ty: &'a syn::Type, wrapper: &str) -> Option<&'a syn::Type> {
 /// The interfaces a library marked, and the one whose functions are being read.
 struct Scope<'a> {
     interfaces: &'a [String],
+    // Those of them marked `shared`.
+    shared: &'a [String],
     own: &'a str,
 }
 
@@ -149,11 +176,21 @@ impl Scope<'_> {
         ))
     }
 
+    // `Arc<T>` of an interface gives `T`.
+    fn pointer(&self, ty: &syn::Type) -> Option<String> {
+        self.interface(wrapped(ty, "Arc")?)
+    }
+
+    fn is_shared(&self, interface: &str) -> bool {
+        self.shared.iter().any(|shared| shared == interface)
+    }
+
     fn param(&self, name: String, ty: &syn::Type) -> Result<Param, Error> {
         let plain = |ty| Param {
             name: name.clone(),
             ty,
             exclusive: false,
+            kept: false,
         };
         if let syn::Type::Reference(reference) = ty
             && reference.mutability.is_none()
@@ -176,11 +213,17 @@ impl Scope<'_> {
                 "a cell is lent for the call: take `&AtomicI32` or `&AtomicFlag`",
             );
         }
-        let (borrowed, nullable) = match optional(ty) {
-            Some(inner) => (self.borrowed(inner), true),
-            None => (self.borrowed(ty), false),
+        let (inner, nullable) = match optional(ty) {
+            Some(inner) => (inner, true),
+            None => (ty, false),
         };
-        if let Some((interface, exclusive)) = borrowed {
+        if let Some((interface, exclusive)) = self.borrowed(inner) {
+            if exclusive && self.is_shared(&interface) {
+                return error(
+                    ty.span(),
+                    "a shared interface is reached from more than one place: take `&T`, and change it through a cell or a lock inside",
+                );
+            }
             return Ok(Param {
                 name,
                 ty: Type::Handle {
@@ -188,7 +231,35 @@ impl Scope<'_> {
                     nullable,
                 },
                 exclusive,
+                kept: false,
             });
+        }
+        if let Some(interface) = self.pointer(inner) {
+            if !self.is_shared(&interface) {
+                return error(
+                    ty.span(),
+                    format!(
+                        "`Arc<{interface}>` needs `{interface}` marked `#[hxn::interface(shared)]`"
+                    ),
+                );
+            }
+            return Ok(Param {
+                name,
+                ty: Type::Handle {
+                    interface,
+                    nullable,
+                },
+                exclusive: false,
+                kept: true,
+            });
+        }
+        if let syn::Type::Reference(reference) = inner
+            && self.pointer(&reference.elem).is_some()
+        {
+            return error(
+                ty.span(),
+                "a shared interface is taken as `&T` to use it, or `Arc<T>` to keep a share",
+            );
         }
         if self.interface(ty).is_some() {
             return error(
@@ -207,21 +278,42 @@ impl Scope<'_> {
         }
     }
 
-    fn result(&self, ty: &syn::Type) -> Result<Type, Error> {
+    // The type, and whether it is a shared interface already in its `Arc`.
+    fn result(&self, ty: &syn::Type) -> Result<(Type, bool), Error> {
         if let syn::Type::Tuple(tuple) = ty
             && tuple.elems.is_empty()
         {
-            return Ok(Type::Void);
+            return Ok((Type::Void, false));
         }
         let (inner, nullable) = match optional(ty) {
             Some(inner) => (inner, true),
             None => (ty, false),
         };
         if let Some(interface) = self.interface(inner) {
-            return Ok(Type::Handle {
-                interface,
-                nullable,
-            });
+            return Ok((
+                Type::Handle {
+                    interface,
+                    nullable,
+                },
+                false,
+            ));
+        }
+        if let Some(interface) = self.pointer(inner) {
+            if !self.is_shared(&interface) {
+                return error(
+                    ty.span(),
+                    format!(
+                        "`Arc<{interface}>` needs `{interface}` marked `#[hxn::interface(shared)]`"
+                    ),
+                );
+            }
+            return Ok((
+                Type::Handle {
+                    interface,
+                    nullable,
+                },
+                true,
+            ));
         }
         if self.borrowed(inner).is_some() {
             return error(
@@ -230,7 +322,7 @@ impl Scope<'_> {
             );
         }
         if let Some(cell) = wrapped(ty, "Arc").and_then(cell) {
-            return Ok(cell);
+            return Ok((cell, false));
         }
         if cell(ty).is_some() {
             return error(
@@ -238,22 +330,25 @@ impl Scope<'_> {
                 "a cell the library keeps is returned as `Arc<AtomicI32>` or `Arc<AtomicFlag>`",
             );
         }
-        match path_name(ty).as_deref() {
-            Some("bool") => Ok(Type::Bool),
-            Some("i32") => Ok(Type::I32),
-            Some("f64") => Ok(Type::F64),
-            Some("String") => Ok(Type::Str),
-            _ => error(
-                ty.span(),
-                "a result is one of (), bool, i32, f64, String, Arc<AtomicI32>, Arc<AtomicFlag>, an interface or an Option of one, or a Result of these",
-            ),
-        }
+        let plain = match path_name(ty).as_deref() {
+            Some("bool") => Type::Bool,
+            Some("i32") => Type::I32,
+            Some("f64") => Type::F64,
+            Some("String") => Type::Str,
+            _ => {
+                return error(
+                    ty.span(),
+                    "a result is one of (), bool, i32, f64, String, Arc<AtomicI32>, Arc<AtomicFlag>, an interface or an Option of one, or a Result of these",
+                );
+            }
+        };
+        Ok((plain, false))
     }
 
     // `Result<T, E>` gives `T` and says the function can fail.
-    fn returns(&self, output: &ReturnType) -> Result<(Type, bool), Error> {
+    fn returns(&self, output: &ReturnType) -> Result<((Type, bool), bool), Error> {
         let ReturnType::Type(_, ty) = output else {
-            return Ok((Type::Void, false));
+            return Ok(((Type::Void, false), false));
         };
         if let syn::Type::Path(path) = &**ty
             && let Some(segment) = path.path.segments.last()
@@ -284,6 +379,9 @@ impl Scope<'_> {
         for input in &signature.inputs {
             match input {
                 FnArg::Receiver(this) => {
+                    if this.colon_token.is_some() {
+                        return error(this.span(), "a receiver is `&self`, `&mut self` or `self`");
+                    }
                     receiver = match (&this.reference, &this.mutability) {
                         (Some(_), None) => Receiver::Shared,
                         (Some(_), Some(_)) => Receiver::Exclusive,
@@ -309,7 +407,20 @@ impl Scope<'_> {
             }
         }
 
-        let (returns, fallible) = self.returns(&signature.output)?;
+        let shared = self.is_shared(self.own);
+        if shared && matches!(receiver, Receiver::Exclusive | Receiver::Owned) {
+            return error(
+                signature.ident.span(),
+                "a shared interface is reached from more than one place: its functions take `&self`, and change it through a cell or a lock inside",
+            );
+        }
+        if shared && ["same", "weak"].contains(&name.as_str()) {
+            return error(
+                signature.ident.span(),
+                format!("every shared interface has a `{name}` of hxn's"),
+            );
+        }
+        let ((returns, returns_arc), fallible) = self.returns(&signature.output)?;
         let own = Type::Handle {
             interface: self.own.to_owned(),
             nullable: false,
@@ -330,6 +441,7 @@ impl Scope<'_> {
             fallible,
             blocking: is_blocking(&function.attrs)?,
             constructor,
+            returns_arc,
         })
     }
 }
@@ -362,14 +474,38 @@ pub fn parse(name: &str, source: &str) -> Result<Library, Error> {
                 format!("`{name}` is a name the adapters use; call the interface something else"),
             );
         }
+        let notes = notes(&item.attrs)?;
         interfaces.push(Interface {
             name,
             docs: docs(&item.attrs),
-            weighed: is_weighed(&item.attrs)?,
+            shared: notes.shared,
+            weighed: notes.weighed,
             methods: Vec::new(),
         });
     }
     let names: Vec<String> = interfaces.iter().map(|i| i.name.clone()).collect();
+    let shared: Vec<String> = interfaces
+        .iter()
+        .filter(|i| i.shared)
+        .map(|i| i.name.clone())
+        .collect();
+    // A shared interface's weak reference is a class of that name.
+    for name in &shared {
+        let weak = format!("{name}Weak");
+        for item in &file.items {
+            if let Item::Struct(item) = item
+                && item.ident == weak
+                && names.contains(&weak)
+            {
+                return error(
+                    item.ident.span(),
+                    format!(
+                        "`{weak}` is the weak reference to `{name}`; call the interface something else"
+                    ),
+                );
+            }
+        }
+    }
 
     for item in &file.items {
         let Item::Impl(block) = item else { continue };
@@ -390,6 +526,7 @@ pub fn parse(name: &str, source: &str) -> Result<Library, Error> {
         };
         let scope = Scope {
             interfaces: &names,
+            shared: &shared,
             own: &target,
         };
         for item in &block.items {

@@ -73,7 +73,10 @@ fn interface(interface: &Interface) -> String {
     let mut out = String::from("    {\n");
     out.push_str(&format!("      \"name\": {},\n", quoted(&interface.name)));
     out.push_str(&docs(&interface.docs, "      "));
-    // Said only when it is.
+    // Each said only when it is.
+    if interface.shared {
+        out.push_str("      \"shared\": true,\n");
+    }
     if interface.weighed {
         out.push_str("      \"weighed\": true,\n");
     }

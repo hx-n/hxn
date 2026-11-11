@@ -244,6 +244,88 @@ impl Default for Tally {
     }
 }
 
+static POTS: AtomicI32 = AtomicI32::new(0);
+
+/// A total several things add to. Shared: the library and any number of
+/// Haxe objects hold the same one, and it lives while any of them does.
+#[hxn::interface(shared)]
+pub struct Pot {
+    total: AtomicI32,
+}
+
+#[hxn::methods]
+impl Pot {
+    pub fn new(start: i32) -> Self {
+        POTS.fetch_add(1, Ordering::SeqCst);
+        Self {
+            total: AtomicI32::new(start),
+        }
+    }
+
+    /// Adds to the total and returns it.
+    pub fn add(&self, amount: i32) -> i32 {
+        self.total.fetch_add(amount, Ordering::SeqCst) + amount
+    }
+
+    pub fn total(&self) -> i32 {
+        self.total.load(Ordering::SeqCst)
+    }
+
+    /// A pot of its own starting at this one's total, made already shared.
+    pub fn split(&self) -> Arc<Pot> {
+        Arc::new(Pot::new(self.total()))
+    }
+
+    /// How many pots exist, however many hold each.
+    pub fn live() -> i32 {
+        POTS.load(Ordering::SeqCst)
+    }
+}
+
+impl Drop for Pot {
+    fn drop(&mut self) {
+        POTS.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
+/// Something that pays into a pot it keeps a share of.
+#[hxn::interface]
+pub struct Player {
+    pot: Arc<Pot>,
+}
+
+#[hxn::methods]
+impl Player {
+    pub fn new(pot: Arc<Pot>) -> Self {
+        Self { pot }
+    }
+
+    /// Adds to the pot and returns its total.
+    pub fn pay(&self, amount: i32) -> i32 {
+        self.pot.add(amount)
+    }
+
+    /// The pot this pays into: the same one each time.
+    pub fn pot(&self) -> Arc<Pot> {
+        Arc::clone(&self.pot)
+    }
+
+    /// Whether this pays into `pot`.
+    pub fn pays_into(&self, pot: &Pot) -> bool {
+        std::ptr::eq(Arc::as_ptr(&self.pot), pot)
+    }
+
+    /// Moves to another pot, or stays for none. Returns the one left behind.
+    pub fn move_to(&mut self, pot: Option<Arc<Pot>>) -> Option<Arc<Pot>> {
+        pot.map(|pot| std::mem::replace(&mut self.pot, pot))
+    }
+
+    /// The fuller of this player's pot and another, if there is another.
+    pub fn fuller(&self, other: Option<&Pot>) -> Option<Pot> {
+        other.map(|other| Pot::new(self.pot.total().max(other.total())))
+    }
+}
+
 static BLOBS: AtomicI32 = AtomicI32::new(0);
 
 /// Bytes the collector cannot see, which it is told of: to the host, one of

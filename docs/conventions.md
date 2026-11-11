@@ -42,6 +42,8 @@ in [design.md](design.md); this is the checklist.
 | exported function | `<library>_<interface>_<method>`, the interface in snake case |
 | HashLink primitive resolver | `hlp_<interface>_<method>` |
 | HashLink abstract | `<library>_<interface>` |
+| a shared interface's own functions | `<library>_<interface>_same`, `_weak`, `_weak_upgrade`, `_weak_close` |
+| weak reference to a shared interface | Haxe class `<Interface>Weak`, HashLink abstract `<library>_<interface>_weak` |
 | release for any handle | `<library>_release` |
 | bytes a library's values hold | `<library>_memory_held` |
 | whether it asked for a collection | `<library>_memory_wanted` |
@@ -51,7 +53,8 @@ in [design.md](design.md); this is the checklist.
 | Haxe class a binding needs beside the library's own | `Hxn<Library><Role>`: `HxnCounterMemory` |
 
 An interface is not named `Atomic` or `Memory`: the adapters name their own
-exports after those.
+exports after those. Nor is one named `<Interface>Weak` beside a shared
+`<Interface>`, and a shared interface has no function named `same` or `weak`.
 
 A C header never has the name of a Haxe class differing only by case. hxcpp
 generates `Counter.h` for a class `Counter`, and on a case-insensitive
@@ -65,6 +68,11 @@ filesystem `#include "counter.h"` would then find the generated one.
 - Another interface is taken as `&T` or `&mut T` and returned as `T`, with
   `Option` for one that may be absent. It is never taken by value and never
   returned by reference.
+- A value held from more than one place is an interface marked
+  `#[hxn::interface(shared)]`. Its functions take `&self`, never `&mut self`
+  or `self`, and it is `Send + Sync`. It is taken as `&T` to use it and as
+  `Arc<T>` to keep a share, never as `&Arc<T>` or `&mut T`, and returned as
+  `T` or `Arc<T>`. `Arc` of an interface not marked shared does not cross.
 - A cell shared with Haxe is an `AtomicI32` or an `hxn::AtomicFlag`, never
   an `AtomicBool`. It is taken as a reference, lent for the call, and
   returned as an `Arc`, kept by the library.
@@ -105,6 +113,8 @@ filesystem `#include "counter.h"` would then find the generated one.
   that it exists whichever of them a program uses. A weighed class checks it
   once the new object owns its value, never before and never in a finalizer.
 - **A binding collects through `hxn.Gc`**, not through a runtime's own call.
+- **Two objects are compared with `same`**, never with `==`, when their
+  interface is shared.
 - **A returned value gets a new object of its interface's class**, which
   becomes its owner only once the library has handed the value over.
 - **A cell the library returns has no `close()`.** The object holding it
