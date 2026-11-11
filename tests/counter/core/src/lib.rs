@@ -157,7 +157,45 @@ impl Counter {
     }
 }
 
+// Functions that are lent one of the host's. Each fails with whatever the
+// function it was lent failed with.
+#[hxn::methods]
 impl Counter {
+    /// Calls `f` with each of 1 to `count` and half of it, and stops at the
+    /// first failure.
+    pub fn each<E>(count: i32, mut f: impl FnMut(i32, f64) -> Result<(), E>) -> Result<(), E> {
+        for n in 1..=count {
+            f(n, f64::from(n) / 2.0)?;
+        }
+        Ok(())
+    }
+
+    /// Whether `f` holds for the value.
+    pub fn test<E>(&self, f: impl Fn(i32) -> Result<bool, E>) -> Result<bool, E> {
+        f(self.value)
+    }
+
+    /// `f` of half the value, and of whether the value is odd.
+    pub fn scaled_by<E>(&self, f: impl Fn(f64, bool) -> Result<f64, E>) -> Result<f64, E> {
+        f(f64::from(self.value) / 2.0, self.value % 2 != 0)
+    }
+
+    /// What `f` gives.
+    pub fn ask<E>(f: impl FnOnce() -> Result<i32, E>) -> Result<i32, E> {
+        f()
+    }
+
+    /// A counter starting at what `f` gives.
+    pub fn from_fn<E>(f: impl FnOnce() -> Result<i32, E>) -> Result<Counter, E> {
+        Ok(Counter::new(f()?))
+    }
+
+    /// What `f` gives, or -1 if it fails: a library that makes nothing of
+    /// the failure.
+    pub fn attempt<E>(f: impl FnOnce() -> Result<i32, E>) -> i32 {
+        f().unwrap_or(-1)
+    }
+
     /// Replaces the value with `f` of it, `times` over, and stops at the
     /// first failure with the value as the last success left it.
     pub fn apply<E>(

@@ -2,6 +2,7 @@
 //! the C++ glue hxcpp calls them through.
 
 use crate::later;
+use crate::lent;
 use crate::model::{Interface, Library, Method, Type};
 use crate::names::{cell_export, export, has_receiver, held_export, local, release, wanted_export};
 
@@ -23,6 +24,8 @@ fn declaration(library: &Library, interface: &Interface, method: &Method) -> Str
             Type::Str | Type::Bytes => "hxn_slice ",
             Type::Handle { .. } => "hxn_handle *",
             Type::AtomicInt | Type::AtomicBool => "int32_t *",
+            // Lent for the call: its `drop` is null.
+            Type::Lent { .. } => "hxn_callback ",
             Type::Void | Type::Future(_) | Type::Stream(_) | Type::Signal(_) => {
                 unreachable!("not a parameter type")
             }
@@ -34,6 +37,7 @@ fn declaration(library: &Library, interface: &Interface, method: &Method) -> Str
         Type::Bool | Type::I32 => params.push(String::from("int32_t *out")),
         Type::F64 => params.push(String::from("double *out")),
         Type::Str | Type::Bytes => params.push(String::from("hxn_buf *out")),
+        Type::Lent { .. } => unreachable!("not a result type"),
         Type::Handle { .. }
         | Type::AtomicInt
         | Type::AtomicBool
@@ -139,6 +143,18 @@ fn glue(library: &Library, interface: &Interface, method: &Method) -> String {
                 params.push(format!("int *{name}"));
                 arguments.push(name.clone());
             }
+            Type::Lent {
+                params: taken,
+                returns,
+            } => {
+                params.push(format!("Dynamic {name}"));
+                // On this stack for the call, so the library drops nothing.
+                locals.push(format!(
+                    "hxn_callback {name}_lent = {{ (void *){}, {name}.mPtr, 0 }};",
+                    lent::trampoline(taken, returns)
+                ));
+                arguments.push(format!("{name}_lent"));
+            }
             Type::Void | Type::Future(_) | Type::Stream(_) | Type::Signal(_) => {
                 unreachable!("not a parameter type")
             }
@@ -154,6 +170,7 @@ fn glue(library: &Library, interface: &Interface, method: &Method) -> String {
             Some("hxn_buf out = HXN_BUF_EMPTY;"),
             Some("hxn::take_string(out)"),
         ),
+        Type::Lent { .. } => unreachable!("not a result type"),
         Type::Bytes => (
             "Array<unsigned char>",
             Some("hxn_buf out = HXN_BUF_EMPTY;"),
@@ -210,6 +227,7 @@ pub fn cpp_glue(library: &Library) -> String {
         "#ifndef {guard}\n#define {guard}\n\n#include \"{}_abi.h\"\n\nnamespace {}_glue {{\n",
         library.name, library.name
     ));
+    out.push_str(&lent::cpp_trampolines(library));
     for interface in &library.interfaces {
         for method in &interface.methods {
             out.push('\n');

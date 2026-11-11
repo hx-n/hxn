@@ -2,6 +2,7 @@
 //! HashLink primitives. Each is the text of a file a thin crate includes.
 
 use crate::later;
+use crate::lent;
 use crate::model::{Interface, Library, Method, Param, Receiver, Type};
 use crate::names::{
     abstract_name, cell_abstract, cell_export, export, has_receiver, held_export, local, release,
@@ -128,6 +129,16 @@ fn lent(param: &Param) -> (String, String) {
     )
 }
 
+// A function generic in its callback's error fails here with the adapter's
+// own, which makes the `?` on its result a conversion to the same type.
+fn lent_allow(method: &Method) -> &'static str {
+    if method.params.iter().any(|p| lent::of(&p.ty).is_some()) {
+        "#[allow(clippy::needless_question_mark)]\n"
+    } else {
+        ""
+    }
+}
+
 fn c_method(library: &Library, interface: &Interface, method: &Method) -> String {
     let mut params = Vec::new();
     let mut body = Vec::new();
@@ -144,6 +155,11 @@ fn c_method(library: &Library, interface: &Interface, method: &Method) -> String
     let mut arguments = Vec::new();
     for param in &method.params {
         let name = &param.name;
+        if let Some((taken, given)) = lent::of(&param.ty) {
+            params.push(format!("{name}: Callback<{}>", lent::alias(taken, given)));
+            arguments.push(lent::closure(name, taken, given));
+            continue;
+        }
         let (ty, argument) = match &param.ty {
             // An int at the boundary: C has no one size for a bool.
             Type::Bool => ("i32", format!("{name} != 0")),
@@ -168,7 +184,11 @@ fn c_method(library: &Library, interface: &Interface, method: &Method) -> String
                 body.push(statement);
                 ("*mut i32", argument)
             }
-            Type::Void | Type::Future(_) | Type::Stream(_) | Type::Signal(_) => {
+            Type::Void
+            | Type::Future(_)
+            | Type::Stream(_)
+            | Type::Signal(_)
+            | Type::Lent { .. } => {
                 unreachable!("not a parameter type")
             }
         };
@@ -182,6 +202,7 @@ fn c_method(library: &Library, interface: &Interface, method: &Method) -> String
         Type::I32 => (Some("i32"), format!("Ok({call})")),
         Type::F64 => (Some("f64"), format!("Ok({call})")),
         Type::Str | Type::Bytes => (Some("Buf"), format!("Ok(Buf::from({call}))")),
+        Type::Lent { .. } => unreachable!("not a result type"),
         Type::Handle { .. } => (
             Some("RawHandle"),
             handed(library, method, &call, "Handle::into_raw"),
@@ -208,7 +229,8 @@ fn c_method(library: &Library, interface: &Interface, method: &Method) -> String
     params.push(String::from("err: *mut Buf"));
     body.push(result);
     format!(
-        "#[unsafe(no_mangle)]\npub unsafe extern \"C\" fn {name}({params}) -> Status {{\n    unsafe {{\n        guard({out_argument}, err, || {{\n            {body}\n        }})\n    }}\n}}\n",
+        "{allow}#[unsafe(no_mangle)]\npub unsafe extern \"C\" fn {name}({params}) -> Status {{\n    unsafe {{\n        guard({out_argument}, err, || {{\n            {body}\n        }})\n    }}\n}}\n",
+        allow = lent_allow(method),
         name = export(library, &interface.name, &method.name),
         params = params.join(", "),
         body = body.join("\n            "),
@@ -294,14 +316,16 @@ fn imports(library: &Library, core: &str) -> String {
 /// are found under, such as `counter_core`.
 pub fn c_adapter(library: &Library, core: &str) -> String {
     let mut out = String::from(HEADER);
-    out.push_str("\n#[allow(unused_imports)]\nuse std::ptr::null_mut;\n");
+    out.push_str("\n#[allow(unused_imports)]\nuse std::ffi::c_void;\n");
+    out.push_str("#[allow(unused_imports)]\nuse std::ptr::null_mut;\n");
     out.push_str("#[allow(unused_imports)]\nuse std::sync::{Arc, Weak};\n");
     out.push_str("#[allow(unused_imports)]\nuse std::sync::atomic::AtomicI32;\n\n");
     out.push_str(
-        "#[allow(unused_imports)]\nuse hxn_abi::{AtomicFlag, Buf, Fault, Handle, RawHandle, Slice, Status, guard, memory, release};\n",
+        "#[allow(unused_imports)]\nuse hxn_abi::{AtomicFlag, Buf, Callback, Fault, Handle, RawHandle, Slice, Status, guard, memory, release};\n",
     );
     out.push_str(&imports(library, core));
     out.push_str(later::imports(library));
+    out.push_str(&lent::aliases(library));
     for interface in &library.interfaces {
         for method in &interface.methods {
             out.push('\n');
@@ -344,6 +368,7 @@ fn hl_letter(library: &Library, ty: &Type) -> String {
         // A result: UTF-16 bytes for `String.fromUCS2`.
         // Bytes are the VM's own, with their length written beside them.
         Type::Str | Type::Bytes => String::from("B"),
+        Type::Lent { .. } => unreachable!("not a result type"),
         Type::Handle { interface, .. } => format!("X{}_", abstract_name(library, interface)),
         Type::AtomicInt | Type::AtomicBool => format!("X{}_", cell_abstract(library)),
         Type::Future(_) | Type::Stream(_) | Type::Signal(_) => {
@@ -369,6 +394,21 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
     let mut arguments = Vec::new();
     for param in &method.params {
         let name = &param.name;
+        if let Some((taken, given)) = lent::of(&param.ty) {
+            params.push(format!("{name}: *mut vclosure"));
+            signature.push_str(&lent::hl_signature(taken, given));
+            // Lent: the VM keeps it alive for the call, so nothing is dropped.
+            body.push(format!(
+                "if {name}.is_null() {{\n                return Err(Fault::Null.into());\n            }}"
+            ));
+            body.push(format!(
+                "let {name} = Callback::from_raw({} as {}, {name}.cast(), None);",
+                lent::trampoline(taken, given),
+                lent::alias(taken, given)
+            ));
+            arguments.push(lent::closure(name, taken, given));
+            continue;
+        }
         match &param.ty {
             Type::Bool => {
                 params.push(format!("{name}: bool"));
@@ -423,7 +463,11 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
                 body.push(statement);
                 arguments.push(argument);
             }
-            Type::Void | Type::Future(_) | Type::Stream(_) | Type::Signal(_) => {
+            Type::Void
+            | Type::Future(_)
+            | Type::Stream(_)
+            | Type::Signal(_)
+            | Type::Lent { .. } => {
                 unreachable!("not a parameter type")
             }
         }
@@ -445,6 +489,7 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
         Type::I32 => ("i32", format!("Ok({call})")),
         Type::F64 => ("f64", format!("Ok({call})")),
         Type::Str => ("*mut vbyte", format!("Ok(utf16(&{call}))")),
+        Type::Lent { .. } => unreachable!("not a result type"),
         Type::Handle { .. } => ("*mut Managed", handed(library, method, &call, "manage")),
         Type::Future(_) | Type::Stream(_) | Type::Signal(_) => {
             let (kind, _) = later::of(&method.returns).expect("a result over time");
@@ -470,7 +515,8 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
         format!(" -> {ty}")
     };
     format!(
-        "#[unsafe(no_mangle)]\npub unsafe extern \"C\" fn {name}({params}){returns} {{\n    unsafe {{\n        prim(|| {{\n            {body}\n        }})\n    }}\n}}\ndefine_prim!(hlp_{local}, {name}, \"P{signature}_{ret}\");\n",
+        "{allow}#[unsafe(no_mangle)]\npub unsafe extern \"C\" fn {name}({params}){returns} {{\n    unsafe {{\n        prim(|| {{\n            {body}\n        }})\n    }}\n}}\ndefine_prim!(hlp_{local}, {name}, \"P{signature}_{ret}\");\n",
+        allow = lent_allow(method),
         params = params.join(", "),
         body = body.join("\n            "),
         local = local(&interface.name, &method.name),
@@ -481,15 +527,20 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
 /// The adapter of HashLink primitives, for an `.hdll` or a wasm side module.
 pub fn hl_adapter(library: &Library, core: &str) -> String {
     let mut out = String::from(HEADER);
-    out.push_str("\n#[allow(unused_imports)]\nuse std::ptr::null_mut;\n\n");
+    out.push_str("\n#[allow(unused_imports)]\nuse std::ffi::c_void;\n");
+    out.push_str("#[allow(unused_imports)]\nuse std::ptr::null_mut;\n\n");
     out.push_str("#[allow(unused_imports)]\nuse std::sync::{Arc, Weak};\n");
     out.push_str("#[allow(unused_imports)]\nuse std::sync::atomic::AtomicI32;\n\n");
-    out.push_str("#[allow(unused_imports)]\nuse hxn_abi::{AtomicFlag, Fault, memory};\n");
     out.push_str(
-        "#[allow(unused_imports)]\nuse hxn_hl::{Managed, blocking, bytes, define_prim, handle, manage, prim, slice, string, utf16, vbyte, vstring};\n",
+        "#[allow(unused_imports)]\nuse hxn_abi::{AtomicFlag, Callback, Fault, Status, memory};\n",
+    );
+    out.push_str(
+        "#[allow(unused_imports)]\nuse hxn_hl::{Managed, blocking, box_bool, box_f64, box_i32, bytes, call, define_prim, handle, manage, prim, slice, string, unbox_bool, unbox_f64, unbox_i32, utf16, vbyte, vclosure, vdynamic, vstring};\n",
     );
     out.push_str(&imports(library, core));
     out.push_str(later::imports(library));
+    out.push_str(&lent::aliases(library));
+    out.push_str(&lent::hl_trampolines(library));
     for interface in &library.interfaces {
         let own = abstract_name(library, &interface.name);
         for method in &interface.methods {

@@ -159,6 +159,42 @@ class Generated {
 		check("every pot was released", Pot.live() == 0);
 	}
 
+	// Functions of the program's, lent to a call.
+	static function callbacks() {
+		var counter = new Counter(3);
+		check("a function is called by the library", counter.apply(4, value -> value * 2) == 48);
+		var seen = [];
+		Counter.each(3, (n, half) -> seen.push('$n:$half'));
+		check('one that returns nothing, with two arguments: $seen', seen.join(" ") == "1:0.5 2:1 3:1.5");
+		check("one that returns a bool", counter.test(value -> value == 48) && !counter.test(value -> value < 0));
+		check("floats and bools going in", counter.scaledBy((half, odd) -> odd ? -1.0 : half * 3) == 72);
+		check("one that takes nothing", Counter.ask(() -> 7) == 7);
+		var made = Counter.fromFn(() -> 9);
+		check("a call that is lent a function and returns an object", made.add(0) == 9);
+		made.close();
+
+		var thrown = new haxe.Exception("from the function");
+		var caught:Null<haxe.Exception> = null;
+		try {
+			counter.apply(5, value -> {
+				if (value >= 192)
+					throw thrown;
+				return value * 2;
+			});
+		} catch (error:haxe.Exception) {
+			caught = error;
+		}
+		check("what a lent function throws reaches the caller as it was", caught == thrown);
+		check("and the library stopped there", counter.add(0) == 192);
+		throws("even when the library makes nothing of the failure", () -> Counter.attempt(() -> throw new haxe.Exception("ignored by the library")),
+			"ignored by the library");
+		throws("one that returns nothing can throw too", () -> Counter.each(3, (n, _) -> if (n == 2) throw new haxe.Exception("at two")), "at two");
+		throws("an object is in use while its function runs", () -> counter.apply(1, value -> counter.add(1)), "in use");
+		check("and usable afterwards", counter.add(0) == 192);
+		check("nothing is left over for the next call", Counter.ask(() -> 1) == 1);
+		counter.close();
+	}
+
 	// Results the library gives later: waited for here, and delivered.
 	static function later() {
 		check("a future is waited for", Later.square(7, 20).await() == 49);
@@ -315,6 +351,7 @@ class Generated {
 		handles();
 		atomics();
 		shared();
+		callbacks();
 		later();
 		var held = memory();
 

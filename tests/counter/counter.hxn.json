@@ -171,6 +171,69 @@
           "returns": "void",
           "fallible": false,
           "blocking": true
+        },
+        {
+          "name": "each",
+          "docs": "Calls `f` with each of 1 to `count` and half of it, and stops at the\nfirst failure.",
+          "kind": "static",
+          "params": [{ "name": "count", "type": "i32" }, { "name": "f", "type": "fn(i32, f64) -> void" }],
+          "returns": "void",
+          "fallible": true,
+          "blocking": false
+        },
+        {
+          "name": "test",
+          "docs": "Whether `f` holds for the value.",
+          "kind": "method",
+          "params": [{ "name": "f", "type": "fn(i32) -> bool" }],
+          "returns": "bool",
+          "fallible": true,
+          "blocking": false
+        },
+        {
+          "name": "scaled_by",
+          "docs": "`f` of half the value, and of whether the value is odd.",
+          "kind": "method",
+          "params": [{ "name": "f", "type": "fn(f64, bool) -> f64" }],
+          "returns": "f64",
+          "fallible": true,
+          "blocking": false
+        },
+        {
+          "name": "ask",
+          "docs": "What `f` gives.",
+          "kind": "static",
+          "params": [{ "name": "f", "type": "fn() -> i32" }],
+          "returns": "i32",
+          "fallible": true,
+          "blocking": false
+        },
+        {
+          "name": "from_fn",
+          "docs": "A counter starting at what `f` gives.",
+          "kind": "static",
+          "params": [{ "name": "f", "type": "fn() -> i32" }],
+          "returns": "Counter",
+          "fallible": true,
+          "blocking": false
+        },
+        {
+          "name": "attempt",
+          "docs": "What `f` gives, or -1 if it fails: a library that makes nothing of\nthe failure.",
+          "kind": "static",
+          "params": [{ "name": "f", "type": "fn() -> i32" }],
+          "returns": "i32",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "apply",
+          "docs": "Replaces the value with `f` of it, `times` over, and stops at the\nfirst failure with the value as the last success left it.",
+          "kind": "mutating",
+          "params": [{ "name": "times", "type": "i32" }, { "name": "f", "type": "fn(i32) -> i32" }],
+          "returns": "i32",
+          "fallible": true,
+          "blocking": false
         }
       ]
     },

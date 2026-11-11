@@ -210,6 +210,12 @@ binding rethrows the original exception (`hxn.Callback.during`). The catch is
 on the Haxe side, so no trap is needed in native code and it is the same on
 every runtime.
 
+In Rust the library takes such a function as `impl Fn(..) -> Result<T, E>`,
+generic in `E`. It is a `Result` because the Haxe function can throw, and the
+library sees that as an `Err` to return with. The error is a type parameter so
+the library names no type of hxn's and can be tested with any error it likes;
+the adapter calls it with its own.
+
 **Kept across calls.** A function needed by later calls is kept in a field of
 the Haxe object and lent to each call that uses it. Native code holds nothing.
 

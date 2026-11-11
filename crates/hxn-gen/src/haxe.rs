@@ -6,6 +6,7 @@
 //! interface, or of a function other than `new`, gets an owner.
 
 use crate::later;
+use crate::lent;
 use crate::model::{Interface, Library, Method, Type};
 use crate::names::{
     abstract_name, camel, cell_abstract, cell_class, has_receiver, local, memory_class, release,
@@ -32,6 +33,7 @@ fn haxe_type(ty: &Type) -> String {
         Type::Future(of) => format!("hxn.Future<{}>", haxe_type(of)),
         Type::Stream(of) => format!("hxn.Stream<{}>", haxe_type(of)),
         Type::Signal(of) => format!("hxn.Signal<{}>", haxe_type(of)),
+        Type::Lent { params, returns } => lent::haxe_type(params, returns),
         Type::AtomicInt => String::from("hxn.AtomicInt"),
         Type::AtomicBool => String::from("hxn.AtomicBool"),
         Type::Handle {
@@ -140,6 +142,11 @@ fn hl_native(library: &Library, interface: &Interface, method: &Method) -> Strin
                 params.push(format!("{name}:{}", hl_raw(of, &interface.name)));
             }
             Type::AtomicInt | Type::AtomicBool => params.push(format!("{name}:hl.Ref<Int>")),
+            // The wrapper the binding makes, not the function the user passed.
+            Type::Lent {
+                params: taken,
+                returns,
+            } => params.push(format!("{name}:{}", lent::haxe_native_type(taken, returns))),
             Type::Void | Type::Future(_) | Type::Stream(_) | Type::Signal(_) => {
                 unreachable!("not a parameter type")
             }
@@ -155,6 +162,7 @@ fn hl_native(library: &Library, interface: &Interface, method: &Method) -> Strin
         Type::I32 => (String::from("Int"), "\n\t\treturn 0;"),
         Type::F64 => (String::from("Float"), "\n\t\treturn 0.;"),
         Type::Str | Type::Bytes => (String::from("hl.Bytes"), "\n\t\treturn null;"),
+        Type::Lent { .. } => unreachable!("not a result type"),
         Type::Handle { interface: of, .. } => (hl_raw(of, &interface.name), "\n\t\treturn null;"),
         Type::AtomicInt | Type::AtomicBool => (String::from("CellRaw"), "\n\t\treturn null;"),
         Type::Future(_) | Type::Stream(_) | Type::Signal(_) => {
@@ -171,7 +179,42 @@ fn hl_native(library: &Library, interface: &Interface, method: &Method) -> Strin
     )
 }
 
+// A method's body from its statements. One that lends functions makes its
+// native call inside `hxn.Callback.during`, which throws what a lent
+// function threw once the library has returned.
+fn body(guards: &[String], lines: &[String]) -> String {
+    let block = |lines: &[String]| {
+        let mut out = String::from(" {\n");
+        for line in lines {
+            out.push_str(&format!("\t\t{line}\n"));
+        }
+        out.push_str("\t}\n");
+        out
+    };
+    if guards.is_empty() {
+        return match lines {
+            [only] => format!("\n\t\t{only}\n"),
+            lines => block(lines),
+        };
+    }
+    let returns = lines.last().is_some_and(|line| line.starts_with("return "));
+    let mut all = guards.to_vec();
+    all.push(format!(
+        "{}hxn.Callback.during(() -> {{",
+        if returns { "return " } else { "" }
+    ));
+    for line in lines {
+        all.push(format!("\t{}", line.replace('\n', "\n\t")));
+    }
+    if !returns {
+        all.push(String::from("\treturn true;"));
+    }
+    all.push(String::from("});"));
+    block(&all)
+}
+
 fn hl_method(library: &Library, interface: &Interface, method: &Method) -> String {
+    let mut guards = Vec::new();
     let mut arguments = Vec::new();
     if has_receiver(method) {
         arguments.push(String::from("raw"));
@@ -191,6 +234,10 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
             Type::AtomicInt | Type::AtomicBool => {
                 arguments.push(format!("{name} == null ? null : {name}.pointer"));
             }
+            Type::Lent { params, returns } => {
+                guards.push(lent::haxe_guard(&name, params, returns));
+                arguments.push(lent::guarded(&name));
+            }
             _ => arguments.push(name),
         }
     }
@@ -202,54 +249,62 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
         local(&interface.name, &method.name),
         arguments.join(", ")
     );
+    let mut lines = Vec::new();
+    if method.constructor {
+        lines.push(format!("raw = {call};"));
+        if interface.weighed {
+            lines.push(String::from("memory.check();"));
+        }
+    } else {
+        match &method.returns {
+            Type::Void => lines.push(format!("{call};")),
+            Type::Str => lines.push(format!("return @:privateAccess String.fromUCS2({call});")),
+            Type::Bytes => {
+                lines.push(String::from("var outLength = 0;"));
+                lines.push(format!("var data = {call};"));
+                lines.push(String::from(
+                    "return @:privateAccess new haxe.io.Bytes(data, outLength);",
+                ));
+            }
+            Type::Handle {
+                interface: of,
+                nullable: false,
+            } => lines.push(format!("return {of}.adopt({call});")),
+            Type::Handle {
+                interface: of,
+                nullable: true,
+            } => {
+                lines.push(format!("var made = {call};"));
+                lines.push(format!("return made == null ? null : {of}.adopt(made);"));
+            }
+            Type::Future(_) | Type::Stream(_) | Type::Signal(_) => {
+                let (kind, carried) = later::of(&method.returns).expect("a result over time");
+                lines.push(format!(
+                    "return {}.{}({call});",
+                    later::class(library, kind),
+                    later::maker(carried)
+                ));
+            }
+            // The cell lives in the library; what it handed over keeps it
+            // alive for as long as the atomic is referenced.
+            Type::AtomicInt => {
+                lines.push(format!("var owner = {call};"));
+                lines.push(String::from(
+                    "return hxn.AtomicInt.over(Native.atomic_cell(owner), () -> owner);",
+                ));
+            }
+            Type::AtomicBool => {
+                lines.push(format!("var owner = {call};"));
+                lines.push(String::from(
+                    "return hxn.AtomicBool.over(hxn.AtomicInt.over(Native.atomic_cell(owner), () -> owner));",
+                ));
+            }
+            _ => lines.push(format!("return {call};")),
+        }
+    }
     let mut out = docs(&method.docs, "\t");
     out.push_str(&signature(method));
-    if method.constructor {
-        if interface.weighed {
-            out.push_str(&format!(
-                " {{\n\t\traw = {call};\n\t\tmemory.check();\n\t}}\n"
-            ));
-        } else {
-            out.push_str(&format!("\n\t\traw = {call};\n"));
-        }
-        return out;
-    }
-    match &method.returns {
-        Type::Void => out.push_str(&format!("\n\t\t{call};\n")),
-        Type::Str => out.push_str(&format!(
-            "\n\t\treturn @:privateAccess String.fromUCS2({call});\n"
-        )),
-        Type::Bytes => out.push_str(&format!(
-            " {{\n\t\tvar outLength = 0;\n\t\tvar data = {call};\n\t\treturn @:privateAccess new haxe.io.Bytes(data, outLength);\n\t}}\n"
-        )),
-        Type::Handle {
-            interface: of,
-            nullable: false,
-        } => out.push_str(&format!("\n\t\treturn {of}.adopt({call});\n")),
-        Type::Handle {
-            interface: of,
-            nullable: true,
-        } => out.push_str(&format!(
-            " {{\n\t\tvar made = {call};\n\t\treturn made == null ? null : {of}.adopt(made);\n\t}}\n"
-        )),
-        Type::Future(_) | Type::Stream(_) | Type::Signal(_) => {
-            let (kind, carried) = later::of(&method.returns).expect("a result over time");
-            out.push_str(&format!(
-                "\n\t\treturn {}.{}({call});\n",
-                later::class(library, kind),
-                later::maker(carried)
-            ));
-        }
-        // The cell lives in the library; what it handed over keeps it alive
-        // for as long as the atomic is referenced.
-        Type::AtomicInt => out.push_str(&format!(
-            " {{\n\t\tvar owner = {call};\n\t\treturn hxn.AtomicInt.over(Native.atomic_cell(owner), () -> owner);\n\t}}\n"
-        )),
-        Type::AtomicBool => out.push_str(&format!(
-            " {{\n\t\tvar owner = {call};\n\t\treturn hxn.AtomicBool.over(hxn.AtomicInt.over(Native.atomic_cell(owner), () -> owner));\n\t}}\n"
-        )),
-        _ => out.push_str(&format!("\n\t\treturn {call};\n")),
-    }
+    out.push_str(&body(&guards, &lines));
     out
 }
 
@@ -351,6 +406,7 @@ fn cpp_weak(library: &Library, interface: &Interface) -> String {
 }
 
 fn cpp_method(library: &Library, interface: &Interface, method: &Method) -> String {
+    let mut guards = Vec::new();
     let mut before = Vec::new();
     let mut arguments = Vec::new();
     if has_receiver(method) {
@@ -379,6 +435,10 @@ fn cpp_method(library: &Library, interface: &Interface, method: &Method) -> Stri
                     "if ({name} != null)\n\t\t\t{name}Raw = {name}.pointer.raw;"
                 ));
                 arguments.push(format!("{name}Raw"));
+            }
+            Type::Lent { params, returns } => {
+                guards.push(lent::haxe_guard(&name, params, returns));
+                arguments.push(lent::guarded(&name));
             }
             _ => arguments.push(name),
         }
@@ -447,15 +507,7 @@ fn cpp_method(library: &Library, interface: &Interface, method: &Method) -> Stri
     }
     let mut out = docs(&method.docs, "\t");
     out.push_str(&signature(method));
-    if let [only] = body.as_slice() {
-        out.push_str(&format!("\n\t\t{only}\n"));
-    } else {
-        out.push_str(" {\n");
-        for line in &body {
-            out.push_str(&format!("\t\t{line}\n"));
-        }
-        out.push_str("\t}\n");
-    }
+    out.push_str(&self::body(&guards, &body));
     out
 }
 

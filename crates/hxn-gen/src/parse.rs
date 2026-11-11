@@ -128,6 +128,24 @@ fn cell(ty: &syn::Type) -> Option<Type> {
     }
 }
 
+// `wrapper<T, ..>` gives `T`.
+fn wrapped_first<'a>(ty: &'a syn::Type, wrapper: &str) -> Option<&'a syn::Type> {
+    let syn::Type::Path(path) = ty else {
+        return None;
+    };
+    let segment = path.path.segments.last()?;
+    if segment.ident != wrapper {
+        return None;
+    }
+    let syn::PathArguments::AngleBracketed(arguments) = &segment.arguments else {
+        return None;
+    };
+    match arguments.args.first() {
+        Some(syn::GenericArgument::Type(inner)) => Some(inner),
+        _ => None,
+    }
+}
+
 // `wrapper<T>` gives `T`.
 fn wrapped<'a>(ty: &'a syn::Type, wrapper: &str) -> Option<&'a syn::Type> {
     let syn::Type::Path(path) = ty else {
@@ -185,6 +203,56 @@ impl Scope<'_> {
         self.shared.iter().any(|shared| shared == interface)
     }
 
+    // `impl Fn(i32, f64) -> Result<bool, E>`, or `FnMut` or `FnOnce`.
+    fn lent(&self, ty: &syn::TypeImplTrait) -> Result<Type, Error> {
+        const SHAPE: &str = "a function is lent as `impl Fn(..) -> Result<T, E>`, taking bool, i32 or f64 and giving one of those or `()`: it can fail, because the Haxe function can throw";
+        let scalar = |ty: &syn::Type| match path_name(ty).as_deref() {
+            Some("bool") => Some(Type::Bool),
+            Some("i32") => Some(Type::I32),
+            Some("f64") => Some(Type::F64),
+            _ => None,
+        };
+        let mut bounds = ty.bounds.iter();
+        let (Some(syn::TypeParamBound::Trait(bound)), None) = (bounds.next(), bounds.next()) else {
+            return error(ty.span(), SHAPE);
+        };
+        let Some(segment) = bound.path.segments.last() else {
+            return error(ty.span(), SHAPE);
+        };
+        let syn::PathArguments::Parenthesized(call) = &segment.arguments else {
+            return error(ty.span(), SHAPE);
+        };
+        if !["Fn", "FnMut", "FnOnce"].contains(&segment.ident.to_string().as_str())
+            || call.inputs.len() > 4
+        {
+            return error(ty.span(), SHAPE);
+        }
+        let mut params = Vec::new();
+        for input in &call.inputs {
+            match scalar(input) {
+                Some(param) => params.push(param),
+                None => return error(input.span(), SHAPE),
+            }
+        }
+        let ReturnType::Type(_, output) = &call.output else {
+            return error(ty.span(), SHAPE);
+        };
+        let Some(given) = wrapped_first(output, "Result") else {
+            return error(output.span(), SHAPE);
+        };
+        let returns = match given {
+            syn::Type::Tuple(tuple) if tuple.elems.is_empty() => Type::Void,
+            other => match scalar(other) {
+                Some(given) => given,
+                None => return error(other.span(), SHAPE),
+            },
+        };
+        Ok(Type::Lent {
+            params,
+            returns: Box::new(returns),
+        })
+    }
+
     fn param(&self, name: String, ty: &syn::Type) -> Result<Param, Error> {
         let plain = |ty| Param {
             name: name.clone(),
@@ -192,6 +260,9 @@ impl Scope<'_> {
             exclusive: false,
             kept: false,
         };
+        if let syn::Type::ImplTrait(lent) = ty {
+            return Ok(plain(self.lent(lent)?));
+        }
         if let syn::Type::Reference(reference) = ty
             && reference.mutability.is_none()
         {
@@ -273,7 +344,7 @@ impl Scope<'_> {
             Some("f64") => Ok(plain(Type::F64)),
             _ => error(
                 ty.span(),
-                "a parameter is one of bool, i32, f64, &str, &[u8], &AtomicI32, &AtomicFlag, or `&` or `&mut` of an interface",
+                "a parameter is one of bool, i32, f64, &str, &[u8], &AtomicI32, &AtomicFlag, `&` or `&mut` of an interface, or `impl Fn(..) -> Result<T, E>`",
             ),
         }
     }
@@ -440,7 +511,20 @@ impl Scope<'_> {
     fn method(&self, function: &syn::ImplItemFn) -> Result<Method, Error> {
         let signature = &function.sig;
         let name = signature.ident.to_string();
-        if !signature.generics.params.is_empty() || signature.generics.where_clause.is_some() {
+        // A function lent to the call may fail with an error of the caller's
+        // choosing, which is the one use a type parameter has here.
+        let lends = signature.inputs.iter().any(|input| {
+            matches!(input, FnArg::Typed(typed) if matches!(&*typed.ty, syn::Type::ImplTrait(_)))
+        });
+        let only_types = signature
+            .generics
+            .params
+            .iter()
+            .all(|param| matches!(param, syn::GenericParam::Type(_)));
+        if signature.generics.where_clause.is_some()
+            || !only_types
+            || (!signature.generics.params.is_empty() && !lends)
+        {
             return error(signature.generics.span(), "a generic function cannot cross");
         }
         if let Some(token) = &signature.asyncness {
@@ -508,6 +592,17 @@ impl Scope<'_> {
                 "`new` is the constructor: no `self`, and it returns the interface",
             );
         }
+        let blocking = is_blocking(&function.attrs)?;
+        if blocking
+            && params
+                .iter()
+                .any(|param| matches!(param.ty, Type::Lent { .. }))
+        {
+            return error(
+                signature.ident.span(),
+                "a function that waits cannot be lent a Haxe function: the collector may run while it waits",
+            );
+        }
         Ok(Method {
             name,
             docs: docs(&function.attrs),
@@ -515,7 +610,7 @@ impl Scope<'_> {
             params,
             returns,
             fallible,
-            blocking: is_blocking(&function.attrs)?,
+            blocking,
             constructor,
             returns_arc,
         })

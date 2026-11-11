@@ -88,6 +88,10 @@ filesystem `#include "counter.h"` would then find the generated one.
   It carries `bool`, `i32`, `f64` or `String`; a future or a stream may carry
   an interface, a shared one as `Arc<T>`. There is no `async fn` across the
   boundary: the function starts the work with `spawn` and returns its future.
+- A Haxe function is taken as `impl Fn(..) -> Result<T, E>`, or `FnMut` or
+  `FnOnce`, with `E` a type parameter of the function: its only use for one.
+  It takes `bool`, `i32` or `f64` and gives one of those or `()`. The library
+  returns when it fails. A function marked `#[hxn(blocking)]` is not lent one.
 - A cell shared with Haxe is an `AtomicI32` or an `hxn::AtomicFlag`, never
   an `AtomicBool`. It is taken as a reference, lent for the call, and
   returned as an `Arc`, kept by the library.
@@ -117,7 +121,8 @@ filesystem `#include "counter.h"` would then find the generated one.
   `raw -> Native.take(raw)`, not `Native.take`.
 - **Wrap a function lent to native code** so that it catches, calls
   `hxn.Callback.failed` and returns the failure value, and make the native
-  call inside `hxn.Callback.during`.
+  call inside `hxn.Callback.during`. The failure value is null, or false from
+  a function that returns nothing.
 - **Keep a function used by later calls in a field of the Haxe object** and
   lend it to each call. Native code does not root host functions.
 - **Write through.** When a set goes through the binding, set the followed

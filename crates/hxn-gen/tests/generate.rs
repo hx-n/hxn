@@ -808,6 +808,128 @@ fn says_what_a_result_over_time_cannot_carry() {
     }
 }
 
+#[test]
+fn a_function_is_lent_for_the_call_and_can_fail() {
+    let source = r#"
+#[hxn::interface]
+pub struct Mesh;
+
+#[hxn::methods]
+impl Mesh {
+    pub fn each<E>(&mut self, scale: f64, mut f: impl FnMut(i32, f64) -> Result<bool, E>) -> Result<i32, E> {
+        todo!()
+    }
+
+    pub fn tick<E>(f: impl Fn() -> Result<(), E>) -> Result<(), E> {
+        f()
+    }
+
+    pub fn again<E>(&self, g: impl Fn() -> Result<(), E>) -> Result<(), E> {
+        g()
+    }
+}
+"#;
+    let library = parse("geo", source).unwrap();
+    let each = &library.interfaces[0].methods[0];
+    assert_eq!(
+        each.params[1].ty,
+        Type::Lent {
+            params: vec![Type::I32, Type::F64],
+            returns: Box::new(Type::Bool),
+        }
+    );
+    assert!(each.fallible);
+
+    // One function pointer type and one trampoline a shape, however many
+    // functions are lent it.
+    let c = hxn_gen::c_adapter(&library, "geo_core");
+    assert_eq!(c.matches("type LentIDToB = ").count(), 1);
+    assert_eq!(c.matches("type LentToV = ").count(), 1);
+    assert!(c.contains(
+        "type LentIDToB = unsafe extern \"C\" fn(*mut c_void, i32, f64, *mut i32) -> Status;"
+    ));
+    assert!(c.contains("scale: f64, f: Callback<LentIDToB>, out: *mut i32"));
+    assert!(c.contains("this.each(scale, |a0, a1| f.invoke(a0, a1).map(|out| out != 0))?"));
+    assert!(c.contains("Mesh::tick(|| f.invoke().map(|_| ()))?"));
+
+    let hl = hxn_gen::hl_adapter(&library, "geo_core");
+    assert!(hl.contains("\"PXgeo_mesh_dPid_Nb_i\""));
+    assert!(hl.contains("\"PP_b_v\""));
+    assert!(hl.contains("let f = Callback::from_raw(lent_id_to_b as LentIDToB, f.cast(), None);"));
+    assert!(hl.contains("unsafe extern \"C\" fn lent_id_to_b(env: *mut c_void, a0: i32, a1: f64, out: *mut i32) -> Status"));
+    assert!(hl.contains("let mut args: [*mut vdynamic; 2] = [box_i32(a0), box_f64(a1)];"));
+    assert_eq!(hl.matches("fn lent_to_v(").count(), 1);
+
+    let header = hxn_gen::c_header(&library);
+    assert!(header.contains("hxn_status geo_mesh_each(hxn_handle *self, double scale, hxn_callback f, int32_t *out, hxn_buf *err);"));
+    let glue = hxn_gen::cpp_glue(&library);
+    assert!(
+        glue.contains("inline hxn_status lent_id_to_b(void *env, int a0, double a1, int *out)")
+    );
+    assert!(glue.contains("inline int mesh_each(void *self, double scale, Dynamic f)"));
+    assert!(glue.contains("hxn_callback f_lent = { (void *)lent_id_to_b, f.mPtr, 0 };"));
+
+    // The Haxe method wraps what it was passed and calls inside `during`.
+    for files in [hxn_gen::haxe_hl(&library), hxn_gen::haxe_cpp(&library)] {
+        let mesh = &files[0].text;
+        assert!(mesh.contains("public function each(scale:Float, f:(Int, Float) -> Bool):Int {"));
+        assert!(mesh.contains("var fGuarded = function(a0:Int, a1:Float):Null<Bool> {"));
+        assert!(mesh.contains("hxn.Callback.failed(error);"));
+        assert!(mesh.contains("return hxn.Callback.during(() -> {"));
+        assert!(mesh.contains("public static function tick(f:() -> Void):Void {"));
+        assert!(mesh.contains("var fGuarded = function():Bool {"));
+        assert!(mesh.contains("\t\t\treturn true;\n\t\t});"));
+    }
+    let mesh = &hxn_gen::haxe_hl(&library)[0].text;
+    assert!(
+        mesh.contains("mesh_each(self:MeshRaw, scale:Float, f:(Int, Float) -> Null<Bool>):Int")
+    );
+    assert!(hxn_gen::manifest(&library).contains("\"type\": \"fn(i32, f64) -> bool\""));
+}
+
+#[test]
+fn says_how_a_function_is_lent() {
+    let cases = [
+        (
+            "pub fn a(&self, f: impl Fn(i32) -> i32) {}",
+            "is lent as `impl Fn(..) -> Result<T, E>`",
+        ),
+        (
+            "pub fn b<E>(&self, f: impl Fn(&str) -> Result<i32, E>) {}",
+            "is lent as",
+        ),
+        (
+            "pub fn c<E>(&self, f: impl Fn(i32) -> Result<String, E>) {}",
+            "is lent as",
+        ),
+        (
+            "pub fn d(&self, f: impl Iterator<Item = i32>) {}",
+            "is lent as",
+        ),
+        (
+            "pub fn e(&self, f: &dyn Fn(i32) -> i32) {}",
+            "a parameter is one of",
+        ),
+        (
+            "#[hxn(blocking)]\n    pub fn g<E>(&self, f: impl Fn() -> Result<(), E>) {}",
+            "a function that waits cannot be lent",
+        ),
+        (
+            "pub fn h<T>(&self, value: i32) {}",
+            "a generic function cannot cross",
+        ),
+        (
+            "pub fn i<'a, E>(&self, f: impl Fn() -> Result<(), E>) {}",
+            "a generic function cannot cross",
+        ),
+    ];
+    for (method, expected) in cases {
+        let (line, message) = refused(method);
+        assert!(message.contains(expected), "{method}: {message}");
+        assert!((6..=7).contains(&line), "{method}: line {line}");
+    }
+}
+
 // The fixture's manifest is committed, as a library's would be, so a change
 // to what it exposes shows up in review. To update it after changing
 // tests/counter/core, run hxn-gen and copy its counter.hxn.json over.

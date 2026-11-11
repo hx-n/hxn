@@ -19,6 +19,7 @@
 mod c;
 mod haxe;
 mod later;
+mod lent;
 mod manifest;
 mod model;
 mod names;

@@ -18,11 +18,11 @@
 
 use std::ffi::{c_int, c_void};
 
-use hl_abi::{hl_type, vdynamic};
+use hl_abi::hl_type;
 use hxn_abi::{Failure, Fault, Handle, RawHandle, Slice, catch, release};
 
 // What a generated adapter names, so that its crate needs this one alone.
-pub use hl_abi::{define_prim, vbyte, vstring};
+pub use hl_abi::{define_prim, vbyte, vdynamic, vstring};
 
 unsafe extern "C" {
     // A DLL's data is reached through its import pointer, not linked directly.
@@ -41,6 +41,16 @@ unsafe extern "C" {
     #[cfg(windows)]
     #[link_name = "__imp_hlt_i32"]
     static mut hlt_i32_import: *mut hl_type;
+    #[cfg(not(windows))]
+    static mut hlt_f64: hl_type;
+    #[cfg(windows)]
+    #[link_name = "__imp_hlt_f64"]
+    static mut hlt_f64_import: *mut hl_type;
+    #[cfg(not(windows))]
+    static mut hlt_bool: hl_type;
+    #[cfg(windows)]
+    #[link_name = "__imp_hlt_bool"]
+    static mut hlt_bool_import: *mut hl_type;
 
     fn hl_gc_alloc_gen(ty: *mut hl_type, size: c_int, flags: c_int) -> *mut c_void;
     fn hl_alloc_dynamic(ty: *mut hl_type) -> *mut vdynamic;
@@ -289,6 +299,70 @@ pub unsafe fn unbox_i32(value: *const vdynamic) -> Option<i32> {
         None
     } else {
         Some(unsafe { (*value).v.i })
+    }
+}
+
+unsafe fn f64_type() -> *mut hl_type {
+    #[cfg(windows)]
+    unsafe {
+        hlt_f64_import
+    }
+    #[cfg(not(windows))]
+    {
+        &raw mut hlt_f64
+    }
+}
+
+unsafe fn bool_type() -> *mut hl_type {
+    #[cfg(windows)]
+    unsafe {
+        hlt_bool_import
+    }
+    #[cfg(not(windows))]
+    {
+        &raw mut hlt_bool
+    }
+}
+
+/// `value` as the VM passes a `Float` it does not know the type of.
+pub fn box_f64(value: f64) -> *mut vdynamic {
+    let boxed = unsafe { hl_alloc_dynamic(f64_type()) };
+    if !boxed.is_null() {
+        unsafe { (*boxed).v.d = value };
+    }
+    boxed
+}
+
+/// The `Float` in a `Null<Float>`, or `None` for null.
+///
+/// # Safety
+/// `value` is null or a live boxed `Float`.
+pub unsafe fn unbox_f64(value: *const vdynamic) -> Option<f64> {
+    if value.is_null() {
+        None
+    } else {
+        Some(unsafe { (*value).v.d })
+    }
+}
+
+/// `value` as the VM passes a `Bool` it does not know the type of.
+pub fn box_bool(value: bool) -> *mut vdynamic {
+    let boxed = unsafe { hl_alloc_dynamic(bool_type()) };
+    if !boxed.is_null() {
+        unsafe { (*boxed).v.b = value };
+    }
+    boxed
+}
+
+/// The `Bool` in a `Null<Bool>`, or `None` for null.
+///
+/// # Safety
+/// `value` is null or a live boxed `Bool`.
+pub unsafe fn unbox_bool(value: *const vdynamic) -> Option<bool> {
+    if value.is_null() {
+        None
+    } else {
+        Some(unsafe { (*value).v.b })
     }
 }
 

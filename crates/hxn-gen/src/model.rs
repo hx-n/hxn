@@ -95,6 +95,12 @@ pub enum Type {
     Stream(Box<Type>),
     /// A value that changes: `Signal<T>`, a result only.
     Signal(Box<Type>),
+    /// A Haxe function lent for the call: `impl Fn(..) -> Result<T, E>`, a
+    /// parameter only.
+    Lent {
+        params: Vec<Type>,
+        returns: Box<Type>,
+    },
 }
 
 impl Library {
@@ -144,6 +150,10 @@ impl Type {
             Self::Future(of) => format!("future<{}>", of.name()),
             Self::Stream(of) => format!("stream<{}>", of.name()),
             Self::Signal(of) => format!("signal<{}>", of.name()),
+            Self::Lent { params, returns } => {
+                let taken: Vec<String> = params.iter().map(Self::name).collect();
+                format!("fn({}) -> {}", taken.join(", "), returns.name())
+            }
             Self::Handle {
                 interface,
                 nullable,
