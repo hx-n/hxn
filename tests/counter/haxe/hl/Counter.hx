@@ -114,6 +114,21 @@ class Counter {
 		return hxn.Callback.during(() -> Native.apply(raw, times, guarded));
 	}
 
+	// A function used by later calls is kept here, where the collector can
+	// see it, and lent to each of them. Native code holds nothing, so one
+	// that refers back to this counter is collected with it.
+	var step:Null<Int->Int>;
+
+	public function setStep(f:Int->Int):Void
+		step = f;
+
+	public function advance(times:Int):Int {
+		var step = step;
+		if (step == null)
+			throw new haxe.Exception("no step set");
+		return apply(times, step);
+	}
+
 	public function label(name:String):String
 		return @:privateAccess String.fromUCS2(Native.label(raw, name));
 

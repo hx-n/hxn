@@ -30,6 +30,14 @@ class Main {
 			new Counter(i);
 	}
 
+	// Counters whose kept function refers back to them.
+	static function cycles(count:Int) {
+		for (i in 0...count) {
+			var counter = new Counter(i);
+			counter.setStep(value -> value + counter.add(0));
+		}
+	}
+
 	static function collect() {
 		#if hl
 		hl.Gc.major();
@@ -81,6 +89,12 @@ class Main {
 		throws("it cannot use the counter that is calling it", () -> applied.apply(1, value -> applied.add(1)), "in use");
 		check("which is free again afterwards", applied.add(0) == 1026);
 		applied.close();
+
+		var advancing = new Counter(1);
+		throws("a kept function has to be set first", () -> advancing.advance(1), "no step set");
+		advancing.setStep(value -> value * 3);
+		check("a function the binding keeps is lent to each later call", advancing.advance(2) == 9 && advancing.advance(1) == 27);
+		advancing.close();
 	}
 
 	static function futures() {
@@ -245,10 +259,11 @@ class Main {
 		var collected = "no collection was run";
 		#else
 		churn(500);
+		cycles(500);
 		collect();
 		var left = Counter.live();
 		check('the collector releases the rest, $left left', left < 50);
-		var collected = '$left of 500 unclosed counters left after a collection';
+		var collected = '$left of 1000 unclosed counters left after a collection, 500 of them referred to by their own kept function';
 		#end
 
 		Sys.println(failed == 0 ? 'PASS ($collected)' : 'FAILED $failed');
