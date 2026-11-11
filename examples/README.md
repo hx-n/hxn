@@ -24,7 +24,8 @@ hxn run cpp
 What it prints is in the example's `expected.txt`.
 
 `hxn run hl` runs the program with `hl`. `--vm` names another
-HashLink-compatible VM: `hxn run hl --vm ash`.
+HashLink-compatible VM, with any options for it: `hxn run hl --vm ash`, or
+`hxn run hl --vm "ash --mode jit"`.
 
 `--wasm` runs the same program as wasm. `hxn run hl --wasm` builds and runs
 it with Ash, and `hxn run cpp --wasm` with hxcpp, the Emscripten SDK and

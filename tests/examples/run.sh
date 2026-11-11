@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Runs each library under examples/ with `hxn run`, as its readme says to,
 # and compares what it prints with its expected.txt.
-#   run.sh hl [vm]     vm is a HashLink-compatible executable, default `hl`
+#   run.sh hl [vm]     vm is a HashLink-compatible executable, default `hl`,
+#                      with any options for it: "ash --mode jit"
 #   run.sh cpp
 #   run.sh wasm [ash]  built and run by Ash
 #   run.sh emcc        hxcpp through Emscripten, run by node; needs emcc on PATH

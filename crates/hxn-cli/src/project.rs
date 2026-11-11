@@ -20,6 +20,8 @@ pub struct Project {
     /// Where its Haxe program is, and that program's main class.
     pub haxe: PathBuf,
     pub main: String,
+    /// What the program's compile is passed beside what hxn passes.
+    pub flags: Vec<String>,
     /// Cargo's target directory for it.
     pub target: PathBuf,
     /// Where it gets `hxn` from, so the adapters get the same.
@@ -107,6 +109,26 @@ fn same_file(a: &Path, b: &Path) -> bool {
         (Ok(a), Ok(b)) => a == b,
         _ => false,
     }
+}
+
+// The `haxe-flags` setting: a list of arguments, each a string.
+fn flags(settings: Option<&Value>) -> Result<Vec<String>, String> {
+    let Some(value) = settings.and_then(|settings| settings.get("haxe-flags")) else {
+        return Ok(Vec::new());
+    };
+    value
+        .as_array()
+        .and_then(|flags| {
+            flags
+                .iter()
+                .map(|flag| flag.as_str().map(str::to_owned))
+                .collect()
+        })
+        .ok_or_else(|| {
+            String::from(
+                "`haxe-flags` under `[package.metadata.hxn]` is a list of strings, as in [\"-lib\", \"format\"]",
+            )
+        })
 }
 
 /// A name C symbols and Haxe classes can be made from.
@@ -210,6 +232,7 @@ impl Project {
             source,
             haxe: dir.join(setting("haxe").unwrap_or("haxe")),
             main: setting("main").unwrap_or("Main").to_owned(),
+            flags: flags(settings)?,
             target: PathBuf::from(
                 text(&metadata, "target_directory").ok_or("cargo named no target directory")?,
             ),
@@ -259,6 +282,29 @@ mod tests {
         assert!(is_library_name("greeter") && is_library_name("audio_2"));
         for bad in ["", "Greeter", "2d", "my-lib", "a b"] {
             assert!(!is_library_name(bad), "{bad}");
+        }
+    }
+
+    #[test]
+    fn haxe_flags_are_a_list_of_strings() {
+        let settings: Value =
+            serde_json::from_str(r#"{ "haxe-flags": ["-lib", "format", "-D", "fast"] }"#).unwrap();
+        assert_eq!(
+            flags(Some(&settings)).unwrap(),
+            ["-lib", "format", "-D", "fast"]
+        );
+        assert!(flags(None).unwrap().is_empty());
+        assert!(flags(Some(&Value::Null)).unwrap().is_empty());
+        for bad in [
+            r#"{ "haxe-flags": "-lib format" }"#,
+            r#"{ "haxe-flags": ["-D", 1] }"#,
+        ] {
+            let settings: Value = serde_json::from_str(bad).unwrap();
+            assert!(
+                flags(Some(&settings))
+                    .unwrap_err()
+                    .contains("list of strings")
+            );
         }
     }
 

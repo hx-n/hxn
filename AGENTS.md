@@ -16,7 +16,7 @@ natively and on wasm. Read these before changing anything:
   differ in how threads and native calls behave. `tests/cli/run.sh` checks
   the `hxn` command the way the readme uses it, and `tests/examples/run.sh`
   runs every library under `examples/`; both take `hl`, `cpp`, `wasm` and
-  `emcc`.
+  `emcc`, and a VM with its options, as in `hl "ash --mode jit"`.
 - **Run runtime tests under a timeout.** A wrong wait hangs; it does not fail.
 - **Repeat anything concurrent**, and on more than one machine if you can.
 - **Say what was not run.** If a runtime was unavailable, report that, not a

@@ -367,6 +367,11 @@ flag.
 - **What a compile needs is written down**, as a file `haxe` takes: the class
   paths, and for hxcpp where the headers and the library are. `run` passes
   the same itself.
+- **What is the program's own is said by the crate**, under
+  `[package.metadata.hxn]`: its directory and main class, and `haxe-flags`,
+  the arguments its compile takes beside hxn's, a `-lib` or a `-D`. The VM
+  is the user's, so it is named on the command line or in `HXN_VM`, with
+  any options after it.
 - **A wasm build is the same adapter for another target.** For HashLink it is
   built as an archive for `wasm32-wasip1` and linked into a module whose
   exports are the primitives' resolvers and whose imports the program

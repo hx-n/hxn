@@ -26,9 +26,10 @@ const USAGE: &str = "usage: hxn <command>
       Writes the library's binding for HashLink or hxcpp and builds it.
       Prints what to pass haxe to compile against it.
 
-  hxn run <hl|cpp> [--wasm] [--release] [--vm <program>] [-- <arguments>]
+  hxn run <hl|cpp> [--wasm] [--release] [--vm <command>] [-- <arguments>]
       Builds, then compiles the Haxe program in haxe/ and runs it. --vm, or
-      HXN_VM, names the HashLink-compatible program to run it with.
+      HXN_VM, names the HashLink-compatible program to run it with, and
+      any options for it: --vm \"ash --mode jit\".
 
 With --wasm the binding and the program are built for wasm. `hl --wasm` is
 built and run by Ash, which --vm or HXN_VM names if it is not `ash`.
@@ -38,7 +39,8 @@ nightly toolchain.
 
 build and run work on the crate in the current directory. Under
 [package.metadata.hxn] in its Cargo.toml, `library`, `source`, `haxe` and
-`main` replace the crate's name, src/lib.rs, haxe and Main.";
+`main` replace the crate's name, src/lib.rs, haxe and Main, and `haxe-flags`
+lists what else to pass haxe: [\"-lib\", \"format\"].";
 
 /// A command's arguments: what is positional, and what each flag was given.
 struct Arguments {
@@ -90,6 +92,13 @@ fn target(arguments: &Arguments) -> Result<Target, String> {
     })
 }
 
+// A program and its options, from how a command line names them.
+fn words(command: &str) -> Result<(&str, Vec<&str>), String> {
+    let mut words = command.split_whitespace();
+    let program = words.next().ok_or("--vm names no program")?;
+    Ok((program, words.collect()))
+}
+
 // The directory a program named on the command line is in.
 fn directory_of(program: &str) -> Option<PathBuf> {
     let path = Path::new(program);
@@ -129,7 +138,8 @@ fn run(project: &Project, target: Target, arguments: Arguments) -> Result<u8, St
     haxe.arg("-cp")
         .arg(&project.haxe)
         .arg("-main")
-        .arg(&project.main);
+        .arg(&project.main)
+        .args(&project.flags);
     // What runs a HashLink program: the VM named, or `default`.
     let vm = |default: &str| {
         let named = arguments.vm.clone();
@@ -142,20 +152,23 @@ fn run(project: &Project, target: Target, arguments: Arguments) -> Result<u8, St
             let program = built.dir.join("main.hl");
             haxe.arg("-hl").arg(&program);
             make::run(&mut haxe)?;
-            let ash = vm("ash");
+            let vm = vm("ash");
+            let (ash, options) = words(&vm)?;
             let module = built.dir.join("main.wasm");
             // Ash finds the library's module beside its output. With fibers
             // a Haxe thread that waits suspends and lets the others run.
+            // Its options are for the build.
             make::run(
-                Command::new(&ash)
+                Command::new(ash)
                     .env("ASH_WASM_FIBERS", "1")
+                    .args(options)
                     .arg("--build")
                     .arg(&module)
                     .args(["--target", "wasm32-wasip1"])
                     .arg(&program),
             )?;
             exit(
-                Command::new(&ash)
+                Command::new(ash)
                     .arg("run")
                     .arg(&module)
                     .args(&arguments.rest),
@@ -166,12 +179,13 @@ fn run(project: &Project, target: Target, arguments: Arguments) -> Result<u8, St
             haxe.arg("-hl").arg(&program);
             make::run(&mut haxe)?;
             let vm = vm("hl");
+            let (vm, options) = words(&vm)?;
             // The VM asks the system's loader for the library by name, and
             // for its own beside itself.
             let mut places = vec![built.dir.clone()];
-            places.extend(directory_of(&vm));
-            let mut command = Command::new(&vm);
-            command.arg(&program).args(&arguments.rest);
+            places.extend(directory_of(vm));
+            let mut command = Command::new(vm);
+            command.args(options).arg(&program).args(&arguments.rest);
             for variable in ["DYLD_LIBRARY_PATH", "LD_LIBRARY_PATH", "PATH"] {
                 if variable == "PATH" && !cfg!(windows) {
                     continue;
@@ -197,9 +211,10 @@ fn run(project: &Project, target: Target, arguments: Arguments) -> Result<u8, St
             let name = project.main.rsplit('.').next().unwrap_or(&project.main);
             if target.wasm {
                 // HXN_VM names a HashLink VM, which this is not run by.
-                let node = arguments.vm.as_deref().unwrap_or("node");
+                let (node, options) = words(arguments.vm.as_deref().unwrap_or("node"))?;
                 return exit(
                     Command::new(node)
+                        .args(options)
                         .arg(out.join(format!("{name}.js")))
                         .args(&arguments.rest),
                 );
@@ -283,5 +298,32 @@ fn main() -> ExitCode {
             eprintln!("hxn: {message}");
             ExitCode::from(2)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_vm_is_named_with_its_options() {
+        assert_eq!(words("hl").unwrap(), ("hl", vec![]));
+        assert_eq!(
+            words("/opt/ash  --mode jit").unwrap(),
+            ("/opt/ash", vec!["--mode", "jit"])
+        );
+        assert!(words(" ").is_err());
+    }
+
+    #[test]
+    fn flags_are_read_and_the_rest_is_the_programs() {
+        let given = ["hl", "--wasm", "--vm", "ash -O 2", "--", "--release", "x"];
+        let read = arguments(given.into_iter().map(String::from)).unwrap();
+        assert_eq!(read.positional, ["hl"]);
+        assert!(read.wasm && !read.release);
+        assert_eq!(read.vm.as_deref(), Some("ash -O 2"));
+        assert_eq!(read.rest, ["--release", "x"]);
+        assert!(arguments(["--vm"].into_iter().map(String::from)).is_err());
+        assert!(arguments(["--fast"].into_iter().map(String::from)).is_err());
     }
 }

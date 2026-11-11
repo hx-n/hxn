@@ -185,7 +185,8 @@ filesystem `#include "counter.h"` would then find the generated one.
 - `tests/cli/run.sh` makes a library with `hxn new` and runs it with
   `hxn run`, as the readme says to, and `tests/examples/run.sh` runs each
   library under `examples/` and compares what it prints with its
-  `expected.txt`. Both take `hl <vm>`, `cpp`, `wasm <ash>` and `emcc`.
+  `expected.txt`. Both take `hl <vm>`, `cpp`, `wasm <ash>` and `emcc`, and
+  a VM is named with its options, so `hl "ash --mode jit"` runs Ash's JIT.
 - **The readme's example is `examples/greeter`, which is what `hxn new`
   makes.** A test fails when the readme differs from it.
 - **An example is a library as someone would write one:** a crate, a Haxe
