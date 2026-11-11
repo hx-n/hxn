@@ -102,6 +102,11 @@ Add `--wasm` to build and run the same program as wasm: `hxn run hl --wasm`
 through Ash, and `hxn run cpp --wasm` through hxcpp and Emscripten. Both need
 a nightly Rust toolchain.
 
+`hxn run cppia` runs the same program as a CPPIA script: it builds the hxcpp
+binding into a host program and has that run the script. A script calls the
+library through the host, which is the only thing that needs rebuilding when
+the library changes.
+
 `hxn package` builds the library for both runtimes and gathers the classes,
 the headers and the native libraries into one directory, for a Haxe project
 that does not have the Rust source. That directory is a haxelib:

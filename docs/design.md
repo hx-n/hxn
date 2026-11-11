@@ -386,6 +386,7 @@ flag.
 | `hxn run <hl\|cpp>` | builds, then compiles and runs the library's Haxe program |
 | `hxn package [hl] [cpp]` | builds for both runtimes, or the ones named, and gathers what a Haxe program needs into one directory |
 | `--wasm` on any of these | does the same for the runtime's wasm form |
+| `cppia` in place of `hl` or `cpp` | builds for hxcpp and a host around it, and runs the program as a script |
 
 - **The adapter crates are written, not kept.** A build writes the adapter
   for the runtime as a crate under cargo's target directory, depending on the
@@ -420,6 +421,16 @@ flag.
   position-independent for the one and aborting for the other, which takes a
   nightly toolchain; the command says so when it has another.
 
+- **A script reaches a library through its host.** A CPPIA script cannot
+  call C++ or hold a pointer, so nothing of a binding is compiled into it.
+  Its host is an hxcpp program built to run scripts that holds the library's
+  classes, the ones any hxcpp program uses, and hxn's own. The generator
+  writes a declaration of each class beside it, an `extern class` with the
+  public methods and nothing of how they are carried out, and a script is
+  compiled against those and against the list of what its host holds. For
+  `cppia` the command builds such a host, compiles the library's Haxe program
+  as a script and has the host run it; the host passes on the arguments that
+  follow the script's name, as a program's.
 - **A package is what a Haxe program uses without the library's source.**
   It is a directory that is also a haxelib:
 
@@ -428,6 +439,7 @@ flag.
   | `<library>.hxn.json` | the manifest |
   | `hxn/` | hxn's own Haxe classes |
   | `binding/hl/`, `binding/cpp/` | the library's generated classes for each runtime |
+  | `binding/cppia/` | declarations of the hxcpp classes, for a script |
   | `include/` | `hxn.h` and the library's headers, for hxcpp |
   | `native/<triple>/` | the built libraries for one kind of machine, named as Rust names it, or for `wasm32-wasip1` or `wasm32-unknown-emscripten` |
   | `haxelib.json`, `extraParams.hxml` | its name and version, and the one line that runs `hxn.Bind.lib` |
@@ -445,7 +457,10 @@ flag.
   copies the `.hdll`, or the `.wasm` module, beside the program once that is
   written, which is where the VM's loader and Ash look. The library is the
   one for the machine compiling, for wasm when `wasm` or `emscripten` is
-  defined, or the one `-D hxn_triple=<triple>` names.
+  defined, or the one `-D hxn_triple=<triple>` names. A compile for `cppia`
+  gets `binding/cppia` and nothing else; an hxcpp compile with
+  `-D scriptable`, a host, keeps every class of the binding and of hxn
+  whether or not the host uses it.
 - **The macro chooses classes; it does not make them.** A library's Haxe
   classes and the adapter they call are written by one run of the generator,
   so the names and signatures on the two sides cannot differ. Classes built
@@ -463,6 +478,7 @@ in `tests/counter` has them, gives each a build script that calls `hxn-gen`.
 | Ash, native | the same `.hdll` | yes; cooperative in its interpreter mode | becomes a thrown error | Tested in its hybrid, JIT and interpreter modes. |
 | Ash, wasm | `-hl` as a side module | Haxe threads as fibers; no Rust threads | ends the program | The module takes its allocator from the program. |
 | hxcpp | `-c` with C++ glue | yes | becomes a thrown error | |
+| CPPIA | none of its own: a script runs in an hxcpp program that holds the binding | yes | becomes a thrown error | The host is built with `-D scriptable` and nothing dropped as unused. |
 | hxcpp through Emscripten | the same | none | ends the program | hxcpp's collector does not complete a forced collection there, so `hxn.Gc.collect()` does nothing and a meter only counts. |
 
 Rayzor's plugin ABI informed the manifest, but there is no Rayzor adapter.

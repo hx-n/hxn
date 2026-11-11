@@ -4,17 +4,21 @@
 #   run.sh hl [vm]     vm is a HashLink-compatible executable, default `hl`,
 #                      with any options for it: "ash --mode jit"
 #   run.sh cpp
+#   run.sh cppia       as a script, in an hxcpp program that holds the library
 #   run.sh wasm [ash]  built and run by Ash
 #   run.sh emcc        hxcpp through Emscripten, run by node; needs emcc on PATH
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "$here/../.." && pwd)"
-runtime="${1:?usage: run.sh hl [vm] | cpp | wasm [ash] | emcc}"
+runtime="${1:?usage: run.sh hl [vm] | cpp | cppia | wasm [ash] | emcc}"
 
+# What `run` is told, and `package` where that differs: a script uses the
+# package made for hxcpp.
 case "$runtime" in
 	hl) arguments=(hl --vm "${2:-hl}") ;;
 	cpp) arguments=(cpp) ;;
+	cppia) arguments=(cppia) packaged=(cpp) ;;
 	wasm) arguments=(hl --wasm --vm "${2:-ash}") ;;
 	emcc) arguments=(cpp --wasm) ;;
 	*)
@@ -22,6 +26,10 @@ case "$runtime" in
 		exit 2
 		;;
 esac
+
+if [ -z "${packaged+set}" ]; then
+	packaged=("${arguments[@]}")
+fi
 
 cargo build --manifest-path "$root/Cargo.toml" -p hxn-cli
 hxn="$root/target/debug/hxn"
@@ -50,7 +58,7 @@ test -f greeter.hxn.json || { echo "FAILED: no manifest was written" >&2; exit 1
 
 # As a package: a program's build names it and the macro it carries, and
 # nothing of where its classes, headers or library are.
-"$hxn" package "${arguments[@]}" --out "$work/package"
+"$hxn" package "${packaged[@]}" --out "$work/package"
 mkdir "$work/program"
 (
 	cd "$work/program"
@@ -65,6 +73,24 @@ mkdir "$work/program"
 		cpp)
 			"${compile[@]}" -cpp out
 			./out/Main
+			;;
+		cppia)
+			# The host is someone's hxcpp program that runs scripts and names
+			# the package; the script names the package and the host.
+			mkdir host
+			cat >host/Host.hx <<'EOF'
+// hxcpp's own zlib takes `fdopen` for missing on a Mac unless it is a macro.
+@:buildXml('<compiler id="darwin" exe="clang++" if="macos"><flag value="-Dfdopen=fdopen"/></compiler>')
+class Host {
+	static function main() {
+		cpp.cppia.Host.main();
+	}
+}
+EOF
+			haxe -cp host -cp "$work/package" "$work/package/extraParams.hxml" -main Host -cpp host/out \
+				-D scriptable -dce no -D dll_export=host.classes
+			"${compile[@]}" -cppia main.cppia -D dll_import=host.classes
+			./host/out/Host main.cppia
 			;;
 		wasm)
 			"${compile[@]}" -D wasm -hl main.hl

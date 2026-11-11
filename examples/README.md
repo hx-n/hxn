@@ -31,6 +31,10 @@ HashLink-compatible VM, with any options for it: `hxn run hl --vm ash`, or
 it with Ash, and `hxn run cpp --wasm` with hxcpp, the Emscripten SDK and
 node. Both need a nightly Rust toolchain with `rust-src`.
 
+`hxn run cppia` runs it as a CPPIA script, in an hxcpp program the command
+builds to hold the library. The first build of that program takes a few
+minutes.
+
 Without installing anything, `cargo run -p hxn-cli -- run hl` in an example's
 directory does the same with the command as the checkout has it.
 

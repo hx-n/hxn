@@ -658,6 +658,81 @@ pub fn haxe_cpp(library: &Library) -> Vec<File> {
     files
 }
 
+// What a script is told of a class its host holds: the public methods and
+// nothing of how they are carried out.
+fn cppia_module(interface: &Interface) -> String {
+    let name = &interface.name;
+    let mut out = String::from(HEADER);
+    if interface.namespace {
+        out.push_str(NAMESPACE_DOCS);
+    } else {
+        out.push_str(&docs(&interface.docs, ""));
+    }
+    out.push_str(&format!("extern class {name} {{"));
+    let mut members: Vec<String> = interface
+        .methods
+        .iter()
+        .map(|method| format!("{}{};\n", docs(&method.docs, "\t"), signature(method)))
+        .collect();
+    if interface.shared {
+        members.push(format!(
+            "{SAME_DOCS}\tpublic function same(other:Null<{name}>):Bool;\n"
+        ));
+        members.push(format!(
+            "{WEAK_DOCS}\tpublic function weak():{};\n",
+            weak_class(name)
+        ));
+    }
+    if !interface.namespace {
+        members.push(format!(
+            "{}\tpublic function close():Void;\n",
+            close_docs(interface)
+        ));
+    }
+    for (index, member) in members.iter().enumerate() {
+        out.push_str(if index == 0 { "\n" } else { "\n\n" });
+        out.push_str(member.trim_end());
+    }
+    out.push_str("\n}\n");
+    out
+}
+
+fn cppia_weak(interface: &Interface) -> String {
+    let of = &interface.name;
+    format!(
+        "{HEADER}/** A reference to a `{of}` that does not keep it alive. **/\nextern class {name} {{\n{UPGRADE_DOCS}\tpublic function upgrade():Null<{of}>;\n\n\t/** Releases the reference now. The collector does it otherwise. **/\n\tpublic function close():Void;\n}}\n",
+        name = weak_class(of),
+    )
+}
+
+/// The classes for a CPPIA script: declarations of the ones `haxe_cpp`
+/// writes, which the script's host holds. A script cannot call C++ or keep a
+/// pointer, so it is given what the classes are called with and no more.
+pub fn haxe_cppia(library: &Library) -> Vec<File> {
+    let mut files: Vec<File> = library
+        .interfaces
+        .iter()
+        .map(|interface| File {
+            path: format!("{}.hx", interface.name),
+            text: cppia_module(interface),
+        })
+        .collect();
+    for interface in library.interfaces.iter().filter(|i| i.shared) {
+        files.push(File {
+            path: format!("{}.hx", weak_class(&interface.name)),
+            text: cppia_weak(interface),
+        });
+    }
+    files.push(File {
+        path: format!("{}.hx", memory_class(library)),
+        text: format!(
+            "{HEADER}/**\n\t{MEMORY_DOCS}\n**/\nextern class {} {{\n\tpublic static var meter(default, never):hxn.Gc.Meter;\n}}\n",
+            memory_class(library)
+        ),
+    });
+    files
+}
+
 // What the extern class calls a handle: a pointer hxcpp does not look into.
 const CPP_HANDLE: &str = "Handle";
 

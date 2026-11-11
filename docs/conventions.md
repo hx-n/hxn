@@ -198,6 +198,7 @@ filesystem `#include "counter.h"` would then find the generated one.
   tests/counter/run.sh emcc
   tests/counter/run.sh gen-hl <vm>
   tests/counter/run.sh gen-cpp
+  tests/counter/run.sh gen-cppia
   tests/counter/run.sh gen-wasm <ash>
   tests/counter/run.sh gen-emcc
   ```
@@ -208,8 +209,9 @@ filesystem `#include "counter.h"` would then find the generated one.
   `hxn run`, as the readme says to, then packages it with `hxn package` and
   builds the same program against the package alone.
   `tests/examples/run.sh` runs each library under `examples/` and compares
-  what it prints with its `expected.txt`. Both take `hl <vm>`, `cpp`, `wasm <ash>` and `emcc`, and
-  a VM is named with its options, so `hl "ash --mode jit"` runs Ash's JIT.
+  what it prints with its `expected.txt`. Both take `hl <vm>`, `cpp`,
+  `cppia`, `wasm <ash>` and `emcc`, and a VM is named with its options, so
+  `hl "ash --mode jit"` runs Ash's JIT.
 - **The readme's example is `examples/greeter`, which is what `hxn new`
   makes.** A test fails when the readme differs from it.
 - **An example is a library as someone would write one:** a crate, a Haxe
@@ -219,7 +221,8 @@ filesystem `#include "counter.h"` would then find the generated one.
 - **CI runs what one machine cannot.** `.github/workflows/ci.yml` runs the
   unit tests on Linux, Windows and macOS, the lints and Miri on Linux, and
   the fixture's native modes and the command's and the examples' tests on
-  HashLink and hxcpp on Linux and Windows. Windows is run nowhere else. Ash, wasm and Emscripten are run by
+  HashLink and hxcpp on Linux and Windows, and the fixture and the command's
+  test as scripts. Windows is run nowhere else. Ash, wasm and Emscripten are run by
   hand, as above.
 - Run a runtime test under a timeout. A wrong wait hangs; it does not fail.
 - Anything concurrent is run repeatedly, on more than one machine.

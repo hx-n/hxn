@@ -9,13 +9,14 @@
 # haxe/Generated.hx:
 #   run.sh gen-hl [vm]
 #   run.sh gen-cpp
+#   run.sh gen-cppia   as a script, in an hxcpp program that holds the classes
 #   run.sh gen-wasm [ash]
 #   run.sh gen-emcc
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "$here/../.." && pwd)"
-runtime="${1:?usage: run.sh hl [vm] | cpp | wasm [ash] | emcc | gen-hl [vm] | gen-cpp | gen-wasm [ash] | gen-emcc}"
+runtime="${1:?usage: run.sh hl [vm] | cpp | wasm [ash] | emcc | gen-hl [vm] | gen-cpp | gen-cppia | gen-wasm [ash] | gen-emcc}"
 
 # What cargo and hxcpp name what they build for this system.
 prefix=lib static=a exe=
@@ -88,6 +89,25 @@ case "$runtime" in
 			-D COUNTER_INCLUDE="$work/gen/include" \
 			-D COUNTER_LIB="$root/target/debug/${prefix}counter_gen.$static"
 		"$work/out/Generated$exe" | tee "$work/out.txt"
+		;;
+	gen-cppia)
+		staticlib counter-gen-c
+		generate
+		# The host is an hxcpp program that keeps every class of the binding
+		# and of hxn, and says which they are for the script's compile. It
+		# keeps what it does not use itself: a script may.
+		haxe -cp "$root/haxe" -cp "$here/haxe" -cp "$here/haxe/cppia" -cp "$work/gen/haxe/cpp" -main Host -cpp "$work/host" \
+			-D scriptable -dce no -D dll_export="$work/host.classes" \
+			--macro "include('hxn')" --macro "include('', true, null, ['$work/gen/haxe/cpp'])" Finish \
+			${linked[@]+"${linked[@]}"} \
+			-D HXN_INCLUDE="$root/include" \
+			-D COUNTER_INCLUDE="$work/gen/include" \
+			-D COUNTER_LIB="$root/target/debug/${prefix}counter_gen.$static"
+		# The script is compiled against declarations of the binding's
+		# classes, and leaves out whatever the host already holds.
+		haxe -cp "$root/haxe" -cp "$here/haxe" -cp "$work/gen/haxe/cppia" -main Generated -cppia "$work/generated.cppia" \
+			-D dll_import="$work/host.classes"
+		"$work/host/Host$exe" "$work/generated.cppia" | tee "$work/out.txt"
 		;;
 	hl)
 		vm="$(command -v "${2:-hl}")"

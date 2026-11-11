@@ -9,6 +9,7 @@ mod make;
 mod new;
 mod package;
 mod project;
+mod script;
 mod support;
 
 use std::path::{Path, PathBuf};
@@ -23,14 +24,18 @@ const USAGE: &str = "usage: hxn <command>
       Makes a library in a new directory: a crate, and a Haxe program that
       uses it. With --hxn it depends on that copy of hxn's repository.
 
-  hxn build <hl|cpp> [--wasm] [--release]
+  hxn build <hl|cpp|cppia> [--wasm] [--release]
       Writes the library's binding for HashLink or hxcpp and builds it.
       Prints what to pass haxe to compile against it.
 
-  hxn run <hl|cpp> [--wasm] [--release] [--vm <command>] [-- <arguments>]
+  hxn run <hl|cpp|cppia> [--wasm] [--release] [--vm <command>] [-- <arguments>]
       Builds, then compiles the Haxe program in haxe/ and runs it. --vm, or
       HXN_VM, names the HashLink-compatible program to run it with, and
       any options for it: --vm \"ash --mode jit\".
+
+`cppia` is the hxcpp binding used from a script: it also builds a host, an
+hxcpp program that holds the library's classes, and the Haxe program is
+compiled as a script and run by that host.
 
   hxn package [hl] [cpp] [--wasm] [--release] [--out <directory>]
       Builds the library for both runtimes, or the ones named, and gathers
@@ -89,12 +94,22 @@ fn arguments(mut given: impl Iterator<Item = String>) -> Result<Arguments, Strin
     Ok(out)
 }
 
+// Whether the program is to be a CPPIA script, which is the hxcpp binding
+// with a host around it.
+fn script(arguments: &Arguments) -> bool {
+    arguments.positional == ["cppia"]
+}
+
 fn target(arguments: &Arguments) -> Result<Target, String> {
     let runtime = match arguments.positional.as_slice() {
-        [name] => {
-            Runtime::parse(name).ok_or(format!("unknown runtime `{name}`: it is `hl` or `cpp`"))?
+        [_] if script(arguments) && arguments.wasm => {
+            return Err(String::from("a script's host is not built for wasm"));
         }
-        _ => return Err(String::from("name one runtime: `hl` or `cpp`")),
+        [_] if script(arguments) => Runtime::Cpp,
+        [name] => Runtime::parse(name).ok_or(format!(
+            "unknown runtime `{name}`: it is `hl`, `cpp` or `cppia`"
+        ))?,
+        _ => return Err(String::from("name one runtime: `hl`, `cpp` or `cppia`")),
     };
     Ok(Target {
         runtime,
@@ -166,6 +181,26 @@ fn run(project: &Project, target: Target, arguments: Arguments) -> Result<u8, St
         ));
     }
     let mut haxe = Command::new("haxe");
+    if script(&arguments) {
+        let host = script::host(project, &built)?;
+        for (flag, value) in &host.arguments {
+            haxe.arg(flag).arg(value);
+        }
+        let program = host.dir.join("main.cppia");
+        haxe.arg("-cp")
+            .arg(&project.haxe)
+            .arg("-main")
+            .arg(&project.main)
+            .args(&project.flags)
+            .arg("-cppia")
+            .arg(&program);
+        make::run(&mut haxe)?;
+        return exit(
+            Command::new(host.program)
+                .arg(program)
+                .args(&arguments.rest),
+        );
+    }
     for (flag, value) in &built.arguments {
         haxe.arg(flag).arg(value);
     }
@@ -286,6 +321,16 @@ fn command() -> Result<u8, String> {
                 arguments.release,
                 hashlink(&arguments, target).as_deref(),
             )?;
+            if script(&arguments) {
+                let host = script::host(&project, &built)?;
+                println!(
+                    "Built {} and a host for scripts that use it. To compile a script and run it:\n  haxe {} -cp <your classes> -main <Main> -cppia main.cppia\n  {} main.cppia",
+                    project.library,
+                    host.hxml.display(),
+                    host.program.display()
+                );
+                return Ok(0);
+            }
             let output = match target.runtime {
                 Runtime::Hl => "-hl main.hl",
                 Runtime::Cpp => "-cpp out",
@@ -396,5 +441,17 @@ mod tests {
         assert_eq!(read.rest, ["--release", "x"]);
         assert!(arguments(["--vm"].into_iter().map(String::from)).is_err());
         assert!(arguments(["--fast"].into_iter().map(String::from)).is_err());
+    }
+
+    #[test]
+    fn a_script_is_the_hxcpp_binding_and_has_no_wasm_form() {
+        let read = |given: &[&str]| arguments(given.iter().map(|word| word.to_string())).unwrap();
+        let cppia = read(&["cppia"]);
+        assert!(script(&cppia));
+        let built = target(&cppia).unwrap();
+        assert_eq!((built.runtime, built.wasm), (Runtime::Cpp, false));
+        assert!(!script(&read(&["cpp"])));
+        assert!(target(&read(&["cppia", "--wasm"])).is_err());
+        assert!(target(&read(&["neko"])).is_err());
     }
 }

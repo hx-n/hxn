@@ -11,6 +11,7 @@
 //! | the C header for the first | [`c_header`] |
 //! | the C++ glue hxcpp calls it through | [`cpp_glue`] |
 //! | the Haxe classes | [`haxe_hl`], [`haxe_cpp`] |
+//! | their declarations, for a CPPIA script | [`haxe_cppia`] |
 //!
 //! The library itself is not changed and gains no runtime. Each adapter is
 //! the text of a file that a thin crate of its own includes, usually from a
@@ -27,7 +28,7 @@ mod parse;
 mod rust;
 
 pub use c::{c_header, cpp_glue};
-pub use haxe::{File, haxe_cpp, haxe_hl};
+pub use haxe::{File, haxe_cpp, haxe_cppia, haxe_hl};
 pub use manifest::manifest;
 pub use model::{Error, Interface, Library, Method, Number, Param, Receiver, Type};
 pub use parse::{parse, parse_crate};

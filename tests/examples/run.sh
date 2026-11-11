@@ -4,17 +4,19 @@
 #   run.sh hl [vm]     vm is a HashLink-compatible executable, default `hl`,
 #                      with any options for it: "ash --mode jit"
 #   run.sh cpp
+#   run.sh cppia       as a script, in an hxcpp program that holds the library
 #   run.sh wasm [ash]  built and run by Ash
 #   run.sh emcc        hxcpp through Emscripten, run by node; needs emcc on PATH
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "$here/../.." && pwd)"
-runtime="${1:?usage: run.sh hl [vm] | cpp | wasm [ash] | emcc}"
+runtime="${1:?usage: run.sh hl [vm] | cpp | cppia | wasm [ash] | emcc}"
 
 case "$runtime" in
 	hl) arguments=(run hl --vm "${2:-hl}") ;;
 	cpp) arguments=(run cpp) ;;
+	cppia) arguments=(run cppia) ;;
 	wasm) arguments=(run hl --wasm --vm "${2:-ash}") ;;
 	emcc) arguments=(run cpp --wasm) ;;
 	*)

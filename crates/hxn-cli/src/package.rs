@@ -8,6 +8,7 @@
 //! | `<library>.hxn.json` | the manifest, which `hxn.Bind` finds the package by |
 //! | `hxn/` | hxn's own Haxe classes |
 //! | `binding/<runtime>/` | the library's Haxe classes for `hl` or `cpp` |
+//! | `binding/cppia/` | declarations of the `cpp` ones, for a CPPIA script |
 //! | `include/` | `hxn.h` and the library's headers, for hxcpp |
 //! | `native/<triple>/` | the built libraries for one kind of machine, or for wasm |
 //!
@@ -83,6 +84,9 @@ pub fn package(
         )?;
         if target.runtime == Runtime::Cpp {
             mirror(&built.include, &out.join("include"))?;
+        }
+        if target.runtime == Runtime::Cpp && !target.wasm {
+            mirror(&built.declarations, &out.join("binding").join("cppia"))?;
         }
         let triple = target.triple().unwrap_or(&host).to_owned();
         let native = out.join("native").join(&triple);

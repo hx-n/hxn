@@ -10,6 +10,7 @@
 //! | `<runtime>/haxe/` | the library's Haxe classes, a class path |
 //! | `<runtime>/build.hxml` | what to pass `haxe` to compile against them |
 //! | `hl/<library>.hdll` | the built library, for HashLink |
+//! | `cppia/` | what a CPPIA script needs, which [`crate::script`] writes |
 //! | `hl-wasm/<library>.wasm` | the same as a module Ash loads into a wasm program |
 //!
 //! `<runtime>` is `hl` or `cpp`, and `hl-wasm` or `cpp-wasm` for a wasm
@@ -105,6 +106,9 @@ pub struct Built {
     pub include: PathBuf,
     /// What was built: the library a VM loads, or the archive hxcpp links.
     pub library: PathBuf,
+    /// Declarations of the hxcpp classes for a CPPIA script, a class path.
+    /// Written with a native hxcpp build and no other.
+    pub declarations: PathBuf,
 }
 
 // Leaves a file that already says this alone, so cargo and haxe rebuild
@@ -137,7 +141,7 @@ pub fn run(command: &mut Command) -> Result<(), String> {
     }
 }
 
-fn text(path: &Path) -> String {
+pub fn text(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }
 
@@ -255,6 +259,23 @@ fn side_module(archive: &Path, adapter: &str, module: &Path) -> Result<(), Strin
     run(&mut link)
 }
 
+// Makes `dir` hold these classes and no others: one for an interface the
+// library no longer has would still compile.
+fn classes_in(dir: &Path, classes: &[hxn_gen::File]) -> Result<(), String> {
+    for class in classes {
+        write(&dir.join(&class.path), &class.text)?;
+    }
+    for entry in std::fs::read_dir(dir).map_err(|error| format!("{}: {error}", dir.display()))? {
+        let entry = entry.map_err(|error| error.to_string())?;
+        let file = entry.file_name().to_string_lossy().into_owned();
+        if !classes.iter().any(|class| class.path == file) {
+            std::fs::remove_file(entry.path())
+                .map_err(|error| format!("{}: {error}", entry.path().display()))?;
+        }
+    }
+    Ok(())
+}
+
 /// Reads the library's marked items, writes its binding for `target` and
 /// builds the adapter. `hashlink` is the directory the VM is in.
 pub fn build(
@@ -342,17 +363,10 @@ pub fn build(
     )?;
 
     let haxe = dir.join("haxe");
-    for class in &classes {
-        write(&haxe.join(&class.path), &class.text)?;
-    }
-    // A class for an interface the library no longer has would still compile.
-    for entry in std::fs::read_dir(&haxe).map_err(|error| format!("{}: {error}", haxe.display()))? {
-        let entry = entry.map_err(|error| error.to_string())?;
-        let file = entry.file_name().to_string_lossy().into_owned();
-        if !classes.iter().any(|class| class.path == file) {
-            std::fs::remove_file(entry.path())
-                .map_err(|error| format!("{}: {error}", entry.path().display()))?;
-        }
+    classes_in(&haxe, &classes)?;
+    let declarations = out.join("cppia").join("haxe");
+    if runtime == Runtime::Cpp && !target.wasm {
+        classes_in(&declarations, &hxn_gen::haxe_cppia(&library))?;
     }
 
     // Built with what the library's own lock file resolved, the first time.
@@ -453,6 +467,7 @@ pub fn build(
         classes: haxe,
         include: out.join("include"),
         library: built,
+        declarations,
     })
 }
 

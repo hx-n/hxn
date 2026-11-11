@@ -17,6 +17,10 @@ import sys.io.File;
 	tells hxcpp where the headers and the built library are, and puts a
 	HashLink library beside the program.
 
+	A CPPIA script gets declarations of the hxcpp classes, which its host
+	holds: an hxcpp program compiled with `-D scriptable` and this same macro,
+	which then keeps the library's classes whether or not it uses them.
+
 	The library taken is the one built for this machine, or for wasm when
 	`wasm` or `emscripten` is defined. `-D hxn_triple=<triple>` names another,
 	as Rust names what it builds for.
@@ -39,13 +43,19 @@ class Bind {
 		var runtime = if (Context.defined("hl")) "hl" else if (Context.defined("cpp")) "cpp" else null;
 		if (runtime == null)
 			fail('$name is bound for HashLink and hxcpp, and this compile is for neither');
-		var classes = Path.join([root, "binding", runtime]);
+		// A script is compiled for hxcpp too, and calls nothing native itself.
+		var script = Context.defined("cppia");
+		var classes = Path.join([root, "binding", script ? "cppia" : runtime]);
 		if (!FileSystem.isDirectory(classes))
 			fail('the package in $root was not built for $runtime: run `hxn package $runtime` on the library');
 		Compiler.addClassPath(classes);
 		// An editor asks for types, and builds nothing to find a library for.
-		if (Context.defined("display"))
+		if (script || Context.defined("display"))
 			return;
+		if (runtime == "cpp" && Context.defined("scriptable")) {
+			Compiler.include("hxn");
+			Compiler.include("", true, null, [classes]);
+		}
 
 		var triple = triple(runtime);
 		var built = Path.join([root, "native", triple]);

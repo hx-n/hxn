@@ -1356,3 +1356,65 @@ fn says_what_a_function_outside_an_impl_cannot_be() {
     assert_eq!(only.interfaces[0].name, "Maths");
     assert!(hxn_gen::hl_adapter(&only, "maths").contains("Ok(hxn_library::double(value))"));
 }
+
+// The public functions a class file has, as they are declared.
+fn public_functions(text: &str) -> Vec<String> {
+    text.lines()
+        .filter(|line| line.starts_with("\tpublic ") && line.contains("function "))
+        .map(|line| {
+            line.trim_end_matches(" {")
+                .trim_end_matches(';')
+                .trim()
+                .to_owned()
+        })
+        .collect()
+}
+
+// A script calls the classes its host holds, so each declaration it is
+// compiled against has to say what the hxcpp class of that name has.
+#[test]
+fn a_script_is_told_what_each_class_is_called_with() {
+    let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/counter");
+    let (library, _) =
+        hxn_gen::parse_crate("counter", format!("{root}/core/src/lib.rs").as_ref()).unwrap();
+    let held = hxn_gen::haxe_cpp(&library);
+    let declared = hxn_gen::haxe_cppia(&library);
+    for interface in &library.interfaces {
+        let path = format!("{}.hx", interface.name);
+        assert!(declared.iter().any(|file| file.path == path), "{path}");
+    }
+    for declaration in &declared {
+        let class = held
+            .iter()
+            .find(|file| file.path == declaration.path)
+            .unwrap_or_else(|| panic!("{} declares a class no host holds", declaration.path));
+        assert!(
+            declaration.text.contains("\nextern class "),
+            "{}",
+            declaration.path
+        );
+        assert_eq!(
+            public_functions(&declaration.text),
+            public_functions(&class.text),
+            "{}",
+            declaration.path
+        );
+        // Nothing of how the class reaches the library.
+        for inside in ["raw", "Native", "cpp."] {
+            assert!(
+                !declaration.text.contains(inside),
+                "{} names `{inside}`",
+                declaration.path
+            );
+        }
+    }
+    let memory = declared
+        .iter()
+        .find(|file| file.path == "HxnCounterMemory.hx")
+        .unwrap();
+    assert!(
+        memory
+            .text
+            .contains("public static var meter(default, never):hxn.Gc.Meter;")
+    );
+}
