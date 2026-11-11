@@ -13,6 +13,11 @@
 	<lib name="${COUNTER_LIB}"/>
 	<lib name="-lpthread" if="linux"/>
 	<lib name="-ldl" if="linux"/>
+	<lib name="kernel32.lib" if="windows"/>
+	<lib name="ntdll.lib" if="windows"/>
+	<lib name="userenv.lib" if="windows"/>
+	<lib name="ws2_32.lib" if="windows"/>
+	<lib name="dbghelp.lib" if="windows"/>
 </target>
 ')
 @:headerInclude("counter_glue.h")

@@ -217,8 +217,8 @@ filesystem `#include "counter.h"` would then find the generated one.
   nothing; what has to be checked is in the fixture.
 - **CI runs what one machine cannot.** `.github/workflows/ci.yml` runs the
   unit tests on Linux, Windows and macOS, the lints and Miri on Linux, and
-  the command's and the examples' tests on HashLink and hxcpp on Linux and
-  Windows. Windows is run nowhere else. Ash, wasm and Emscripten are run by
+  the fixture's native modes and the command's and the examples' tests on
+  HashLink and hxcpp on Linux and Windows. Windows is run nowhere else. Ash, wasm and Emscripten are run by
   hand, as above.
 - Run a runtime test under a timeout. A wrong wait hangs; it does not fail.
 - Anything concurrent is run repeatedly, on more than one machine.

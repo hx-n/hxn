@@ -107,11 +107,8 @@ jobs:
       - run: hl --version
       - run: tests/cli/run.sh hl
       - run: tests/examples/run.sh hl
-      # The fixture's own crates are not built for Windows yet.
-      - if: runner.os == 'Linux'
-        run: tests/counter/run.sh hl
-      - if: runner.os == 'Linux'
-        run: tests/counter/run.sh gen-hl
+      - run: tests/counter/run.sh hl
+      - run: tests/counter/run.sh gen-hl
 
   hxcpp:
     name: hxcpp, ${{ matrix.os }}
@@ -133,8 +130,5 @@ jobs:
       - run: haxelib install hxcpp 4.3.2 --quiet
       - run: tests/cli/run.sh cpp
       - run: tests/examples/run.sh cpp
-      # The fixture's own crates are not built for Windows yet.
-      - if: runner.os == 'Linux'
-        run: tests/counter/run.sh cpp
-      - if: runner.os == 'Linux'
-        run: tests/counter/run.sh gen-cpp
+      - run: tests/counter/run.sh cpp
+      - run: tests/counter/run.sh gen-cpp

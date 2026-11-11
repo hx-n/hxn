@@ -16,13 +16,50 @@ set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "$here/../.." && pwd)"
 runtime="${1:?usage: run.sh hl [vm] | cpp | wasm [ash] | emcc | gen-hl [vm] | gen-cpp | gen-wasm [ash] | gen-emcc}"
+
+# What cargo and hxcpp name what they build for this system.
+prefix=lib static=a exe=
+case "$(uname -s)" in
+	Darwin) dylib=dylib ;;
+	MINGW* | MSYS* | CYGWIN*)
+		prefix='' dylib=dll static=lib exe=.exe
+		# As a program that is not this shell's reads a path.
+		here="$(cygpath -m "$here")"
+		root="$(cygpath -m "$root")"
+		;;
+	*) dylib=so ;;
+esac
 work="$root/target/counter-$runtime"
 mkdir -p "$work"
 
-case "$(uname -s)" in
-	Darwin) dylib=dylib ;;
-	*) dylib=so ;;
-esac
+# Builds one of the HashLink libraries against the VM in $vm and puts it
+# where the VM will look for `counter`.
+hdll() {
+	vm_dir="$(dirname "$vm")"
+	if [ -n "$exe" ]; then
+		# Windows links the library against the VM's own, and its loader
+		# looks along PATH.
+		export HXN_HL_DIR="${HXN_HL_DIR:-$(cygpath -m "$vm_dir")}"
+		PATH="$(cygpath -u "$work"):$PATH"
+	fi
+	cargo build --manifest-path "$root/Cargo.toml" -p "$1"
+	cp "$root/target/debug/$prefix${1//-/_}.$dylib" "$work/counter.hdll"
+}
+
+# Builds one of the archives hxcpp links, and says what else hxcpp needs to
+# link it.
+linked=()
+staticlib() {
+	if [ -n "$exe" ]; then
+		# hxcpp links the static C runtime there, and builds for 32 bits
+		# unless told.
+		RUSTFLAGS="${RUSTFLAGS:-} -C target-feature=+crt-static" \
+			cargo build --manifest-path "$root/Cargo.toml" -p "$1"
+		linked=(-D HXCPP_M64)
+	else
+		cargo build --manifest-path "$root/Cargo.toml" -p "$1"
+	fi
+}
 
 # The header, the glue and the Haxe classes, from the same source the
 # adapter crates build theirs from.
@@ -34,44 +71,42 @@ generate() {
 case "$runtime" in
 	gen-hl)
 		vm="$(command -v "${2:-hl}")"
-		cargo build --manifest-path "$root/Cargo.toml" -p counter-gen-hl
+		hdll counter-gen-hl
 		generate
-		cp "$root/target/debug/libcounter_gen_hl.$dylib" "$work/counter.hdll"
 		haxe -cp "$root/haxe" -cp "$here/haxe" -cp "$work/gen/haxe/hl" -main Generated -hl "$work/main.hl"
 		cd "$work"
-		vm_dir="$(dirname "$vm")"
 		DYLD_LIBRARY_PATH="$work:$vm_dir${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}" \
 		LD_LIBRARY_PATH="$work:$vm_dir${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
 			"$vm" main.hl | tee "$work/out.txt"
 		;;
 	gen-cpp)
-		cargo build --manifest-path "$root/Cargo.toml" -p counter-gen-c
+		staticlib counter-gen-c
 		generate
 		haxe -cp "$root/haxe" -cp "$here/haxe" -cp "$work/gen/haxe/cpp" -main Generated -cpp "$work/out" \
+			${linked[@]+"${linked[@]}"} \
 			-D HXN_INCLUDE="$root/include" \
 			-D COUNTER_INCLUDE="$work/gen/include" \
-			-D COUNTER_LIB="$root/target/debug/libcounter_gen.a"
-		"$work/out/Generated" | tee "$work/out.txt"
+			-D COUNTER_LIB="$root/target/debug/${prefix}counter_gen.$static"
+		"$work/out/Generated$exe" | tee "$work/out.txt"
 		;;
 	hl)
 		vm="$(command -v "${2:-hl}")"
-		cargo build --manifest-path "$root/Cargo.toml" -p counter-hl
-		cp "$root/target/debug/libcounter_hl.$dylib" "$work/counter.hdll"
+		hdll counter-hl
 		haxe -cp "$root/haxe" -cp "$here/haxe" -cp "$here/haxe/hl" -main Main -hl "$work/main.hl"
 		cd "$work"
 		# The VM resolves a bare library name through the OS loader.
-		vm_dir="$(dirname "$vm")"
 		DYLD_LIBRARY_PATH="$work:$vm_dir${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}" \
 		LD_LIBRARY_PATH="$work:$vm_dir${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
 			"$vm" main.hl | tee "$work/out.txt"
 		;;
 	cpp)
-		cargo build --manifest-path "$root/Cargo.toml" -p counter-c
+		staticlib counter-c
 		haxe -cp "$root/haxe" -cp "$here/haxe" -cp "$here/haxe/cpp" -main Main -cpp "$work" \
+			${linked[@]+"${linked[@]}"} \
 			-D HXN_INCLUDE="$root/include" \
 			-D COUNTER_INCLUDE="$here/c" \
-			-D COUNTER_LIB="$root/target/debug/libcounter.a"
-		"$work/Main" | tee "$work/out.txt"
+			-D COUNTER_LIB="$root/target/debug/${prefix}counter.$static"
+		"$work/Main$exe" | tee "$work/out.txt"
 		;;
 	wasm | gen-wasm)
 		ash="$(command -v "${2:-ash}")"
