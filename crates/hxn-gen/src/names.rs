@@ -1,6 +1,6 @@
 //! The names generated code agrees on across its files.
 
-use crate::model::{Interface, Library, Method};
+use crate::model::{Library, Method, Receiver};
 
 /// `AudioDevice` as `audio_device`.
 pub fn snake(name: &str) -> String {
@@ -37,12 +37,12 @@ pub fn camel(name: &str) -> String {
 
 /// A method's name within its library: `counter_add` for `Counter::add`.
 /// The Haxe side declares its primitive under this name.
-pub fn local(interface: &Interface, method: &str) -> String {
-    format!("{}_{}", snake(&interface.name), method)
+pub fn local(interface: &str, method: &str) -> String {
+    format!("{}_{}", snake(interface), method)
 }
 
 /// The symbol a method is exported as: `counter_counter_add`.
-pub fn export(library: &Library, interface: &Interface, method: &str) -> String {
+pub fn export(library: &Library, interface: &str, method: &str) -> String {
     format!("{}_{}", library.name, local(interface, method))
 }
 
@@ -52,11 +52,11 @@ pub fn release(library: &Library) -> String {
 }
 
 /// What HashLink knows an interface's values as.
-pub fn abstract_name(library: &Library, interface: &Interface) -> String {
-    format!("{}_{}", library.name, snake(&interface.name))
+pub fn abstract_name(library: &Library, interface: &str) -> String {
+    format!("{}_{}", library.name, snake(interface))
 }
 
 /// Whether `method` is called on a value, as opposed to the type.
 pub fn has_receiver(method: &Method) -> bool {
-    method.receiver != crate::model::Receiver::None
+    method.receiver != Receiver::None
 }

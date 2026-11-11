@@ -10,7 +10,7 @@
           "name": "new",
           "kind": "constructor",
           "params": [{ "name": "start", "type": "i32" }],
-          "returns": "self",
+          "returns": "Counter",
           "fallible": false,
           "blocking": false
         },
@@ -65,6 +65,51 @@
           "blocking": false
         },
         {
+          "name": "absorb",
+          "docs": "Adds another counter's value to this one.",
+          "kind": "mutating",
+          "params": [{ "name": "other", "type": "Counter" }],
+          "returns": "i32",
+          "fallible": true,
+          "blocking": false
+        },
+        {
+          "name": "swap",
+          "docs": "Exchanges values with another counter.",
+          "kind": "mutating",
+          "params": [{ "name": "other", "type": "Counter", "borrow": "exclusive" }],
+          "returns": "void",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "fork",
+          "docs": "A new counter starting at this one's value.",
+          "kind": "method",
+          "params": [],
+          "returns": "Counter",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "larger",
+          "docs": "A counter at the larger of the two values, or nothing without\nanother to compare with.",
+          "kind": "method",
+          "params": [{ "name": "other", "type": "Counter?" }],
+          "returns": "Counter?",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "into_value",
+          "docs": "Gives the counter up for its value.",
+          "kind": "consuming",
+          "params": [],
+          "returns": "i32",
+          "fallible": false,
+          "blocking": false
+        },
+        {
           "name": "live",
           "docs": "How many counters exist.",
           "kind": "static",
@@ -90,6 +135,46 @@
           "returns": "void",
           "fallible": false,
           "blocking": true
+        }
+      ]
+    },
+    {
+      "name": "Tally",
+      "docs": "A running total of counters: one interface that takes and makes another.",
+      "methods": [
+        {
+          "name": "new",
+          "kind": "constructor",
+          "params": [],
+          "returns": "Tally",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "record",
+          "docs": "Adds a counter's value to the total and returns it.",
+          "kind": "mutating",
+          "params": [{ "name": "counter", "type": "Counter" }],
+          "returns": "i32",
+          "fallible": true,
+          "blocking": false
+        },
+        {
+          "name": "total",
+          "kind": "method",
+          "params": [],
+          "returns": "i32",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "to_counter",
+          "docs": "A counter starting at the total.",
+          "kind": "method",
+          "params": [],
+          "returns": "Counter",
+          "fallible": false,
+          "blocking": false
         }
       ]
     }

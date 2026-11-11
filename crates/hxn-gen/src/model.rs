@@ -31,13 +31,8 @@ pub struct Method {
     pub fallible: bool,
     /// Marked `#[hxn(blocking)]`: the collector may run while it waits.
     pub blocking: bool,
-}
-
-impl Method {
     /// `new`, which makes the value a Haxe `new` wraps.
-    pub fn is_constructor(&self) -> bool {
-        self.returns == Type::Own
-    }
+    pub constructor: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -48,17 +43,22 @@ pub enum Receiver {
     Shared,
     /// `&mut self`.
     Exclusive,
+    /// `self`: the value is consumed, and the Haxe object closed.
+    Owned,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Param {
     pub name: String,
     pub ty: Type,
+    /// For an interface, borrowed as `&mut` and not `&`.
+    pub exclusive: bool,
 }
 
 /// The types that cross. A parameter is borrowed for the call and a result
-/// is handed over, so `Str` is `&str` coming in and `String` going out.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+/// is handed over, so `Str` is `&str` coming in and `String` going out, and
+/// an interface is `&T` or `&mut T` coming in and `T` going out.
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Type {
     Void,
     Bool,
@@ -66,21 +66,33 @@ pub enum Type {
     F64,
     Str,
     Bytes,
-    /// The interface itself, from its constructor.
-    Own,
+    /// A value of an interface, or with `nullable` possibly none.
+    Handle {
+        interface: String,
+        nullable: bool,
+    },
 }
 
 impl Type {
     /// Its name in the manifest.
-    pub fn name(self) -> &'static str {
+    pub fn name(&self) -> String {
         match self {
-            Self::Void => "void",
-            Self::Bool => "bool",
-            Self::I32 => "i32",
-            Self::F64 => "f64",
-            Self::Str => "str",
-            Self::Bytes => "bytes",
-            Self::Own => "self",
+            Self::Void => String::from("void"),
+            Self::Bool => String::from("bool"),
+            Self::I32 => String::from("i32"),
+            Self::F64 => String::from("f64"),
+            Self::Str => String::from("str"),
+            Self::Bytes => String::from("bytes"),
+            Self::Handle {
+                interface,
+                nullable,
+            } => {
+                if *nullable {
+                    format!("{interface}?")
+                } else {
+                    interface.clone()
+                }
+            }
         }
     }
 }

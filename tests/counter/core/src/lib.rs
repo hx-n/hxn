@@ -72,6 +72,32 @@ impl Counter {
         self.value = if negate { -value } else { value };
     }
 
+    /// Adds another counter's value to this one.
+    pub fn absorb(&mut self, other: &Counter) -> Result<i32, Overflow> {
+        self.add(other.value)
+    }
+
+    /// Exchanges values with another counter.
+    pub fn swap(&mut self, other: &mut Counter) {
+        std::mem::swap(&mut self.value, &mut other.value);
+    }
+
+    /// A new counter starting at this one's value.
+    pub fn fork(&self) -> Counter {
+        Counter::new(self.value)
+    }
+
+    /// A counter at the larger of the two values, or nothing without
+    /// another to compare with.
+    pub fn larger(&self, other: Option<&Counter>) -> Option<Counter> {
+        Some(Counter::new(self.value.max(other?.value)))
+    }
+
+    /// Gives the counter up for its value.
+    pub fn into_value(self) -> i32 {
+        self.value
+    }
+
     /// How many counters exist.
     pub fn live() -> i32 {
         live()
@@ -107,6 +133,40 @@ impl Counter {
 impl Drop for Counter {
     fn drop(&mut self) {
         LIVE.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
+/// A running total of counters: one interface that takes and makes another.
+#[hxn::interface]
+pub struct Tally {
+    total: i32,
+}
+
+#[hxn::methods]
+impl Tally {
+    pub fn new() -> Self {
+        Self { total: 0 }
+    }
+
+    /// Adds a counter's value to the total and returns it.
+    pub fn record(&mut self, counter: &Counter) -> Result<i32, Overflow> {
+        self.total = self.total.checked_add(counter.value).ok_or(Overflow)?;
+        Ok(self.total)
+    }
+
+    pub fn total(&self) -> i32 {
+        self.total
+    }
+
+    /// A counter starting at the total.
+    pub fn to_counter(&self) -> Counter {
+        Counter::new(self.total)
+    }
+}
+
+impl Default for Tally {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

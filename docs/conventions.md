@@ -53,8 +53,12 @@ filesystem `#include "counter.h"` would then find the generated one.
 
 ## Rust side
 
-- A function exposed to Haxe takes `&self` or `&mut self`, or no receiver.
-  Only `new` returns the interface itself. No generics, no `self` by value.
+- A function exposed to Haxe takes `&self`, `&mut self` or `self`, or no
+  receiver. `self` by value closes the Haxe object. `new` is the constructor.
+  No generics.
+- Another interface is taken as `&T` or `&mut T` and returned as `T`, with
+  `Option` for one that may be absent. It is never taken by value and never
+  returned by reference.
 - Errors are a `Result` whose error implements `Display`. Do not panic to
   report a failure: a wasm build cannot catch it.
 - Mark a function that waits with `#[hxn(blocking)]`.
@@ -82,6 +86,11 @@ filesystem `#include "counter.h"` would then find the generated one.
   signal as well.
 - **Every class that owns a handle has `close()` and a finalizer.** The
   finalizer frees and does nothing else: it runs inside a collection.
+- **A returned value gets a new object of its interface's class**, which
+  becomes its owner only once the library has handed the value over.
+- **A null object is passed as a null handle**, whether or not the library
+  takes one. The library refuses it, with the same error on every runtime;
+  hxcpp does not check a null object before reading its field.
 - On hxcpp, a raw pointer field is `@:unreflective`, and a call that waits is
   made inside `hxn::Blocking`. Failures are thrown by `hxn::check` after the
   library has returned.

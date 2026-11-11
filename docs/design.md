@@ -81,6 +81,35 @@ one fails with `Busy` instead of waiting or aliasing.
 
 `T` must be `Send`, because a collector finalizes on whichever thread it runs.
 
+### Passing handles
+
+One Haxe object owns one handle. Everything else follows from keeping that
+true.
+
+| In Rust | Meaning | In Haxe |
+|---|---|---|
+| `&T` parameter | borrowed for the call, shared | an object |
+| `&mut T` parameter | borrowed for the call, exclusive | an object |
+| `T` result, from any function | a new value, handed over | a new object |
+| `self` by value | the value is consumed | the object is closed by the call |
+| `Option` of any of these | may be absent | `null` |
+
+- **A parameter is only ever borrowed.** Passing the same object twice in ways
+  that conflict, as the receiver of a `&mut self` method and as its argument,
+  fails with "in use" like any other conflicting borrow.
+- **A result is always owned.** There are no borrowed results: a value that
+  refers into another cannot be tied to it across the boundary. A child that
+  needs its parent holds a shared reference to it.
+- **Sharing is the library's choice.** To hand the same thing out twice, the
+  library returns something clonable, an `Arc` for instance, and each return
+  is a handle of its own. Two Haxe objects may then refer to one value; Haxe
+  object identity is not preserved.
+- **Haxe values stay in Haxe.** A library that must remember something of the
+  host's is given an id, and the binding keeps the table. Rooting a host
+  value from native code has the same cycle problem as rooting a function.
+- **A handle belongs to the library that made it.** One passed to another
+  library is refused by the type check.
+
 ## Calling a Haxe function
 
 Native code cannot be thrown through, cannot be called from a thread the

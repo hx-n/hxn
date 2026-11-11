@@ -29,20 +29,27 @@ fn docs(lines: &[String], indent: &str) -> String {
 }
 
 fn method(method: &Method) -> String {
-    let kind = match (method.receiver, method.is_constructor()) {
+    let kind = match (method.receiver, method.constructor) {
         (_, true) => "constructor",
         (Receiver::None, false) => "static",
         (Receiver::Shared, false) => "method",
         (Receiver::Exclusive, false) => "mutating",
+        (Receiver::Owned, false) => "consuming",
     };
     let params: Vec<String> = method
         .params
         .iter()
         .map(|param| {
+            // Said only for an interface borrowed as `&mut`.
+            let borrow = if param.exclusive {
+                ", \"borrow\": \"exclusive\""
+            } else {
+                ""
+            };
             format!(
-                "{{ \"name\": {}, \"type\": {} }}",
+                "{{ \"name\": {}, \"type\": {}{borrow} }}",
                 quoted(&param.name),
-                quoted(param.ty.name())
+                quoted(&param.ty.name())
             )
         })
         .collect();
@@ -53,7 +60,7 @@ fn method(method: &Method) -> String {
     out.push_str(&format!("          \"params\": [{}],\n", params.join(", ")));
     out.push_str(&format!(
         "          \"returns\": {},\n",
-        quoted(method.returns.name())
+        quoted(&method.returns.name())
     ));
     out.push_str(&format!("          \"fallible\": {},\n", method.fallible));
     out.push_str(&format!("          \"blocking\": {}\n", method.blocking));

@@ -16,26 +16,27 @@ fn declaration(library: &Library, interface: &Interface, method: &Method) -> Str
         params.push(String::from("hxn_handle *self"));
     }
     for param in &method.params {
-        let ty = match param.ty {
-            Type::Bool | Type::I32 => "int32_t",
-            Type::F64 => "double",
-            Type::Str | Type::Bytes => "hxn_slice",
-            Type::Void | Type::Own => unreachable!("not a parameter type"),
+        let ty = match &param.ty {
+            Type::Bool | Type::I32 => "int32_t ",
+            Type::F64 => "double ",
+            Type::Str | Type::Bytes => "hxn_slice ",
+            Type::Handle { .. } => "hxn_handle *",
+            Type::Void => unreachable!("not a parameter type"),
         };
-        params.push(format!("{ty} {}", param.name));
+        params.push(format!("{ty}{}", param.name));
     }
-    match method.returns {
+    match &method.returns {
         Type::Void => {}
         Type::Bool | Type::I32 => params.push(String::from("int32_t *out")),
         Type::F64 => params.push(String::from("double *out")),
         Type::Str => params.push(String::from("hxn_buf *out")),
-        Type::Own => params.push(String::from("hxn_handle **out")),
+        Type::Handle { .. } => params.push(String::from("hxn_handle **out")),
         Type::Bytes => unreachable!("not a result type"),
     }
     params.push(String::from("hxn_buf *err"));
     format!(
         "hxn_status {}({});\n",
-        export(library, interface, &method.name),
+        export(library, &interface.name, &method.name),
         params.join(", ")
     )
 }
@@ -55,7 +56,7 @@ pub fn c_header(library: &Library) -> String {
         }
         out.push_str(&format!(
             "hxn_status {}(hxn_handle *self, hxn_buf *err);\n",
-            export(library, interface, "close")
+            export(library, &interface.name, "close")
         ));
     }
     out.push_str(&format!(
@@ -76,7 +77,7 @@ fn glue(library: &Library, interface: &Interface, method: &Method) -> String {
     }
     for param in &method.params {
         let name = &param.name;
-        match param.ty {
+        match &param.ty {
             Type::Bool => {
                 params.push(format!("bool {name}"));
                 arguments.push(format!("{name} ? 1 : 0"));
@@ -98,10 +99,14 @@ fn glue(library: &Library, interface: &Interface, method: &Method) -> String {
                 params.push(format!("Array<unsigned char> {name}"));
                 arguments.push(format!("hxn::slice({name})"));
             }
-            Type::Void | Type::Own => unreachable!("not a parameter type"),
+            Type::Handle { .. } => {
+                params.push(format!("void *{name}"));
+                arguments.push(format!("(hxn_handle *){name}"));
+            }
+            Type::Void => unreachable!("not a parameter type"),
         }
     }
-    let (returns, out, result) = match method.returns {
+    let (returns, out, result) = match &method.returns {
         Type::Void => ("void", None, None),
         Type::Bool => ("bool", Some("int out = 0;"), Some("out != 0")),
         Type::I32 => ("int", Some("int out = 0;"), Some("out")),
@@ -111,7 +116,7 @@ fn glue(library: &Library, interface: &Interface, method: &Method) -> String {
             Some("hxn_buf out = HXN_BUF_EMPTY;"),
             Some("hxn::take_string(out)"),
         ),
-        Type::Own => ("void *", Some("hxn_handle *out = 0;"), Some("out")),
+        Type::Handle { .. } => ("void *", Some("hxn_handle *out = 0;"), Some("out")),
         Type::Bytes => unreachable!("not a result type"),
     };
     if let Some(out) = out {
@@ -122,7 +127,7 @@ fn glue(library: &Library, interface: &Interface, method: &Method) -> String {
     arguments.push(String::from("&err"));
     let call = format!(
         "{}({})",
-        export(library, interface, &method.name),
+        export(library, &interface.name, &method.name),
         arguments.join(", ")
     );
     let mut body = String::new();
@@ -144,7 +149,7 @@ fn glue(library: &Library, interface: &Interface, method: &Method) -> String {
     let separator = if returns.ends_with('*') { "" } else { " " };
     format!(
         "inline {returns}{separator}{}({}) {{\n{body}}}\n",
-        local(interface, &method.name),
+        local(&interface.name, &method.name),
         params.join(", ")
     )
 }
@@ -165,8 +170,8 @@ pub fn cpp_glue(library: &Library) -> String {
         }
         out.push_str(&format!(
             "\ninline void {}(void *self) {{\n\thxn_buf err = HXN_BUF_EMPTY;\n\thxn::check({}((hxn_handle *)self, &err), err);\n}}\n",
-            local(interface, "close"),
-            export(library, interface, "close")
+            local(&interface.name, "close"),
+            export(library, &interface.name, "close")
         ));
     }
     out.push_str("\n}\n\n#endif\n");

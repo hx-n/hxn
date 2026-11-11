@@ -71,119 +71,217 @@ fn path_name(ty: &syn::Type) -> Option<String> {
     }
 }
 
-fn param_type(ty: &syn::Type) -> Result<Type, Error> {
-    if let syn::Type::Reference(reference) = ty
-        && reference.mutability.is_none()
-    {
-        if path_name(&reference.elem).as_deref() == Some("str") {
-            return Ok(Type::Str);
-        }
-        if let syn::Type::Slice(slice) = &*reference.elem
-            && path_name(&slice.elem).as_deref() == Some("u8")
-        {
-            return Ok(Type::Bytes);
-        }
-    }
-    match path_name(ty).as_deref() {
-        Some("bool") => Ok(Type::Bool),
-        Some("i32") => Ok(Type::I32),
-        Some("f64") => Ok(Type::F64),
-        _ => error(
-            ty.span(),
-            "a parameter is one of bool, i32, f64, &str or &[u8]",
-        ),
-    }
-}
-
-fn result_type(ty: &syn::Type, interface: &str) -> Result<Type, Error> {
-    if let syn::Type::Tuple(tuple) = ty
-        && tuple.elems.is_empty()
-    {
-        return Ok(Type::Void);
-    }
-    match path_name(ty).as_deref() {
-        Some("bool") => Ok(Type::Bool),
-        Some("i32") => Ok(Type::I32),
-        Some("f64") => Ok(Type::F64),
-        Some("String") => Ok(Type::Str),
-        Some(name) if name == "Self" || name == interface => Ok(Type::Own),
-        _ => error(
-            ty.span(),
-            "a result is one of (), bool, i32, f64, String or Self, or a Result of one",
-        ),
-    }
-}
-
-// `Result<T, E>` gives `T` and says the function can fail.
-fn returns(output: &ReturnType, interface: &str) -> Result<(Type, bool), Error> {
-    let ReturnType::Type(_, ty) = output else {
-        return Ok((Type::Void, false));
+// `Option<T>` gives `T`.
+fn optional(ty: &syn::Type) -> Option<&syn::Type> {
+    let syn::Type::Path(path) = ty else {
+        return None;
     };
-    if let syn::Type::Path(path) = &**ty
-        && let Some(segment) = path.path.segments.last()
-        && segment.ident == "Result"
-        && let syn::PathArguments::AngleBracketed(arguments) = &segment.arguments
-        && let Some(syn::GenericArgument::Type(ok)) = arguments.args.first()
-    {
-        return Ok((result_type(ok, interface)?, true));
+    let segment = path.path.segments.last()?;
+    if path.path.segments.len() != 1 || segment.ident != "Option" {
+        return None;
     }
-    Ok((result_type(ty, interface)?, false))
+    let syn::PathArguments::AngleBracketed(arguments) = &segment.arguments else {
+        return None;
+    };
+    match arguments.args.first() {
+        Some(syn::GenericArgument::Type(inner)) if arguments.args.len() == 1 => Some(inner),
+        _ => None,
+    }
 }
 
-fn method(function: &syn::ImplItemFn, interface: &str) -> Result<Method, Error> {
-    let signature = &function.sig;
-    let name = signature.ident.to_string();
-    if !signature.generics.params.is_empty() || signature.generics.where_clause.is_some() {
-        return error(signature.generics.span(), "a generic function cannot cross");
-    }
-    if let Some(token) = &signature.asyncness {
-        return error(token.span(), "an async function cannot cross yet");
-    }
-    if let Some(token) = &signature.unsafety {
-        return error(token.span(), "an unsafe function cannot cross");
-    }
+/// The interfaces a library marked, and the one whose functions are being read.
+struct Scope<'a> {
+    interfaces: &'a [String],
+    own: &'a str,
+}
 
-    let mut receiver = Receiver::None;
-    let mut params = Vec::new();
-    for input in &signature.inputs {
-        match input {
-            FnArg::Receiver(this) => {
-                receiver = match (&this.reference, &this.mutability) {
-                    (Some(_), None) => Receiver::Shared,
-                    (Some(_), Some(_)) => Receiver::Exclusive,
-                    (None, _) => {
-                        return error(this.span(), "a method takes `&self` or `&mut self`");
-                    }
-                };
-            }
-            FnArg::Typed(typed) => {
-                let syn::Pat::Ident(pattern) = &*typed.pat else {
-                    return error(typed.pat.span(), "a parameter needs a plain name");
-                };
-                params.push(Param {
-                    name: pattern.ident.to_string(),
-                    ty: param_type(&typed.ty)?,
-                });
-            }
+impl Scope<'_> {
+    // The interface `ty` names, with `Self` as the one being read.
+    fn interface(&self, ty: &syn::Type) -> Option<String> {
+        let name = path_name(ty)?;
+        if name == "Self" {
+            Some(self.own.to_owned())
+        } else {
+            self.interfaces.contains(&name).then_some(name)
         }
     }
 
-    let (returns, fallible) = returns(&signature.output, interface)?;
-    if returns == Type::Own && (receiver != Receiver::None || name != "new") {
-        return error(
-            signature.output.span(),
-            "only `new` returns the interface itself",
-        );
+    // `&T` or `&mut T` of an interface, and whether it is the latter.
+    fn borrowed(&self, ty: &syn::Type) -> Option<(String, bool)> {
+        let syn::Type::Reference(reference) = ty else {
+            return None;
+        };
+        Some((
+            self.interface(&reference.elem)?,
+            reference.mutability.is_some(),
+        ))
     }
-    Ok(Method {
-        name,
-        docs: docs(&function.attrs),
-        receiver,
-        params,
-        returns,
-        fallible,
-        blocking: is_blocking(&function.attrs)?,
-    })
+
+    fn param(&self, name: String, ty: &syn::Type) -> Result<Param, Error> {
+        let plain = |ty| Param {
+            name: name.clone(),
+            ty,
+            exclusive: false,
+        };
+        if let syn::Type::Reference(reference) = ty
+            && reference.mutability.is_none()
+        {
+            if path_name(&reference.elem).as_deref() == Some("str") {
+                return Ok(plain(Type::Str));
+            }
+            if let syn::Type::Slice(slice) = &*reference.elem
+                && path_name(&slice.elem).as_deref() == Some("u8")
+            {
+                return Ok(plain(Type::Bytes));
+            }
+        }
+        let (borrowed, nullable) = match optional(ty) {
+            Some(inner) => (self.borrowed(inner), true),
+            None => (self.borrowed(ty), false),
+        };
+        if let Some((interface, exclusive)) = borrowed {
+            return Ok(Param {
+                name,
+                ty: Type::Handle {
+                    interface,
+                    nullable,
+                },
+                exclusive,
+            });
+        }
+        if self.interface(ty).is_some() {
+            return error(
+                ty.span(),
+                "an interface is taken as `&T` or `&mut T`, not by value",
+            );
+        }
+        match path_name(ty).as_deref() {
+            Some("bool") => Ok(plain(Type::Bool)),
+            Some("i32") => Ok(plain(Type::I32)),
+            Some("f64") => Ok(plain(Type::F64)),
+            _ => error(
+                ty.span(),
+                "a parameter is one of bool, i32, f64, &str, &[u8], or `&` or `&mut` of an interface",
+            ),
+        }
+    }
+
+    fn result(&self, ty: &syn::Type) -> Result<Type, Error> {
+        if let syn::Type::Tuple(tuple) = ty
+            && tuple.elems.is_empty()
+        {
+            return Ok(Type::Void);
+        }
+        let (inner, nullable) = match optional(ty) {
+            Some(inner) => (inner, true),
+            None => (ty, false),
+        };
+        if let Some(interface) = self.interface(inner) {
+            return Ok(Type::Handle {
+                interface,
+                nullable,
+            });
+        }
+        if self.borrowed(inner).is_some() {
+            return error(
+                ty.span(),
+                "an interface is returned by value: a result cannot borrow",
+            );
+        }
+        match path_name(ty).as_deref() {
+            Some("bool") => Ok(Type::Bool),
+            Some("i32") => Ok(Type::I32),
+            Some("f64") => Ok(Type::F64),
+            Some("String") => Ok(Type::Str),
+            _ => error(
+                ty.span(),
+                "a result is one of (), bool, i32, f64, String, an interface or an Option of one, or a Result of these",
+            ),
+        }
+    }
+
+    // `Result<T, E>` gives `T` and says the function can fail.
+    fn returns(&self, output: &ReturnType) -> Result<(Type, bool), Error> {
+        let ReturnType::Type(_, ty) = output else {
+            return Ok((Type::Void, false));
+        };
+        if let syn::Type::Path(path) = &**ty
+            && let Some(segment) = path.path.segments.last()
+            && segment.ident == "Result"
+            && let syn::PathArguments::AngleBracketed(arguments) = &segment.arguments
+            && let Some(syn::GenericArgument::Type(ok)) = arguments.args.first()
+        {
+            return Ok((self.result(ok)?, true));
+        }
+        Ok((self.result(ty)?, false))
+    }
+
+    fn method(&self, function: &syn::ImplItemFn) -> Result<Method, Error> {
+        let signature = &function.sig;
+        let name = signature.ident.to_string();
+        if !signature.generics.params.is_empty() || signature.generics.where_clause.is_some() {
+            return error(signature.generics.span(), "a generic function cannot cross");
+        }
+        if let Some(token) = &signature.asyncness {
+            return error(token.span(), "an async function cannot cross yet");
+        }
+        if let Some(token) = &signature.unsafety {
+            return error(token.span(), "an unsafe function cannot cross");
+        }
+
+        let mut receiver = Receiver::None;
+        let mut params = Vec::new();
+        for input in &signature.inputs {
+            match input {
+                FnArg::Receiver(this) => {
+                    receiver = match (&this.reference, &this.mutability) {
+                        (Some(_), None) => Receiver::Shared,
+                        (Some(_), Some(_)) => Receiver::Exclusive,
+                        (None, _) => Receiver::Owned,
+                    };
+                }
+                FnArg::Typed(typed) => {
+                    let syn::Pat::Ident(pattern) = &*typed.pat else {
+                        return error(typed.pat.span(), "a parameter needs a plain name");
+                    };
+                    let name = pattern.ident.to_string();
+                    // What the adapters call their own.
+                    if ["this", "out", "err"].contains(&name.as_str()) {
+                        return error(
+                            pattern.ident.span(),
+                            format!(
+                                "`{name}` is a name the adapters use; call the parameter something else"
+                            ),
+                        );
+                    }
+                    params.push(self.param(name, &typed.ty)?);
+                }
+            }
+        }
+
+        let (returns, fallible) = self.returns(&signature.output)?;
+        let own = Type::Handle {
+            interface: self.own.to_owned(),
+            nullable: false,
+        };
+        let constructor = name == "new";
+        if constructor && (receiver != Receiver::None || returns != own) {
+            return error(
+                signature.ident.span(),
+                "`new` is the constructor: no `self`, and it returns the interface",
+            );
+        }
+        Ok(Method {
+            name,
+            docs: docs(&function.attrs),
+            receiver,
+            params,
+            returns,
+            fallible,
+            blocking: is_blocking(&function.attrs)?,
+            constructor,
+        })
+    }
 }
 
 /// Reads the marked items of `source`, the text of one Rust file, as the
@@ -212,6 +310,7 @@ pub fn parse(name: &str, source: &str) -> Result<Library, Error> {
             methods: Vec::new(),
         });
     }
+    let names: Vec<String> = interfaces.iter().map(|i| i.name.clone()).collect();
 
     for item in &file.items {
         let Item::Impl(block) = item else { continue };
@@ -230,6 +329,10 @@ pub fn parse(name: &str, source: &str) -> Result<Library, Error> {
                 format!("`{target}` is not marked `#[hxn::interface]`"),
             );
         };
+        let scope = Scope {
+            interfaces: &names,
+            own: &target,
+        };
         for item in &block.items {
             let ImplItem::Fn(function) = item else {
                 continue;
@@ -237,7 +340,7 @@ pub fn parse(name: &str, source: &str) -> Result<Library, Error> {
             if !matches!(function.vis, Visibility::Public(_)) {
                 continue;
             }
-            let method = method(function, &target)?;
+            let method = scope.method(function)?;
             if interface.methods.iter().any(|m| m.name == method.name) {
                 return error(
                     function.sig.ident.span(),

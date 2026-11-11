@@ -28,6 +28,42 @@ class Generated {
 			new Counter(i);
 	}
 
+	// Objects passed to, returned from and consumed by the library.
+	static function handles() {
+		var a = new Counter(10);
+		var b = new Counter(5);
+		check("another object as a parameter", a.absorb(b) == 15);
+		throws("the same object twice, when one use is exclusive", () -> a.absorb(a), "in use");
+		a.swap(b);
+		check("an object the library changes", a.add(0) == 5 && b.add(0) == 15);
+		throws("null where an object is required", () -> a.absorb(null), "null pointer");
+		check("and the object is usable afterwards", a.add(0) == 5);
+
+		var before = Counter.live();
+		var forked = a.fork();
+		check("a method returns a new object", forked.add(1) == 6 && a.add(0) == 5 && Counter.live() == before + 1);
+		check("an absent object in gives an absent one out", a.larger(null) == null && Counter.live() == before + 1);
+		var larger = a.larger(b);
+		check("a present one gives a present one", larger != null && larger.add(0) == 15);
+
+		var live = Counter.live();
+		check("a method that consumes its object returns", forked.intoValue() == 6);
+		check("and the value is gone", Counter.live() == live - 1);
+		throws("so the object is closed", () -> forked.add(1), "closed");
+		forked.close();
+
+		var tally = new Tally();
+		tally.record(a);
+		check("one interface takes another", tally.record(b) == 20 && tally.total() == 20);
+		var total = tally.toCounter();
+		check("and makes another", total.add(1) == 21);
+
+		for (counter in [a, b, larger, total])
+			counter.close();
+		tally.close();
+		check("everything made was released", Counter.live() == 0);
+	}
+
 	static function main() {
 		var counter = new Counter(40);
 		check("an int in and out", counter.add(2) == 42);
@@ -53,6 +89,8 @@ class Generated {
 		check("close drops the value", Counter.live() == 0);
 		counter.close();
 		throws("use after close", () -> counter.add(1), "closed");
+
+		handles();
 
 		#if emscripten
 		// hxcpp's collector does not return from a forced collection under Emscripten.
