@@ -31,7 +31,8 @@ trap 'rm "$out"' EXIT
 for example in "$root"/examples/*/; do
 	name="$(basename "$example")"
 	echo "== $name"
-	(cd "$example" && "$hxn" "${arguments[@]}") | tee "$out"
+	# Less the carriage returns a Windows program ends its lines with.
+	(cd "$example" && "$hxn" "${arguments[@]}") | tr -d '\r' | tee "$out"
 	# The program's lines are the last ones, after whatever the build printed.
 	expected="$example/expected.txt"
 	if [ "$(tail -n "$(wc -l <"$expected")" "$out")" != "$(cat "$expected")" ]; then

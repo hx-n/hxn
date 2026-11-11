@@ -725,7 +725,7 @@ fn cpp_natives(library: &Library) -> String {
     // defines. hxcpp links its own exceptions under Emscripten but does not
     // compile for them unless told.
     out.push_str(&format!(
-        "private typedef Handle = cpp.RawPointer<cpp.Void>;\n\n/** The library's functions, as its glue header declares them. **/\n@:buildXml('\n<files id=\"haxe\">\n\t<compilerflag value=\"-I${{HXN_INCLUDE}}\"/>\n\t<compilerflag value=\"-I${{{upper}_INCLUDE}}\"/>\n</files>\n<section if=\"emscripten\">\n\t<compiler id=\"emscripten\" exe=\"emcc\">\n\t\t<flag value=\"-fexceptions\"/>\n\t</compiler>\n</section>\n<target id=\"haxe\">\n\t<lib name=\"${{{upper}_LIB}}\"/>\n\t<lib name=\"-lpthread\" if=\"linux\"/>\n\t<lib name=\"-ldl\" if=\"linux\"/>\n</target>\n')\n@:include(\"{}_glue.h\")\n@:noCompletion extern class {} {{\n",
+        "private typedef Handle = cpp.RawPointer<cpp.Void>;\n\n/** The library's functions, as its glue header declares them. **/\n@:buildXml('\n<files id=\"haxe\">\n\t<compilerflag value=\"-I${{HXN_INCLUDE}}\"/>\n\t<compilerflag value=\"-I${{{upper}_INCLUDE}}\"/>\n</files>\n<section if=\"emscripten\">\n\t<compiler id=\"emscripten\" exe=\"emcc\">\n\t\t<flag value=\"-fexceptions\"/>\n\t</compiler>\n</section>\n<target id=\"haxe\">\n\t<lib name=\"${{{upper}_LIB}}\"/>\n\t<lib name=\"-lpthread\" if=\"linux\"/>\n\t<lib name=\"-ldl\" if=\"linux\"/>\n\t<lib name=\"kernel32.lib\" if=\"windows\"/>\n\t<lib name=\"ntdll.lib\" if=\"windows\"/>\n\t<lib name=\"userenv.lib\" if=\"windows\"/>\n\t<lib name=\"ws2_32.lib\" if=\"windows\"/>\n\t<lib name=\"dbghelp.lib\" if=\"windows\"/>\n</target>\n')\n@:include(\"{}_glue.h\")\n@:noCompletion extern class {} {{\n",
         library.name,
         native_class(library)
     ));

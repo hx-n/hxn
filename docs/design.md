@@ -399,6 +399,11 @@ flag.
 - **What a compile needs is written down**, as a file `haxe` takes: the class
   paths, and for hxcpp where the headers and the library are. `run` passes
   the same itself.
+- **On Windows a HashLink library is linked against the VM's own.** Its
+  adapter's build script names `libhl.lib` and looks for it in `HXN_HL_DIR`,
+  which the command sets to the directory the VM is in. A library linked
+  into an hxcpp program there is built with the static C runtime hxcpp
+  uses, and the program names the system libraries Rust's own needs.
 - **What is the program's own is said by the crate**, under
   `[package.metadata.hxn]`: its directory and main class, and `haxe-flags`,
   the arguments its compile takes beside hxn's, a `-lib` or a `-D`. The VM

@@ -76,6 +76,9 @@ impl Target {
     // JavaScript's, which a library that unwinds cannot link against.
     fn rustflags(self) -> Option<&'static str> {
         match (self.wasm, self.runtime) {
+            // hxcpp links the static C runtime on Windows, and a library
+            // linked into its program has to use the same one.
+            (false, Runtime::Cpp) if cfg!(windows) => Some("-C target-feature=+crt-static"),
             (false, _) => None,
             (true, Runtime::Hl) => {
                 Some("-C relocation-model=pic -C target-feature=+mutable-globals")
@@ -165,8 +168,10 @@ fn manifest(project: &Project, target: Target, later: bool) -> String {
 }
 
 // The VM's symbols are resolved when it loads the library. Other Unix
-// linkers leave them undefined in a shared object; Apple's must be told.
-const HL_BUILD_SCRIPT: &str = "// Written by hxn. Do not edit.\nfn main() {\n    println!(\"cargo:rerun-if-changed=build.rs\");\n    if std::env::var(\"CARGO_CFG_TARGET_VENDOR\").as_deref() == Ok(\"apple\") {\n        println!(\"cargo:rustc-cdylib-link-arg=-Wl,-undefined,dynamic_lookup\");\n    }\n}\n";
+// linkers leave them undefined in a shared object; Apple's must be told,
+// and Windows resolves them at link time against the VM's `libhl.lib`,
+// found in HXN_HL_DIR.
+const HL_BUILD_SCRIPT: &str = "// Written by hxn. Do not edit.\nfn main() {\n    println!(\"cargo:rerun-if-changed=build.rs\");\n    println!(\"cargo:rerun-if-env-changed=HXN_HL_DIR\");\n    if std::env::var(\"CARGO_CFG_TARGET_VENDOR\").as_deref() == Ok(\"apple\") {\n        println!(\"cargo:rustc-cdylib-link-arg=-Wl,-undefined,dynamic_lookup\");\n    }\n    if std::env::var(\"CARGO_CFG_TARGET_OS\").as_deref() == Ok(\"windows\") {\n        if let Ok(dir) = std::env::var(\"HXN_HL_DIR\") {\n            println!(\"cargo:rustc-link-search=native={dir}\");\n        }\n        println!(\"cargo:rustc-link-lib=dylib=libhl\");\n    }\n}\n";
 
 // What cargo calls the library it builds from an adapter crate.
 fn artifact(library: &str, target: Target) -> String {
@@ -244,8 +249,13 @@ fn side_module(archive: &Path, adapter: &str, module: &Path) -> Result<(), Strin
 }
 
 /// Reads the library's marked items, writes its binding for `target` and
-/// builds the adapter.
-pub fn build(project: &Project, target: Target, release: bool) -> Result<Built, String> {
+/// builds the adapter. `hashlink` is the directory the VM is in.
+pub fn build(
+    project: &Project,
+    target: Target,
+    release: bool,
+    hashlink: Option<&Path>,
+) -> Result<Built, String> {
     let name = &project.library;
     let runtime = target.runtime;
     if target.wasm {
@@ -363,6 +373,13 @@ pub fn build(project: &Project, target: Target, release: bool) -> Result<Built, 
             .args(["--target", triple])
             .arg("-Zbuild-std=std,panic_abort");
         built.push(triple);
+    }
+    // Where the adapter's build script finds the VM's library, unless the
+    // environment says.
+    if let Some(dir) = hashlink
+        && std::env::var_os("HXN_HL_DIR").is_none()
+    {
+        cargo.env("HXN_HL_DIR", dir);
     }
     // With the flags the environment already asks for, which these would
     // otherwise replace.

@@ -103,9 +103,28 @@ fn words(command: &str) -> Result<(&str, Vec<&str>), String> {
 fn directory_of(program: &str) -> Option<PathBuf> {
     let path = Path::new(program);
     if path.components().count() > 1 {
-        return path.canonicalize().ok()?.parent().map(Path::to_owned);
+        return std::path::absolute(path).ok()?.parent().map(Path::to_owned);
     }
-    std::env::split_paths(&std::env::var_os("PATH")?).find(|dir| dir.join(program).is_file())
+    std::env::split_paths(&std::env::var_os("PATH")?)
+        .find(|dir| dir.join(program).is_file() || dir.join(format!("{program}.exe")).is_file())
+}
+
+// What runs a HashLink program: the VM named with its options, or `default`.
+fn vm_command(arguments: &Arguments, default: &str) -> String {
+    let named = arguments.vm.clone();
+    named
+        .or_else(|| std::env::var("HXN_VM").ok())
+        .unwrap_or_else(|| default.to_owned())
+}
+
+// Where HashLink is, for a native build of its binding: on Windows a
+// library is linked against the VM's own, which is beside it.
+fn hashlink(arguments: &Arguments, target: Target) -> Option<PathBuf> {
+    if target.runtime != Runtime::Hl || target.wasm {
+        return None;
+    }
+    let vm = vm_command(arguments, "hl");
+    directory_of(words(&vm).ok()?.0)
 }
 
 fn exit(command: &mut Command) -> Result<u8, String> {
@@ -124,7 +143,12 @@ fn exit(command: &mut Command) -> Result<u8, String> {
 }
 
 fn run(project: &Project, target: Target, arguments: Arguments) -> Result<u8, String> {
-    let built = make::build(project, target, arguments.release)?;
+    let built = make::build(
+        project,
+        target,
+        arguments.release,
+        hashlink(&arguments, target).as_deref(),
+    )?;
     if !project.haxe.is_dir() {
         return Err(format!(
             "no Haxe program in {}: put one there, or name its directory as `haxe` under `[package.metadata.hxn]`",
@@ -140,13 +164,7 @@ fn run(project: &Project, target: Target, arguments: Arguments) -> Result<u8, St
         .arg("-main")
         .arg(&project.main)
         .args(&project.flags);
-    // What runs a HashLink program: the VM named, or `default`.
-    let vm = |default: &str| {
-        let named = arguments.vm.clone();
-        named
-            .or_else(|| std::env::var("HXN_VM").ok())
-            .unwrap_or_else(|| default.to_owned())
-    };
+    let vm = |default: &str| vm_command(&arguments, default);
     match target.runtime {
         Runtime::Hl if target.wasm => {
             let program = built.dir.join("main.hl");
@@ -252,7 +270,12 @@ fn command() -> Result<u8, String> {
             let arguments = arguments(given)?;
             let target = target(&arguments)?;
             let project = Project::read(&here)?;
-            let built = make::build(&project, target, arguments.release)?;
+            let built = make::build(
+                &project,
+                target,
+                arguments.release,
+                hashlink(&arguments, target).as_deref(),
+            )?;
             let output = match target.runtime {
                 Runtime::Hl => "-hl main.hl",
                 Runtime::Cpp => "-cpp out",

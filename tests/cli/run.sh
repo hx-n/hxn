@@ -34,7 +34,8 @@ cd "$work"
 "$hxn" new greeter --hxn "$root"
 cd greeter
 
-"$hxn" "${arguments[@]}" | tee "$work/out.txt"
+# Less the carriage returns a Windows program ends its lines with.
+"$hxn" "${arguments[@]}" | tr -d '\r' | tee "$work/out.txt"
 # The program's own lines, whatever the VM prints around them.
 expected=$'Hello, Haxe!\nHello, Rust!\n2 greeted\nrefused: nobody to greet'
 if [ "$(grep -E '^(Hello, |2 greeted|refused: )' "$work/out.txt")" != "$expected" ]; then
@@ -59,7 +60,7 @@ cat >>Cargo.toml <<'EOF'
 main = "Other"
 haxe-flags = ["-D", "word=Howdy"]
 EOF
-"$hxn" "${arguments[@]}" -- one two | tee "$work/out.txt"
+"$hxn" "${arguments[@]}" -- one two | tr -d '\r' | tee "$work/out.txt"
 if [ "$(grep '^Howdy' "$work/out.txt")" != "Howdy, one and two" ]; then
 	echo "FAILED: the settings or the arguments did not reach the program" >&2
 	exit 1

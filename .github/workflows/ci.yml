@@ -1,0 +1,138 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  # The toolchain the lints and the formatting were last checked with.
+  TOOLCHAIN: nightly-2026-08-25
+  HAXE: 4.3.6
+  HASHLINK: "1.15"
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  rust:
+    name: rust, ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.TOOLCHAIN }}
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - if: runner.os != 'Windows'
+        run: cargo test --workspace
+      # Less the fixture's HashLink libraries, which Windows links against
+      # the VM's own.
+      - if: runner.os == 'Windows'
+        run: cargo test --workspace --exclude counter-hl --exclude counter-gen-hl
+      - if: runner.os == 'Linux'
+        run: cargo fmt --all --check
+      - if: runner.os == 'Linux'
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+  miri:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.TOOLCHAIN }}
+          components: miri, rust-src
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo miri test -p hxn-abi
+      # Less the tests that count on what fits in a slice of time, which
+      # Miri runs too slowly for. The workers live as long as the process.
+      - run: >
+          cargo miri test -p hxn-future --
+          --skip a_step_may_queue_work_and_may_not_drive_it
+          --skip a_wait_without_limit_finishes_short_work_and_gives_up_on_long
+          --skip queued_work_takes_turns
+          --skip queued_async_and_stepped_work_share_the_queue
+        env:
+          MIRIFLAGS: -Zmiri-ignore-leaks
+
+  hashlink:
+    name: hashlink, ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@v2
+      - uses: krdlab/setup-haxe@v1
+        with:
+          haxe-version: ${{ env.HAXE }}
+      - name: Build HashLink
+        if: runner.os == 'Linux'
+        run: |
+          git clone --depth 1 --branch "$HASHLINK" https://github.com/HaxeFoundation/hashlink "$RUNNER_TEMP/hashlink"
+          make -C "$RUNNER_TEMP/hashlink" libhl hl
+          echo "$RUNNER_TEMP/hashlink" >> "$GITHUB_PATH"
+          echo "LD_LIBRARY_PATH=$RUNNER_TEMP/hashlink" >> "$GITHUB_ENV"
+      - name: Fetch HashLink
+        if: runner.os == 'Windows'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          temp="$(cygpath -u "$RUNNER_TEMP")"
+          gh release download "$HASHLINK" --repo HaxeFoundation/hashlink --pattern '*-win.zip' --dir "$temp"
+          unzip -q "$temp"/*-win.zip -d "$temp/hl"
+          dir="$(dirname "$(find "$temp/hl" -name hl.exe | head -1)")"
+          ls "$dir"
+          cygpath -w "$dir" >> "$GITHUB_PATH"
+      - run: hl --version
+      - run: tests/cli/run.sh hl
+      - run: tests/examples/run.sh hl
+      # The fixture's own crates are not built for Windows yet.
+      - if: runner.os == 'Linux'
+        run: tests/counter/run.sh hl
+      - if: runner.os == 'Linux'
+        run: tests/counter/run.sh gen-hl
+
+  hxcpp:
+    name: hxcpp, ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@v2
+      - uses: krdlab/setup-haxe@v1
+        with:
+          haxe-version: ${{ env.HAXE }}
+      - run: haxelib install hxcpp 4.3.2 --quiet
+      - run: tests/cli/run.sh cpp
+      - run: tests/examples/run.sh cpp
+      # The fixture's own crates are not built for Windows yet.
+      - if: runner.os == 'Linux'
+        run: tests/counter/run.sh cpp
+      - if: runner.os == 'Linux'
+        run: tests/counter/run.sh gen-cpp

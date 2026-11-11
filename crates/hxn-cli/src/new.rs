@@ -32,8 +32,9 @@ pub fn new(name: &str, checkout: Option<&Path>, at: &Path) -> Result<PathBuf, St
     }
     let hxn = match checkout {
         Some(checkout) => {
-            let krate = checkout
-                .canonicalize()
+            // Not canonical: on Windows that is a path cargo takes and
+            // other tools do not.
+            let krate = std::path::absolute(checkout)
                 .map_err(|error| format!("{}: {error}", checkout.display()))?
                 .join("crates/hxn");
             if !krate.join("Cargo.toml").is_file() {

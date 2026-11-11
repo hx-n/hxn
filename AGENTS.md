@@ -21,6 +21,9 @@ natively and on wasm. Read these before changing anything:
 - **Repeat anything concurrent**, and on more than one machine if you can.
   A change to `hxn-abi` or `hxn-future` is also run under Miri
   (`cargo miri test -p hxn-abi`, `-p hxn-future`).
+- **Windows is run by CI** (`.github/workflows/ci.yml`), with HashLink and
+  hxcpp on Linux beside it. A change is not known to work there until that
+  has run.
 - **Say what was not run.** If a runtime was unavailable, report that, not a
   pass.
 - `cargo fmt --all` and `cargo clippy --workspace --all-targets` are clean.
