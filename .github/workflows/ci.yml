@@ -11,10 +11,12 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  # The toolchain the lints and the formatting were last checked with.
-  TOOLCHAIN: nightly-2026-08-25
-  HAXE: 4.3.6
-  HASHLINK: "1.15"
+  # The toolchain the lints and the formatting were last checked with. Not
+  # named as an action's own input is: Windows does not tell `toolchain`
+  # from `TOOLCHAIN`.
+  HXN_RUST: nightly-2026-08-25
+  HXN_HAXE: 4.3.6
+  HXN_HASHLINK: "1.15"
 
 defaults:
   run:
@@ -32,7 +34,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: ${{ env.TOOLCHAIN }}
+          toolchain: ${{ env.HXN_RUST }}
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - if: runner.os != 'Windows'
@@ -52,7 +54,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: ${{ env.TOOLCHAIN }}
+          toolchain: ${{ env.HXN_RUST }}
           components: miri, rust-src
       - uses: Swatinem/rust-cache@v2
       - run: cargo miri test -p hxn-abi
@@ -79,15 +81,15 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: ${{ env.TOOLCHAIN }}
+          toolchain: ${{ env.HXN_RUST }}
       - uses: Swatinem/rust-cache@v2
       - uses: krdlab/setup-haxe@v1
         with:
-          haxe-version: ${{ env.HAXE }}
+          haxe-version: ${{ env.HXN_HAXE }}
       - name: Build HashLink
         if: runner.os == 'Linux'
         run: |
-          git clone --depth 1 --branch "$HASHLINK" https://github.com/HaxeFoundation/hashlink "$RUNNER_TEMP/hashlink"
+          git clone --depth 1 --branch "$HXN_HASHLINK" https://github.com/HaxeFoundation/hashlink "$RUNNER_TEMP/hashlink"
           make -C "$RUNNER_TEMP/hashlink" libhl hl
           echo "$RUNNER_TEMP/hashlink" >> "$GITHUB_PATH"
           echo "LD_LIBRARY_PATH=$RUNNER_TEMP/hashlink" >> "$GITHUB_ENV"
@@ -97,7 +99,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           temp="$(cygpath -u "$RUNNER_TEMP")"
-          gh release download "$HASHLINK" --repo HaxeFoundation/hashlink --pattern '*-win.zip' --dir "$temp"
+          gh release download "$HXN_HASHLINK" --repo HaxeFoundation/hashlink --pattern '*-win.zip' --dir "$temp"
           unzip -q "$temp"/*-win.zip -d "$temp/hl"
           dir="$(dirname "$(find "$temp/hl" -name hl.exe | head -1)")"
           ls "$dir"
@@ -123,11 +125,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: ${{ env.TOOLCHAIN }}
+          toolchain: ${{ env.HXN_RUST }}
       - uses: Swatinem/rust-cache@v2
       - uses: krdlab/setup-haxe@v1
         with:
-          haxe-version: ${{ env.HAXE }}
+          haxe-version: ${{ env.HXN_HAXE }}
       - run: haxelib install hxcpp 4.3.2 --quiet
       - run: tests/cli/run.sh cpp
       - run: tests/examples/run.sh cpp
