@@ -1,0 +1,4 @@
+9592 primes below 100000
+2 3 5 7 11 13 17 19 23 29
+counting
+168 primes below 1000

@@ -2,6 +2,7 @@
 resolver = "3"
 members = [
     "crates/*",
+    "examples/*",
     "tests/counter/core",
     "tests/counter/c",
     "tests/counter/hl",

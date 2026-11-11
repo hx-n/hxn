@@ -13,8 +13,9 @@ natively and on wasm. Read these before changing anything:
   The rest is `tests/counter/run.sh` in each of its modes: `hl`, `cpp`, `wasm`,
   `emcc`, `gen-hl`, `gen-cpp`, `gen-wasm`, `gen-emcc`. Run Ash in its hybrid,
   JIT and interpreter modes (`ash --mode jit`, `ash --mode interp`); they
-  differ in how threads and native calls behave. `tests/cli/run.sh hl` and `cpp` check the `hxn`
-  command the way the readme uses it.
+  differ in how threads and native calls behave. `tests/cli/run.sh hl` and
+  `cpp` check the `hxn` command the way the readme uses it, and
+  `tests/examples/run.sh hl` and `cpp` run every library under `examples/`.
 - **Run runtime tests under a timeout.** A wrong wait hangs; it does not fail.
 - **Repeat anything concurrent**, and on more than one machine if you can.
 - **Say what was not run.** If a runtime was unavailable, report that, not a
@@ -68,7 +69,9 @@ natively and on wasm. Read these before changing anything:
 | `crates/hxn-cli` | The `hxn` command: makes a library, builds its binding for a runtime, runs its Haxe program. |
 | `include/hxn.h` | The same layouts for C, and what hxcpp glue needs around them. |
 | `haxe/hxn` | The Haxe side: `Future`, `Stream`, `Signal`, `Computed`, `Reactive`, `Inbox`, `Loop`, `Callback`, `AtomicInt`, `AtomicBool`, `Gc`. |
+| `examples` | Small libraries to read and run: each a crate, a Haxe program and what it prints. |
 | `tests/counter` | The fixture: a small library bound for every runtime, and the Haxe test they all run. |
 | `tests/cli` | Makes a library with `hxn new` and runs it, as the readme says to. |
+| `tests/examples` | Runs each example and compares what it prints. |
 
 `internal/` is not part of the repository.

@@ -1,0 +1,56 @@
+{
+  "hxn": 1,
+  "library": "picture",
+  "interfaces": [
+    {
+      "name": "Picture",
+      "docs": "A greyscale picture.",
+      "methods": [
+        {
+          "name": "new",
+          "docs": "A black picture. Fails unless each side is from 1 to 4096.",
+          "kind": "constructor",
+          "params": [{ "name": "width", "type": "i32" }, { "name": "height", "type": "i32" }],
+          "returns": "Picture",
+          "fallible": true,
+          "blocking": false
+        },
+        {
+          "name": "width",
+          "kind": "method",
+          "params": [],
+          "returns": "i32",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "paint",
+          "docs": "Sets every pixel to what `shade` returns for its column and row,\nfrom 0 for black to 255 for white. `shade` is a Haxe function: if it\nthrows, painting stops there and the caller catches what it threw.",
+          "kind": "mutating",
+          "params": [{ "name": "shade", "type": "fn(i32, i32) -> i32" }],
+          "returns": "void",
+          "fallible": true,
+          "blocking": false
+        },
+        {
+          "name": "lighten",
+          "docs": "Keeps the brighter of each pixel and the one at its place in `other`.\nFails if the two differ in size.",
+          "kind": "mutating",
+          "params": [{ "name": "other", "type": "Picture" }],
+          "returns": "void",
+          "fallible": true,
+          "blocking": false
+        },
+        {
+          "name": "pixels",
+          "docs": "The pixels, row after row from the top.",
+          "kind": "method",
+          "params": [],
+          "returns": "bytes",
+          "fallible": false,
+          "blocking": false
+        }
+      ]
+    }
+  ]
+}

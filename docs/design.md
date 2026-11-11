@@ -349,7 +349,7 @@ flag.
 
 | | |
 |---|---|
-| `hxn new <name>` | makes a library: a crate, and a Haxe program that uses it |
+| `hxn new <name>` | makes a library, a copy of `examples/greeter`: a crate, and a Haxe program that uses it |
 | `hxn build <hl\|cpp>` | writes the binding for a runtime and builds it |
 | `hxn run <hl\|cpp>` | builds, then compiles and runs the library's Haxe program |
 

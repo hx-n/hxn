@@ -5,9 +5,10 @@ use std::path::{Path, PathBuf};
 
 use crate::project::{is_library_name, quoted};
 
-const LIBRARY: &str = include_str!("../template/src/lib.rs");
-const PROGRAM: &str = include_str!("../template/haxe/Main.hx");
-const IGNORE: &str = include_str!("../template/gitignore");
+// What it starts from is the repository's first example.
+const LIBRARY: &str = include_str!("../../../examples/greeter/src/lib.rs");
+const PROGRAM: &str = include_str!("../../../examples/greeter/haxe/Main.hx");
+const IGNORE: &str = "/target\n";
 
 /// What the new crate's manifest says. `hxn` is how it depends on hxn.
 fn manifest(name: &str, hxn: &str) -> String {

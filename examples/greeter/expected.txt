@@ -1,0 +1,4 @@
+Hello, Haxe!
+Hello, Rust!
+2 greeted
+refused: nobody to greet

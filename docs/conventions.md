@@ -184,8 +184,15 @@ filesystem `#include "counter.h"` would then find the generated one.
   threads and native calls behave.
 - `tests/cli/run.sh hl <vm>` and `tests/cli/run.sh cpp` make a library with
   `hxn new` and run it with `hxn run`, as the readme says to.
-- **The readme's example is the one `hxn new` makes.** A test fails when the
-  two differ.
+- `tests/examples/run.sh hl <vm>` and `tests/examples/run.sh cpp` run each
+  library under `examples/` and compare what it prints with its
+  `expected.txt`.
+- **The readme's example is `examples/greeter`, which is what `hxn new`
+  makes.** A test fails when the readme differs from it.
+- **An example is a library as someone would write one:** a crate, a Haxe
+  program, its committed manifest, and what the program prints, which is the
+  same on every run and every runtime. It shows a few things and checks
+  nothing; what has to be checked is in the fixture.
 - Run a runtime test under a timeout. A wrong wait hangs; it does not fail.
 - Anything concurrent is run repeatedly, on more than one machine.
 - A test that depends on a runtime's limits says so beside the check it
@@ -194,8 +201,8 @@ filesystem `#include "counter.h"` would then find the generated one.
   collection, or asserts a bound that holds either way.
 - The pure crates have unit tests; `hxn-hl` and the adapters are tested only
   in a real runtime.
-- The fixture's manifest is committed, and a test fails when it no longer
-  matches the source.
+- The fixture's manifest and each example's are committed, and a test fails
+  when one no longer matches its source.
 
 ## Comments, commits and issues
 

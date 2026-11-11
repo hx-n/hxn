@@ -1,0 +1,38 @@
+{
+  "hxn": 1,
+  "library": "greeter",
+  "interfaces": [
+    {
+      "name": "Greeter",
+      "docs": "Greets people, and counts them.",
+      "methods": [
+        {
+          "name": "new",
+          "kind": "constructor",
+          "params": [{ "name": "greeting", "type": "str" }],
+          "returns": "Greeter",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "greet",
+          "docs": "A greeting for `name`. Fails for an empty name.",
+          "kind": "mutating",
+          "params": [{ "name": "name", "type": "str" }],
+          "returns": "str",
+          "fallible": true,
+          "blocking": false
+        },
+        {
+          "name": "greeted",
+          "docs": "How many have been greeted.",
+          "kind": "method",
+          "params": [],
+          "returns": "i32",
+          "fallible": false,
+          "blocking": false
+        }
+      ]
+    }
+  ]
+}

@@ -97,6 +97,23 @@ refused: nobody to greet
 native library without running anything, and prints the `haxe` arguments for
 compiling your own program against them.
 
+## Examples
+
+[examples/](examples) has this library and two more, each a crate and a Haxe
+program that run from a checkout:
+
+| Example | What it shows |
+|---|---|
+| [greeter](examples/greeter) | A struct used as a Haxe class, text in and out, and a failure thrown as an exception. |
+| [picture](examples/picture) | A Haxe function called by the library, bytes returned, and one object passed to another. |
+| [primes](examples/primes) | Work done on another thread: a future to wait for or be called back by, and a stream. |
+
+```
+cargo install --path crates/hxn-cli
+cd examples/primes
+hxn run hl
+```
+
 To work on hxn itself, see [AGENTS.md](AGENTS.md).
 
 ## License

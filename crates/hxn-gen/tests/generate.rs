@@ -1030,3 +1030,26 @@ fn the_counter_manifest_is_current() {
         hxn_gen::manifest(&library.clone())
     );
 }
+
+// Each example is a library as someone would write one: its manifest is
+// committed and current, and it says what its program prints. To update a
+// manifest, run the example.
+#[test]
+fn every_example_is_one_the_generator_takes() {
+    let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples");
+    let mut seen = 0;
+    for entry in std::fs::read_dir(root).unwrap() {
+        let dir = entry.unwrap().path();
+        if !dir.is_dir() {
+            continue;
+        }
+        let name = dir.file_name().unwrap().to_str().unwrap();
+        let (library, _) = hxn_gen::parse_crate(name, &dir.join("src/lib.rs")).unwrap();
+        let committed = std::fs::read_to_string(dir.join(format!("{name}.hxn.json"))).unwrap();
+        assert_eq!(hxn_gen::manifest(&library), committed, "{name}");
+        assert!(dir.join("haxe/Main.hx").is_file(), "{name}");
+        assert!(dir.join("expected.txt").is_file(), "{name}");
+        seen += 1;
+    }
+    assert!(seen >= 3);
+}
