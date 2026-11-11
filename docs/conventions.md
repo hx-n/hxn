@@ -182,11 +182,10 @@ filesystem `#include "counter.h"` would then find the generated one.
 
   Ash is run in its hybrid, JIT and interpreter modes, which differ in how
   threads and native calls behave.
-- `tests/cli/run.sh hl <vm>` and `tests/cli/run.sh cpp` make a library with
-  `hxn new` and run it with `hxn run`, as the readme says to.
-- `tests/examples/run.sh hl <vm>` and `tests/examples/run.sh cpp` run each
-  library under `examples/` and compare what it prints with its
-  `expected.txt`.
+- `tests/cli/run.sh` makes a library with `hxn new` and runs it with
+  `hxn run`, as the readme says to, and `tests/examples/run.sh` runs each
+  library under `examples/` and compares what it prints with its
+  `expected.txt`. Both take `hl <vm>`, `cpp`, `wasm <ash>` and `emcc`.
 - **The readme's example is `examples/greeter`, which is what `hxn new`
   makes.** A test fails when the readme differs from it.
 - **An example is a library as someone would write one:** a crate, a Haxe

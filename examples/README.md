@@ -26,6 +26,10 @@ What it prints is in the example's `expected.txt`.
 `hxn run hl` runs the program with `hl`. `--vm` names another
 HashLink-compatible VM: `hxn run hl --vm ash`.
 
+`--wasm` runs the same program as wasm. `hxn run hl --wasm` builds and runs
+it with Ash, and `hxn run cpp --wasm` with hxcpp, the Emscripten SDK and
+node. Both need a nightly Rust toolchain with `rust-src`.
+
 Without installing anything, `cargo run -p hxn-cli -- run hl` in an example's
 directory does the same with the command as the checkout has it.
 

@@ -97,6 +97,10 @@ refused: nobody to greet
 native library without running anything, and prints the `haxe` arguments for
 compiling your own program against them.
 
+Add `--wasm` to build and run the same program as wasm: `hxn run hl --wasm`
+through Ash, and `hxn run cpp --wasm` through hxcpp and Emscripten. Both need
+a nightly Rust toolchain.
+
 ## Examples
 
 [examples/](examples) has this library and two more, each a crate and a Haxe

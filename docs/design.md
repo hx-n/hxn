@@ -352,6 +352,7 @@ flag.
 | `hxn new <name>` | makes a library, a copy of `examples/greeter`: a crate, and a Haxe program that uses it |
 | `hxn build <hl\|cpp>` | writes the binding for a runtime and builds it |
 | `hxn run <hl\|cpp>` | builds, then compiles and runs the library's Haxe program |
+| `--wasm` on either | does the same for the runtime's wasm form |
 
 - **The adapter crates are written, not kept.** A build writes the adapter
   for the runtime as a crate under cargo's target directory, depending on the
@@ -366,6 +367,14 @@ flag.
 - **What a compile needs is written down**, as a file `haxe` takes: the class
   paths, and for hxcpp where the headers and the library are. `run` passes
   the same itself.
+- **A wasm build is the same adapter for another target.** For HashLink it is
+  built as an archive for `wasm32-wasip1` and linked into a module whose
+  exports are the primitives' resolvers and whose imports the program
+  answers; Ash builds the program and loads the module from beside it. For
+  hxcpp it is an archive for `wasm32-unknown-emscripten` that hxcpp links,
+  and node runs the result. Either way Rust's standard library is rebuilt,
+  position-independent for the one and aborting for the other, which takes a
+  nightly toolchain; the command says so when it has another.
 
 A library that wants its adapter crates in its own repository, as the fixture
 in `tests/counter` has them, gives each a build script that calls `hxn-gen`.

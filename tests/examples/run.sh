@@ -3,15 +3,19 @@
 # and compares what it prints with its expected.txt.
 #   run.sh hl [vm]     vm is a HashLink-compatible executable, default `hl`
 #   run.sh cpp
+#   run.sh wasm [ash]  built and run by Ash
+#   run.sh emcc        hxcpp through Emscripten, run by node; needs emcc on PATH
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "$here/../.." && pwd)"
-runtime="${1:?usage: run.sh hl [vm] | cpp}"
+runtime="${1:?usage: run.sh hl [vm] | cpp | wasm [ash] | emcc}"
 
 case "$runtime" in
 	hl) arguments=(run hl --vm "${2:-hl}") ;;
 	cpp) arguments=(run cpp) ;;
+	wasm) arguments=(run hl --wasm --vm "${2:-ash}") ;;
+	emcc) arguments=(run cpp --wasm) ;;
 	*)
 		echo "unknown runtime: $runtime" >&2
 		exit 2

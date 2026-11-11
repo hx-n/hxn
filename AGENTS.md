@@ -13,9 +13,10 @@ natively and on wasm. Read these before changing anything:
   The rest is `tests/counter/run.sh` in each of its modes: `hl`, `cpp`, `wasm`,
   `emcc`, `gen-hl`, `gen-cpp`, `gen-wasm`, `gen-emcc`. Run Ash in its hybrid,
   JIT and interpreter modes (`ash --mode jit`, `ash --mode interp`); they
-  differ in how threads and native calls behave. `tests/cli/run.sh hl` and
-  `cpp` check the `hxn` command the way the readme uses it, and
-  `tests/examples/run.sh hl` and `cpp` run every library under `examples/`.
+  differ in how threads and native calls behave. `tests/cli/run.sh` checks
+  the `hxn` command the way the readme uses it, and `tests/examples/run.sh`
+  runs every library under `examples/`; both take `hl`, `cpp`, `wasm` and
+  `emcc`.
 - **Run runtime tests under a timeout.** A wrong wait hangs; it does not fail.
 - **Repeat anything concurrent**, and on more than one machine if you can.
 - **Say what was not run.** If a runtime was unavailable, report that, not a

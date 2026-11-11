@@ -13,7 +13,7 @@ mod support;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 
-use make::Runtime;
+use make::{Runtime, Target};
 use project::Project;
 
 const USAGE: &str = "usage: hxn <command>
@@ -22,13 +22,19 @@ const USAGE: &str = "usage: hxn <command>
       Makes a library in a new directory: a crate, and a Haxe program that
       uses it. With --hxn it depends on that copy of hxn's repository.
 
-  hxn build <hl|cpp> [--release]
+  hxn build <hl|cpp> [--wasm] [--release]
       Writes the library's binding for HashLink or hxcpp and builds it.
       Prints what to pass haxe to compile against it.
 
-  hxn run <hl|cpp> [--release] [--vm <program>] [-- <arguments>]
+  hxn run <hl|cpp> [--wasm] [--release] [--vm <program>] [-- <arguments>]
       Builds, then compiles the Haxe program in haxe/ and runs it. --vm, or
       HXN_VM, names the HashLink-compatible program to run it with.
+
+With --wasm the binding and the program are built for wasm. `hl --wasm` is
+built and run by Ash, which --vm or HXN_VM names if it is not `ash`.
+`cpp --wasm` is built by hxcpp through Emscripten and run by node, or by the
+program --vm names. Both rebuild Rust's standard library, which takes a
+nightly toolchain.
 
 build and run work on the crate in the current directory. Under
 [package.metadata.hxn] in its Cargo.toml, `library`, `source`, `haxe` and
@@ -38,6 +44,7 @@ build and run work on the crate in the current directory. Under
 struct Arguments {
     positional: Vec<String>,
     release: bool,
+    wasm: bool,
     vm: Option<String>,
     hxn: Option<PathBuf>,
     rest: Vec<String>,
@@ -47,6 +54,7 @@ fn arguments(mut given: impl Iterator<Item = String>) -> Result<Arguments, Strin
     let mut out = Arguments {
         positional: Vec::new(),
         release: false,
+        wasm: false,
         vm: None,
         hxn: None,
         rest: Vec::new(),
@@ -59,6 +67,7 @@ fn arguments(mut given: impl Iterator<Item = String>) -> Result<Arguments, Strin
                 break;
             }
             "--release" => out.release = true,
+            "--wasm" => out.wasm = true,
             "--vm" => out.vm = Some(value("--vm")?),
             "--hxn" => out.hxn = Some(PathBuf::from(value("--hxn")?)),
             flag if flag.starts_with('-') => return Err(format!("unknown option `{flag}`")),
@@ -68,13 +77,17 @@ fn arguments(mut given: impl Iterator<Item = String>) -> Result<Arguments, Strin
     Ok(out)
 }
 
-fn runtime(arguments: &Arguments) -> Result<Runtime, String> {
-    match arguments.positional.as_slice() {
+fn target(arguments: &Arguments) -> Result<Target, String> {
+    let runtime = match arguments.positional.as_slice() {
         [name] => {
-            Runtime::parse(name).ok_or(format!("unknown runtime `{name}`: it is `hl` or `cpp`"))
+            Runtime::parse(name).ok_or(format!("unknown runtime `{name}`: it is `hl` or `cpp`"))?
         }
-        _ => Err(String::from("name one runtime: `hl` or `cpp`")),
-    }
+        _ => return Err(String::from("name one runtime: `hl` or `cpp`")),
+    };
+    Ok(Target {
+        runtime,
+        wasm: arguments.wasm,
+    })
 }
 
 // The directory a program named on the command line is in.
@@ -101,8 +114,8 @@ fn exit(command: &mut Command) -> Result<u8, String> {
         .map_or(1, |code| u8::try_from(code).unwrap_or(1)))
 }
 
-fn run(project: &Project, runtime: Runtime, arguments: Arguments) -> Result<u8, String> {
-    let built = make::build(project, runtime, arguments.release)?;
+fn run(project: &Project, target: Target, arguments: Arguments) -> Result<u8, String> {
+    let built = make::build(project, target, arguments.release)?;
     if !project.haxe.is_dir() {
         return Err(format!(
             "no Haxe program in {}: put one there, or name its directory as `haxe` under `[package.metadata.hxn]`",
@@ -117,15 +130,42 @@ fn run(project: &Project, runtime: Runtime, arguments: Arguments) -> Result<u8, 
         .arg(&project.haxe)
         .arg("-main")
         .arg(&project.main);
-    match runtime {
+    // What runs a HashLink program: the VM named, or `default`.
+    let vm = |default: &str| {
+        let named = arguments.vm.clone();
+        named
+            .or_else(|| std::env::var("HXN_VM").ok())
+            .unwrap_or_else(|| default.to_owned())
+    };
+    match target.runtime {
+        Runtime::Hl if target.wasm => {
+            let program = built.dir.join("main.hl");
+            haxe.arg("-hl").arg(&program);
+            make::run(&mut haxe)?;
+            let ash = vm("ash");
+            let module = built.dir.join("main.wasm");
+            // Ash finds the library's module beside its output. With fibers
+            // a Haxe thread that waits suspends and lets the others run.
+            make::run(
+                Command::new(&ash)
+                    .env("ASH_WASM_FIBERS", "1")
+                    .arg("--build")
+                    .arg(&module)
+                    .args(["--target", "wasm32-wasip1"])
+                    .arg(&program),
+            )?;
+            exit(
+                Command::new(&ash)
+                    .arg("run")
+                    .arg(&module)
+                    .args(&arguments.rest),
+            )
+        }
         Runtime::Hl => {
             let program = built.dir.join("main.hl");
             haxe.arg("-hl").arg(&program);
             make::run(&mut haxe)?;
-            let vm = arguments
-                .vm
-                .or_else(|| std::env::var("HXN_VM").ok())
-                .unwrap_or_else(|| String::from("hl"));
+            let vm = vm("hl");
             // The VM asks the system's loader for the library by name, and
             // for its own beside itself.
             let mut places = vec![built.dir.clone()];
@@ -148,9 +188,22 @@ fn run(project: &Project, runtime: Runtime, arguments: Arguments) -> Result<u8, 
         Runtime::Cpp => {
             let out = built.dir.join("out");
             haxe.arg("-cpp").arg(&out);
+            if target.wasm {
+                // hxcpp would take a compiler named here in place of emcc.
+                haxe.env_remove("CC").env_remove("CXX");
+            }
             make::run(&mut haxe)?;
             // hxcpp names the program after the main class, less its package.
             let name = project.main.rsplit('.').next().unwrap_or(&project.main);
+            if target.wasm {
+                // HXN_VM names a HashLink VM, which this is not run by.
+                let node = arguments.vm.as_deref().unwrap_or("node");
+                return exit(
+                    Command::new(node)
+                        .arg(out.join(format!("{name}.js")))
+                        .args(&arguments.rest),
+                );
+            }
             let program = out.join(if cfg!(windows) {
                 format!("{name}.exe")
             } else {
@@ -182,32 +235,38 @@ fn command() -> Result<u8, String> {
         }
         "build" => {
             let arguments = arguments(given)?;
-            let runtime = runtime(&arguments)?;
+            let target = target(&arguments)?;
             let project = Project::read(&here)?;
-            let built = make::build(&project, runtime, arguments.release)?;
-            let output = match runtime {
+            let built = make::build(&project, target, arguments.release)?;
+            let output = match target.runtime {
                 Runtime::Hl => "-hl main.hl",
                 Runtime::Cpp => "-cpp out",
             };
             println!(
                 "Built {} for {}. To compile a program against it:\n  haxe {} -cp <your classes> -main <Main> {output}",
                 project.library,
-                runtime.name(),
+                target.name(),
                 built.hxml.display()
             );
-            if runtime == Runtime::Hl {
-                println!(
+            match (target.runtime, target.wasm) {
+                (Runtime::Hl, false) => println!(
                     "The VM loads {}.hdll from {}.",
                     project.library,
                     built.dir.display()
-                );
+                ),
+                (Runtime::Hl, true) => println!(
+                    "Ash builds the wasm program, and loads {}.wasm from beside it. With main.hl in {}:\n  ASH_WASM_FIBERS=1 ash --build main.wasm --target wasm32-wasip1 main.hl\n  ash run main.wasm",
+                    project.library,
+                    built.dir.display()
+                ),
+                (Runtime::Cpp, _) => {}
             }
             Ok(0)
         }
         "run" => {
             let arguments = arguments(given)?;
-            let runtime = runtime(&arguments)?;
-            run(&Project::read(&here)?, runtime, arguments)
+            let target = target(&arguments)?;
+            run(&Project::read(&here)?, target, arguments)
         }
         "help" | "--help" | "-h" => {
             println!("{USAGE}");

@@ -10,8 +10,10 @@
 //! | `<runtime>/haxe/` | the library's Haxe classes, a class path |
 //! | `<runtime>/build.hxml` | what to pass `haxe` to compile against them |
 //! | `hl/<library>.hdll` | the built library, for HashLink |
+//! | `hl-wasm/<library>.wasm` | the same as a module Ash loads into a wasm program |
 //!
-//! The library's own crate gains one file, its manifest.
+//! `<runtime>` is `hl` or `cpp`, and `hl-wasm` or `cpp-wasm` for a wasm
+//! build. The library's own crate gains one file, its manifest.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -38,6 +40,47 @@ impl Runtime {
         match self {
             Self::Hl => "hl",
             Self::Cpp => "cpp",
+        }
+    }
+}
+
+/// What a binding is built for: a runtime, natively or as wasm.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Target {
+    pub runtime: Runtime,
+    pub wasm: bool,
+}
+
+impl Target {
+    /// The directory its output goes in: `hl`, or `cpp-wasm`.
+    pub fn name(self) -> String {
+        let runtime = self.runtime.name();
+        if self.wasm {
+            format!("{runtime}-wasm")
+        } else {
+            runtime.to_owned()
+        }
+    }
+
+    // What rustc calls it, where that is not the host. HashLink bytecode
+    // becomes wasm through Ash, and hxcpp's C++ through Emscripten.
+    fn triple(self) -> Option<&'static str> {
+        match (self.wasm, self.runtime) {
+            (false, _) => None,
+            (true, Runtime::Hl) => Some("wasm32-wasip1"),
+            (true, Runtime::Cpp) => Some("wasm32-unknown-emscripten"),
+        }
+    }
+
+    // A side module is position-independent. Emscripten's exceptions are
+    // JavaScript's, which a library that unwinds cannot link against.
+    fn rustflags(self) -> Option<&'static str> {
+        match (self.wasm, self.runtime) {
+            (false, _) => None,
+            (true, Runtime::Hl) => {
+                Some("-C relocation-model=pic -C target-feature=+mutable-globals")
+            }
+            (true, Runtime::Cpp) => Some("-C panic=abort"),
         }
     }
 }
@@ -92,13 +135,16 @@ const NOTE: &str = "# Written by hxn. Do not edit.\n";
 
 // The manifest of an adapter crate. It names the library and hxn's crates
 // from where the library gets them, and stands outside any workspace.
-fn manifest(project: &Project, runtime: Runtime, later: bool) -> String {
-    let (kind, crates): (&str, &[&str]) = match runtime {
+fn manifest(project: &Project, target: Target, later: bool) -> String {
+    let (kind, crates): (&str, &[&str]) = match target.runtime {
+        // Nothing here can link a wasm library whose imports are the
+        // program's, so that one is linked from an archive afterwards.
+        Runtime::Hl if target.wasm => ("staticlib", &["hxn-abi", "hxn-hl"]),
         Runtime::Hl => ("cdylib", &["hxn-abi", "hxn-hl"]),
         Runtime::Cpp => ("staticlib", &["hxn-abi"]),
     };
     let library = &project.library;
-    let suffix = runtime.name();
+    let suffix = target.runtime.name();
     let mut out = format!(
         "{NOTE}[package]\nname = \"{library}-{suffix}\"\nversion = \"0.0.0\"\nedition = \"2024\"\npublish = false\n\n[lib]\nname = \"{library}_{suffix}\"\ncrate-type = [\"{kind}\"]\ntest = false\ndoctest = false\n\n[dependencies]\n{package} = {{ path = {path} }}\n",
         package = project.package,
@@ -123,20 +169,100 @@ fn manifest(project: &Project, runtime: Runtime, later: bool) -> String {
 const HL_BUILD_SCRIPT: &str = "// Written by hxn. Do not edit.\nfn main() {\n    println!(\"cargo:rerun-if-changed=build.rs\");\n    if std::env::var(\"CARGO_CFG_TARGET_VENDOR\").as_deref() == Ok(\"apple\") {\n        println!(\"cargo:rustc-cdylib-link-arg=-Wl,-undefined,dynamic_lookup\");\n    }\n}\n";
 
 // What cargo calls the library it builds from an adapter crate.
-fn artifact(library: &str, runtime: Runtime) -> String {
-    match runtime {
+fn artifact(library: &str, target: Target) -> String {
+    match target.runtime {
+        Runtime::Hl if target.wasm => format!("lib{library}_hl.a"),
         Runtime::Hl if cfg!(windows) => format!("{library}_hl.dll"),
         Runtime::Hl if cfg!(target_os = "macos") => format!("lib{library}_hl.dylib"),
         Runtime::Hl => format!("lib{library}_hl.so"),
-        Runtime::Cpp if cfg!(windows) => format!("{library}_cpp.lib"),
+        Runtime::Cpp if cfg!(windows) && !target.wasm => format!("{library}_cpp.lib"),
         Runtime::Cpp => format!("lib{library}_cpp.a"),
     }
 }
 
-/// Reads the library's marked items, writes its binding for `runtime` and
+// What a command prints, when it ran and printed something.
+fn said(command: &mut Command) -> Option<String> {
+    let output = command.output().ok()?;
+    output
+        .status
+        .success()
+        .then(|| String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
+// The line of `rustc -vV` that starts with `key`.
+fn rustc_says(key: &str) -> Result<String, String> {
+    said(Command::new("rustc").arg("-vV"))
+        .and_then(|text| {
+            text.lines()
+                .find_map(|line| line.strip_prefix(key).map(|value| value.trim().to_owned()))
+        })
+        .ok_or_else(|| String::from("`rustc -vV` did not say what it is"))
+}
+
+/// Whether `program` is in a directory on PATH.
+pub fn on_path(program: &str) -> bool {
+    std::env::var_os("PATH").is_some_and(|path| {
+        std::env::split_paths(&path)
+            .any(|dir| dir.join(program).is_file() || dir.join(format!("{program}.exe")).is_file())
+    })
+}
+
+// The name of each primitive's resolver in a HashLink adapter, which is
+// what a VM looks a primitive up by.
+fn resolvers(adapter: &str) -> Vec<&str> {
+    adapter
+        .split("define_prim!(")
+        .skip(1)
+        .filter_map(|rest| rest.split(',').next())
+        .map(str::trim)
+        .collect()
+}
+
+// Links the adapter's archive into a module a wasm program loads. What it
+// leaves undefined, the VM's own functions and the allocator, becomes
+// imports the program answers.
+fn side_module(archive: &Path, adapter: &str, module: &Path) -> Result<(), String> {
+    let sysroot = said(Command::new("rustc").args(["--print", "sysroot"]))
+        .ok_or("`rustc --print sysroot` did not say where it is")?;
+    let linker = Path::new(sysroot.trim())
+        .join("lib/rustlib")
+        .join(rustc_says("host:")?)
+        .join("bin/rust-lld");
+    let mut link = Command::new(linker);
+    link.args(["-flavor", "wasm", "--experimental-pic", "-shared"])
+        .args(["--no-entry", "--gc-sections", "--no-export-dynamic"])
+        .arg("--unresolved-symbols=import-dynamic");
+    for resolver in resolvers(adapter) {
+        link.arg(format!("--export={resolver}"));
+    }
+    link.arg("--whole-archive")
+        .arg(archive)
+        .arg("--no-whole-archive")
+        .arg("-o")
+        .arg(module);
+    run(&mut link)
+}
+
+/// Reads the library's marked items, writes its binding for `target` and
 /// builds the adapter.
-pub fn build(project: &Project, runtime: Runtime, release: bool) -> Result<Built, String> {
+pub fn build(project: &Project, target: Target, release: bool) -> Result<Built, String> {
     let name = &project.library;
+    let runtime = target.runtime;
+    if target.wasm {
+        // std is rebuilt for a wasm target, to be position-independent or
+        // to abort, and only a nightly cargo will do that.
+        let release = rustc_says("release:")?;
+        if !release.contains("nightly") && !release.contains("dev") {
+            return Err(format!(
+                "a wasm build rebuilds Rust's standard library, which takes a nightly toolchain, and this one is {release}: install one with `rustup toolchain install nightly --component rust-src` and set RUSTUP_TOOLCHAIN=nightly"
+            ));
+        }
+        if runtime == Runtime::Cpp && !on_path("emcc") {
+            return Err(String::from(
+                "`emcc` was not found: hxcpp builds for wasm with the Emscripten SDK, which has to be installed and on PATH",
+            ));
+        }
+    }
     let (library, _) =
         hxn_gen::parse_crate(name, &project.source).map_err(|error| error.to_string())?;
     if library.interfaces.is_empty() {
@@ -158,15 +284,17 @@ pub fn build(project: &Project, runtime: Runtime, release: bool) -> Result<Built
     for (path, text) in support::HAXE {
         write(&support.join(path), text)?;
     }
-    let dir = out.join(runtime.name());
+    let dir = out.join(target.name());
     let krate = dir.join("crate");
     write(
         &krate.join("Cargo.toml"),
-        &manifest(project, runtime, library.returns_later()),
+        &manifest(project, target, library.returns_later()),
     )?;
     let (adapter, classes) = match runtime {
         Runtime::Hl => {
-            write(&krate.join("build.rs"), HL_BUILD_SCRIPT)?;
+            if !target.wasm {
+                write(&krate.join("build.rs"), HL_BUILD_SCRIPT)?;
+            }
             (
                 hxn_gen::hl_adapter(&library, &project.krate),
                 hxn_gen::haxe_hl(&library),
@@ -229,12 +357,31 @@ pub fn build(project: &Project, runtime: Runtime, release: bool) -> Result<Built
     if release {
         cargo.arg("--release");
     }
+    let mut built = project.target.clone();
+    if let Some(triple) = target.triple() {
+        cargo
+            .args(["--target", triple])
+            .arg("-Zbuild-std=std,panic_abort");
+        built.push(triple);
+    }
+    // With the flags the environment already asks for, which these would
+    // otherwise replace.
+    if let Some(flags) = target.rustflags() {
+        let given = std::env::var("RUSTFLAGS").unwrap_or_default();
+        cargo.env("RUSTFLAGS", format!("{given} {flags}"));
+    }
     run(&mut cargo)?;
-    let profile = if release { "release" } else { "debug" };
-    let built = project.target.join(profile).join(artifact(name, runtime));
+    built.push(if release { "release" } else { "debug" });
+    built.push(artifact(name, target));
 
     let mut arguments = vec![("-cp", text(&support)), ("-cp", text(&haxe))];
+    if target.wasm {
+        arguments.push(("-D", String::from("wasm")));
+    }
     match runtime {
+        Runtime::Hl if target.wasm => {
+            side_module(&built, &adapter, &dir.join(format!("{name}.wasm")))?;
+        }
         Runtime::Hl => {
             // Under the name the Haxe classes ask the VM for.
             let hdll = dir.join(format!("{name}.hdll"));
@@ -242,6 +389,13 @@ pub fn build(project: &Project, runtime: Runtime, release: bool) -> Result<Built
                 .map_err(|error| format!("{}: {error}", built.display()))?;
         }
         Runtime::Cpp => {
+            if target.wasm {
+                // hxcpp assumes the host's 64 bits, and its UTF-16 strings
+                // reach for a Windows-only call under Emscripten.
+                for define in ["emscripten", "HXCPP_M32", "disable_unicode_strings"] {
+                    arguments.push(("-D", String::from(define)));
+                }
+            }
             let include = text(&out.join("include"));
             let upper = name.to_uppercase();
             arguments.push(("-D", format!("HXN_INCLUDE={include}")));
@@ -261,4 +415,44 @@ pub fn build(project: &Project, runtime: Runtime, release: bool) -> Result<Built
         arguments,
         hxml,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_wasm_build_has_its_own_directory_and_target() {
+        let native = Target {
+            runtime: Runtime::Hl,
+            wasm: false,
+        };
+        assert_eq!(native.name(), "hl");
+        assert_eq!((native.triple(), native.rustflags()), (None, None));
+        let ash = Target {
+            runtime: Runtime::Hl,
+            wasm: true,
+        };
+        assert_eq!(ash.name(), "hl-wasm");
+        assert_eq!(ash.triple(), Some("wasm32-wasip1"));
+        assert_eq!(artifact("greeter", ash), "libgreeter_hl.a");
+        let emscripten = Target {
+            runtime: Runtime::Cpp,
+            wasm: true,
+        };
+        assert_eq!(emscripten.name(), "cpp-wasm");
+        assert_eq!(emscripten.triple(), Some("wasm32-unknown-emscripten"));
+        assert_eq!(artifact("greeter", emscripten), "libgreeter_cpp.a");
+    }
+
+    #[test]
+    fn every_primitive_of_an_adapter_is_exported_from_its_module() {
+        let source = "#[hxn::interface]\npub struct Greeter;\n#[hxn::methods]\nimpl Greeter {\n    pub fn new() -> Self { Self }\n    pub fn greeted(&self) -> i32 { 0 }\n}\n";
+        let library = hxn_gen::parse("greeter", source).unwrap();
+        let adapter = hxn_gen::hl_adapter(&library, "greeter");
+        let found = resolvers(&adapter);
+        assert_eq!(found.len(), adapter.matches("define_prim!").count());
+        assert!(found.iter().all(|name| name.starts_with("hlp_")));
+        assert!(found.contains(&"hlp_greeter_new") && found.contains(&"hlp_greeter_greeted"));
+    }
 }
