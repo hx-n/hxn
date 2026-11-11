@@ -23,19 +23,19 @@ use crate::support;
 
 // Makes `to` hold the files of `from` and no others.
 fn mirror(from: &Path, to: &Path) -> Result<(), String> {
-    let said = |path: &Path, error: std::io::Error| format!("{}: {error}", path.display());
-    std::fs::create_dir_all(to).map_err(|error| said(to, error))?;
+    let failed = |path: &Path, error: std::io::Error| format!("{}: {error}", path.display());
+    std::fs::create_dir_all(to).map_err(|error| failed(to, error))?;
     let mut kept = Vec::new();
-    for entry in std::fs::read_dir(from).map_err(|error| said(from, error))? {
-        let entry = entry.map_err(|error| said(from, error))?;
-        let text = std::fs::read_to_string(entry.path()).map_err(|e| said(&entry.path(), e))?;
+    for entry in std::fs::read_dir(from).map_err(|error| failed(from, error))? {
+        let entry = entry.map_err(|error| failed(from, error))?;
+        let text = std::fs::read_to_string(entry.path()).map_err(|e| failed(&entry.path(), e))?;
         write(&to.join(entry.file_name()), &text)?;
         kept.push(entry.file_name());
     }
-    for entry in std::fs::read_dir(to).map_err(|error| said(to, error))? {
-        let entry = entry.map_err(|error| said(to, error))?;
+    for entry in std::fs::read_dir(to).map_err(|error| failed(to, error))? {
+        let entry = entry.map_err(|error| failed(to, error))?;
         if !kept.contains(&entry.file_name()) {
-            std::fs::remove_file(entry.path()).map_err(|error| said(&entry.path(), error))?;
+            std::fs::remove_file(entry.path()).map_err(|error| failed(&entry.path(), error))?;
         }
     }
     Ok(())
@@ -74,7 +74,7 @@ pub fn package(
     out: &Path,
 ) -> Result<Vec<String>, String> {
     let name = &project.library;
-    let host = make::rustc_says("host:")?;
+    let host = make::rustc_reports("host:")?;
     let mut triples = Vec::new();
     for &target in targets {
         let built = make::build(project, target, release, hashlink)?;
@@ -114,7 +114,7 @@ pub fn package(
     Ok(triples)
 }
 
-/// Where a library is packaged unless the command line says.
+/// Where a library is packaged unless the command line specifies a directory.
 pub fn default_directory(project: &Project) -> PathBuf {
     project
         .target

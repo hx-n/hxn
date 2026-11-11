@@ -10,7 +10,7 @@ const LIBRARY: &str = include_str!("../../../examples/greeter/src/lib.rs");
 const PROGRAM: &str = include_str!("../../../examples/greeter/haxe/Main.hx");
 const IGNORE: &str = "/target\n";
 
-/// What the new crate's manifest says. `hxn` is how it depends on hxn.
+/// The new crate's manifest. `hxn` is how it depends on hxn.
 fn manifest(name: &str, hxn: &str) -> String {
     format!(
         "[package]\nname = \"{name}\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\nhxn = {hxn}\n"

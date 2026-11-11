@@ -81,7 +81,7 @@ pub fn held_export(library: &Library) -> String {
     format!("{}_memory_held", library.name)
 }
 
-/// The symbol that says whether the library asked for a collection.
+/// The symbol that reports whether the library asked for a collection.
 pub fn wanted_export(library: &Library) -> String {
     format!("{}_memory_wanted", library.name)
 }

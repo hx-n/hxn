@@ -217,7 +217,7 @@ impl<T: Send + 'static> From<Signal<T>> for AnySignal {
     }
 }
 
-// A host counts versions in a non-negative int, and negative ones say
+// A host counts versions in a non-negative int, and negative ones mean
 // something else.
 const VERSIONS: u64 = i32::MAX as u64;
 

@@ -4,7 +4,7 @@
 //! called during the call, on the calling thread, and it can fail, because
 //! the Haxe function can throw. Native code cannot be thrown through, so the
 //! Haxe side wraps what the user passed: the wrapper keeps the exception and
-//! returns a value that says so, the trampoline turns that into
+//! returns a value that marks it, the trampoline turns that into
 //! `Status::CALLBACK`, the library sees an `Err` and returns, and the binding
 //! throws the kept exception afterwards.
 //!
@@ -120,11 +120,11 @@ pub fn closure(name: &str, params: &[Type], returns: &Type) -> String {
     )
 }
 
-/// The closure's type as a HashLink primitive's signature says it.
+/// The closure's type as a HashLink primitive's signature writes it.
 pub fn hl_signature(params: &[Type], returns: &Type) -> String {
     let taken: String = params.iter().map(letter).collect();
     let given = match returns {
-        // The wrapper says whether the function returned.
+        // The wrapper's result is whether the function returned.
         Type::Void => String::from("b"),
         other => format!("N{}", letter(other)),
     };

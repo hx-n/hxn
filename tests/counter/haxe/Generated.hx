@@ -268,7 +268,7 @@ class Generated {
 		}
 		check("a stream of objects", total == 10 && Counter.live() == before);
 
-		// Delivered where the app says, and to all of these in one batch.
+		// Delivered where the app chooses, and to all of these in one batch.
 		hxn.Loop.manual = true;
 		var squared = -1;
 		Later.square(6, 1).then(value -> squared = value);

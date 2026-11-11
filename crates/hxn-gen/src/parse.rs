@@ -29,7 +29,7 @@ fn is_marker(attribute: &Attribute, name: &str) -> bool {
     segments == ["hxn", name]
 }
 
-/// What `#[hxn::interface(...)]` says of a struct.
+/// What `#[hxn::interface(...)]` specifies for a struct.
 #[derive(Default)]
 struct Notes {
     shared: bool,
@@ -514,7 +514,7 @@ impl Scope<'_> {
         Ok((plain, false))
     }
 
-    // `Result<T, E>` gives `T` and says the function can fail.
+    // `Result<T, E>` gives `T` and means the function can fail.
     fn returns(&self, output: &ReturnType) -> Result<((Type, bool), bool), Error> {
         match given(output) {
             None => Ok(((Type::Void, false), false)),
@@ -774,7 +774,7 @@ fn load(
     Ok(())
 }
 
-// Says which file an error was met in, if it does not say already.
+// Adds the file an error was met in, if it names none already.
 fn located<T>(result: Result<T, Error>, source: &Source) -> Result<T, Error> {
     result.map_err(|mut error| {
         if error.file.is_none() {
@@ -904,7 +904,7 @@ fn methods_of(
 }
 
 // Every interface first, so that a block in one file can name one in another.
-// What `#[hxn::function]` says of a function, if it is marked: the class it
+// What `#[hxn::function]` specifies for a function, if it is marked: the class it
 // is a static of, when that is not the library's own.
 fn function_class(attributes: &[Attribute]) -> Result<Option<Option<String>>, Error> {
     let Some(attribute) = attributes.iter().find(|a| is_marker(a, "function")) else {

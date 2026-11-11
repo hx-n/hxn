@@ -9,7 +9,7 @@ package hxn;
 	that whatever the value holds. Two things make up for it:
 
 	- `collect` runs a collection now, the same call on every runtime;
-	- a library says what its values hold, and its `Meter` collects when that
+	- a library declares what its values hold, and its `Meter` collects when that
 	  has grown. A binding checks the meter whenever it makes an object of an
 	  interface the library marked as weighed.
 

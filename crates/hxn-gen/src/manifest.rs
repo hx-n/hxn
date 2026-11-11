@@ -40,7 +40,7 @@ fn method(method: &Method) -> String {
         .params
         .iter()
         .map(|param| {
-            // Said only for an interface borrowed as `&mut`.
+            // Written only for an interface borrowed as `&mut`.
             let borrow = if param.exclusive {
                 ", \"borrow\": \"exclusive\""
             } else {
@@ -73,7 +73,7 @@ fn interface(interface: &Interface) -> String {
     let mut out = String::from("    {\n");
     out.push_str(&format!("      \"name\": {},\n", quoted(&interface.name)));
     out.push_str(&docs(&interface.docs, "      "));
-    // Each said only when it is.
+    // Each written only when it holds.
     if interface.namespace {
         out.push_str("      \"namespace\": true,\n");
     }

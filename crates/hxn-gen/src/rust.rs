@@ -530,7 +530,7 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
         }
     }
     if method.returns == Type::Bytes {
-        // The VM's bytes do not say how long they are.
+        // The VM's bytes do not carry their length.
         params.push(String::from("out: *mut i32"));
         signature.push_str("Ri");
     }

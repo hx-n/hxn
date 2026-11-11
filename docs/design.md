@@ -47,7 +47,7 @@ function may also take or give a narrower integer, a size, an unsigned 32 or
 64 bits or an `f32`; its adapter converts on the way, and a value that does
 not fit fails the call with `Status::RANGE` before the function runs or
 after it has returned. So the boundary and the generated Haxe are the same
-whichever of these the Rust says, but for `u32`, which Haxe sees as a
+whichever of these the Rust declares, but for `u32`, which Haxe sees as a
 `UInt`. Haxe has no unsigned 64 bits: a `u64` arrives in a `haxe.Int64` with
 its bits as they were, and reads as negative from 2^63 up.
 
@@ -142,8 +142,8 @@ or any Haxe object has one.
 | `Arc<T>` result | a share of a value the library also keeps | a new object |
 
 - **One Haxe object still owns one handle.** Returning the same value twice
-  gives two objects with a share each, so Haxe object identity says nothing.
-  `same(other)` says whether two objects hold one value.
+  gives two objects with a share each, so Haxe object identity means nothing.
+  `same(other)` reports whether two objects hold one value.
 - **`close()` gives up one share.** The object is closed; the value goes with
   its last holder.
 - **`weak()` gives a reference that holds nothing**, a class of its own named
@@ -169,7 +169,7 @@ from any thread, and there is no call between them.
 | `Arc<AtomicI32>`, `Arc<AtomicFlag>` result | a cell the library keeps | the same, over the library's memory |
 
 - **A lent cell** is one Haxe made. Rust has it for the call only, which the
-  borrow says, so nothing has to keep Haxe's memory alive afterwards. A
+  borrow expresses, so nothing has to keep Haxe's memory alive afterwards. A
   cancel flag for a call in progress is the usual use.
 - **A kept cell** lives in the library. The Haxe object holds what the
   library handed over, which keeps the memory alive for as long as the object
@@ -192,7 +192,7 @@ code call the runtime.
 | | Rust | Haxe |
 |---|---|---|
 | collect now | | `hxn.Gc.collect()` |
-| say what a value holds | an `hxn::Weight` kept in the value | `hxn.Gc.budget` |
+| declare what a value holds | an `hxn::Weight` kept in the value | `hxn.Gc.budget` |
 | ask for a collection | `hxn::collect_soon()` | honoured at the next check |
 
 - **`hxn.Gc.collect()`** is one call for every runtime's own. It returns
@@ -407,7 +407,7 @@ flag.
   into an hxcpp program there is built with the static C runtime hxcpp
   uses, the program names the system libraries Rust's own needs, and hxcpp
   is told to build for the host's 64 bits, which is not its default.
-- **What is the program's own is said by the crate**, under
+- **What is the program's own is specified by the crate**, under
   `[package.metadata.hxn]`: its directory and main class, and `haxe-flags`,
   the arguments its compile takes beside hxn's, a `-lib` or a `-D`. The VM
   is the user's, so it is named on the command line or in `HXN_VM`, with
@@ -419,7 +419,7 @@ flag.
   hxcpp it is an archive for `wasm32-unknown-emscripten` that hxcpp links,
   and node runs the result. Either way Rust's standard library is rebuilt,
   position-independent for the one and aborting for the other, which takes a
-  nightly toolchain; the command says so when it has another.
+  nightly toolchain; the command reports that when it has another.
 
 - **A script reaches a library through its host.** A CPPIA script cannot
   call C++ or hold a pointer, so nothing of a binding is compiled into it.
@@ -448,7 +448,7 @@ flag.
   elsewhere, or with `--wasm`, adds a directory to it.
 - **`hxn.Bind.lib("<library>")` points a compile at a package.** It is a
   macro run before anything is typed, which a package's `extraParams.hxml`
-  does, so a program's build says `-lib <library>` and nothing of where
+  does, so a program's build specifies `-lib <library>` and nothing of where
   things are. It finds the package by its manifest on the class path and
   reads it, refusing a manifest of another version. From the compile's
   defines it adds `binding/hl` or `binding/cpp` to the class path; for hxcpp

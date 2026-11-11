@@ -1026,7 +1026,7 @@ fn a_library_is_read_from_every_file_of_its_crate() {
         "#[hxn::interface]\npub struct Elsewhere;\n\n#[hxn::methods]\nimpl Elsewhere {\n    pub fn bad(&self, value: String) {}\n}\n",
     );
 
-    // Where a refusal is says which file.
+    // A refusal names the file it is in.
     let error = hxn_gen::parse_crate("many", &dir.join("src/lib.rs")).unwrap_err();
     assert!(error.file.as_deref().unwrap().ends_with("place.rs"));
     assert_eq!(error.line, 6);
@@ -1093,7 +1093,7 @@ fn the_counter_manifest_is_current() {
 }
 
 // Each example is a library as someone would write one: its manifest is
-// committed and current, and it says what its program prints. To update a
+// committed and current, and it records what its program prints. To update a
 // manifest, run the example.
 #[test]
 fn every_example_is_one_the_generator_takes() {
@@ -1371,7 +1371,7 @@ fn public_functions(text: &str) -> Vec<String> {
 }
 
 // A script calls the classes its host holds, so each declaration it is
-// compiled against has to say what the hxcpp class of that name has.
+// compiled against has to list what the hxcpp class of that name has.
 #[test]
 fn a_script_is_told_what_each_class_is_called_with() {
     let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/counter");

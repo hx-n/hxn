@@ -47,10 +47,10 @@ natively and on wasm. Read these before changing anything:
   describe how hxn is, not its history.
 - **No planning, backlog or status documents.** History, measurements,
   alternatives weighed and open questions go in `git-bug` issues. Look at
-  `git-bug bug` before starting on an area: its issue says what is known and
+  `git-bug bug` before starting on an area: its issue records what is known and
   what is still open.
-- **Comments** say what the code does, and why it is shaped that way when
-  that is not obvious. No account of what was tried, and no measurements.
+- **Comments** describe what the code does, and why it is shaped that way
+  when that is not obvious. No account of what was tried, and no measurements.
 - **Commit messages** are short: what changed, and a few sentences of why
   when that is not self-evident. Cite the issue in a trailer with its full id:
 
@@ -77,7 +77,7 @@ natively and on wasm. Read these before changing anything:
 | `haxe/hxn` | The Haxe side: `Future`, `Stream`, `Signal`, `Computed`, `Reactive`, `Inbox`, `Loop`, `Callback`, `AtomicInt`, `AtomicBool`, `Gc`, and the macro `Bind`. |
 | `examples` | Small libraries to read and run: each a crate, a Haxe program and what it prints. |
 | `tests/counter` | The fixture: a small library bound for every runtime, and the Haxe test they all run. |
-| `tests/cli` | Makes a library with `hxn new`, runs it as the readme says to, and packages it. |
+| `tests/cli` | Makes a library with `hxn new`, runs it as the readme describes, and packages it. |
 | `tests/examples` | Runs each example and compares what it prints. |
 
 `internal/` is not part of the repository.

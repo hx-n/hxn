@@ -32,7 +32,7 @@ thread_local! {
     static PROGRESSED: Cell<bool> = const { Cell::new(false) };
 }
 
-/// Said by a task that did something with its step, as opposed to finding
+/// Called by a task that did something with its step, as opposed to finding
 /// it was still waiting.
 pub(crate) fn progressed() {
     PROGRESSED.set(true);

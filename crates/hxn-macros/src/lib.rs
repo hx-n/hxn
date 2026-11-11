@@ -16,7 +16,7 @@ pub fn interface(_arguments: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 /// Marks an `impl` block whose public functions are exposed. A function may
-/// carry `#[hxn(blocking)]` to say it waits.
+/// carry `#[hxn(blocking)]` to declare that it waits.
 #[proc_macro_attribute]
 pub fn methods(_arguments: TokenStream, item: TokenStream) -> TokenStream {
     without_notes(item)

@@ -117,7 +117,7 @@ filesystem `#include "counter.h"` would then find the generated one.
 - A cell shared with Haxe is an `AtomicI32` or an `hxn::AtomicFlag`, never
   an `AtomicBool`. It is taken as a reference, lent for the call, and
   returned as an `Arc`, kept by the library.
-- A value that holds much memory keeps an `hxn::Weight` saying how much, and
+- A value that holds much memory keeps an `hxn::Weight` recording how much, and
   its interface is marked `#[hxn::interface(weighed)]`. The weight is set
   again when the size changes. Without the mark the weight is counted but
   making the object checks nothing.
@@ -206,7 +206,7 @@ filesystem `#include "counter.h"` would then find the generated one.
   Ash is run in its hybrid, JIT and interpreter modes, which differ in how
   threads and native calls behave.
 - `tests/cli/run.sh` makes a library with `hxn new` and runs it with
-  `hxn run`, as the readme says to, then packages it with `hxn package` and
+  `hxn run`, as the readme describes, then packages it with `hxn package` and
   builds the same program against the package alone.
   `tests/examples/run.sh` runs each library under `examples/` and compares
   what it prints with its `expected.txt`. Both take `hl <vm>`, `cpp`,
@@ -230,7 +230,7 @@ filesystem `#include "counter.h"` would then find the generated one.
   `cargo miri test -p hxn-future` finds interleavings a native run does not,
   the more with `-Zmiri-many-seeds`. Under Miri the tests that count on what
   fits in a slice of time are skipped: it runs too slowly for them.
-- A test that depends on a runtime's limits says so beside the check it
+- A test that depends on a runtime's limits notes it beside the check it
   skips, with the reason.
 - A check does not depend on when the collector runs by itself: it forces a
   collection, or asserts a bound that holds either way.
@@ -241,8 +241,8 @@ filesystem `#include "counter.h"` would then find the generated one.
 
 ## Comments, commits and issues
 
-- A comment says what the code does, and why it is shaped that way when that
-  is not obvious. No history of what was tried, and no measurements.
+- A comment describes what the code does, and why it is shaped that way when
+  that is not obvious. No history of what was tried, and no measurements.
 - A commit message is short: what changed, and a few sentences of why when
   that is not self-evident.
 - Detail lives in a `git-bug` issue: reproducers, measurements, alternatives

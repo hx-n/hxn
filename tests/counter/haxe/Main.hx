@@ -179,7 +179,7 @@ class Main {
 		#end
 	}
 
-	// An app with a loop of its own: nothing is delivered until it says so,
+	// An app with a loop of its own: nothing is delivered until it asks,
 	// and then everything is, in the order the library produced it.
 	static function frames() {
 		hxn.Loop.manual = true;
@@ -354,7 +354,7 @@ class Main {
 		#if emscripten
 		// hxcpp's collector does not return from a forced collection under
 		// Emscripten, so nothing here can show a finalizer running.
-		check("and hxn says it cannot run one", !hxn.Gc.collect());
+		check("and hxn reports that it cannot run one", !hxn.Gc.collect());
 		var collected = "no collection was run";
 		#else
 		churn(500);

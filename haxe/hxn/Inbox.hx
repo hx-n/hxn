@@ -25,7 +25,7 @@ class Inbox {
 	final lock = new Mutex();
 	final watchers = new Map<Int, Array<() -> Bool>>();
 	var watching = 0;
-	// Watched since the last sync, and owed a first look whatever the queue says.
+	// Watched since the last sync, and owed a first look whatever the queue holds.
 	var due:Array<Int> = [];
 	var driven = false;
 	var looking = false;

@@ -15,7 +15,7 @@ pub struct Project {
     pub krate: String,
     /// The name its binaries and symbols carry.
     pub library: String,
-    /// The package's version and what it says it is, which its haxelib says too.
+    /// The package's version and description, which its haxelib repeats.
     pub version: String,
     pub description: String,
     /// The Rust file holding its marked items.
@@ -59,8 +59,8 @@ pub fn quoted(text: &str) -> String {
 }
 
 impl Source {
-    /// What a manifest says to depend on `name`, one of hxn's crates, from
-    /// here. Each of them must come from one place: two copies of `hxn-abi`
+    /// How a manifest specifies a dependency on `name`, one of hxn's crates,
+    /// from here. Each of them must come from one place: two copies of `hxn-abi`
     /// would not agree on a handle.
     pub fn dependency(&self, name: &str) -> String {
         match self {
@@ -162,7 +162,7 @@ impl Project {
             return Err(String::from_utf8_lossy(&output.stderr).trim().to_owned());
         }
         let metadata: Value = serde_json::from_slice(&output.stdout)
-            .map_err(|error| format!("reading what cargo said: {error}"))?;
+            .map_err(|error| format!("reading cargo's output: {error}"))?;
         let packages = metadata
             .get("packages")
             .and_then(Value::as_array)

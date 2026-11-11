@@ -11,9 +11,9 @@ import sys.io.File;
 	Points a compile at a library that `hxn package` packaged.
 
 	`--macro hxn.Bind.lib("name")`, which the package's `extraParams.hxml`
-	says, so that `-lib name` is all a program's build names. The package is
-	found by its manifest, `name.hxn.json`, on the class path. From what the
-	compile is for, this adds the library's classes for HashLink or hxcpp,
+	specifies, so that `-lib name` is all a program's build names. The package
+	is found by its manifest, `name.hxn.json`, on the class path. From what
+	the compile is for, this adds the library's classes for HashLink or hxcpp,
 	tells hxcpp where the headers and the built library are, and puts a
 	HashLink library beside the program.
 

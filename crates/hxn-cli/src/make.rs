@@ -111,8 +111,8 @@ pub struct Built {
     pub declarations: PathBuf,
 }
 
-// Leaves a file that already says this alone, so cargo and haxe rebuild
-// only what changed.
+// Leaves a file that already holds this text alone, so cargo and haxe
+// rebuild only what changed.
 pub fn write(path: &Path, text: &str) -> Result<(), String> {
     if std::fs::read_to_string(path).is_ok_and(|existing| existing == text) {
         return Ok(());
@@ -197,7 +197,7 @@ fn artifact(library: &str, target: Target) -> String {
 }
 
 // What a command prints, when it ran and printed something.
-fn said(command: &mut Command) -> Option<String> {
+fn printed(command: &mut Command) -> Option<String> {
     let output = command.output().ok()?;
     output
         .status
@@ -206,13 +206,13 @@ fn said(command: &mut Command) -> Option<String> {
 }
 
 // The line of `rustc -vV` that starts with `key`.
-pub fn rustc_says(key: &str) -> Result<String, String> {
-    said(Command::new("rustc").arg("-vV"))
+pub fn rustc_reports(key: &str) -> Result<String, String> {
+    printed(Command::new("rustc").arg("-vV"))
         .and_then(|text| {
             text.lines()
                 .find_map(|line| line.strip_prefix(key).map(|value| value.trim().to_owned()))
         })
-        .ok_or_else(|| String::from("`rustc -vV` did not say what it is"))
+        .ok_or_else(|| String::from("`rustc -vV` did not report what it is"))
 }
 
 /// Whether `program` is in a directory on PATH.
@@ -238,11 +238,11 @@ fn resolvers(adapter: &str) -> Vec<&str> {
 // leaves undefined, the VM's own functions and the allocator, becomes
 // imports the program answers.
 fn side_module(archive: &Path, adapter: &str, module: &Path) -> Result<(), String> {
-    let sysroot = said(Command::new("rustc").args(["--print", "sysroot"]))
-        .ok_or("`rustc --print sysroot` did not say where it is")?;
+    let sysroot = printed(Command::new("rustc").args(["--print", "sysroot"]))
+        .ok_or("`rustc --print sysroot` did not print where it is")?;
     let linker = Path::new(sysroot.trim())
         .join("lib/rustlib")
-        .join(rustc_says("host:")?)
+        .join(rustc_reports("host:")?)
         .join("bin/rust-lld");
     let mut link = Command::new(linker);
     link.args(["-flavor", "wasm", "--experimental-pic", "-shared"])
@@ -289,7 +289,7 @@ pub fn build(
     if target.wasm {
         // std is rebuilt for a wasm target, to be position-independent or
         // to abort, and only a nightly cargo will do that.
-        let release = rustc_says("release:")?;
+        let release = rustc_reports("release:")?;
         if !release.contains("nightly") && !release.contains("dev") {
             return Err(format!(
                 "a wasm build rebuilds Rust's standard library, which takes a nightly toolchain, and this one is {release}: install one with `rustup toolchain install nightly --component rust-src` and set RUSTUP_TOOLCHAIN=nightly"
@@ -396,7 +396,7 @@ pub fn build(
         built.push(triple);
     }
     // Where the adapter's build script finds the VM's library, unless the
-    // environment says.
+    // environment already specifies it.
     if let Some(dir) = hashlink
         && std::env::var_os("HXN_HL_DIR").is_none()
     {

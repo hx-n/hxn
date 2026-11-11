@@ -47,7 +47,7 @@ hdll() {
 	cp "$root/target/debug/$prefix${1//-/_}.$dylib" "$work/counter.hdll"
 }
 
-# Builds one of the archives hxcpp links, and says what else hxcpp needs to
+# Builds one of the archives hxcpp links, and sets what else hxcpp needs to
 # link it.
 linked=()
 staticlib() {
@@ -94,7 +94,7 @@ case "$runtime" in
 		staticlib counter-gen-c
 		generate
 		# The host is an hxcpp program that keeps every class of the binding
-		# and of hxn, and says which they are for the script's compile. It
+		# and of hxn, and lists which they are for the script's compile. It
 		# keeps what it does not use itself: a script may.
 		haxe -cp "$root/haxe" -cp "$here/haxe" -cp "$here/haxe/cppia" -cp "$work/gen/haxe/cpp" -main Host -cpp "$work/host" \
 			-D scriptable -dce no -D dll_export="$work/host.classes" \

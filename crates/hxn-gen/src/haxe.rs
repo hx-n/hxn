@@ -245,7 +245,7 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
                 arguments.push(format!("{name}.length"));
             }
             // Null goes through as null whether or not the library takes
-            // one: it is the library that says so, the same on every runtime.
+            // one: it is the library that refuses it, the same on every runtime.
             Type::Handle { .. } => {
                 arguments.push(format!("{name} == null ? null : {name}.raw"));
             }
@@ -796,7 +796,7 @@ fn cpp_natives(library: &Library) -> String {
     let upper = library.name.to_uppercase();
     let this = format!("self:{CPP_HANDLE}");
     let mut out = String::from(HEADER);
-    // Where the headers and the library are is the build's to say, through
+    // Where the headers and the library are is the build's to specify, through
     // defines. hxcpp links its own exceptions under Emscripten but does not
     // compile for them unless told.
     out.push_str(&format!(

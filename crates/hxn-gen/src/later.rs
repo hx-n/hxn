@@ -209,7 +209,7 @@ fn names(params: &str) -> Vec<&str> {
 // The calls every handle of a kind answers, beside taking what it carries:
 // name, extra parameters, and the expression over `this`.
 fn calls(kind: Kind) -> Vec<(&'static str, &'static str, &'static str, bool)> {
-    // The last says whether the call waits.
+    // The last is whether the call waits.
     match kind {
         Kind::Future => vec![
             ("state", "", "this.state() as i32", false),

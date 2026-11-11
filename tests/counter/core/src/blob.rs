@@ -1,4 +1,4 @@
-//! A value that says how much it holds, kept in a file of its own: the
+//! A value that declares how much it holds, kept in a file of its own: the
 //! generator reads every module of a library.
 
 use std::sync::atomic::{AtomicI32, Ordering};

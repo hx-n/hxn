@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs each library under examples/ with `hxn run`, as its readme says to,
+# Runs each library under examples/ with `hxn run`, as its readme describes,
 # and compares what it prints with its expected.txt.
 #   run.sh hl [vm]     vm is a HashLink-compatible executable, default `hl`,
 #                      with any options for it: "ash --mode jit"
@@ -38,7 +38,7 @@ for example in "$root"/examples/*/; do
 	# The program's lines are the last ones, after whatever the build printed.
 	expected="$example/expected.txt"
 	if [ "$(tail -n "$(wc -l <"$expected")" "$out")" != "$(cat "$expected")" ]; then
-		echo "FAILED: $name did not print what expected.txt says" >&2
+		echo "FAILED: $name did not print what expected.txt lists" >&2
 		exit 1
 	fi
 done

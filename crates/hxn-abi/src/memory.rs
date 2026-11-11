@@ -3,7 +3,7 @@
 //! A collector decides when to run from the memory it manages. A handle is a
 //! few words of that, whatever the value behind it holds, so a host can keep
 //! making values and never think it is time to collect the ones it dropped.
-//! A library says what its values hold with a [`Weight`], and the binding
+//! A library declares what its values hold with a [`Weight`], and the binding
 //! reads the total and collects when it has grown.
 //!
 //! The total is the library's: this crate is linked into each one separately.
