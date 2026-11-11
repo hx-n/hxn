@@ -21,6 +21,7 @@ typedef int32_t hxn_status;
 #define HXN_PENDING (-8)
 #define HXN_CANCELLED (-9)
 #define HXN_CALLBACK (-10)
+#define HXN_RANGE (-11)
 
 /* Bytes or UTF-8 text the caller keeps alive for the call. */
 typedef struct hxn_slice {

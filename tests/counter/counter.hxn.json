@@ -603,6 +603,88 @@
           "blocking": false
         }
       ]
+    },
+    {
+      "name": "Numbers",
+      "docs": "Numbers narrower than the two that cross, and the unsigned 32 bits.",
+      "methods": [
+        {
+          "name": "byte",
+          "kind": "static",
+          "params": [{ "name": "value", "type": "u8" }],
+          "returns": "u8",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "small",
+          "kind": "static",
+          "params": [{ "name": "value", "type": "i8" }],
+          "returns": "i8",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "word",
+          "kind": "static",
+          "params": [{ "name": "value", "type": "u16" }],
+          "returns": "u16",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "short",
+          "kind": "static",
+          "params": [{ "name": "value", "type": "i16" }],
+          "returns": "i16",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "inverted",
+          "docs": "Every bit of `bits` turned over.",
+          "kind": "static",
+          "params": [{ "name": "bits", "type": "u32" }],
+          "returns": "u32",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "doubled",
+          "docs": "Twice `count`, which may be more than fits going back.",
+          "kind": "static",
+          "params": [{ "name": "count", "type": "usize" }],
+          "returns": "usize",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "negated",
+          "kind": "static",
+          "params": [{ "name": "by", "type": "isize" }],
+          "returns": "isize",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "third",
+          "docs": "A third of `value`, to the precision an `f32` has.",
+          "kind": "static",
+          "params": [{ "name": "value", "type": "f32" }],
+          "returns": "f32",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "sized",
+          "docs": "A length, checked by the library after the binding let it through.",
+          "kind": "static",
+          "params": [{ "name": "count", "type": "usize" }],
+          "returns": "usize",
+          "fallible": true,
+          "blocking": false
+        }
+      ]
     }
   ]
 }

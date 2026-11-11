@@ -49,7 +49,7 @@ fn method(method: &Method) -> String {
             format!(
                 "{{ \"name\": {}, \"type\": {}{borrow} }}",
                 quoted(&param.name),
-                quoted(&param.ty.name())
+                quoted(&param.type_name())
             )
         })
         .collect();
@@ -60,7 +60,7 @@ fn method(method: &Method) -> String {
     out.push_str(&format!("          \"params\": [{}],\n", params.join(", ")));
     out.push_str(&format!(
         "          \"returns\": {},\n",
-        quoted(&method.returns.name())
+        quoted(&method.returns_name())
     ));
     out.push_str(&format!("          \"fallible\": {},\n", method.fallible));
     out.push_str(&format!("          \"blocking\": {}\n", method.blocking));

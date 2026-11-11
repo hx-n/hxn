@@ -18,7 +18,9 @@ use hxn_future::{
 
 // An interface in a module is named at the root, where the adapters look.
 mod blob;
+mod numbers;
 pub use blob::Blob;
+pub use numbers::Numbers;
 
 static LIVE: AtomicI32 = AtomicI32::new(0);
 

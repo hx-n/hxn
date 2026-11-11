@@ -7,7 +7,7 @@
 
 use crate::later;
 use crate::lent;
-use crate::model::{Interface, Library, Method, Type};
+use crate::model::{Interface, Library, Method, Number, Type};
 use crate::names::{
     abstract_name, camel, cell_abstract, cell_class, has_receiver, local, memory_class,
     native_class, weak_abstract, weak_class,
@@ -62,11 +62,26 @@ fn docs(lines: &[String], indent: &str) -> String {
     }
 }
 
+// A number is the Haxe type it crosses as, but for the one that is
+// unsigned in the same 32 bits.
+fn number_type(number: Option<Number>, ty: &Type) -> String {
+    match number {
+        Some(Number::U32) => String::from("UInt"),
+        _ => haxe_type(ty),
+    }
+}
+
 fn params(method: &Method) -> String {
     let params: Vec<String> = method
         .params
         .iter()
-        .map(|param| format!("{}:{}", camel(&param.name), haxe_type(&param.ty)))
+        .map(|param| {
+            format!(
+                "{}:{}",
+                camel(&param.name),
+                number_type(param.number, &param.ty)
+            )
+        })
         .collect();
     params.join(", ")
 }
@@ -81,7 +96,7 @@ fn signature(method: &Method) -> String {
         "\tpublic {modifier}function {}({}):{}",
         camel(&method.name),
         params(method),
-        haxe_type(&method.returns)
+        number_type(method.returns_number, &method.returns)
     )
 }
 

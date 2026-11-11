@@ -40,6 +40,14 @@ every dependency twice.
 | a cell both sides read and write | an atomic `i32` | whoever made it |
 | failure | `Status`, with a message in a `Buf` | - |
 
+Numbers cross as an `i32` or an `f64` and nothing else, which is what every
+runtime has. A library's function may take or give a narrower integer, a
+size, an unsigned 32 bits or an `f32`; its adapter converts on the way, and
+a value that does not fit fails the call with `Status::RANGE` before the
+function runs or after it has returned. So the boundary and the generated
+Haxe are the same whichever of these the Rust says, but for `u32`, which
+Haxe sees as a `UInt`.
+
 Text is UTF-8 at the boundary. HashLink strings are UTF-16, so the HashLink
 adapter converts at the edge, strictly: text that is not valid in its encoding
 is an error, not a replacement character.

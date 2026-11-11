@@ -1,4 +1,4 @@
-use hxn_gen::{File, Library, Receiver, Type, parse};
+use hxn_gen::{File, Library, Number, Receiver, Type, parse};
 
 // The hxcpp classes less the extern class they call the glue through, which
 // HashLink has no file for: each of its classes declares its own natives.
@@ -177,8 +177,16 @@ fn says_where_and_why_something_cannot_cross() {
         ("pub async fn later(&self) {}", "async"),
         ("pub unsafe fn raw(&self) {}", "unsafe"),
         (
-            "pub fn size(&self, value: usize) {}",
-            "a parameter is one of",
+            "pub fn size(&self, value: u64) {}",
+            "64-bit or wider integer does not cross yet",
+        ),
+        (
+            "pub fn stamp(&self) -> Result<i64, String> { todo!() }",
+            "64-bit or wider integer does not cross yet",
+        ),
+        (
+            "pub fn maybe(&self) -> Option<u8> { todo!() }",
+            "a result is one of",
         ),
         (
             "pub fn text(&self, value: String) {}",
@@ -1014,7 +1022,7 @@ fn a_library_is_read_from_every_file_of_its_crate() {
     );
     write(
         "src/odd/place.rs",
-        "#[hxn::interface]\npub struct Elsewhere;\n\n#[hxn::methods]\nimpl Elsewhere {\n    pub fn bad(&self, value: usize) {}\n}\n",
+        "#[hxn::interface]\npub struct Elsewhere;\n\n#[hxn::methods]\nimpl Elsewhere {\n    pub fn bad(&self, value: String) {}\n}\n",
     );
 
     // Where a refusal is says which file.
@@ -1104,4 +1112,52 @@ fn every_example_is_one_the_generator_takes() {
         seen += 1;
     }
     assert!(seen >= 3);
+}
+
+#[test]
+fn a_number_crosses_as_one_of_the_two_the_boundary_has() {
+    let source = "#[hxn::interface]\npub struct Gauge;\n\n#[hxn::methods]\nimpl Gauge {\n    pub fn set(&mut self, level: u8, gain: f32) {}\n    pub fn mask(&self, bits: u32) -> u32 { todo!() }\n    pub fn len(&self) -> usize { todo!() }\n    pub fn seek(&mut self, by: isize) -> Result<i16, String> { todo!() }\n}\n";
+    let library = parse("meter", source).unwrap();
+    let methods = &library.interfaces[0].methods;
+    assert_eq!(methods[0].params[0].ty, Type::I32);
+    assert_eq!(methods[0].params[0].number, Some(Number::U8));
+    assert_eq!(methods[0].params[1].ty, Type::F64);
+    assert_eq!(methods[1].returns_number, Some(Number::U32));
+    assert_eq!(methods[3].returns, Type::I32);
+    assert_eq!(methods[3].returns_number, Some(Number::I16));
+
+    // Nothing of the boundary changes: the adapters convert on the way.
+    let header = hxn_gen::c_header(&library);
+    assert!(
+        header.contains(
+            "meter_gauge_set(hxn_handle *self, int32_t level, double gain, hxn_buf *err);"
+        )
+    );
+    for adapter in [
+        hxn_gen::c_adapter(&library, "meter_core"),
+        hxn_gen::hl_adapter(&library, "meter_core"),
+    ] {
+        assert!(
+            adapter
+                .contains("this.set(u8::try_from(level).map_err(|_| Fault::Range)?, gain as f32)")
+        );
+        assert!(adapter.contains("Ok(this.mask(bits as u32) as i32)"));
+        assert!(adapter.contains("Ok(i32::try_from(this.len()).map_err(|_| Fault::Range)?)"));
+        assert!(
+            adapter.contains(
+                "Ok(i32::from(this.seek(isize::try_from(by).map_err(|_| Fault::Range)?)?))"
+            )
+        );
+    }
+
+    // Haxe sees an Int or a Float, and a UInt for the unsigned 32 bits.
+    for files in [hxn_gen::haxe_hl(&library), cpp_classes(&library)] {
+        let gauge = &files[0].text;
+        assert!(gauge.contains("public function set(level:Int, gain:Float):Void"));
+        assert!(gauge.contains("public function mask(bits:UInt):UInt"));
+        assert!(gauge.contains("public function len():Int"));
+    }
+    let manifest = hxn_gen::manifest(&library);
+    assert!(manifest.contains("{ \"name\": \"level\", \"type\": \"u8\" }"));
+    assert!(manifest.contains("\"returns\": \"usize\""));
 }

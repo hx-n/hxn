@@ -42,6 +42,8 @@ pub struct Method {
     /// Returns a shared interface as the `Arc` it is already in, and not
     /// as a value for the adapter to put in one.
     pub returns_arc: bool,
+    /// The number the function returns, when `returns` is what it crosses as.
+    pub returns_number: Option<Number>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -64,6 +66,81 @@ pub struct Param {
     pub exclusive: bool,
     /// For a shared interface, taken as `Arc<T>`: a share the library keeps.
     pub kept: bool,
+    /// The number the function takes, when `ty` is what it crosses as.
+    pub number: Option<Number>,
+}
+
+/// A number Rust has and the boundary does not. It crosses as an `i32` or an
+/// `f64` and the adapter converts it, failing where it does not fit: a
+/// parameter, or a result, and not what a callback or a result over time
+/// carries.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum Number {
+    I8,
+    I16,
+    U8,
+    U16,
+    /// The same 32 bits as the `i32` it crosses as: a Haxe `UInt`.
+    U32,
+    Isize,
+    Usize,
+    F32,
+}
+
+impl Number {
+    const ALL: [Self; 8] = [
+        Self::I8,
+        Self::I16,
+        Self::U8,
+        Self::U16,
+        Self::U32,
+        Self::Isize,
+        Self::Usize,
+        Self::F32,
+    ];
+
+    /// The one Rust calls `name`.
+    pub fn parse(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|number| number.name() == name)
+    }
+
+    /// What Rust and the manifest call it.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::I8 => "i8",
+            Self::I16 => "i16",
+            Self::U8 => "u8",
+            Self::U16 => "u16",
+            Self::U32 => "u32",
+            Self::Isize => "isize",
+            Self::Usize => "usize",
+            Self::F32 => "f32",
+        }
+    }
+
+    /// What it crosses as.
+    pub fn wire(self) -> Type {
+        match self {
+            Self::F32 => Type::F64,
+            _ => Type::I32,
+        }
+    }
+}
+
+impl Param {
+    /// Its type's name in the manifest.
+    pub fn type_name(&self) -> String {
+        self.number
+            .map_or_else(|| self.ty.name(), |number| number.name().to_owned())
+    }
+}
+
+impl Method {
+    /// Its result's name in the manifest.
+    pub fn returns_name(&self) -> String {
+        self.returns_number
+            .map_or_else(|| self.returns.name(), |number| number.name().to_owned())
+    }
 }
 
 /// The types that cross. A parameter is borrowed for the call and a result

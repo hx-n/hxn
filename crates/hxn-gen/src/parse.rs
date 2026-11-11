@@ -7,7 +7,7 @@ use proc_macro2::Span;
 use syn::spanned::Spanned;
 use syn::{Attribute, FnArg, ImplItem, Item, Meta, ReturnType, Visibility};
 
-use crate::model::{Error, Interface, Library, Method, Param, Receiver, Type};
+use crate::model::{Error, Interface, Library, Method, Number, Param, Receiver, Type};
 
 fn error<T>(span: Span, message: impl Into<String>) -> Result<T, Error> {
     Err(Error {
@@ -262,6 +262,7 @@ impl Scope<'_> {
             ty,
             exclusive: false,
             kept: false,
+            number: None,
         };
         if let syn::Type::ImplTrait(lent) = ty {
             return Ok(plain(self.lent(lent)?));
@@ -306,6 +307,7 @@ impl Scope<'_> {
                 },
                 exclusive,
                 kept: false,
+                number: None,
             });
         }
         if let Some(interface) = self.pointer(inner) {
@@ -325,6 +327,7 @@ impl Scope<'_> {
                 },
                 exclusive: false,
                 kept: true,
+                number: None,
             });
         }
         if let syn::Type::Reference(reference) = inner
@@ -345,9 +348,17 @@ impl Scope<'_> {
             Some("bool") => Ok(plain(Type::Bool)),
             Some("i32") => Ok(plain(Type::I32)),
             Some("f64") => Ok(plain(Type::F64)),
+            Some(name) if Number::parse(name).is_some() => {
+                let number = Number::parse(name);
+                Ok(Param {
+                    number,
+                    ..plain(number.map_or(Type::I32, Number::wire))
+                })
+            }
+            Some("i64" | "u64" | "i128" | "u128") => error(ty.span(), WIDE),
             _ => error(
                 ty.span(),
-                "a parameter is one of bool, i32, f64, &str, &[u8], &AtomicI32, &AtomicFlag, `&` or `&mut` of an interface, or `impl Fn(..) -> Result<T, E>`",
+                "a parameter is one of bool, a number, &str, &[u8], &AtomicI32, &AtomicFlag, `&` or `&mut` of an interface, or `impl Fn(..) -> Result<T, E>`",
             ),
         }
     }
@@ -485,10 +496,15 @@ impl Scope<'_> {
             Some("i32") => Type::I32,
             Some("f64") => Type::F64,
             Some("String") => Type::Str,
+            // Which number it is, `method` reads off the signature.
+            Some(name) if Number::parse(name).is_some() => {
+                Number::parse(name).map_or(Type::I32, Number::wire)
+            }
+            Some("i64" | "u64" | "i128" | "u128") => return error(ty.span(), WIDE),
             _ => {
                 return error(
                     ty.span(),
-                    "a result is one of (), bool, i32, f64, String, Vec<u8>, Arc<AtomicI32>, Arc<AtomicFlag>, an interface or an Option of one, a Future, Stream or Signal, or a Result of these",
+                    "a result is one of (), bool, a number, String, Vec<u8>, Arc<AtomicI32>, Arc<AtomicFlag>, an interface or an Option of one, a Future, Stream or Signal, or a Result of these",
                 );
             }
         };
@@ -497,18 +513,10 @@ impl Scope<'_> {
 
     // `Result<T, E>` gives `T` and says the function can fail.
     fn returns(&self, output: &ReturnType) -> Result<((Type, bool), bool), Error> {
-        let ReturnType::Type(_, ty) = output else {
-            return Ok(((Type::Void, false), false));
-        };
-        if let syn::Type::Path(path) = &**ty
-            && let Some(segment) = path.path.segments.last()
-            && segment.ident == "Result"
-            && let syn::PathArguments::AngleBracketed(arguments) = &segment.arguments
-            && let Some(syn::GenericArgument::Type(ok)) = arguments.args.first()
-        {
-            return Ok((self.result(ok)?, true));
+        match given(output) {
+            None => Ok(((Type::Void, false), false)),
+            Some((ty, fallible)) => Ok((self.result(ty)?, fallible)),
         }
-        Ok((self.result(ty)?, false))
     }
 
     fn method(&self, function: &syn::ImplItemFn) -> Result<Method, Error> {
@@ -616,8 +624,29 @@ impl Scope<'_> {
             blocking,
             constructor,
             returns_arc,
+            returns_number: given(&signature.output)
+                .and_then(|(ty, _)| path_name(ty))
+                .and_then(|name| Number::parse(&name)),
         })
     }
+}
+
+const WIDE: &str = "a 64-bit or wider integer does not cross yet: Haxe's `Int` is 32 bits. Take or give an `f64`, which holds every integer up to 2^53, or split the value";
+
+// What a function gives, less the `Result` around it, and whether it had one.
+fn given(output: &ReturnType) -> Option<(&syn::Type, bool)> {
+    let ReturnType::Type(_, ty) = output else {
+        return None;
+    };
+    if let syn::Type::Path(path) = &**ty
+        && let Some(segment) = path.path.segments.last()
+        && segment.ident == "Result"
+        && let syn::PathArguments::AngleBracketed(arguments) = &segment.arguments
+        && let Some(syn::GenericArgument::Type(ok)) = arguments.args.first()
+    {
+        return Some((ok, true));
+    }
+    Some((ty, false))
 }
 
 /// One file's items, those of its inline modules among them, and where it

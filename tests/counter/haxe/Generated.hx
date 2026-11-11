@@ -22,6 +22,24 @@ class Generated {
 		check('$what: $message', message != null && message.indexOf(expected) >= 0);
 	}
 
+	static function numbers() {
+		check("narrow numbers come back as they went",
+			Numbers.byte(200) == 200 && Numbers.small(-100) == -100 && Numbers.word(60000) == 60000 && Numbers.short(-30000) == -30000);
+		throws("one too large for its type is refused", () -> Numbers.byte(256), "out of range");
+		throws("and one too small", () -> Numbers.small(-129), "out of range");
+		throws("an unsigned one is not negative", () -> Numbers.word(-1), "out of range");
+		check("sizes", Numbers.doubled(21) == 42 && Numbers.negated(5) == -5);
+		throws("a size is not negative either", () -> Numbers.doubled(-1), "out of range");
+		throws("a result that does not fit is refused too", () -> Numbers.doubled(0x7fffffff), "out of range");
+		check("a number is converted before the library sees it", Numbers.sized(100) == 100);
+		throws("and the library can still refuse it", () -> Numbers.sized(101), "too many");
+		var all:UInt = Numbers.inverted(0);
+		var low:UInt = Numbers.inverted(0xF0000000);
+		check('an unsigned 32-bit number keeps its bits: $all', (all : Int) == -1 && (low : Int) == 0x0FFFFFFF && Std.string(all) == "4294967295");
+		var third = Numbers.third(1);
+		check('a float of single precision: $third', Math.abs(third - 1 / 3) < 1e-7 && third != 1 / 3);
+	}
+
 	// Out of line, so no counter is left in a register or stack slot of `main`.
 	static function churn(count:Int) {
 		for (i in 0...count)
@@ -349,6 +367,7 @@ class Generated {
 		throws("use after close", () -> counter.add(1), "closed");
 
 		handles();
+		numbers();
 		atomics();
 		shared();
 		callbacks();

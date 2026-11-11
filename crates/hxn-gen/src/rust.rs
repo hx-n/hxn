@@ -3,7 +3,7 @@
 
 use crate::later;
 use crate::lent;
-use crate::model::{Interface, Library, Method, Param, Receiver, Type};
+use crate::model::{Interface, Library, Method, Number, Param, Receiver, Type};
 use crate::names::{
     abstract_name, cell_abstract, cell_export, export, has_receiver, held_export, local, release,
     wanted_export, weak_abstract,
@@ -23,6 +23,33 @@ fn call(interface: &Interface, method: &Method, arguments: &[String]) -> String 
         format!("{}::{}", interface.name, method.name)
     };
     format!("{target}({}){}", arguments.join(", "), question(method))
+}
+
+// What crossed, as the number the library's function takes. One that may
+// not fit fails the call before the function is reached.
+fn narrowed(number: Option<Number>, value: &str) -> String {
+    match number {
+        None => value.to_owned(),
+        Some(Number::U32) => format!("{value} as u32"),
+        Some(Number::F32) => format!("{value} as f32"),
+        Some(number) => format!(
+            "{}::try_from({value}).map_err(|_| Fault::Range)?",
+            number.name()
+        ),
+    }
+}
+
+// The number a function gave, as what crosses.
+fn widened(number: Option<Number>, value: &str) -> String {
+    match number {
+        None => value.to_owned(),
+        Some(Number::U32) => format!("{value} as i32"),
+        Some(Number::F32) => format!("f64::from({value})"),
+        Some(Number::Isize | Number::Usize) => {
+            format!("i32::try_from({value}).map_err(|_| Fault::Range)?")
+        }
+        Some(_) => format!("i32::from({value})"),
+    }
 }
 
 // The receiver as `this`, borrowed or taken from what `open` yields: a
@@ -163,8 +190,8 @@ fn c_method(library: &Library, interface: &Interface, method: &Method) -> String
         let (ty, argument) = match &param.ty {
             // An int at the boundary: C has no one size for a bool.
             Type::Bool => ("i32", format!("{name} != 0")),
-            Type::I32 => ("i32", name.clone()),
-            Type::F64 => ("f64", name.clone()),
+            Type::I32 => ("i32", narrowed(param.number, name)),
+            Type::F64 => ("f64", narrowed(param.number, name)),
             Type::Str => ("Slice<'_>", format!("{name}.as_str()?")),
             Type::Bytes => ("Slice<'_>", format!("{name}.as_bytes()?")),
             Type::Handle {
@@ -199,8 +226,14 @@ fn c_method(library: &Library, interface: &Interface, method: &Method) -> String
     let (out, result) = match &method.returns {
         Type::Void => (None, format!("{call};\n            Ok(())")),
         Type::Bool => (Some("i32"), format!("Ok(i32::from({call}))")),
-        Type::I32 => (Some("i32"), format!("Ok({call})")),
-        Type::F64 => (Some("f64"), format!("Ok({call})")),
+        Type::I32 => (
+            Some("i32"),
+            format!("Ok({})", widened(method.returns_number, &call)),
+        ),
+        Type::F64 => (
+            Some("f64"),
+            format!("Ok({})", widened(method.returns_number, &call)),
+        ),
         Type::Str | Type::Bytes => (Some("Buf"), format!("Ok(Buf::from({call}))")),
         Type::Lent { .. } => unreachable!("not a result type"),
         Type::Handle { .. } => (
@@ -418,12 +451,12 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
             Type::I32 => {
                 params.push(format!("{name}: i32"));
                 signature.push('i');
-                arguments.push(name.clone());
+                arguments.push(narrowed(param.number, name));
             }
             Type::F64 => {
                 params.push(format!("{name}: f64"));
                 signature.push('d');
-                arguments.push(name.clone());
+                arguments.push(narrowed(param.number, name));
             }
             Type::Str => {
                 params.push(format!("{name}: *mut vstring"));
@@ -486,8 +519,14 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
     let (ty, result) = match &method.returns {
         Type::Void => ("()", format!("{call};\n            Ok(())")),
         Type::Bool => ("bool", format!("Ok({call})")),
-        Type::I32 => ("i32", format!("Ok({call})")),
-        Type::F64 => ("f64", format!("Ok({call})")),
+        Type::I32 => (
+            "i32",
+            format!("Ok({})", widened(method.returns_number, &call)),
+        ),
+        Type::F64 => (
+            "f64",
+            format!("Ok({})", widened(method.returns_number, &call)),
+        ),
         Type::Str => ("*mut vbyte", format!("Ok(utf16(&{call}))")),
         Type::Lent { .. } => unreachable!("not a result type"),
         Type::Handle { .. } => ("*mut Managed", handed(library, method, &call, "manage")),

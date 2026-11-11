@@ -79,6 +79,10 @@ filesystem `#include "counter.h"` would then find the generated one.
   No generics.
 - Text is taken as `&str` and returned as `String`; bytes are taken as
   `&[u8]` and returned as `Vec<u8>`.
+- A number is `i32` or `f64`, or one the adapter converts: `i8`, `i16`,
+  `u8`, `u16`, `isize` and `usize` are a Haxe `Int`, `u32` a `UInt` with
+  the same bits, `f32` a `Float`. One that does not fit, going in or coming
+  back, fails the call. `i64` and wider do not cross.
 - Another interface is taken as `&T` or `&mut T` and returned as `T`, with
   `Option` for one that may be absent. It is never taken by value and never
   returned by reference.

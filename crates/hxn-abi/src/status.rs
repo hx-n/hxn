@@ -25,6 +25,7 @@ impl Status {
     /// A host callback failed. The host has its own account of why, and
     /// reports that one once the call returns.
     pub const CALLBACK: Self = Self(-10);
+    pub const RANGE: Self = Self(-11);
 
     pub const fn is_ok(self) -> bool {
         self.0 == 0
@@ -47,6 +48,8 @@ pub enum Fault {
     Encoding,
     /// A length no allocation can have.
     TooLarge,
+    /// A number that does not fit the type it is for.
+    Range,
 }
 
 impl Fault {
@@ -58,6 +61,7 @@ impl Fault {
             Self::Busy => Status::BUSY,
             Self::Encoding => Status::ENCODING,
             Self::TooLarge => Status::TOO_LARGE,
+            Self::Range => Status::RANGE,
         }
     }
 
@@ -69,6 +73,7 @@ impl Fault {
             Self::Busy => "handle is in use",
             Self::Encoding => "invalid text encoding",
             Self::TooLarge => "length out of range",
+            Self::Range => "number out of range",
         }
     }
 }
