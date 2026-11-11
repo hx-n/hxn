@@ -136,11 +136,9 @@ fn artifact(library: &str, runtime: Runtime) -> String {
 /// Reads the library's marked items, writes its binding for `runtime` and
 /// builds the adapter.
 pub fn build(project: &Project, runtime: Runtime, release: bool) -> Result<Built, String> {
-    let source = std::fs::read_to_string(&project.source)
-        .map_err(|error| format!("{}: {error}", project.source.display()))?;
     let name = &project.library;
-    let library = hxn_gen::parse(name, &source)
-        .map_err(|error| format!("{}: {error}", project.source.display()))?;
+    let (library, _) =
+        hxn_gen::parse_crate(name, &project.source).map_err(|error| error.to_string())?;
     if library.interfaces.is_empty() {
         return Err(format!(
             "{}: nothing is marked `#[hxn::interface]`",

@@ -30,5 +30,5 @@ pub use c::{c_header, cpp_glue};
 pub use haxe::{File, haxe_cpp, haxe_hl};
 pub use manifest::manifest;
 pub use model::{Error, Interface, Library, Method, Param, Receiver, Type};
-pub use parse::parse;
+pub use parse::{parse, parse_crate};
 pub use rust::{c_adapter, hl_adapter};

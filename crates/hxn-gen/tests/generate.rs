@@ -930,15 +930,100 @@ fn says_how_a_function_is_lent() {
     }
 }
 
+// A library laid out the ways a crate can be: a module beside the root, one
+// in a directory, one inside an inline module, and one at a path given.
+#[test]
+fn a_library_is_read_from_every_file_of_its_crate() {
+    let dir = std::env::temp_dir().join(format!("hxn-gen-crate-{}", std::process::id()));
+    let write = |path: &str, text: &str| {
+        let path = dir.join(path);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, text).unwrap();
+    };
+    write(
+        "src/lib.rs",
+        "mod beside;\nmod within;\nmod inline {\n    pub mod deep;\n}\n#[path = \"odd/place.rs\"]\nmod elsewhere;\n\n#[hxn::interface]\npub struct Root;\n",
+    );
+    write(
+        "src/beside.rs",
+        "mod child;\n\n#[hxn::interface]\npub struct Beside;\n\nuse crate::Root;\n\n#[hxn::methods]\nimpl Root {\n    pub fn depth(&self) -> i32 { 0 }\n}\n\n#[hxn::methods]\nimpl Beside {\n    pub fn root(&self, root: &Root) -> i32 { 0 }\n}\n",
+    );
+    write(
+        "src/beside/child.rs",
+        "#[hxn::interface]\npub struct Child;\n",
+    );
+    write(
+        "src/within/mod.rs",
+        "#[hxn::interface]\npub struct Within;\n",
+    );
+    write(
+        "src/inline/deep.rs",
+        "#[hxn::interface]\npub struct Deep;\n",
+    );
+    write(
+        "src/odd/place.rs",
+        "#[hxn::interface]\npub struct Elsewhere;\n\n#[hxn::methods]\nimpl Elsewhere {\n    pub fn bad(&self, value: usize) {}\n}\n",
+    );
+
+    // Where a refusal is says which file.
+    let error = hxn_gen::parse_crate("many", &dir.join("src/lib.rs")).unwrap_err();
+    assert!(error.file.as_deref().unwrap().ends_with("place.rs"));
+    assert_eq!(error.line, 6);
+    assert!(
+        error
+            .to_string()
+            .contains("place.rs:6: a parameter is one of")
+    );
+
+    write(
+        "src/odd/place.rs",
+        "#[hxn::interface]\npub struct Elsewhere;\n",
+    );
+    let (library, files) = hxn_gen::parse_crate("many", &dir.join("src/lib.rs")).unwrap();
+    let names: Vec<_> = library.interfaces.iter().map(|i| i.name.as_str()).collect();
+    assert_eq!(
+        names,
+        ["Root", "Beside", "Child", "Within", "Deep", "Elsewhere"]
+    );
+    assert_eq!(files.len(), 6);
+    // A block in one file exposes functions on, and names, an interface of another.
+    let beside = &library.interfaces[1];
+    assert_eq!(beside.methods[0].params[0].ty, handle("Root", false));
+    assert_eq!(library.interfaces[0].methods[0].name, "depth");
+
+    write("src/within/mod.rs", "#[hxn::interface]\npub struct Root;\n");
+    let error = hxn_gen::parse_crate("many", &dir.join("src/lib.rs")).unwrap_err();
+    assert!(
+        error
+            .message
+            .contains("`Root` is marked as an interface twice")
+    );
+
+    std::fs::remove_file(dir.join("src/within/mod.rs")).unwrap();
+    let error = hxn_gen::parse_crate("many", &dir.join("src/lib.rs")).unwrap_err();
+    assert!(
+        error
+            .message
+            .contains("the file of module `within` was not found")
+    );
+    assert!(error.file.as_deref().unwrap().ends_with("lib.rs") && error.line == 2);
+
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
 // The fixture's manifest is committed, as a library's would be, so a change
 // to what it exposes shows up in review. To update it after changing
 // tests/counter/core, run hxn-gen and copy its counter.hxn.json over.
 #[test]
 fn the_counter_manifest_is_current() {
     let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/counter");
-    let source = std::fs::read_to_string(format!("{root}/core/src/lib.rs")).unwrap();
     let committed = std::fs::read_to_string(format!("{root}/counter.hxn.json")).unwrap();
-    let library = parse("counter", &source).unwrap();
+    let (library, files) =
+        hxn_gen::parse_crate("counter", format!("{root}/core/src/lib.rs").as_ref()).unwrap();
+    assert!(
+        files.len() > 1,
+        "the fixture keeps a module in its own file"
+    );
     assert_eq!(hxn_gen::manifest(&library), committed);
     assert_eq!(
         hxn_gen::manifest(&library),

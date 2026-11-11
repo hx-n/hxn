@@ -6,7 +6,7 @@ use std::process::ExitCode;
 const USAGE: &str = "usage: hxn-gen --library NAME --source FILE --crate PATH --out DIR
 
   --library  the name the library's binaries and symbols carry
-  --source   the Rust file holding its marked items
+  --source   its lib.rs; the files of the modules declared from there are read too
   --crate    the path its items are found under in the adapters, such as counter_core
   --out      where to write: the manifest, c/ and hl/ adapters, include/ headers and haxe/ classes";
 
@@ -44,8 +44,8 @@ fn run() -> Result<(), String> {
         return Err(String::from(USAGE));
     };
 
-    let text = std::fs::read_to_string(&source).map_err(|error| format!("{source}: {error}"))?;
-    let library = hxn_gen::parse(&name, &text).map_err(|error| format!("{source}: {error}"))?;
+    let (library, _) =
+        hxn_gen::parse_crate(&name, Path::new(&source)).map_err(|error| error.to_string())?;
     let out = PathBuf::from(out);
 
     write(

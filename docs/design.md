@@ -329,7 +329,10 @@ things keep the two sides consistent:
 
 `hxn-gen` reads a library's source for the items marked `#[hxn::interface]`
 and `#[hxn::methods]` and writes the manifest, both Rust adapters, the C
-header, the hxcpp glue and the Haxe classes.
+header, the hxcpp glue and the Haxe classes. It starts at the crate's `lib.rs`
+and reads the file of every module declared from there down, so a library is
+laid out as any crate is. Names are the library's, not a module's: the
+adapters find each interface at the crate's root.
 
 The attributes generate nothing. A macro expanding inside the library could
 not write files or put code into the separate adapter crates, so the generator

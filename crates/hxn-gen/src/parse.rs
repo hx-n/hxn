@@ -1,6 +1,8 @@
 //! From a library's source to its [`Library`]: the items it marked, and
 //! nothing the emitters cannot carry.
 
+use std::path::{Path, PathBuf};
+
 use proc_macro2::Span;
 use syn::spanned::Spanned;
 use syn::{Attribute, FnArg, ImplItem, Item, Meta, ReturnType, Visibility};
@@ -9,6 +11,7 @@ use crate::model::{Error, Interface, Library, Method, Param, Receiver, Type};
 
 fn error<T>(span: Span, message: impl Into<String>) -> Result<T, Error> {
     Err(Error {
+        file: None,
         line: span.start().line,
         message: message.into(),
     })
@@ -617,16 +620,137 @@ impl Scope<'_> {
     }
 }
 
-/// Reads the marked items of `source`, the text of one Rust file, as the
-/// API of the library `name`.
-pub fn parse(name: &str, source: &str) -> Result<Library, Error> {
-    let file = syn::parse_file(source).map_err(|error| Error {
+/// One file's items, those of its inline modules among them, and where it
+/// is if it came from a file.
+struct Source {
+    file: Option<String>,
+    items: Vec<Item>,
+}
+
+// A module declared in a file and kept in another.
+struct Outside {
+    name: String,
+    line: usize,
+    // `#[path = "..."]`, which is relative to the declaring file.
+    path: Option<String>,
+    // Where its file is looked for otherwise.
+    dir: PathBuf,
+}
+
+fn path_attribute(attributes: &[Attribute]) -> Option<String> {
+    attributes
+        .iter()
+        .find_map(|attribute| match &attribute.meta {
+            Meta::NameValue(pair) if pair.path.is_ident("path") => match &pair.value {
+                syn::Expr::Lit(syn::ExprLit {
+                    lit: syn::Lit::Str(text),
+                    ..
+                }) => Some(text.value()),
+                _ => None,
+            },
+            _ => None,
+        })
+}
+
+// Takes a file's items apart: those of inline modules join the rest, and a
+// module kept in another file is noted. `dir` is where this level's modules
+// keep their files.
+fn flatten(items: Vec<Item>, dir: &Path, out: &mut Vec<Item>, outside: &mut Vec<Outside>) {
+    for item in items {
+        match item {
+            Item::Mod(module) => {
+                let name = module.ident.to_string();
+                match module.content {
+                    Some((_, inner)) => flatten(inner, &dir.join(&name), out, outside),
+                    None => outside.push(Outside {
+                        line: module.ident.span().start().line,
+                        path: path_attribute(&module.attrs),
+                        dir: dir.to_owned(),
+                        name,
+                    }),
+                }
+            }
+            other => out.push(other),
+        }
+    }
+}
+
+fn parse_text(text: &str, file: Option<&Path>) -> Result<syn::File, Error> {
+    syn::parse_file(text).map_err(|error| Error {
+        file: file.map(|file| file.display().to_string()),
         line: error.span().start().line,
         message: error.to_string(),
-    })?;
+    })
+}
 
-    let mut interfaces: Vec<Interface> = Vec::new();
-    for item in &file.items {
+// Reads the file at `path`, whose own modules keep their files in `dir`,
+// and then those modules.
+fn load(
+    path: &Path,
+    dir: &Path,
+    sources: &mut Vec<Source>,
+    files: &mut Vec<PathBuf>,
+) -> Result<(), Error> {
+    let name = path.display().to_string();
+    let text = std::fs::read_to_string(path).map_err(|error| Error {
+        file: Some(name.clone()),
+        line: 0,
+        message: error.to_string(),
+    })?;
+    let file = parse_text(&text, Some(path))?;
+    files.push(path.to_owned());
+    let mut items = Vec::new();
+    let mut outside = Vec::new();
+    flatten(file.items, dir, &mut items, &mut outside);
+    sources.push(Source {
+        file: Some(name.clone()),
+        items,
+    });
+    let beside = path.parent().unwrap_or(Path::new(""));
+    for module in outside {
+        // A file named for its module keeps that module's own in a
+        // directory of the same name; `mod.rs`, and a file given by path,
+        // keep them beside themselves.
+        let beside_it = module.dir.join(format!("{}.rs", module.name));
+        let within = module.dir.join(&module.name).join("mod.rs");
+        let (file, dir) = if let Some(given) = &module.path {
+            let file = beside.join(given);
+            let dir = file.parent().unwrap_or(Path::new("")).to_owned();
+            (file, dir)
+        } else if beside_it.is_file() {
+            (beside_it, module.dir.join(&module.name))
+        } else if within.is_file() {
+            (within, module.dir.join(&module.name))
+        } else {
+            return Err(Error {
+                file: Some(name),
+                line: module.line,
+                message: format!(
+                    "the file of module `{}` was not found: neither {} nor {}",
+                    module.name,
+                    beside_it.display(),
+                    within.display()
+                ),
+            });
+        };
+        load(&file, &dir, sources, files)?;
+    }
+    Ok(())
+}
+
+// Says which file an error was met in, if it does not say already.
+fn located<T>(result: Result<T, Error>, source: &Source) -> Result<T, Error> {
+    result.map_err(|mut error| {
+        if error.file.is_none() {
+            error.file.clone_from(&source.file);
+        }
+        error
+    })
+}
+
+// The interfaces a file marks.
+fn interfaces_of(items: &[Item], interfaces: &mut Vec<Interface>) -> Result<(), Error> {
+    for item in items {
         let Item::Struct(item) = item else { continue };
         if !item.attrs.iter().any(|a| is_marker(a, "interface")) {
             continue;
@@ -645,6 +769,13 @@ pub fn parse(name: &str, source: &str) -> Result<Library, Error> {
                 format!("`{name}` is a name the adapters use; call the interface something else"),
             );
         }
+        // Names are the library's, whatever module an item is in.
+        if interfaces.iter().any(|known| known.name == name) {
+            return error(
+                item.ident.span(),
+                format!("`{name}` is marked as an interface twice"),
+            );
+        }
         let notes = notes(&item.attrs)?;
         interfaces.push(Interface {
             name,
@@ -654,16 +785,14 @@ pub fn parse(name: &str, source: &str) -> Result<Library, Error> {
             methods: Vec::new(),
         });
     }
-    let names: Vec<String> = interfaces.iter().map(|i| i.name.clone()).collect();
-    let shared: Vec<String> = interfaces
-        .iter()
-        .filter(|i| i.shared)
-        .map(|i| i.name.clone())
-        .collect();
-    // A shared interface's weak reference is a class of that name.
-    for name in &shared {
+    Ok(())
+}
+
+// A shared interface's weak reference is a class of its name with `Weak`.
+fn weak_clash(items: &[Item], names: &[String], shared: &[String]) -> Result<(), Error> {
+    for name in shared {
         let weak = format!("{name}Weak");
-        for item in &file.items {
+        for item in items {
             if let Item::Struct(item) = item
                 && item.ident == weak
                 && names.contains(&weak)
@@ -677,8 +806,17 @@ pub fn parse(name: &str, source: &str) -> Result<Library, Error> {
             }
         }
     }
+    Ok(())
+}
 
-    for item in &file.items {
+// The functions a file's marked blocks expose, each added to its interface.
+fn methods_of(
+    items: &[Item],
+    interfaces: &mut [Interface],
+    names: &[String],
+    shared: &[String],
+) -> Result<(), Error> {
+    for item in items {
         let Item::Impl(block) = item else { continue };
         if !block.attrs.iter().any(|a| is_marker(a, "methods")) {
             continue;
@@ -696,8 +834,8 @@ pub fn parse(name: &str, source: &str) -> Result<Library, Error> {
             );
         };
         let scope = Scope {
-            interfaces: &names,
-            shared: &shared,
+            interfaces: names,
+            shared,
             own: &target,
         };
         for item in &block.items {
@@ -723,9 +861,56 @@ pub fn parse(name: &str, source: &str) -> Result<Library, Error> {
             interface.methods.push(method);
         }
     }
+    Ok(())
+}
 
+// Every interface first, so that a block in one file can name one in another.
+fn build(name: &str, sources: &[Source]) -> Result<Library, Error> {
+    let mut interfaces: Vec<Interface> = Vec::new();
+    for source in sources {
+        located(interfaces_of(&source.items, &mut interfaces), source)?;
+    }
+    let names: Vec<String> = interfaces.iter().map(|i| i.name.clone()).collect();
+    let shared: Vec<String> = interfaces
+        .iter()
+        .filter(|i| i.shared)
+        .map(|i| i.name.clone())
+        .collect();
+    for source in sources {
+        located(weak_clash(&source.items, &names, &shared), source)?;
+    }
+    for source in sources {
+        located(
+            methods_of(&source.items, &mut interfaces, &names, &shared),
+            source,
+        )?;
+    }
     Ok(Library {
         name: name.to_owned(),
         interfaces,
     })
+}
+
+/// Reads the marked items of `source`, the text of one Rust file, as the
+/// API of the library `name`. Modules it keeps in other files are not read:
+/// [`parse_crate`] reads a library from its files.
+pub fn parse(name: &str, source: &str) -> Result<Library, Error> {
+    let file = parse_text(source, None)?;
+    let mut items = Vec::new();
+    flatten(file.items, Path::new(""), &mut items, &mut Vec::new());
+    build(name, &[Source { file: None, items }])
+}
+
+/// Reads the library `name` from the file at `root`, its `lib.rs`, and from
+/// the file of every module declared from there down. Gives the files read
+/// as well, for a build script to watch.
+///
+/// The adapters name an interface at the crate's root, so one defined in a
+/// module is re-exported there.
+pub fn parse_crate(name: &str, root: &Path) -> Result<(Library, Vec<PathBuf>), Error> {
+    let mut sources = Vec::new();
+    let mut files = Vec::new();
+    let dir = root.parent().unwrap_or(Path::new(""));
+    load(root, dir, &mut sources, &mut files)?;
+    Ok((build(name, &sources)?, files))
 }

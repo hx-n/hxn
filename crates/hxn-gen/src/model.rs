@@ -171,6 +171,8 @@ impl Type {
 /// Why a source could not be read, and where.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Error {
+    /// The file, when the library was read from files and not from text.
+    pub file: Option<String>,
     /// 1-based, or zero when the whole source is at fault.
     pub line: usize,
     pub message: String,
@@ -178,10 +180,11 @@ pub struct Error {
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.line == 0 {
-            f.write_str(&self.message)
-        } else {
-            write!(f, "line {}: {}", self.line, self.message)
+        match (&self.file, self.line) {
+            (Some(file), 0) => write!(f, "{file}: {}", self.message),
+            (Some(file), line) => write!(f, "{file}:{line}: {}", self.message),
+            (None, 0) => f.write_str(&self.message),
+            (None, line) => write!(f, "line {line}: {}", self.message),
         }
     }
 }

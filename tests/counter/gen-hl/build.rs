@@ -1,12 +1,12 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 fn main() {
-    let source = "../core/src/lib.rs";
-    println!("cargo:rerun-if-changed={source}");
     println!("cargo:rerun-if-changed=build.rs");
-    let text = std::fs::read_to_string(source).expect("reading the library's source");
-    let library =
-        hxn_gen::parse("counter", &text).unwrap_or_else(|error| panic!("{source}: {error}"));
+    let (library, files) = hxn_gen::parse_crate("counter", Path::new("../core/src/lib.rs"))
+        .unwrap_or_else(|error| panic!("{error}"));
+    for file in files {
+        println!("cargo:rerun-if-changed={}", file.display());
+    }
     let out = PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
     std::fs::write(
         out.join("adapter.rs"),

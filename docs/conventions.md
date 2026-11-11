@@ -70,6 +70,9 @@ filesystem `#include "counter.h"` would then find the generated one.
 
 ## Rust side
 
+- An interface is named once in a library, whatever module it is in, and is
+  reachable at the crate's root: one defined in a module is re-exported
+  there. A `#[hxn::methods]` block names its interface by its bare name.
 - A function exposed to Haxe takes `&self`, `&mut self` or `self`, or no
   receiver. `self` by value closes the Haxe object. `new` is the constructor.
   No generics.
