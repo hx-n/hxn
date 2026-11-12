@@ -29,8 +29,7 @@ pub fn dependency(checkout: Option<&Path>, krate: &str) -> Result<String, String
             // has a form that cargo accepts and other tools do not.
             let krate = std::path::absolute(checkout)
                 .map_err(|error| format!("{}: {error}", checkout.display()))?
-                .join("crates")
-                .join(krate);
+                .join(format!("crates/{krate}"));
             if !krate.join("Cargo.toml").is_file() {
                 return Err(format!(
                     "{} is not a checkout of hxn's repository",
