@@ -153,6 +153,12 @@ impl Counter {
         data.iter().map(|&byte| i32::from(byte)).sum()
     }
 
+    /// Adds `other`'s value, consuming it, and returns the new value.
+    pub fn consume(&mut self, other: Counter) -> i32 {
+        self.value += other.value;
+        self.value
+    }
+
     /// `parts` new counters, starting at this one's value and counting up.
     pub fn split(&self, parts: i32) -> Vec<Counter> {
         (0..parts).map(|at| Counter::new(self.value + at)).collect()
@@ -503,6 +509,13 @@ impl Later {
 
     /// String and byte parameters of an async function are owned copies,
     /// because it runs after the call that passed them has returned.
+    /// The sum of two counters' values, taking both, once some time has
+    /// passed.
+    pub async fn total_later(first: Counter, second: Option<Counter>) -> i32 {
+        let _ = square_later(1, millis(1)).await;
+        first.value + second.map_or(0, |second| second.value)
+    }
+
     pub async fn shout(name: &str, data: &[u8]) -> String {
         let greeting = greet_later(name.to_owned(), millis(1))
             .await

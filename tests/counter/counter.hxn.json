@@ -153,6 +153,15 @@
           "blocking": false
         },
         {
+          "name": "consume",
+          "docs": "Adds `other`'s value, consuming it, and returns the new value.",
+          "kind": "mutating",
+          "params": [{ "name": "other", "type": "Counter", "borrow": "taken" }],
+          "returns": "i32",
+          "fallible": false,
+          "blocking": false
+        },
+        {
           "name": "split",
           "docs": "`parts` new counters, starting at this one's value and counting up.",
           "kind": "method",
@@ -587,8 +596,17 @@
           "blocking": false
         },
         {
+          "name": "total_later",
+          "docs": "String and byte parameters of an async function are owned copies,\nbecause it runs after the call that passed them has returned.\nThe sum of two counters' values, taking both, once some time has\npassed.",
+          "kind": "static",
+          "params": [{ "name": "first", "type": "Counter", "borrow": "taken" }, { "name": "second", "type": "Counter?", "borrow": "taken" }],
+          "returns": "future<i32>",
+          "async": true,
+          "fallible": false,
+          "blocking": false
+        },
+        {
           "name": "shout",
-          "docs": "String and byte parameters of an async function are owned copies,\nbecause it runs after the call that passed them has returned.",
           "kind": "static",
           "params": [{ "name": "name", "type": "str" }, { "name": "data", "type": "bytes" }],
           "returns": "future<str>",

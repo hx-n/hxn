@@ -193,6 +193,7 @@ that invariant.
 | `&mut T` parameter | borrowed for the call, exclusive | an object |
 | `T` result, from any function | a new value; ownership passes to Haxe | a new object |
 | `self` by value | the value is consumed | the object is closed by the call |
+| `T` parameter | the value is moved out of its handle | the object passed is closed by the call |
 | `Option` of any of these | may be absent | `null` |
 | `Vec<T>` result, `Vec<Arc<T>>` of a shared interface | new values, each passed to Haxe | an `Array` of new objects |
 

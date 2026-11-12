@@ -40,9 +40,12 @@ fn method(method: &Method) -> String {
         .params
         .iter()
         .map(|param| {
-            // Written only for an interface borrowed as `&mut`.
+            // Written only for an interface borrowed as `&mut` or taken by
+            // value.
             let borrow = if param.exclusive {
                 ", \"borrow\": \"exclusive\""
+            } else if param.taken {
+                ", \"borrow\": \"taken\""
             } else {
                 ""
             };

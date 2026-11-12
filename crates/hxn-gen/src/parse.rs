@@ -449,6 +449,7 @@ impl Scope<'_> {
             ty,
             exclusive: false,
             kept: false,
+            taken: false,
             number: None,
             data: None,
             borrowed: false,
@@ -504,6 +505,7 @@ impl Scope<'_> {
                 },
                 exclusive,
                 kept: false,
+                taken: false,
                 number: None,
                 data: None,
                 borrowed: false,
@@ -526,6 +528,7 @@ impl Scope<'_> {
                 },
                 exclusive: false,
                 kept: true,
+                taken: false,
                 number: None,
                 data: None,
                 borrowed: false,
@@ -539,11 +542,29 @@ impl Scope<'_> {
                 "a shared interface is taken as `&T` to use it, or `Arc<T>` to keep a share",
             );
         }
-        if self.interface(ty).is_some() {
-            return error(
-                ty.span(),
-                "an interface is taken as `&T` or `&mut T`, not by value",
-            );
+        // Taken by value: moved out of its handle.
+        if let Some(interface) = self.interface(inner) {
+            if self.is_shared(&interface) {
+                return error(
+                    ty.span(),
+                    format!(
+                        "a shared interface is kept as `Arc<{interface}>`: its value has other holders"
+                    ),
+                );
+            }
+            return Ok(Param {
+                name,
+                ty: Type::Handle {
+                    interface,
+                    nullable,
+                },
+                exclusive: false,
+                kept: false,
+                taken: true,
+                number: None,
+                data: None,
+                borrowed: false,
+            });
         }
         // Data is copied in either way: passed by value, or by a reference
         // to the adapter's copy. A list may also be accepted as a slice.
@@ -809,7 +830,9 @@ impl Scope<'_> {
                 Type::Lent { .. } => Some("a function"),
                 Type::AtomicInt | Type::AtomicBool => Some("a cell"),
                 Type::BytesMut => Some("bytes to write into"),
-                Type::Handle { interface, .. } if param.exclusive || !self.is_shared(interface) => {
+                Type::Handle { interface, .. }
+                    if !param.taken && (param.exclusive || !self.is_shared(interface)) =>
+                {
                     Some("an object")
                 }
                 _ => None,

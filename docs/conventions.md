@@ -121,8 +121,9 @@ filesystem `#include "counter.h"` would then find the generated header.
 - Data carried by a signal must be `Clone`.
 - Another interface is accepted as `&T` or `&mut T` and returned as `T`, with
   `Option` for one that may be absent and `Vec` for a list, which Haxe gets
-  as an `Array`. It is never accepted by value and never returned by
-  reference.
+  as an `Array`. Accepted as `T`, it is moved out of its handle and the Haxe
+  object passed is closed, whether or not the call succeeds. It is never
+  returned by reference.
 - A value with more than one owner is an interface marked
   `#[hxn::interface(shared)]`. Its functions take `&self`, never `&mut self`
   or `self`, and it is `Send + Sync`. It is accepted as `&T` to use it and as

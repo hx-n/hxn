@@ -207,6 +207,16 @@ fn borrowed(
         ("borrow", "")
     };
     let opened = open(name);
+    // Taken out, so the Haxe object is closed whatever the call does.
+    if param.taken {
+        let taken = format!("{opened}?.take()?.ok_or(Fault::Closed)?");
+        let statement = if nullable {
+            format!("let {name} = if {name}.is_null() {{ None }} else {{ Some({taken}) }};")
+        } else {
+            format!("let {name} = {taken};")
+        };
+        return (statement, name.clone());
+    }
     if nullable {
         let argument = if param.kept {
             format!("{name}.as_deref().cloned()")

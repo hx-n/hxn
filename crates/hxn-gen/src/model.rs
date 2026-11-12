@@ -244,6 +244,9 @@ pub struct Param {
     /// For a shared interface, accepted as `Arc<T>`: a reference the library
     /// keeps.
     pub kept: bool,
+    /// An interface taken by value, `T`: the value is moved out of its
+    /// handle, which closes the Haxe object.
+    pub taken: bool,
     /// The parameter's numeric type, when `ty` is its wire type.
     pub number: Option<Number>,
     /// The parameter's data type, when `ty` is its wire type.

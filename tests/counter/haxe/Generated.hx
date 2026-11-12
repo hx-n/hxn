@@ -381,6 +381,10 @@ class Generated {
 		var gone = counted.intoValueLater(5);
 		throws("an async function that takes the object closes it at once", () -> counted.add(1), "closed");
 		check("and the work has it", gone.await() == 9 && Counter.live() == before);
+		var one = new Counter(3), two = new Counter(4);
+		var summed = Later.totalLater(one, two);
+		throws("an async function that takes an object by value closes it at once", () -> one.add(1), "closed");
+		check("and the work owns it", summed.await() == 7 && Later.totalLater(new Counter(1), null).await() == 1 && Counter.live() == before);
 		var kept = new Pot(1);
 		var adding = kept.addLater(2, 20);
 		kept.close();
@@ -657,6 +661,11 @@ class Generated {
 		check("an empty list", counter.split(0).length == 0);
 		for (part in parts)
 			part.close();
+		var host = new Counter(1), eaten = new Counter(5);
+		check("an object taken by value", host.consume(eaten) == 6);
+		throws("closes the object passed", () -> eaten.add(0), "closed");
+		throws("which cannot also be the receiver", () -> host.consume(host), "in use");
+		host.close();
 		throws("a failure in place of bytes", () -> counter.fill(-1), "negative count");
 		check("a bool out", counter.isPositive());
 		check("a float in and out", counter.scaled(0.5) == 21);

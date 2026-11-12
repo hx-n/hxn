@@ -173,6 +173,25 @@ fn refused(method: &str) -> (usize, String) {
 }
 
 #[test]
+fn an_interface_taken_by_value_is_moved_out_of_its_handle() {
+    let source = "#[hxn::interface]\npub struct Thing;\n\n#[hxn::methods]\nimpl Thing {\n    pub fn eat(&self, value: Thing, maybe: Option<Thing>) {}\n}\n";
+    let library = parse("thing", source).unwrap();
+    let eat = &library.interfaces[0].methods[0];
+    assert!(
+        eat.params
+            .iter()
+            .all(|param| param.taken && !param.exclusive)
+    );
+    assert_eq!(eat.params[1].ty, handle("Thing", true));
+    let adapter = hxn_gen::c_adapter(&library, "thing");
+    assert!(
+        adapter.contains(
+            "let value = Handle::<Thing>::from_raw(value)?.take()?.ok_or(Fault::Closed)?;"
+        )
+    );
+}
+
+#[test]
 fn says_where_and_why_something_cannot_cross() {
     let cases = [
         ("pub fn each<T>(&self, value: T) {}", "generic"),
@@ -199,7 +218,6 @@ fn says_where_and_why_something_cannot_cross() {
             "pub fn other(&self, value: &Unmarked) {}",
             "a parameter is one of",
         ),
-        ("pub fn eat(&self, value: Thing) {}", "not by value"),
         (
             "pub fn items(&self) -> Vec<Unknown> { todo!() }",
             "a result is one of",
