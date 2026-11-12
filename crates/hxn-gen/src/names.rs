@@ -1,4 +1,4 @@
-//! The names generated code agrees on across its files.
+//! Names that must match across the generated files.
 
 use crate::model::{Library, Method, Receiver};
 
@@ -51,12 +51,13 @@ pub fn release(library: &Library) -> String {
     format!("{}_release", library.name)
 }
 
-/// What HashLink knows an interface's values as.
+/// The HashLink abstract type name for an interface's values.
 pub fn abstract_name(library: &Library, interface: &str) -> String {
     format!("{}_{}", library.name, snake(interface))
 }
 
-/// What HashLink knows a weak reference to a shared interface's value as.
+/// The HashLink abstract type name for a weak reference to a shared
+/// interface's value.
 pub fn weak_abstract(library: &Library, interface: &str) -> String {
     format!("{}_weak", abstract_name(library, interface))
 }
@@ -66,17 +67,18 @@ pub fn weak_class(interface: &str) -> String {
     format!("{interface}Weak")
 }
 
-/// What HashLink knows a cell the library handed over as.
+/// The HashLink abstract type name for an atomic cell the library returned.
 pub fn cell_abstract(library: &Library) -> String {
     format!("{}_atomic", library.name)
 }
 
-/// The symbol that gives the address of a cell the library handed over.
+/// The symbol that returns the address of an atomic cell the library
+/// returned.
 pub fn cell_export(library: &Library) -> String {
     format!("{}_atomic_cell", library.name)
 }
 
-/// The symbol that gives the bytes the library's values declare.
+/// The symbol that returns the total bytes the library's values declare.
 pub fn held_export(library: &Library) -> String {
     format!("{}_memory_held", library.name)
 }
@@ -86,7 +88,7 @@ pub fn wanted_export(library: &Library) -> String {
     format!("{}_memory_wanted", library.name)
 }
 
-/// The hxcpp class that owns such a cell: `HxnCounterCell`.
+/// The hxcpp class that owns a returned atomic cell: `HxnCounterCell`.
 pub fn cell_class(library: &Library) -> String {
     helper_class(library, "Cell")
 }
@@ -96,22 +98,23 @@ pub fn native_class(library: &Library) -> String {
     helper_class(library, "Native")
 }
 
-/// The Haxe class that holds the library's meter: `HxnCounterMemory`.
+/// The Haxe class that holds the library's memory meter: `HxnCounterMemory`.
 pub fn memory_class(library: &Library) -> String {
     helper_class(library, "Memory")
 }
 
-/// The Haxe class that makes a failure's typed exception: `HxnCounterThrown`.
+/// The Haxe class that builds the typed exception for a failure:
+/// `HxnCounterThrown`.
 pub fn thrown_class(library: &Library) -> String {
     helper_class(library, "Thrown")
 }
 
-/// The symbol that hands over the last failure's value.
+/// The symbol that returns the value of the last failure.
 pub fn thrown_export(library: &Library) -> String {
     format!("{}_thrown_take", library.name)
 }
 
-/// The Haxe exception that holds a failure of the data `name`:
+/// The Haxe exception class for the error type `name`:
 /// `PantryException` for `PantryError`, `RefusedException` for `Refused`.
 pub fn exception_class(name: &str) -> String {
     match name.strip_suffix("Error") {
@@ -120,13 +123,13 @@ pub fn exception_class(name: &str) -> String {
     }
 }
 
-/// The Haxe class that writes and reads an enum whose variants hold
-/// values, which cannot have functions of its own: `EventWire`.
+/// The Haxe class that serializes and deserializes a tagged enum, since a
+/// Haxe enum cannot have methods: `EventWire`.
 pub fn wire_class(name: &str) -> String {
     format!("{name}Wire")
 }
 
-/// `audio_tools` as a class is named: `AudioTools`.
+/// `audio_tools` as a class name: `AudioTools`.
 pub fn pascal(name: &str) -> String {
     let mut out = String::new();
     let mut upper = true;
@@ -143,7 +146,8 @@ pub fn pascal(name: &str) -> String {
     out
 }
 
-// A class the binding needs beside the library's own: `Hxn<Library><role>`.
+// A helper class of the binding, named apart from the library's own classes:
+// `Hxn<Library><role>`.
 fn helper_class(library: &Library, role: &str) -> String {
     format!("Hxn{}{role}", pascal(&library.name))
 }

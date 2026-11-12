@@ -1,5 +1,5 @@
-//! Work written as an `async fn`, on a value that the work and any number
-//! of Haxe objects share.
+//! An `async fn` method on a shared interface: the running task and any
+//! number of Haxe objects hold references to the same value.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicI32, Ordering};
@@ -7,16 +7,17 @@ use std::time::Duration;
 
 use hxn_future::{Failure, spawn_blocking};
 
-/// What several downloads add up to. Shared: a download holds a share of it
-/// while it runs, whatever becomes of the object that started it.
+/// The total size of several downloads. A shared interface: a download holds
+/// its own reference while it runs, independent of the Haxe object that
+/// started it.
 #[hxn::interface(shared)]
 #[derive(Default)]
 pub struct Tally {
     bytes: Arc<AtomicI32>,
 }
 
-// Stands in for a read from the network: it takes a moment, on a thread of
-// its own where there are threads.
+// Simulates a network read: it sleeps briefly, on a separate thread where
+// the build has threads.
 async fn chunk() {
     let wait = spawn_blocking(|| {
         std::thread::sleep(Duration::from_millis(1));
@@ -31,8 +32,9 @@ impl Tally {
         Self::default()
     }
 
-    /// Fetches `size` bytes a chunk at a time and adds them to the tally.
-    /// Haxe gets a future of the text this returns, or of its failure.
+    /// Fetches `size` bytes in chunks and adds them to the tally. In Haxe
+    /// this returns a future that resolves to the returned text or rejects
+    /// with the error.
     pub async fn fetch(&self, name: &str, size: i32) -> Result<String, String> {
         if size < 0 {
             return Err(format!("{name} has a negative size"));
@@ -47,7 +49,8 @@ impl Tally {
         Ok(format!("{name}: {size} bytes"))
     }
 
-    /// The bytes fetched so far, as a cell Haxe reads without a call.
+    /// The number of bytes fetched so far, as an atomic cell that Haxe reads
+    /// without a native call.
     pub fn bytes(&self) -> Arc<AtomicI32> {
         Arc::clone(&self.bytes)
     }

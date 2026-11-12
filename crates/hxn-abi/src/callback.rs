@@ -3,20 +3,22 @@ use std::mem::MaybeUninit;
 
 use crate::{Failure, Fault, Status};
 
-/// A host closure: the function to call, the state to call it with, and how
-/// to let go of that state.
+/// A host closure: a function pointer, the environment pointer passed to it,
+/// and a function that releases the environment.
 ///
 /// `F` is the C signature, an `unsafe extern "C" fn` whose first parameter is
-/// `env`. `drop` is null for a callback lent for one call, and otherwise runs
-/// once when this is dropped, which is when the host may collect the closure.
+/// `env`. `drop` is null for a callback borrowed for one call. Otherwise it
+/// runs once when this value is dropped, after which the host may collect the
+/// closure.
 ///
 /// Neither `Send` nor `Sync`: a host closure is called on the thread that
-/// passed it, which is the only one its runtime is known to accept.
+/// passed it, the only thread its runtime is known to accept the call on.
 ///
-/// `call` must return normally. A host exception raised inside it is the
-/// binding's to catch, because it would otherwise cross Rust frames. By
-/// convention a callback returns a [`Status`] and writes its result through
-/// a last `out` parameter, which is the shape [`invoke`](Self::invoke) calls.
+/// `call` must return normally. The binding is responsible for catching a host
+/// exception raised inside it, because the exception would otherwise unwind
+/// through Rust frames. By convention a callback returns a [`Status`] and
+/// writes its result through a final `out` parameter.
+/// [`invoke`](Self::invoke) calls a callback with that signature.
 #[repr(C)]
 pub struct Callback<F: Copy> {
     call: Option<F>,
@@ -27,7 +29,8 @@ pub struct Callback<F: Copy> {
 impl<F: Copy> Callback<F> {
     /// # Safety
     /// `F` is an `unsafe extern "C" fn` pointer type. `call` may be called
-    /// with `env` on this thread until `drop` has run, and `drop` at most once.
+    /// with `env` on this thread until `drop` has run, and `drop` may be
+    /// called at most once.
     pub const unsafe fn from_raw(
         call: F,
         env: *mut c_void,
@@ -40,10 +43,11 @@ impl<F: Copy> Callback<F> {
         }
     }
 
-    /// The function, for a signature [`call`](Self::call) does not cover, such
-    /// as one with a borrowed parameter. It is called with [`env`](Self::env).
+    /// Returns the function pointer, for a signature [`call`](Self::call) does
+    /// not cover, such as one with a borrowed parameter. Pass
+    /// [`env`](Self::env) as its first argument.
     pub fn func(&self) -> Result<F, Fault> {
-        // A function pointer is the only `F` whose `Option` is one word.
+        // `Option<F>` is one word only when `F` is a function pointer.
         const { assert!(size_of::<Option<F>>() == size_of::<usize>()) };
         self.call.ok_or(Fault::Null)
     }
@@ -76,10 +80,10 @@ macro_rules! call {
 macro_rules! invoke {
     ($($arg:ident),*) => {
         impl<R $(, $arg)*> Callback<unsafe extern "C" fn(*mut c_void $(, $arg)*, *mut R) -> Status> {
-            /// Calls a callback of the conventional shape and returns what
-            /// it wrote, or the status it failed with. After
-            /// [`Status::CALLBACK`] the host has an exception of its own
-            /// waiting, so the library should stop and return the failure.
+            /// Calls a callback that follows the convention and returns the
+            /// value it wrote to `out`, or the status it failed with. After
+            /// [`Status::CALLBACK`] the host has a pending exception, so the
+            /// library should stop and return the failure.
             #[allow(non_snake_case, clippy::too_many_arguments)]
             pub fn invoke(&self $(, $arg: $arg)*) -> Result<R, Failure> {
                 let call = self.func()?;

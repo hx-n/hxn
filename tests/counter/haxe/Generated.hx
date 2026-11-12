@@ -1,6 +1,6 @@
 /**
-	Checks for the classes hxn-gen writes. The generated `Counter` is on the
-	class path in place of a hand-written binding.
+	Checks for the classes hxn-gen generates. The generated `Counter` is on
+	the class path instead of a hand-written binding.
 **/
 class Generated {
 	static var failed = 0;
@@ -35,8 +35,9 @@ class Generated {
 		second.close();
 	}
 
-	// Plain data: an enum crosses as its number, and a record, an option or a
-	// list as bytes each side writes and reads.
+	// Plain data: an enum is passed as its discriminant, and a struct, an
+	// option or a list is serialized to bytes on one side and deserialized on
+	// the other.
 	static function data() {
 		check("an enum crosses as itself", Shapes.louder(Mode.Off) == Mode.Quiet && Shapes.louder(Mode.Quiet) == Mode.Loud);
 		check("with the numbers the library gave it", (Mode.Quiet : Int) == 3 && (Mode.Loud : Int) == 9 && (Mode.Off : Int) == 10);
@@ -170,7 +171,7 @@ class Generated {
 		check("everything made was released", Counter.live() == 0);
 	}
 
-	// Cells both sides read and write with no call between them.
+	// Atomics both sides read and write directly, without a call.
 	static function atomics() {
 		var counter = new Counter(0);
 		var adds = counter.adds();
@@ -198,7 +199,8 @@ class Generated {
 		check("a cell outlives the object it came from", adds.add(1) == 12 && adds.load() == 13);
 
 		#if !wasm
-		// A thread of the library's own, with no Haxe call in progress.
+		// A thread the library starts, running while no Haxe call is in
+		// progress.
 		var job = new Job(100000);
 		var done = job.done();
 		var stop = job.stop();
@@ -214,7 +216,7 @@ class Generated {
 		#end
 	}
 
-	// A value the library and several objects here hold at once.
+	// A shared value held by the library and by several Haxe objects at once.
 	static function shared() {
 		var pot = new Pot(10);
 		var a = new Player(pot);
@@ -265,7 +267,8 @@ class Generated {
 		check("every pot was released", Pot.live() == 0);
 	}
 
-	// Functions of the program's, lent to a call.
+	// Haxe functions passed as callbacks, borrowed for the duration of the
+	// call.
 	static function callbacks() {
 		var counter = new Counter(3);
 		check("a function is called by the library", counter.apply(4, value -> value * 2) == 48);
@@ -341,7 +344,8 @@ class Generated {
 		counter.close();
 	}
 
-	// Results the library gives later: waited for here, and delivered.
+	// Asynchronous results from the library: awaited here, and delivered by
+	// the loop.
 	static function later() {
 		check("a future is waited for", Later.square(7, 20).await() == 49);
 		check("a text result", Later.greet("wörld ☃", 1).await() == "hello wörld ☃");
@@ -406,7 +410,8 @@ class Generated {
 		}
 		check("a stream of objects", total == 10 && Counter.live() == before);
 
-		// Delivered where the app chooses, and to all of these in one batch.
+		// Delivered when the app calls `Loop.sync`, to all of these in one
+		// batch.
 		hxn.Loop.manual = true;
 		var squared = -1;
 		Later.square(6, 1).then(value -> squared = value);
@@ -433,8 +438,8 @@ class Generated {
 		for (i in 1...levels.length)
 			if (levels[i] <= levels[i - 1])
 				rising = false;
-		// A signal gives the latest value and nothing else, so how many of
-		// the steps were seen depends on how fast the library got there.
+		// A signal reports only its latest value, so the number of
+		// intermediate values seen depends on how fast the library ran.
 		check('a signal is followed to its last value: $levels', levels[levels.length - 1] == 50 && rising);
 		check("and one of text", label.peek() == "3");
 		check("and one of 64 bits", odometer.peek() == far);
@@ -442,8 +447,8 @@ class Generated {
 		hxn.Loop.manual = false;
 	}
 
-	// Enums that hold values, maps, failures that are data, and data where a
-	// result over time or a lent function carries it.
+	// Tagged enums, maps, typed errors, and data carried by futures, streams,
+	// signals and callbacks.
 	static function events() {
 		var history = Events.history();
 		check("an enum that holds values, one of each case", history.length == 9 && history[0].match(Started));
@@ -470,7 +475,8 @@ class Generated {
 		var deep = Events.wrapped(Message("in"), 3);
 		check("an enum taken and given back", deep.match(Wrapped(Wrapped(Wrapped(Message("in"))))) && Events.depth(deep) == 3);
 		#if !emscripten
-		// An Emscripten build's stack is too small to write a value that deep.
+		// An Emscripten build's stack is too small to serialize a value nested
+		// that deep.
 		throws("one that nests too deep is refused", () -> Events.depth(Events.wrapped(Started, 200)), "nests too deep");
 		#end
 		throws("and one that is missing", () -> Events.depth(null), "null where a Event is needed");
@@ -569,7 +575,7 @@ class Generated {
 		throws("or bytes", () -> Events.stamped(_ -> null), "returned null");
 	}
 
-	// Out of line, as `churn` is. Returns the most that was held at once.
+	// Out of line, like `churn`. Returns the peak memory held.
 	static function pile(count:Int, size:Int):Float {
 		var peak = 0.;
 		for (i in 0...count) {
@@ -581,8 +587,8 @@ class Generated {
 		return peak;
 	}
 
-	// Memory the collector cannot see, which the library declares. Returns
-	// what it saw, for the summary.
+	// Native memory the collector cannot see, which the library reports to
+	// it. Returns a description of the results for the summary line.
 	static function memory():String {
 		var meter = HxnCounterMemory.meter;
 		var mib = 1024 * 1024;
@@ -605,13 +611,14 @@ class Generated {
 		#else
 		check("a collection can be run", hxn.Gc.collect());
 
-		// Dropped without `close`, and nothing here asks for a collection.
+		// Dropped without `close`, and with no explicit collection.
 		hxn.Gc.budget = 8 * mib;
 		var peak = pile(400, mib);
 		var left = Blob.live();
 		check('dropped values are collected as they pile up: $left of 400 left, ${peak / mib} MiB held at most', peak <= 16 * mib && left <= 16);
 
-		// Under the budget, so only the library's asking collects these.
+		// Under the budget, so these are collected only because the library
+		// requests a collection.
 		hxn.Gc.collect();
 		hxn.Gc.budget = 1024 * mib;
 		pile(4, mib);

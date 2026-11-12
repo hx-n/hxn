@@ -1,34 +1,35 @@
-//! How a value made of plain data crosses: as bytes, its parts one after
-//! another, written by one side's generated code and read by the other's.
+//! The wire format for plain-data values: a value is serialized as its parts
+//! in order, written by one side's generated code and read by the other's.
 //!
 //! | Part | Bytes |
 //! |---|---|
 //! | `bool` | one, 0 or 1 |
-//! | an `i32`, a narrower integer, an enum | four, little-endian |
+//! | an `i32`, a narrower integer, a C-like enum | four, little-endian |
 //! | an `i64`, a `u64` | eight, little-endian |
 //! | an `f64`, an `f32` | eight, little-endian, as an `f64` |
 //! | text, bytes | a length as an `i32`, then that many bytes; text is UTF-8 |
 //! | an `Option` | one byte, 0 or 1, then the value if 1 |
 //! | a list | a count as an `i32`, then each item |
 //! | a record | its fields, in the order declared |
-//! | an enum whose variants hold values | which variant, counted from 0 as an `i32`, then its fields |
+//! | a tagged enum | the variant's index, starting at 0, as an `i32`, then its fields |
 //! | a map | a count as an `i32`, then each key and its value |
 //!
-//! Nothing says what the bytes are: both sides are generated from the same
-//! declaration, and a reader that runs out or has bytes left over fails.
+//! The format is not self-describing: both sides are generated from the same
+//! declaration, and a reader that runs out of bytes or has bytes left over
+//! fails.
 
 use crate::Fault;
 
-/// Reads the parts of a value from the bytes a host sent.
+/// Deserializes the parts of a value from bytes a host sent.
 pub struct Reader<'a> {
     left: &'a [u8],
     depth: u32,
 }
 
 impl<'a> Reader<'a> {
-    /// How deep a value may hold values of its own kind. A value that
-    /// nests is read by a function that calls itself, and the bytes decide
-    /// how often.
+    /// The maximum nesting depth of a recursive value. A recursive value is
+    /// read by a recursive function, and the input bytes determine how deep
+    /// it recurses.
     pub const DEPTH: u32 = 128;
 
     pub const fn new(bytes: &'a [u8]) -> Self {
@@ -38,7 +39,8 @@ impl<'a> Reader<'a> {
         }
     }
 
-    /// Entered by the reader of a record or an enum, which may hold another.
+    /// Called on entry by the reader of a record or an enum, either of which
+    /// may contain another.
     pub fn enter(&mut self) -> Result<(), Fault> {
         if self.depth == Self::DEPTH {
             return Err(Fault::Depth);
@@ -47,7 +49,7 @@ impl<'a> Reader<'a> {
         Ok(())
     }
 
-    /// Left once that value is read.
+    /// Called once that value has been read.
     pub fn leave(&mut self) {
         self.depth = self.depth.saturating_sub(1);
     }
@@ -87,7 +89,7 @@ impl<'a> Reader<'a> {
         Ok(f64::from_le_bytes(self.array()?))
     }
 
-    /// A length or a count: an `i32` that is not negative.
+    /// Reads a length or a count: a non-negative `i32`.
     pub fn count(&mut self) -> Result<usize, Fault> {
         usize::try_from(self.i32()?).map_err(|_| Fault::Encoding)
     }
@@ -101,9 +103,9 @@ impl<'a> Reader<'a> {
         String::from_utf8(self.bytes()?).map_err(|_| Fault::Encoding)
     }
 
-    /// How many items of at least `least` bytes each a list of `count` can
-    /// hold: a count that the bytes left cannot back is refused before
-    /// anything is allocated for it.
+    /// Reads the item count of a list whose items take at least `least` bytes
+    /// each. A count larger than the remaining bytes can hold is rejected
+    /// before anything is allocated for it.
     pub fn items(&mut self, least: usize) -> Result<usize, Fault> {
         let count = self.count()?;
         if count.saturating_mul(least.max(1)) > self.left.len() {
@@ -112,7 +114,7 @@ impl<'a> Reader<'a> {
         Ok(count)
     }
 
-    /// Whether every byte was read, which a whole value leaves true.
+    /// Checks that every byte was read, which holds after a complete value.
     pub fn end(&self) -> Result<(), Fault> {
         if self.left.is_empty() {
             Ok(())
@@ -138,7 +140,7 @@ pub fn f64(out: &mut Vec<u8>, value: f64) {
     out.extend_from_slice(&value.to_le_bytes());
 }
 
-/// A length or a count. One too large for an `i32` cannot be written.
+/// Writes a length or a count. Fails if it does not fit in an `i32`.
 pub fn count(out: &mut Vec<u8>, value: usize) -> Result<(), Fault> {
     i32(out, i32::try_from(value).map_err(|_| Fault::TooLarge)?);
     Ok(())
@@ -196,9 +198,9 @@ mod tests {
 
     #[test]
     fn bytes_that_are_not_a_value_are_refused() {
-        // Runs out.
+        // Runs out of bytes.
         assert_eq!(Reader::new(&[1, 2]).i32(), Err(Fault::Encoding));
-        // A bool that is neither.
+        // A bool that is neither 0 nor 1.
         assert_eq!(Reader::new(&[2]).bool(), Err(Fault::Encoding));
         // A negative length, and one longer than what follows.
         assert_eq!(
@@ -212,7 +214,8 @@ mod tests {
         let mut bad = 1_i32.to_le_bytes().to_vec();
         bad.push(0xff);
         assert_eq!(Reader::new(&bad).text(), Err(Fault::Encoding));
-        // A count nothing backs, refused before a list is allocated for it.
+        // A count larger than the remaining bytes can hold, rejected before a
+        // list is allocated for it.
         assert_eq!(
             Reader::new(&i32::MAX.to_le_bytes()).items(4),
             Err(Fault::Encoding)

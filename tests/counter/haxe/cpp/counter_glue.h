@@ -1,5 +1,6 @@
-/* What hxcpp calls for the counter library. Each function returns before its
- * failure is thrown, and frees what the library handed it. */
+/* The C++ glue hxcpp calls for the counter library. Each function throws a
+ * failure only after the library call has returned, and frees the buffers
+ * the library returned. */
 #ifndef COUNTER_GLUE_H
 #define COUNTER_GLUE_H
 
@@ -21,8 +22,8 @@ inline int add(void *self, int amount) {
 	return out;
 }
 
-// What the library calls a function of Int->Null<Int> through. The binding's
-// wrapper returns null when the user's function threw.
+// The trampoline through which the library calls an Int->Null<Int> function.
+// The binding's wrapper returns null when the user's function threw.
 inline hxn_status int_to_int(void *env, int value, int *out) {
 	Dynamic result = Dynamic((hx::Object *)env)(value);
 	if (result == null())
@@ -34,7 +35,8 @@ inline hxn_status int_to_int(void *env, int value, int *out) {
 inline int apply(void *self, int times, Dynamic f) {
 	int out = 0;
 	hxn_buf err = HXN_BUF_EMPTY;
-	// Lent: `f` is on this stack for the call, so the library drops nothing.
+	// Borrowed: `f` stays on this stack for the duration of the call, so the
+	// callback has no drop function.
 	hxn_callback callback = { (void *)int_to_int, f.mPtr, 0 };
 	hxn::check(counter_apply((hxn_handle *)self, times, callback, &out, &err), err);
 	return out;
@@ -118,7 +120,8 @@ inline int future_wait(void *self, int milliseconds) {
 	hxn_buf err = HXN_BUF_EMPTY;
 	hxn_status status;
 	{
-		// The collector may run while this thread waits; it is back before the throw.
+		// The collector may run while this thread waits. The thread has left
+		// the blocking zone before the throw.
 		hxn::Blocking zone;
 		status = counter_future_wait((hxn_handle *)self, milliseconds, &out, &err);
 	}
@@ -180,7 +183,8 @@ inline int stream_wait(void *self, int milliseconds) {
 	hxn_buf err = HXN_BUF_EMPTY;
 	hxn_status status;
 	{
-		// The collector may run while this thread waits; it is back before the throw.
+		// The collector may run while this thread waits. The thread has left
+		// the blocking zone before the throw.
 		hxn::Blocking zone;
 		status = counter_stream_wait((hxn_handle *)self, milliseconds, &out, &err);
 	}
@@ -235,7 +239,8 @@ inline int signal_wait(void *self, int seen, int milliseconds) {
 	hxn_buf err = HXN_BUF_EMPTY;
 	hxn_status status;
 	{
-		// The collector may run while this thread waits; it is back before the throw.
+		// The collector may run while this thread waits. The thread has left
+		// the blocking zone before the throw.
 		hxn::Blocking zone;
 		status = counter_signal_wait((hxn_handle *)self, seen, milliseconds, &out, &err);
 	}

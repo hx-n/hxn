@@ -1,31 +1,37 @@
-//! hxn's HashLink side: what an `.hdll` built on [`hxn_abi`] needs from the
-//! VM's collector and nothing else.
+//! hxn's HashLink support: only the parts an `.hdll` built on [`hxn_abi`]
+//! needs from the VM's garbage collector.
 //!
-//! - [`manage`] gives a [`Handle`] to the collector, which releases it.
+//! - [`manage`] transfers a [`Handle`] to the garbage collector, which
+//!   releases it.
 //! - [`Root`] keeps a VM value alive while Rust holds it.
-//! - [`string`], [`utf16`] and [`bytes`] copy text and bytes across, since a
-//!   Haxe `String` is UTF-16 here and Rust's is UTF-8.
-//! - [`prim`] throws a failure to Haxe once Rust has let go of everything.
-//! - [`blocking`] lets the collector run while a call waits.
+//! - [`string`], [`utf16`] and [`bytes`] copy text and bytes across the
+//!   boundary, because a Haxe `String` is UTF-16 on HashLink and a Rust string
+//!   is UTF-8.
+//! - [`prim`] throws a failure to Haxe after Rust has dropped everything it
+//!   held.
+//! - [`blocking`] lets the garbage collector run while a call blocks.
 //! - [`call`], with [`box_i32`] and [`unbox_i32`], calls a Haxe function
-//!   value, which is what a callback's trampoline is made of.
+//!   value. A callback's trampoline is built from these.
 //!
-//! Like `hl_abi` it imports the runtime's symbols and defines none, so the
-//! library linking it must leave them undefined for the VM to resolve.
+//! Like `hl_abi`, it imports the runtime's symbols and defines none, so the
+//! library that links it must leave them undefined for the VM to resolve.
 //!
-//! Every function here is for the thread the VM called in on. Stock HashLink
-//! aborts when a thread it does not know allocates or changes a root.
+//! Every function here must be called on the thread the VM called in on. Stock
+//! HashLink aborts when a thread not registered with it allocates or changes a
+//! root.
 
 use std::ffi::{c_int, c_void};
 
 use hl_abi::hl_type;
 use hxn_abi::{Failure, Fault, Handle, RawHandle, Slice, catch, release};
 
-// What a generated adapter names, so that its crate needs this one alone.
+// Re-exports the `hl_abi` items a generated adapter uses, so that its crate
+// depends on this one alone.
 pub use hl_abi::{define_prim, vbyte, vdynamic, vstring};
 
 unsafe extern "C" {
-    // A DLL's data is reached through its import pointer, not linked directly.
+    // On Windows a DLL's data symbol is read through its `__imp_` import
+    // pointer instead of being linked directly.
     #[cfg(not(windows))]
     static mut hlt_abstract: hl_type;
     #[cfg(not(windows))]
@@ -86,8 +92,9 @@ unsafe fn bytes_type() -> *mut hl_type {
     }
 }
 
-/// What Haxe holds for a handle: an abstract the collector finalizes. The
-/// finalizer is its first word, which is where the collector looks for it.
+/// The object Haxe holds for a handle: an abstract value with a finalizer.
+/// The finalizer pointer is the first word, where the garbage collector
+/// expects it.
 #[repr(C)]
 pub struct Managed {
     finalize: Option<unsafe extern "C" fn(*mut Managed)>,
@@ -101,10 +108,10 @@ unsafe extern "C" fn finalize(managed: *mut Managed) {
     }
 }
 
-/// Moves `value` into a handle the collector owns. Null if the VM has no
-/// memory for it, in which case `value` is dropped.
+/// Moves `value` into a handle the garbage collector owns. Returns null if the
+/// VM cannot allocate it, in which case `value` is dropped.
 ///
-/// `value` is dropped inside a collection if it is never taken, so its `Drop`
+/// If `value` is never taken, it is dropped during a collection, so its `Drop`
 /// must not allocate from the VM or call into it.
 pub fn manage<T: Send + 'static>(value: T) -> *mut Managed {
     let managed = unsafe {
@@ -126,11 +133,11 @@ pub fn manage<T: Send + 'static>(value: T) -> *mut Managed {
     managed
 }
 
-/// The handle `managed` owns, if it is one of `T`.
+/// Returns the handle `managed` owns, if it is a handle to a `T`.
 ///
 /// # Safety
-/// `managed` is null or came from [`manage`] in this library, and the VM
-/// keeps it reachable for `'a`, as it does an argument for the call.
+/// `managed` is null or was returned by [`manage`] in this library, and the VM
+/// keeps it reachable for `'a`, as it does for an argument during the call.
 pub unsafe fn handle<'a, T: Send + 'static>(
     managed: *const Managed,
 ) -> Result<&'a Handle<T>, Fault> {
@@ -140,9 +147,10 @@ pub unsafe fn handle<'a, T: Send + 'static>(
     unsafe { Handle::from_raw((*managed).handle) }
 }
 
-/// Keeps a VM value alive, and at this address, for as long as it exists.
+/// A GC root: keeps a VM value alive, and at this address, for as long as the
+/// `Root` exists.
 ///
-/// Not `Send`: it is dropped on the thread that made it.
+/// Not `Send`: it must be dropped on the thread that created it.
 pub struct Root<T>(Box<*mut T>);
 
 impl<T> Root<T> {
@@ -165,7 +173,7 @@ impl<T> Drop for Root<T> {
     }
 }
 
-/// A Haxe `String` as Rust text. `None` for null.
+/// Converts a Haxe `String` to a Rust `String`. Returns `None` for null.
 ///
 /// # Safety
 /// `value` is null or a live `String`.
@@ -183,8 +191,9 @@ pub unsafe fn string(value: *const vstring) -> Result<Option<String>, Fault> {
         .map_err(|_| Fault::Encoding)
 }
 
-/// A `haxe.io.Bytes` as the VM lays it out: its fields in the order the
-/// class declares them. A primitive that takes one writes it `OiB_`.
+/// The VM's layout of a `haxe.io.Bytes`: its fields in the order the class
+/// declares them. A primitive that accepts one declares the parameter type as
+/// `OiB_`.
 #[repr(C)]
 #[allow(non_camel_case_types)]
 pub struct vbuffer {
@@ -193,7 +202,7 @@ pub struct vbuffer {
     bytes: *mut vbyte,
 }
 
-/// A copy of what a `haxe.io.Bytes` holds. `None` for null.
+/// Returns a copy of the contents of a `haxe.io.Bytes`, or `None` for null.
 ///
 /// # Safety
 /// `value` is null or a live `haxe.io.Bytes`.
@@ -208,7 +217,7 @@ pub unsafe fn buffer(value: *const vbuffer) -> Option<Vec<u8>> {
     Some(unsafe { std::slice::from_raw_parts(data, length as usize) }.to_vec())
 }
 
-/// `hl.Bytes` and a length, borrowed for the call.
+/// Wraps an `hl.Bytes` pointer and a length as a slice borrowed for the call.
 ///
 /// # Safety
 /// `data` is readable for `length` bytes for `'a`, or `length` is not positive.
@@ -216,8 +225,8 @@ pub unsafe fn slice<'a>(data: *const vbyte, length: c_int) -> Slice<'a> {
     unsafe { Slice::from_raw(data, usize::try_from(length).unwrap_or(0)) }
 }
 
-/// `text` as VM-owned, null-terminated UTF-16, which is what
-/// `String.fromUCS2` takes. Null if it is too long for the VM.
+/// Copies `text` into VM-owned, null-terminated UTF-16, the input
+/// `String.fromUCS2` accepts. Returns null if it is too long for the VM.
 pub fn utf16(text: &str) -> *mut vbyte {
     let units: Vec<u16> = text.encode_utf16().chain(std::iter::once(0)).collect();
     let Some(size) = units.len().checked_mul(size_of::<u16>()) else {
@@ -226,7 +235,7 @@ pub fn utf16(text: &str) -> *mut vbyte {
     unsafe { copy(units.as_ptr().cast(), size) }
 }
 
-/// A VM-owned copy of `data`. Null if it is too long for the VM.
+/// Returns a VM-owned copy of `data`, or null if it is too long for the VM.
 pub fn bytes(data: &[u8]) -> *mut vbyte {
     unsafe { copy(data.as_ptr(), data.len()) }
 }
@@ -242,17 +251,18 @@ unsafe fn copy(data: *const u8, size: usize) -> *mut vbyte {
     out
 }
 
-/// The body of a primitive: returns what `body` returns, or throws its
-/// failure or panic to Haxe as the message. A failure's value is kept for
-/// the binding to ask for: see `hxn_abi::thrown`.
+/// Implements the body of a primitive: returns the value `body` returns, or
+/// throws its failure or panic to Haxe as an exception carrying the message.
+/// A failure's value is stored for the binding to retrieve: see
+/// `hxn_abi::thrown`.
 ///
-/// The VM throws by jumping to its handler, past every Rust frame on the way
-/// without running a destructor. `body` and the failure are finished before
-/// that happens.
+/// The VM throws with a non-local jump to its handler, which skips every Rust
+/// frame in between without running destructors. `body` has returned and the
+/// failure has been dropped before the jump.
 ///
 /// # Safety
-/// The primitive's own frame holds nothing with a destructor while this
-/// runs, which is true if this call is all it does.
+/// The primitive's own frame holds no value with a destructor while this
+/// runs. That holds if this call is the primitive's entire body.
 pub unsafe fn prim<T>(body: impl FnOnce() -> Result<T, Failure>) -> T {
     let thrown = match catch(body) {
         Ok(value) => return value,
@@ -265,7 +275,7 @@ pub unsafe fn prim<T>(body: impl FnOnce() -> Result<T, Failure>) -> T {
     unsafe { hl_throw(thrown) }
 }
 
-// What `hl_error` throws: a dynamic holding UTF-16 bytes.
+// Builds the value `hl_error` throws: a dynamic holding UTF-16 bytes.
 fn exception(message: &str) -> *mut vdynamic {
     let text = utf16(message);
     let value = unsafe { hl_alloc_dynamic(bytes_type()) };
@@ -275,12 +285,12 @@ fn exception(message: &str) -> *mut vdynamic {
     value
 }
 
-/// Runs `body` with the collector free to run without this thread, for a
-/// call that waits.
+/// Runs `body` with this thread marked as blocked, so the garbage collector
+/// can run without waiting for it. For a call that blocks.
 ///
 /// # Safety
-/// `body` does not allocate from the VM, call into it, or write to memory it
-/// owns. Reading arguments the caller still holds is fine.
+/// `body` does not allocate from the VM, call into it, or write to memory the
+/// VM owns. Reading arguments the caller still holds is allowed.
 pub unsafe fn blocking<T>(body: impl FnOnce() -> T) -> T {
     struct Leave;
     impl Drop for Leave {
@@ -293,7 +303,7 @@ pub unsafe fn blocking<T>(body: impl FnOnce() -> T) -> T {
     body()
 }
 
-/// A Haxe function value. Opaque: it is only handed back to the VM.
+/// A Haxe function value. Opaque: it is only passed back to the VM.
 #[allow(non_camel_case_types)]
 #[repr(C)]
 pub struct vclosure {
@@ -311,7 +321,8 @@ unsafe fn i32_type() -> *mut hl_type {
     }
 }
 
-/// `value` as the VM passes `hl.Bytes` it does not know the type of.
+/// Boxes `value` in a dynamic, which is how the VM passes an `hl.Bytes` whose
+/// type is not statically known.
 pub fn box_bytes(value: *mut vbyte) -> *mut vdynamic {
     let boxed = unsafe { hl_alloc_dynamic(bytes_type()) };
     if !boxed.is_null() {
@@ -320,7 +331,8 @@ pub fn box_bytes(value: *mut vbyte) -> *mut vdynamic {
     boxed
 }
 
-/// `value` as the VM passes an `Int` it does not know the type of.
+/// Boxes `value` in a dynamic, which is how the VM passes an `Int` whose type
+/// is not statically known.
 pub fn box_i32(value: i32) -> *mut vdynamic {
     let boxed = unsafe { hl_alloc_dynamic(i32_type()) };
     if !boxed.is_null() {
@@ -329,7 +341,7 @@ pub fn box_i32(value: i32) -> *mut vdynamic {
     boxed
 }
 
-/// The `Int` in a `Null<Int>`, or `None` for null.
+/// Returns the `Int` in a `Null<Int>`, or `None` for null.
 ///
 /// # Safety
 /// `value` is null or a live boxed `Int`.
@@ -363,7 +375,8 @@ unsafe fn bool_type() -> *mut hl_type {
     }
 }
 
-/// `value` as the VM passes a `Float` it does not know the type of.
+/// Boxes `value` in a dynamic, which is how the VM passes a `Float` whose type
+/// is not statically known.
 pub fn box_f64(value: f64) -> *mut vdynamic {
     let boxed = unsafe { hl_alloc_dynamic(f64_type()) };
     if !boxed.is_null() {
@@ -372,7 +385,7 @@ pub fn box_f64(value: f64) -> *mut vdynamic {
     boxed
 }
 
-/// The `Float` in a `Null<Float>`, or `None` for null.
+/// Returns the `Float` in a `Null<Float>`, or `None` for null.
 ///
 /// # Safety
 /// `value` is null or a live boxed `Float`.
@@ -384,7 +397,8 @@ pub unsafe fn unbox_f64(value: *const vdynamic) -> Option<f64> {
     }
 }
 
-/// `value` as the VM passes a `Bool` it does not know the type of.
+/// Boxes `value` in a dynamic, which is how the VM passes a `Bool` whose type
+/// is not statically known.
 pub fn box_bool(value: bool) -> *mut vdynamic {
     let boxed = unsafe { hl_alloc_dynamic(bool_type()) };
     if !boxed.is_null() {
@@ -393,7 +407,7 @@ pub fn box_bool(value: bool) -> *mut vdynamic {
     boxed
 }
 
-/// The `Bool` in a `Null<Bool>`, or `None` for null.
+/// Returns the `Bool` in a `Null<Bool>`, or `None` for null.
 ///
 /// # Safety
 /// `value` is null or a live boxed `Bool`.
@@ -405,13 +419,14 @@ pub unsafe fn unbox_bool(value: *const vdynamic) -> Option<bool> {
     }
 }
 
-/// Calls a Haxe function value and returns its result as the VM boxes it:
-/// null for `Void` or a null.
+/// Calls a Haxe function value and returns its result boxed by the VM: null
+/// for `Void` or for a null result.
 ///
 /// # Safety
-/// `closure` is live, `args` are boxed as its parameters are typed, and it
-/// does not throw. A binding sees to the last by wrapping what the user
-/// passed: a throw here would jump past every Rust frame on the way out.
+/// `closure` is live, each of `args` is boxed to match the type of its
+/// parameter, and the closure does not throw. A binding guarantees the last
+/// condition by wrapping the function the user passed: a throw here would jump
+/// past every Rust frame on the way out.
 pub unsafe fn call(closure: *mut vclosure, args: &mut [*mut vdynamic]) -> *mut vdynamic {
     unsafe { hl_dyn_call(closure, args.as_mut_ptr(), args.len() as c_int) }
 }

@@ -1,6 +1,6 @@
 class Main {
 	static function main() {
-		// The library calls each function once for every pixel.
+		// The library calls each callback once for every pixel.
 		var disc = new Picture(25, 9);
 		disc.paint((x, y) -> {
 			var dx = x - 12, dy = (y - 4) * 2;
@@ -9,11 +9,11 @@ class Main {
 		var line = new Picture(25, 9);
 		line.paint((x, y) -> y == 4 ? 255 : 0);
 
-		// One object is passed to another.
+		// One object is passed as a parameter to another object's method.
 		disc.lighten(line);
 		show(disc);
 
-		// What a function throws is what the caller catches.
+		// An exception thrown by a callback propagates to the caller of `paint`.
 		try {
 			disc.paint((x, y) -> {
 				if (x == 5)
@@ -32,7 +32,7 @@ class Main {
 	}
 
 	static function show(picture:Picture) {
-		// A `Vec<u8>` arrives as `haxe.io.Bytes`.
+		// A `Vec<u8>` is returned as `haxe.io.Bytes`.
 		var pixels = picture.pixels();
 		var width = picture.width();
 		var row = new StringBuf();

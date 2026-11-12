@@ -1,6 +1,6 @@
 [package]
 name = "hxn-hl"
-description = "hxn's HashLink carriers: finalized handles, roots, text and deferred throws"
+description = "hxn's HashLink support: finalized handles, GC roots, string conversion and deferred throws"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

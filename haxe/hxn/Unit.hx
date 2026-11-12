@@ -1,8 +1,8 @@
 package hxn;
 
 /**
-	What a future or a stream carries when there is nothing to carry: that
-	the work is done, or that something happened.
+	The value type of a future or stream that has no data to return. It only
+	reports that the work completed or that an event occurred.
 **/
 enum Unit {
 	Nothing;

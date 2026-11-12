@@ -1,6 +1,6 @@
 [package]
 name = "hxn-macros"
-description = "The attributes that mark what a library exposes to Haxe; the generator reads them from source"
+description = "Attribute macros that mark the API a library exposes to Haxe; the generator reads them from source"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

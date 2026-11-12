@@ -73,8 +73,8 @@ pub fn parse(text: &str) -> Result<Value, ParseError> {
     serde_json::from_str(text)
         .map(from_json)
         .map_err(|error| ParseError {
-            // serde_json appends " at line L column C"; the position has
-            // its own fields.
+            // serde_json appends " at line L column C". It is removed
+            // because the position is in the `line` and `column` fields.
             message: error
                 .to_string()
                 .split(" at line ")

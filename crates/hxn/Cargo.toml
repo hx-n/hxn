@@ -1,6 +1,6 @@
 [package]
 name = "hxn"
-description = "What a library written for hxn depends on: the attributes that mark its API"
+description = "The crate a library written for hxn depends on: the attributes that mark its API"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

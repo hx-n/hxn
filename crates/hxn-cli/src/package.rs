@@ -1,20 +1,21 @@
-//! Gathers what a Haxe program needs of a library into one directory, which
-//! is a haxelib:
+//! Copies everything a Haxe program needs to use a library into one
+//! directory, laid out as a haxelib:
 //!
 //! | Path | What it is |
 //! |---|---|
-//! | `haxelib.json` | the library's name and version, and what else the crate gives of what haxelib lists |
-//! | `extraParams.hxml` | runs `hxn.Bind.lib`, which does the rest at compile time |
-//! | `<library>.hxn.json` | the manifest, which `hxn.Bind` finds the package by |
-//! | `<library>.hxn.webidl` | the same as WebIDL |
-//! | `hxn/` | hxn's own Haxe classes |
+//! | `haxelib.json` | the library's name and version, and the other haxelib fields the crate's metadata provides |
+//! | `extraParams.hxml` | calls the macro `hxn.Bind.lib`, which sets up the rest at compile time |
+//! | `<library>.hxn.json` | the manifest, which `hxn.Bind` uses to locate the package |
+//! | `<library>.hxn.webidl` | the manifest as WebIDL |
+//! | `hxn/` | hxn's Haxe support classes |
 //! | `binding/<runtime>/` | the library's Haxe classes for `hl` or `cpp` |
-//! | `binding/cppia/` | declarations of the `cpp` ones, for a CPPIA script |
+//! | `binding/cppia/` | declarations of the `cpp` classes, for a CPPIA script |
 //! | `include/` | `hxn.h` and the library's headers, for hxcpp |
-//! | `native/<triple>/` | the built libraries for one kind of machine, or for wasm |
+//! | `native/<triple>/` | the built libraries for one target triple, which may be a wasm one |
 //!
-//! Only `native/` differs between machines, so packaging on another one into
-//! the same directory, or copying its `native/<triple>/` in, adds to it.
+//! Only `native/` differs between platforms. Packaging on another machine
+//! into the same directory, or copying that machine's `native/<triple>/` into
+//! it, adds that platform to the package.
 
 use std::path::{Path, PathBuf};
 
@@ -22,7 +23,7 @@ use crate::make::{self, Built, Runtime, Target, write};
 use crate::project::Project;
 use crate::support;
 
-// Makes `to` hold the files of `from` and no others.
+// Copies the files of `from` into `to` and deletes every other file in `to`.
 fn mirror(from: &Path, to: &Path) -> Result<(), String> {
     let failed = |path: &Path, error: std::io::Error| format!("{}: {error}", path.display());
     std::fs::create_dir_all(to).map_err(|error| failed(to, error))?;
@@ -42,7 +43,8 @@ fn mirror(from: &Path, to: &Path) -> Result<(), String> {
     Ok(())
 }
 
-// What a built library is called in a package, where `hxn.Bind` looks for it.
+// The file name of a built library in a package. `hxn.Bind` looks for it
+// under that name.
 fn packaged(library: &str, target: Target, built: &Built) -> String {
     match target.runtime {
         Runtime::Hl if target.wasm => format!("{library}.wasm"),
@@ -55,8 +57,8 @@ fn packaged(library: &str, target: Target, built: &Built) -> String {
     }
 }
 
-// Each field haxelib lists is written where the crate gives it, and left
-// out where it does not.
+// The text of haxelib.json. An optional field is written only if the
+// crate's metadata provides it.
 fn haxelib(project: &Project) -> String {
     let quoted = |text: &str| serde_json::Value::from(text).to_string();
     let list = |items: &[String]| {
@@ -87,8 +89,8 @@ fn haxelib(project: &Project) -> String {
     format!("{{\n  {}\n}}\n", fields.join(",\n  "))
 }
 
-/// Builds the library for each of `targets` and gathers the results in
-/// `out`. Returns what the libraries added were built for.
+/// Builds the library for each of `targets` and copies the results into
+/// `out`. Returns the target triples of the libraries it added.
 pub fn package(
     project: &Project,
     targets: &[Target],
@@ -125,7 +127,8 @@ pub fn package(
     let text = std::fs::read_to_string(project.dir.join(&manifest))
         .map_err(|error| format!("{manifest}: {error}"))?;
     write(&out.join(&manifest), &text)?;
-    // Beside it, the same as WebIDL, which the last build wrote.
+    // The WebIDL form of the manifest, written by the last build, goes next
+    // to it.
     let idl = format!("{name}.hxn.webidl");
     let built = project.target.join("hxn").join(name).join(&idl);
     let text = std::fs::read_to_string(&built).map_err(|error| format!("{idl}: {error}"))?;

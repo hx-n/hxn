@@ -5,11 +5,11 @@
 #   run.sh wasm [ash]  as a side module of an Ash wasm program, run by `ash run`
 #   run.sh emcc        hxcpp through Emscripten, run by node; needs emcc on PATH
 #
-# The same for what hxn-gen writes from the library's source, checked by
-# haxe/Generated.hx:
+# The same for the binding hxn-gen generates from the library's source,
+# tested by haxe/Generated.hx:
 #   run.sh gen-hl [vm]
 #   run.sh gen-cpp
-#   run.sh gen-cppia   as a script, in an hxcpp program that holds the classes
+#   run.sh gen-cppia   as a CPPIA script, in an hxcpp host that contains the classes
 #   run.sh gen-wasm [ash]
 #   run.sh gen-emcc
 set -euo pipefail
@@ -18,13 +18,13 @@ here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "$here/../.." && pwd)"
 runtime="${1:?usage: run.sh hl [vm] | cpp | wasm [ash] | emcc | gen-hl [vm] | gen-cpp | gen-cppia | gen-wasm [ash] | gen-emcc}"
 
-# What cargo and hxcpp name what they build for this system.
+# The file name prefixes and extensions cargo and hxcpp use on this system.
 prefix=lib static=a exe=
 case "$(uname -s)" in
 	Darwin) dylib=dylib ;;
 	MINGW* | MSYS* | CYGWIN*)
 		prefix='' dylib=dll static=lib exe=.exe
-		# As a program that is not this shell's reads a path.
+		# Convert paths to the form native Windows programs accept.
 		here="$(cygpath -m "$here")"
 		root="$(cygpath -m "$root")"
 		;;
@@ -38,8 +38,8 @@ mkdir -p "$work"
 hdll() {
 	vm_dir="$(dirname "$vm")"
 	if [ -n "$exe" ]; then
-		# Windows links the library against the VM's own, and its loader
-		# looks along PATH.
+		# On Windows the library links against the VM's import library, and
+		# the loader searches PATH.
 		export HXN_HL_DIR="${HXN_HL_DIR:-$(cygpath -m "$vm_dir")}"
 		PATH="$(cygpath -u "$work"):$PATH"
 	fi
@@ -47,13 +47,14 @@ hdll() {
 	cp "$root/target/debug/$prefix${1//-/_}.$dylib" "$work/counter.hdll"
 }
 
-# Builds one of the archives hxcpp links, and sets what else hxcpp needs to
-# link it.
+# Builds one of the static libraries hxcpp links, and sets the extra flags
+# hxcpp needs to link it.
 linked=()
 staticlib() {
 	if [ -n "$exe" ]; then
-		# hxcpp links the static C runtime there, and builds for 32 bits
-		# unless told. With symbols, for a debugger to name what crashed.
+		# On Windows hxcpp links the static C runtime and builds 32-bit unless
+		# HXCPP_M64 is set. HXCPP_DEBUG_LINK keeps symbols so a debugger can
+		# show where a crash happened.
 		RUSTFLAGS="${RUSTFLAGS:-} -C target-feature=+crt-static" \
 			cargo build --manifest-path "$root/Cargo.toml" -p "$1"
 		linked=(-D HXCPP_M64 -D HXCPP_DEBUG_LINK)
@@ -62,8 +63,8 @@ staticlib() {
 	fi
 }
 
-# The header, the glue and the Haxe classes, from the same source the
-# adapter crates build theirs from.
+# Generates the header, the glue and the Haxe classes from the same source
+# the adapter crates generate their adapters from.
 generate() {
 	cargo run --quiet --manifest-path "$root/Cargo.toml" -p hxn-gen -- \
 		--library counter --source "$here/core/src/lib.rs" --crate counter_core --out "$work/gen" >/dev/null
@@ -93,9 +94,10 @@ case "$runtime" in
 	gen-cppia)
 		staticlib counter-gen-c
 		generate
-		# The host is an hxcpp program that keeps every class of the binding
-		# and of hxn, and lists which they are for the script's compile. It
-		# keeps what it does not use itself: a script may.
+		# The host is an hxcpp program that contains every class of the
+		# binding and of hxn, and lists them in a file for the script's
+		# compilation. Dead-code elimination is off because the script may use
+		# classes the host does not.
 		haxe -cp "$root/haxe" -cp "$here/haxe" -cp "$here/haxe/cppia" -cp "$work/gen/haxe/cpp" -main Host -cpp "$work/host" \
 			-D scriptable -dce no -D dll_export="$work/host.classes" \
 			--macro "include('hxn')" --macro "include('', true, null, ['$work/gen/haxe/cpp'])" \
@@ -103,8 +105,8 @@ case "$runtime" in
 			-D HXN_INCLUDE="$root/include" \
 			-D COUNTER_INCLUDE="$work/gen/include" \
 			-D COUNTER_LIB="$root/target/debug/${prefix}counter_gen.$static"
-		# The script is compiled against declarations of the binding's
-		# classes, and leaves out whatever the host already holds.
+		# The script is compiled against extern declarations of the binding's
+		# classes, and omits every class the host already contains.
 		haxe -cp "$root/haxe" -cp "$here/haxe" -cp "$work/gen/haxe/cppia" -main Generated -cppia "$work/generated.cppia" \
 			-D dll_import="$work/host.classes"
 		"$work/host/Host$exe" "$work/generated.cppia" | tee "$work/out.txt"
@@ -138,9 +140,10 @@ case "$runtime" in
 			package=counter-hl archive=libcounter_hl.a main=Main
 			adapter="$here/hl/src/lib.rs" classes="$here/haxe/hl"
 		fi
-		# A side module is position-independent, which the shipped std is not,
-		# so std is rebuilt; only the archive is built, since nothing here can
-		# link a wasm library whose imports are the program's.
+		# A side module must be position-independent and the prebuilt std is
+		# not, so std is rebuilt. Only the static library is built, because
+		# cargo cannot link a wasm shared library whose imports come from the
+		# main program.
 		RUSTFLAGS="-C relocation-model=pic -C target-feature=+mutable-globals" \
 			cargo rustc --manifest-path "$root/Cargo.toml" -p "$package" --crate-type staticlib \
 			--target wasm32-wasip1 -Z build-std=std,panic_abort
@@ -149,15 +152,17 @@ case "$runtime" in
 		while read -r resolver; do
 			exports+=("--export=$resolver")
 		done < <(tr '\n' ' ' < "$adapter" | grep -o 'define_prim!( *hlp_[a-z0-9_]*' | sed 's/define_prim!( *//')
-		# Undefined symbols become imports the program answers when it loads this.
+		# Undefined symbols become imports that the main program resolves when
+		# it loads the module.
 		"$lld" -flavor wasm --experimental-pic -shared --no-entry --gc-sections --no-export-dynamic \
 			--unresolved-symbols=import-dynamic "${exports[@]}" \
 			--whole-archive "$root/target/wasm32-wasip1/debug/$archive" --no-whole-archive \
 			-o "$work/counter.wasm"
 		haxe -D wasm -cp "$root/haxe" -cp "$here/haxe" -cp "$classes" -main "$main" -hl "$work/main.hl"
 		cd "$work"
-		# Ash finds the library beside the output and exports what it imports.
-		# With fibers a Haxe thread that waits suspends and lets the others run.
+		# Ash finds the library next to the output and exports the symbols it
+		# imports. With fibers, a Haxe thread that blocks is suspended and the
+		# other threads run.
 		ASH_WASM_FIBERS=1 "$ash" --build main.wasm --target wasm32-wasip1 main.hl
 		"$ash" run main.wasm | tee "$work/out.txt"
 		;;
@@ -171,15 +176,16 @@ case "$runtime" in
 			include="$here/c" classes="$here/haxe/cpp"
 		fi
 		command -v emcc >/dev/null || { echo "emcc is not on PATH; source emsdk_env.sh first" >&2; exit 2; }
-		# hxcpp takes CXX from the environment in place of emcc.
+		# hxcpp would use CXX from the environment instead of emcc.
 		unset CC CXX
-		# Aborting panics, and a std rebuilt to match: the shipped one unwinds
-		# with wasm exceptions, which hxcpp's JavaScript-based ones cannot link.
+		# Panics abort, and std is rebuilt to match: the prebuilt std unwinds
+		# with wasm exceptions, which cannot link with hxcpp's JavaScript-based
+		# exceptions.
 		RUSTFLAGS="-C panic=abort" \
 			cargo build --manifest-path "$root/Cargo.toml" -p "$package" \
 			--target wasm32-unknown-emscripten -Z build-std=std,panic_abort
-		# hxcpp assumes the host's 64 bits, and its UTF-16 strings reach for a
-		# Windows-only call under Emscripten.
+		# hxcpp assumes the build machine's 64-bit word size, and its UTF-16
+		# strings call a Windows-only function under Emscripten.
 		haxe -D wasm -cp "$root/haxe" -cp "$here/haxe" -cp "$classes" -main "$main" -cpp "$work" \
 			-D emscripten -D HXCPP_M32 -D disable_unicode_strings \
 			-D HXN_INCLUDE="$root/include" \
@@ -193,6 +199,6 @@ case "$runtime" in
 		;;
 esac
 
-# The last checks run from the event loop; a program that ends before them
-# exits cleanly without having passed.
+# The last checks run from the event loop, so a program that exits before
+# them exits with status 0 without passing. Require the PASS line.
 grep -q '^PASS' "$work/out.txt"

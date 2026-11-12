@@ -1,6 +1,8 @@
-//! Each number a binding converts, given back so a test sees what arrived.
+//! One function for each numeric type a binding converts. Each returns its
+//! argument so a test can check the value the library received.
 
-/// Numbers narrower than those that cross, the unsigned ones, and 64 bits.
+/// Integer types narrower than the wire types, unsigned types, and 64-bit
+/// types.
 #[hxn::interface]
 pub struct Numbers;
 
@@ -22,12 +24,12 @@ impl Numbers {
         value
     }
 
-    /// Every bit of `bits` turned over.
+    /// `bits` with every bit inverted.
     pub fn inverted(bits: u32) -> u32 {
         !bits
     }
 
-    /// Twice `count`, which may be more than fits going back.
+    /// Twice `count`, which may be too large to convert back.
     pub fn doubled(count: usize) -> usize {
         count.saturating_mul(2)
     }
@@ -40,22 +42,22 @@ impl Numbers {
         value
     }
 
-    /// `value` times itself, which 32 bits may not hold.
+    /// The square of `value`, which may not fit in 32 bits.
     pub fn squared(value: i32) -> i64 {
         i64::from(value) * i64::from(value)
     }
 
-    /// Every bit of `bits` turned over, all 64.
+    /// `bits` with all 64 bits inverted.
     pub fn inverted_wide(bits: u64) -> u64 {
         !bits
     }
 
-    /// A third of `value`, to the precision an `f32` has.
+    /// A third of `value`, at `f32` precision.
     pub fn third(value: f32) -> f32 {
         value / 3.0
     }
 
-    /// A length, checked by the library after the binding let it through.
+    /// A length the library validates after the binding has accepted it.
     pub fn sized(count: usize) -> Result<usize, &'static str> {
         if count > 100 {
             return Err("too many");
@@ -64,7 +66,8 @@ impl Numbers {
     }
 }
 
-/// Half of `value`: a function of a module, on a class of the library's.
+/// Half of `value`: a free function in a submodule, bound to a class the
+/// library names.
 #[hxn::function(class = "Tools")]
 pub fn halve(value: f64) -> f64 {
     value / 2.0

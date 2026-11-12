@@ -1,6 +1,6 @@
 [package]
 name = "hxn-abi"
-description = "The runtime-neutral core of hxn: what a native library and a Haxe runtime agree on"
+description = "The runtime-neutral core of hxn: the ABI types a native library and a Haxe runtime share"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

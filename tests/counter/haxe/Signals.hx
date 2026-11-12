@@ -2,7 +2,7 @@ import hxn.Computed;
 import hxn.Reactive;
 import hxn.Signal;
 
-/** Checks for the reactive core, which is Haxe alone and so the same on every runtime. **/
+/** Checks for the reactive core, which is pure Haxe and so behaves the same on every runtime. **/
 class Signals {
 	public static function run(check:(what:String, ok:Bool) -> Void) {
 		var count = new Signal(1);
@@ -17,7 +17,7 @@ class Signals {
 		count.value = 9;
 		check("a stopped effect stays stopped", seen.length == 3 && count.peek() == 9);
 
-		// A computed value is worked out when read, and kept.
+		// A computed value is evaluated lazily when read, and cached.
 		var a = new Signal(2);
 		var computes = 0;
 		var squared = new Computed(() -> {
@@ -30,7 +30,8 @@ class Signals {
 		check("a change alone does not work it out again", computes == 1);
 		check("reading it does", squared.value == 9 && computes == 2);
 
-		// Two paths to one value: computed once, never from old and new mixed.
+		// A diamond dependency: computed once per change, never from a mix of
+		// old and new inputs.
 		var base = new Signal(1);
 		var plusOne = new Computed(() -> base.value + 1);
 		var timesTwo = new Computed(() -> base.value * 2);
@@ -40,7 +41,7 @@ class Signals {
 		base.value = 10;
 		check('a value reached by two paths is computed once a change: $sums', sums.join(",") == "4,7,31");
 
-		// A computed value that comes out the same stops the change there.
+		// A computed value that does not change stops propagation.
 		var number = new Signal(2);
 		var parity = new Computed(() -> number.value % 2);
 		var parities = 0;
@@ -54,7 +55,7 @@ class Signals {
 		number.value = 7;
 		check("a changed one does", parities == 2);
 
-		// Dependencies follow the branch taken.
+		// Only the branch taken registers dependencies.
 		var useFirst = new Signal(true);
 		var first = new Signal("a");
 		var second = new Signal("b");
@@ -85,7 +86,7 @@ class Signals {
 		trigger.value = 1;
 		check('an untracked read is not a dependency: $untracked', untracked.join(",") == "0,6");
 
-		// Cleanups, and effects made by effects.
+		// Cleanups, and effects created inside effects.
 		var topic = new Signal("x");
 		var log = [];
 		var stopOuter = Reactive.effect(() -> {
@@ -112,7 +113,7 @@ class Signals {
 		inner.value = 1;
 		check('an effect made by an effect is replaced with it, not added to: $innerRuns', innerRuns == 4);
 
-		// A root owns what is made inside it.
+		// A root owns the effects created inside it.
 		var rooted = new Signal(0);
 		var rootedRuns = 0;
 		var dispose = Reactive.root(dispose -> {
@@ -127,7 +128,7 @@ class Signals {
 		rooted.value = 2;
 		check("disposing a root stops what it owns", rootedRuns == 2);
 
-		// An effect may set a signal; what depends on that settles too.
+		// An effect may set a signal, and that signal's dependents update too.
 		var source = new Signal(1);
 		var mirror = new Signal(0);
 		var mirrored = [];
@@ -136,7 +137,7 @@ class Signals {
 		source.value = 2;
 		check('an effect that sets a signal reruns what reads it: $mirrored', mirrored.join(",") == "10,20");
 
-		// What counts as a change can be chosen.
+		// A signal can take a custom equality function.
 		var point = new Signal({x: 1, y: 2}, (old, next) -> old.x == next.x && old.y == next.y);
 		var moves = 0;
 		Reactive.effect(() -> {

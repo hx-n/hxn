@@ -1,6 +1,6 @@
 [package]
 name = "counter-core"
-description = "The library tests/counter binds: plain Rust, no runtime in sight"
+description = "The fixture library that tests/counter binds: plain Rust with no runtime dependency"
 publish = false
 version.workspace = true
 edition.workspace = true

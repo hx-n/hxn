@@ -1,6 +1,6 @@
 [package]
 name = "hxn-cli"
-description = "The hxn command: makes, builds and runs a library written for hxn"
+description = "The hxn command-line tool: creates, builds and runs a library written for hxn"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

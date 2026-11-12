@@ -1,16 +1,17 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicI32, Ordering};
 
-/// A flag both sides set and read: an int that is 0 or 1.
+/// A boolean flag both sides set and read, stored as an `i32` that is 0 or 1.
 ///
-/// A host's atomic integer and Rust's `AtomicI32` are the same four bytes, so
-/// each side works on the other's cell with its own operations and no call
-/// between them. A host has no atomic of one byte, which Rust's `AtomicBool`
-/// is, so a flag that crosses is this.
+/// A host's atomic integer and Rust's `AtomicI32` have the same four-byte
+/// layout, so each side uses its own atomic operations on the other's cell,
+/// with no call across the boundary. Rust's `AtomicBool` is one byte and a
+/// host has no one-byte atomic, so a flag passed across the boundary has this
+/// type.
 ///
-/// Borrowed as `&AtomicFlag` it is a cell lent for a call; owned as
-/// `Arc<AtomicFlag>` it is one the library keeps and hands to the host.
-/// Integers cross as `&AtomicI32` and `Arc<AtomicI32>` themselves.
+/// `&AtomicFlag` is a cell borrowed for the duration of a call.
+/// `Arc<AtomicFlag>` is a cell the library owns and shares with the host.
+/// Integers are passed as `&AtomicI32` and `Arc<AtomicI32>` directly.
 #[repr(transparent)]
 #[derive(Default)]
 pub struct AtomicFlag(AtomicI32);
@@ -28,24 +29,25 @@ impl AtomicFlag {
         self.0.store(i32::from(set), Ordering::SeqCst);
     }
 
-    /// Sets the flag and returns what it was.
+    /// Sets the flag and returns its previous value.
     pub fn swap(&self, set: bool) -> bool {
         self.0.swap(i32::from(set), Ordering::SeqCst) != 0
     }
 
-    /// The cell a host lent, as a flag.
+    /// Views a cell borrowed from a host as a flag.
     ///
     /// # Safety
-    /// As [`AtomicI32::from_ptr`]: `cell` is a live, aligned `i32` for `'a`
-    /// that is only reached atomically meanwhile.
+    /// The same as [`AtomicI32::from_ptr`]: `cell` points to a live, aligned
+    /// `i32` for all of `'a`, and every access to it during `'a` is atomic.
     pub unsafe fn from_ptr<'a>(cell: *mut i32) -> &'a Self {
-        // `repr(transparent)` over the type `from_ptr` gives.
+        // `Self` is `repr(transparent)` over the type `from_ptr` returns.
         unsafe { &*(AtomicI32::from_ptr(cell) as *const AtomicI32).cast::<Self>() }
     }
 
-    /// The same cell as the integer it is, which is how it is handed to a host.
+    /// Converts to the underlying `AtomicI32`, the type a host receives.
     pub fn into_int(self: Arc<Self>) -> Arc<AtomicI32> {
-        // `repr(transparent)`: the allocation is an `AtomicI32`'s, exactly.
+        // `repr(transparent)`: the allocation has exactly the layout of an
+        // `AtomicI32`.
         unsafe { Arc::from_raw(Arc::into_raw(self).cast::<AtomicI32>()) }
     }
 }

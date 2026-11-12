@@ -1,5 +1,5 @@
-//! A Haxe function called by the library, bytes handed back, and one object
-//! passed to another.
+//! A Haxe callback called by the library, bytes as a return value, and one
+//! object passed as a parameter to another object's method.
 
 /// A greyscale picture.
 #[hxn::interface]
@@ -11,7 +11,8 @@ pub struct Picture {
 
 #[hxn::methods]
 impl Picture {
-    /// A black picture. Fails unless each side is from 1 to 4096.
+    /// Creates a black picture. Returns an error unless each side is from 1
+    /// to 4096.
     pub fn new(width: i32, height: i32) -> Result<Self, &'static str> {
         if !(1..=4096).contains(&width) || !(1..=4096).contains(&height) {
             return Err("each side of a picture is from 1 to 4096");
@@ -27,9 +28,9 @@ impl Picture {
         self.width
     }
 
-    /// Sets every pixel to what `shade` returns for its column and row,
-    /// from 0 for black to 255 for white. `shade` is a Haxe function: if it
-    /// throws, painting stops there and the caller catches what it threw.
+    /// Sets every pixel to the value `shade` returns for its column and row,
+    /// from 0 for black to 255 for white. `shade` is a Haxe callback: if it
+    /// throws, painting stops and the exception propagates to the caller.
     pub fn paint<E>(&mut self, shade: impl Fn(i32, i32) -> Result<i32, E>) -> Result<(), E> {
         for y in 0..self.height {
             for x in 0..self.width {
@@ -40,8 +41,8 @@ impl Picture {
         Ok(())
     }
 
-    /// Keeps the brighter of each pixel and the one at its place in `other`.
-    /// Fails if the two differ in size.
+    /// Sets each pixel to the brighter of itself and the pixel at the same
+    /// position in `other`. Returns an error if the two differ in size.
     pub fn lighten(&mut self, other: &Picture) -> Result<(), &'static str> {
         if (self.width, self.height) != (other.width, other.height) {
             return Err("the pictures differ in size");
@@ -52,7 +53,7 @@ impl Picture {
         Ok(())
     }
 
-    /// The pixels, row after row from the top.
+    /// The pixels in row order, top row first.
     pub fn pixels(&self) -> Vec<u8> {
         self.pixels.clone()
     }

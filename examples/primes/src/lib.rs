@@ -1,9 +1,9 @@
-//! Work that takes a while, done off the caller's thread: one result that
-//! arrives later, and results that arrive one at a time.
+//! Long-running work done off the caller's thread: a future for a single
+//! result, and a stream for results produced one at a time.
 
 use hxn_future::{Failure, Future, Stream, channel, spawn_blocking};
 
-/// Finds prime numbers without holding up the caller.
+/// Finds prime numbers without blocking the caller.
 #[hxn::interface]
 pub struct Primes;
 
@@ -14,8 +14,8 @@ fn is_prime(number: i32) -> bool {
 
 #[hxn::methods]
 impl Primes {
-    /// How many primes are below `limit`, counted on another thread. Fails
-    /// at once for a negative limit.
+    /// Counts the primes below `limit` on another thread. Returns an error
+    /// immediately for a negative limit.
     pub fn count(limit: i32) -> Result<Future<i32>, &'static str> {
         if limit < 0 {
             return Err("a negative limit");
@@ -26,14 +26,14 @@ impl Primes {
         }))
     }
 
-    /// The primes below `limit`, each sent as it is found.
+    /// Streams the primes below `limit`, sending each one as it is found.
     pub fn below(limit: i32) -> Stream<i32> {
         let (sender, stream) = channel();
-        // Nobody waits for this work to return: the stream is what is read,
-        // and it ends when the sender is dropped.
+        // The task's future is dropped because nothing awaits it. The caller
+        // reads the stream, which ends when the sender is dropped.
         drop(spawn_blocking(move || {
             for number in 2..limit {
-                // `send` is false once the reader has gone.
+                // `send` returns false once the stream has no reader.
                 if is_prime(number) && !sender.send(number) {
                     break;
                 }

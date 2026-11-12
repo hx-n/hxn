@@ -1,19 +1,20 @@
-//! Plain data: values that cross whole, by copy, kept in a file of their
-//! own.
+//! Plain data types, which are passed across the boundary by value. They
+//! are defined in a separate file.
 
 use crate::Counter;
 
-/// How loud. Two of its numbers are written and one follows on.
+/// A loudness level. Two discriminants are explicit and the third is
+/// implicit.
 #[hxn::data]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Mode {
     Quiet = 3,
-    /// As loud as it goes.
+    /// The loudest level.
     Loud = 9,
     Off,
 }
 
-/// A place.
+/// A point.
 #[hxn::data]
 #[derive(Clone, Debug, PartialEq)]
 pub struct Point {
@@ -21,7 +22,7 @@ pub struct Point {
     pub y: f64,
 }
 
-/// One of each thing a record holds.
+/// A struct with one field of each supported type.
 #[hxn::data]
 #[derive(Clone, Debug, PartialEq)]
 pub struct Settings {
@@ -33,9 +34,9 @@ pub struct Settings {
     pub flags: u32,
     pub enabled: bool,
     pub mode: Mode,
-    /// Another record, inside this one.
+    /// A nested struct.
     pub origin: Point,
-    /// May be left out.
+    /// Optional.
     pub note: Option<String>,
     pub limit: Option<i32>,
     pub fallback: Option<Mode>,
@@ -45,13 +46,14 @@ pub struct Settings {
     pub grid: Vec<Vec<i32>>,
 }
 
-/// Functions over data, with no value behind them.
+/// Static functions over data types, with no instance.
 #[hxn::interface]
 pub struct Shapes;
 
 #[hxn::methods]
 impl Shapes {
-    /// The record as the library read it, taken by reference.
+    /// A string showing the struct as the library received it. Takes the
+    /// struct by reference.
     pub fn describe(settings: &Settings) -> String {
         format!(
             "{} x{} wide={} ratio={} small={} flags={} {} {:?} at ({}, {}) note={:?} limit={:?} fallback={:?} path={} tags={} payload={:?} grid={:?}",
@@ -75,7 +77,7 @@ impl Shapes {
         )
     }
 
-    /// A record taken by value and given back changed.
+    /// Takes a struct by value and returns it modified.
     pub fn bumped(mut settings: Settings) -> Settings {
         settings.count += 1;
         settings.wide += 1 << 40;
@@ -101,14 +103,14 @@ impl Shapes {
         format!("{mode:?}")
     }
 
-    /// The mode a number names, if it names one.
+    /// The mode with discriminant `number`, if there is one.
     pub fn mode_of(number: i32) -> Option<Mode> {
         [Mode::Quiet, Mode::Loud, Mode::Off]
             .into_iter()
             .find(|mode| *mode as i32 == number)
     }
 
-    /// Halfway between two points, one taken each way.
+    /// The midpoint of two points, one taken by value and one by reference.
     pub fn midpoint(a: Point, b: &Point) -> Point {
         Point {
             x: (a.x + b.x) / 2.0,
@@ -116,17 +118,17 @@ impl Shapes {
         }
     }
 
-    /// The first point right of `x`, taken from a slice.
+    /// The first point to the right of `x`, from a slice parameter.
     pub fn right_of(points: &[Point], x: f64) -> Option<Point> {
         points.iter().find(|point| point.x > x).cloned()
     }
 
-    /// A list of numbers, added up.
+    /// The sum of a list of numbers.
     pub fn total(values: Vec<i32>) -> i32 {
         values.iter().sum()
     }
 
-    /// A number that may be missing, doubled if it is there.
+    /// Doubles an optional number, if it is present.
     pub fn doubled(value: Option<i32>) -> Option<i32> {
         value.map(|value| value * 2)
     }
@@ -136,7 +138,7 @@ impl Shapes {
         text.split_whitespace().map(str::to_owned).collect()
     }
 
-    /// A record, or a failure.
+    /// Returns a struct, or an error.
     pub fn preset(mode: Mode) -> Result<Settings, &'static str> {
         if mode == Mode::Off {
             return Err("nothing is preset for off");
@@ -161,7 +163,8 @@ impl Shapes {
         })
     }
 
-    /// A counter starting at what a record says: data in, an object out.
+    /// A counter starting at the struct's `count`. Takes data and returns an
+    /// object.
     pub fn counter(settings: &Settings) -> Counter {
         Counter::new(settings.count)
     }

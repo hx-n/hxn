@@ -1,5 +1,5 @@
-//! The manifest: what a library exposes, in a form that is committed and
-//! reviewed. A change to it is a change to the library's ABI.
+//! The manifest: a library's API, in a form that is committed and reviewed.
+//! A change to it is a change to the library's ABI.
 
 use crate::model::{Enumeration, Interface, Library, Method, Receiver, Record, Tagged};
 
@@ -62,11 +62,12 @@ fn method(method: &Method) -> String {
         "          \"returns\": {},\n",
         quoted(&method.returns_name())
     ));
-    // An async function's failure is its future's, not the call's.
+    // An async function's error rejects its future instead of failing the
+    // call.
     if method.asynchronous {
         out.push_str("          \"async\": true,\n");
     }
-    // Written only where the failure is data of the library's own.
+    // Written only when the error type is one of the library's data types.
     if let Some(error) = &method.error {
         out.push_str(&format!(
             "          \"throws\": {},\n",
@@ -87,7 +88,7 @@ fn interface(interface: &Interface) -> String {
     let mut out = String::from("    {\n");
     out.push_str(&format!("      \"name\": {},\n", quoted(&interface.name)));
     out.push_str(&docs(&interface.docs, "      "));
-    // Each written only when it holds.
+    // Each flag is written only when it is set.
     if interface.namespace {
         out.push_str("      \"namespace\": true,\n");
     }
@@ -192,7 +193,7 @@ pub fn manifest(library: &Library) -> String {
     let mut out = String::from("{\n");
     out.push_str("  \"hxn\": 1,\n");
     out.push_str(&format!("  \"library\": {},\n", quoted(&library.name)));
-    // Data is written only by a library that has some.
+    // Data sections are written only when the library has data types.
     if !library.enums.is_empty() {
         let enums: Vec<String> = library.enums.iter().map(enumeration).collect();
         out.push_str(&format!("  \"enums\": [\n{}\n  ],\n", enums.join(",\n")));

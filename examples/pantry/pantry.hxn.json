@@ -4,14 +4,14 @@
   "enums": [
     {
       "name": "Unit",
-      "docs": "What a quantity is counted in. Haxe sees the same names, as numbers.",
+      "docs": "The unit a quantity is counted in. A C-like enum: Haxe gets the same\nnames, with integer values.",
       "variants": [{ "name": "Each", "value": 0 }, { "name": "Kilo", "value": 1 }, { "name": "Litre", "value": 2 }]
     }
   ],
   "records": [
     {
       "name": "Item",
-      "docs": "Something on a shelf. Haxe sees a class with these fields.",
+      "docs": "An item on a shelf. Haxe gets a class with these fields.",
       "fields": [
         { "name": "name", "type": "str" },
         { "name": "quantity", "type": "i32" },
@@ -23,7 +23,7 @@
   "tagged": [
     {
       "name": "PantryError",
-      "docs": "Why `take` failed. A tagged enum becomes a Haxe enum with the same\nconstructors; as an error type it is thrown as `PantryException`.",
+      "docs": "The error type of `take`. A tagged enum becomes a Haxe enum with the same\nconstructors. Used as an error type, it is thrown as `PantryException`.",
       "cases": [
         { "name": "Unknown", "fields": [{ "name": "value", "type": "str" }] },
         { "name": "Short", "fields": [{ "name": "name", "type": "str" }, { "name": "left", "type": "i32" }] }
@@ -33,7 +33,7 @@
   "interfaces": [
     {
       "name": "Pantry",
-      "docs": "The shelves: a value Haxe holds, which data is passed to and from.",
+      "docs": "The shelves: an interface Haxe holds by reference. Its methods accept and\nreturn data.",
       "methods": [
         {
           "name": "new",
@@ -45,7 +45,7 @@
         },
         {
           "name": "stock",
-          "docs": "Puts an item on the shelf and returns how many there are. The item\nis the library's own copy from here on.",
+          "docs": "Puts an item on the shelf and returns the number of items. The\nlibrary stores its own copy of the item.",
           "kind": "mutating",
           "params": [{ "name": "item", "type": "Item" }],
           "returns": "i32",
@@ -64,7 +64,7 @@
         },
         {
           "name": "find",
-          "docs": "The item of that name, if there is one.",
+          "docs": "Returns the item with that name, or `None` if there is none.",
           "kind": "method",
           "params": [{ "name": "name", "type": "str" }],
           "returns": "option<Item>",
@@ -73,7 +73,7 @@
         },
         {
           "name": "low",
-          "docs": "Everything counted in `unit` of which there is less than `below`.",
+          "docs": "Returns the items counted in `unit` whose quantity is less than\n`below`.",
           "kind": "method",
           "params": [{ "name": "unit", "type": "Unit" }, { "name": "below", "type": "i32" }],
           "returns": "list<Item>",

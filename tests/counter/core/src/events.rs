@@ -1,5 +1,5 @@
-//! Enums whose variants hold values, maps, errors that are data, and data
-//! where a result over time or a lent function carries it.
+//! Tagged enums, maps, typed errors, and data carried by futures, streams,
+//! signals and callbacks.
 
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
@@ -9,19 +9,19 @@ use hxn_future::{Failure, Signal, Stream, channel, signal, stepped};
 
 use crate::{Mode, Point, millis, square_later};
 
-/// What happened, each kind with what it holds.
+/// An event: a tagged enum whose variants carry different fields.
 #[hxn::data]
 #[derive(Clone, Debug, PartialEq)]
 pub enum Event {
     Started,
-    /// How far along.
+    /// Progress so far.
     Progress {
         done: u32,
         total: u32,
     },
     Message(String),
     Moved(Point, Mode),
-    /// Events inside an event.
+    /// A list of nested events.
     Batch(Vec<Event>),
     Wrapped(Box<Event>),
     Labelled {
@@ -31,7 +31,7 @@ pub enum Event {
     Maybe(Option<Box<Event>>),
 }
 
-/// Why a count was refused: an error with a case for each reason.
+/// Why a count was rejected: a typed error with one variant per reason.
 #[hxn::data]
 #[derive(Clone, Debug, PartialEq)]
 pub enum CountError {
@@ -50,7 +50,7 @@ impl fmt::Display for CountError {
     }
 }
 
-/// An error that is a record.
+/// A typed error that is a struct.
 #[hxn::data]
 #[derive(Clone, Debug, PartialEq)]
 pub struct Refusal {
@@ -64,7 +64,7 @@ impl fmt::Display for Refusal {
     }
 }
 
-/// An error that is a name.
+/// A typed error that is a C-like enum.
 #[hxn::data]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Trouble {
@@ -81,13 +81,13 @@ impl fmt::Display for Trouble {
     }
 }
 
-/// Functions over events, with no value behind them.
+/// Static functions over events, with no instance.
 #[hxn::interface]
 pub struct Events;
 
 #[hxn::methods]
 impl Events {
-    /// How deep the events in `event` nest.
+    /// The nesting depth of the events in `event`.
     pub fn depth(event: &Event) -> i32 {
         match event {
             Event::Batch(events) => 1 + events.iter().map(Self::depth).max().unwrap_or(0),
@@ -96,12 +96,12 @@ impl Events {
         }
     }
 
-    /// The event as the library read it.
+    /// A string showing the event as the library received it.
     pub fn show(event: &Event) -> String {
         format!("{event:?}")
     }
 
-    /// One of each case.
+    /// One event of each variant.
     pub fn history() -> Vec<Event> {
         vec![
             Event::Started,
@@ -119,12 +119,13 @@ impl Events {
         ]
     }
 
-    /// The event, inside `times` others.
+    /// The event wrapped `times` times.
     pub fn wrapped(event: Event, times: i32) -> Event {
         (0..times).fold(event, |inner, _| Event::Wrapped(Box::new(inner)))
     }
 
-    /// The names by their counts: a map in, and a sorted one out.
+    /// The names keyed by their counts. Takes a hash map and returns a
+    /// sorted map.
     pub fn inverted(counts: &HashMap<String, i32>) -> BTreeMap<i32, String> {
         counts
             .iter()
@@ -132,7 +133,7 @@ impl Events {
             .collect()
     }
 
-    /// The count, or which of the reasons it was refused for.
+    /// The count, or a typed error giving the reason it was rejected.
     pub fn checked(count: u32) -> Result<u32, CountError> {
         match count {
             0 => Err(CountError::Empty),
@@ -141,7 +142,7 @@ impl Events {
         }
     }
 
-    /// The mode `name` names, or the name back in the error.
+    /// The mode called `name`, or an error carrying the name.
     pub fn mode_named(name: &str) -> Result<Mode, CountError> {
         match name {
             "quiet" => Ok(Mode::Quiet),
@@ -150,7 +151,7 @@ impl Events {
         }
     }
 
-    /// Nothing, or a record of why not.
+    /// Returns no value, or a struct error describing the refusal.
     pub fn refuse(code: i32) -> Result<(), Refusal> {
         if code == 0 {
             return Ok(());
@@ -161,7 +162,7 @@ impl Events {
         })
     }
 
-    /// The level, or the trouble it names.
+    /// The level, or the `Trouble` that level corresponds to.
     pub fn trouble(level: i32) -> Result<i32, Trouble> {
         match level {
             1 => Err(Trouble::Minor),
@@ -170,7 +171,8 @@ impl Events {
         }
     }
 
-    /// A record later, or the error of the work that would have made it.
+    /// A future that resolves to a struct, or fails with the typed error of
+    /// the task that would have produced it.
     pub async fn checked_later(count: u32) -> Result<Point, CountError> {
         let _ = square_later(1, millis(1)).await;
         let count = Self::checked(count)?;
@@ -180,18 +182,18 @@ impl Events {
         })
     }
 
-    /// An enum a future carries.
+    /// A future that resolves to an enum.
     pub async fn mode_later(mode: Mode) -> Mode {
         let _ = square_later(1, millis(1)).await;
         crate::Shapes::louder(mode)
     }
 
-    /// A narrow number a future carries.
+    /// A future that resolves to a narrow integer.
     pub async fn small_later(value: i32) -> u8 {
         value as u8
     }
 
-    /// A list of records a future carries.
+    /// A future that resolves to a list of structs.
     pub async fn path_later(count: i32) -> Vec<Point> {
         (0..count)
             .map(|step| Point {
@@ -201,12 +203,12 @@ impl Events {
             .collect()
     }
 
-    /// A number that may be missing, later.
+    /// A future that resolves to an optional number.
     pub async fn maybe_later(value: i32) -> Option<i32> {
         (value >= 0).then_some(value)
     }
 
-    /// The first `count` of `history`, one after another.
+    /// A stream of the first `count` events of `history`.
     pub fn feed(count: i32) -> Stream<Event> {
         let (sender, stream) = channel();
         let mut events = Self::history()
@@ -223,7 +225,7 @@ impl Events {
         stream
     }
 
-    /// A mode that goes from quiet to off.
+    /// A signal of a mode that changes from quiet to off.
     pub fn mode_now() -> Signal<Mode> {
         let (source, mode) = signal(Mode::Quiet);
         let mut next = [Mode::Loud, Mode::Off].into_iter();
@@ -234,7 +236,7 @@ impl Events {
         mode
     }
 
-    /// A place that moves right until it is at `limit`.
+    /// A signal of a point whose `x` increases until it reaches `limit`.
     pub fn place_now(limit: i32) -> Signal<Point> {
         let (source, place) = signal(Point { x: 0.0, y: 1.0 });
         let mut next = 1;
@@ -252,8 +254,8 @@ impl Events {
         place
     }
 
-    /// What `f` makes of each point: a record lent to the function, and an
-    /// enum given back.
+    /// The result of `f` for each point. The callback takes a borrowed
+    /// struct and returns an enum.
     pub fn each_point<E>(
         points: &[Point],
         mut f: impl FnMut(&Point) -> Result<Mode, E>,
@@ -261,7 +263,8 @@ impl Events {
         points.iter().map(&mut f).collect()
     }
 
-    /// The event `f` makes of `event`: one handed over, and one given back.
+    /// The event `f` returns for `event`. The callback takes an owned event
+    /// and returns one.
     pub fn reshaped<E>(
         event: Event,
         f: impl FnOnce(Event) -> Result<Event, E>,
@@ -269,8 +272,8 @@ impl Events {
         f(event)
     }
 
-    /// The point `f` picks, if it picks one: a list lent as a slice, beside
-    /// an enum.
+    /// The point `f` picks, if any. The callback takes a list borrowed as a
+    /// slice, and an enum.
     pub fn picked<E>(
         points: Vec<Point>,
         f: impl Fn(&[Point], Mode) -> Result<Option<Point>, E>,
@@ -278,14 +281,15 @@ impl Events {
         f(&points, Mode::Loud)
     }
 
-    /// The bytes `f` gives for 1, then for 2.
+    /// The bytes `f` returns for 1, followed by the bytes it returns for 2.
     pub fn stamped<E>(f: impl Fn(i32) -> Result<Vec<u8>, E>) -> Result<Vec<u8>, E> {
         let mut out = f(1)?;
         out.extend(f(2)?);
         Ok(out)
     }
 
-    /// What `f` makes of quiet: an enum each way and nothing else.
+    /// The result of `f` for quiet. The callback takes an enum and returns
+    /// one, with no other values.
     pub fn graded<E>(f: impl Fn(Mode) -> Result<Mode, E>) -> Result<Mode, E> {
         f(Mode::Quiet)
     }

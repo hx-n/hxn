@@ -4,7 +4,7 @@
 #   run.sh hl [vm]     vm is a HashLink-compatible executable, default `hl`,
 #                      with any options for it: "ash --mode jit"
 #   run.sh cpp
-#   run.sh cppia       as a script, in an hxcpp program that holds the library
+#   run.sh cppia       as a CPPIA script, in an hxcpp host that contains the library
 #   run.sh wasm [ash]  built and run by Ash
 #   run.sh emcc        hxcpp through Emscripten, run by node; needs emcc on PATH
 set -euo pipefail
@@ -33,9 +33,9 @@ trap 'rm "$out"' EXIT
 for example in "$root"/examples/*/; do
 	name="$(basename "$example")"
 	echo "== $name"
-	# Less the carriage returns a Windows program ends its lines with.
+	# Strip the carriage returns of Windows line endings.
 	(cd "$example" && "$hxn" "${arguments[@]}") | tr -d '\r' | tee "$out"
-	# The program's lines are the last ones, after whatever the build printed.
+	# The program's output is the last lines, after the build output.
 	expected="$example/expected.txt"
 	if [ "$(tail -n "$(wc -l <"$expected")" "$out")" != "$(cat "$expected")" ]; then
 		echo "FAILED: $name did not print what expected.txt lists" >&2

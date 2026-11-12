@@ -1,10 +1,10 @@
-//! Plain data: the library's `#[hxn::data]` structs and enums, and how a
-//! value made of them crosses.
+//! Plain data: the library's `#[hxn::data]` structs and enums, and how their
+//! values are passed across the boundary.
 //!
-//! An enum of names crosses as its number. Anything made of parts crosses
-//! as bytes, laid out as `hxn_abi::wire` describes: each side has generated
-//! code that writes a value's parts in order and reads them back. The Haxe
-//! side is plain Haxe, the same file for every runtime.
+//! A C-like enum is passed as its integer value. A composite value is
+//! serialized to bytes in the format `hxn_abi::wire` describes: each side has
+//! generated code that writes the value's parts in order and reads them back.
+//! The Haxe side is plain Haxe, the same file for every runtime.
 
 use crate::haxe::File;
 use crate::model::{Case, Data, Enumeration, Library, Number, Record, Tagged};
@@ -27,18 +27,19 @@ fn docs(lines: &[String], indent: &str) -> String {
     }
 }
 
-/// The adapter's function that reads a record, or turns a number into an
-/// enum: `hxn_read_options`.
+/// The adapter's function that deserializes a record, or converts an integer
+/// to an enum: `hxn_read_options`.
 pub fn reader(name: &str) -> String {
     format!("hxn_read_{}", snake(name))
 }
 
-/// The one that writes a record, or gives an enum's number.
+/// The adapter's function that serializes a record, or returns an enum's
+/// integer value.
 pub fn writer(name: &str) -> String {
     format!("hxn_write_{}", snake(name))
 }
 
-// The fewest bytes a value takes, which bounds how many a list can hold.
+// The minimum encoded size of a value, used to bound a list's item count.
 fn least(data: &Data) -> usize {
     match data {
         Data::Bool | Data::Option(_) | Data::Record(_) => 1,
@@ -48,7 +49,7 @@ fn least(data: &Data) -> usize {
     }
 }
 
-/// What Rust calls `data`.
+/// The Rust type of `data`.
 pub fn rust_type(data: &Data) -> String {
     match data {
         Data::Bool => String::from("bool"),
@@ -71,7 +72,7 @@ pub fn rust_type(data: &Data) -> String {
     }
 }
 
-/// What a reference to it is a reference to: a list is lent as a slice.
+/// The target type of a reference to it: a list is borrowed as a slice.
 pub fn rust_lent(data: &Data) -> String {
     match data {
         Data::List(of) => format!("[{}]", rust_type(of)),
@@ -79,8 +80,8 @@ pub fn rust_lent(data: &Data) -> String {
     }
 }
 
-/// The Rust expression that reads `data` from `input`. It may fail with a
-/// `Fault`, by `?`.
+/// The Rust expression that deserializes `data` from `input`. It propagates
+/// a `Fault` with `?`.
 pub fn rust_read(data: &Data) -> String {
     match data {
         Data::Bool => String::from("input.bool()?"),
@@ -118,8 +119,8 @@ pub fn rust_read(data: &Data) -> String {
     }
 }
 
-/// The Rust statements that write `data` to `out`, given an expression for
-/// a reference to the value.
+/// The Rust statements that serialize `data` into `out`, given an expression
+/// for a reference to the value.
 pub fn rust_write(data: &Data, value: &str) -> String {
     let wire = "hxn_abi::wire";
     match data {
@@ -138,8 +139,8 @@ pub fn rust_write(data: &Data, value: &str) -> String {
         Data::Bytes => format!("{wire}::bytes(out, {value})?;"),
         Data::Enum(name) => format!("{wire}::i32(out, {}({value}));", writer(name)),
         Data::Record(name) | Data::Tagged(name) => format!("{}({value}, out)?;", writer(name)),
-        // Named first, so that what is written is a reference to the value
-        // and not to its box.
+        // Bound to a name first, so that what is written is a reference to
+        // the inner value, not to the box.
         Data::Boxed(of) => format!("{{ let inner = &**{value}; {} }}", rust_write(of, "inner")),
         Data::Map {
             key, value: held, ..
@@ -152,8 +153,8 @@ pub fn rust_write(data: &Data, value: &str) -> String {
             "match {value} {{ Some(value) => {{ {wire}::bool(out, true); {} }} None => {wire}::bool(out, false), }}",
             rust_write(of, "value")
         ),
-        // Named first: `value` may be `&a.b`, which a method call would
-        // bind tighter than.
+        // Bound to a name first: `value` may be `&a.b`, and a method call
+        // would bind tighter than the `&`.
         Data::List(of) => format!(
             "{{ let items = {value}; {wire}::count(out, items.len())?; for item in items.iter() {{ {} }} }}",
             rust_write(of, "item")
@@ -161,7 +162,8 @@ pub fn rust_write(data: &Data, value: &str) -> String {
     }
 }
 
-/// A parameter's value, read whole from `bytes`: the statement's right side.
+/// A parameter's value, deserialized from all of `bytes`: the right-hand side
+/// of the statement.
 pub fn rust_decoded(data: &Data, bytes: &str) -> String {
     format!(
         "{{ let mut reader = hxn_abi::wire::Reader::new({bytes}); let input = &mut reader; let value = {}; input.end()?; value }}",
@@ -169,7 +171,7 @@ pub fn rust_decoded(data: &Data, bytes: &str) -> String {
     )
 }
 
-/// A result's bytes, given the call that makes the value.
+/// The serialized bytes of a return value, given the call that produces it.
 pub fn rust_encoded(data: &Data, call: &str) -> String {
     format!(
         "{{ let value = {call}; let mut bytes = Vec::new(); {{ let out = &mut bytes; let part = &value; {} }} bytes }}",
@@ -177,9 +179,9 @@ pub fn rust_encoded(data: &Data, call: &str) -> String {
     )
 }
 
-/// What an adapter needs to read and write the library's data: a pair of
-/// functions a record and a pair an enum. An enum is matched by name both
-/// ways, so nothing here depends on how Rust lays it out.
+/// The adapter's serialization code for the library's data: a pair of
+/// functions per record and per enum. An enum is matched by variant name in
+/// both directions, so nothing here depends on its memory layout.
 pub fn rust_codec(library: &Library) -> String {
     let mut out = String::new();
     for record in &library.records {
@@ -240,7 +242,7 @@ pub fn rust_codec(library: &Library) -> String {
     out
 }
 
-// A case as a pattern or an expression, each field given by `part`.
+// A variant as a pattern or an expression, with each field produced by `part`.
 fn case_shape(tagged: &Tagged, case: &Case, part: impl Fn(usize) -> String) -> String {
     let path = format!("{}::{}", tagged.name, case.name);
     if case.fields.is_empty() {
@@ -265,9 +267,9 @@ fn case_shape(tagged: &Tagged, case: &Case, part: impl Fn(usize) -> String) -> S
     }
 }
 
-// The pair of functions for an enum whose variants hold values: which
-// variant, then its fields. A field is bound as `f0`, `f1`, whatever it is
-// called, so that none is mistaken for a name the function uses.
+// The pair of functions for a tagged enum: the variant's index, then its
+// fields. Fields are bound as `f0`, `f1` regardless of their names, so that
+// none collides with a name the function uses.
 fn tagged_codec(tagged: &Tagged) -> String {
     let name = &tagged.name;
     let read: String = tagged
@@ -307,14 +309,15 @@ fn tagged_codec(tagged: &Tagged) -> String {
     )
 }
 
-/// The function that makes a failure of the error `data`:
+/// The function that converts the error type `data` into a failure:
 /// `hxn_thrown_pantry_error`.
 pub fn thrower(data: &Data) -> String {
     format!("hxn_thrown_{}", snake(&data.name()))
 }
 
-/// Those functions, one an error: the message is the error's own, and the
-/// value is which error it is, then the error.
+/// Those functions, one per error type: the failure's message is the error's
+/// own, and its value is the error type's index followed by the serialized
+/// error.
 pub fn rust_throwers(library: &Library) -> String {
     let mut out = String::new();
     for (place, error) in library.errors().into_iter().enumerate() {
@@ -324,8 +327,8 @@ pub fn rust_throwers(library: &Library) -> String {
                 "hxn_abi::wire::i32(&mut value, {}(&error));\n    failure.with_value(value)",
                 writer(known)
             ),
-            // An error that cannot be written is still a failure with a
-            // message.
+            // An error that fails to serialize still produces a failure with
+            // a message.
             _ => format!(
                 "match {}(&error, &mut value) {{\n        Ok(()) => failure.with_value(value),\n        Err(_) => failure,\n    }}",
                 writer(&name)
@@ -339,7 +342,7 @@ pub fn rust_throwers(library: &Library) -> String {
     out
 }
 
-/// What Haxe calls `data`.
+/// The Haxe type of `data`.
 pub fn haxe_type(data: &Data) -> String {
     match data {
         Data::Bool => String::from("Bool"),
@@ -358,9 +361,9 @@ pub fn haxe_type(data: &Data) -> String {
     }
 }
 
-/// The Haxe statements that write `value` to the buffer `out`. `depth`
-/// keeps the loop variables of nested lists apart. A null where a value is
-/// needed throws, here and not in native code.
+/// The Haxe statements that serialize `value` into the buffer `out`. `depth`
+/// keeps the loop variables of nested lists distinct. A null where a value is
+/// required throws here, not in native code.
 pub fn haxe_write(data: &Data, value: &str, out: &str, depth: usize) -> Vec<String> {
     match data {
         Data::Bool => vec![format!("{out}.addByte({value} ? 1 : 0);")],
@@ -428,7 +431,7 @@ pub fn haxe_write(data: &Data, value: &str, out: &str, depth: usize) -> Vec<Stri
     }
 }
 
-/// The Haxe expression that reads `data` from `input`.
+/// The Haxe expression that deserializes `data` from `input`.
 pub fn haxe_read(data: &Data) -> String {
     match data {
         Data::Bool => String::from("input.readByte() != 0"),
@@ -445,7 +448,7 @@ pub fn haxe_read(data: &Data) -> String {
         Data::Record(name) => format!("{name}.hxnRead(input)"),
         Data::Tagged(name) => format!("{}.read(input)", wire_class(name)),
         Data::Boxed(of) => haxe_read(of),
-        // Each read is a statement of its own: the key is read first.
+        // Each read is a separate statement, so the key is read first.
         Data::Map { key, value, .. } => format!(
             "{{ var made = new {}(); for (_ in 0...input.readInt32()) {{ var key = {}; var value = {}; made.set(key, value); }} made; }}",
             haxe_type(data),
@@ -465,11 +468,11 @@ fn record_file(record: &Record) -> File {
     let name = &record.name;
     let mut out = String::from(HEADER);
     out.push_str(&docs(&record.docs, ""));
-    // Made from its fields by name, as `{label: "x", enabled: true}`.
+    // Constructed from its fields by name, as `{label: "x", enabled: true}`.
     out.push_str(&format!("@:structInit class {name} {{\n"));
     for field in &record.fields {
         out.push_str(&docs(&field.docs, "\t"));
-        // A field that may be missing can be left out.
+        // An optional field can be omitted.
         let unset = if matches!(field.ty, Data::Option(_)) {
             " = null"
         } else {
@@ -533,7 +536,7 @@ fn enum_file(known: &Enumeration) -> File {
     }
 }
 
-// What Haxe calls a case's fields: `value`, `done`.
+// The Haxe names of a variant's fields: `value`, `done`.
 fn case_fields(case: &Case) -> Vec<String> {
     case.fields.iter().map(|field| camel(&field.name)).collect()
 }
@@ -563,8 +566,8 @@ fn tagged_file(tagged: &Tagged) -> File {
     }
 }
 
-// An enum has no functions of its own, so a class beside it writes and
-// reads it: which case, then the case's fields.
+// A Haxe enum cannot have methods, so a separate class serializes and
+// deserializes it: the variant's index, then its fields.
 fn tagged_wire_file(tagged: &Tagged) -> File {
     let name = &tagged.name;
     let class = wire_class(name);
@@ -596,7 +599,7 @@ fn tagged_wire_file(tagged: &Tagged) -> File {
     for (index, case) in tagged.cases.iter().enumerate() {
         out.push_str(&format!("\t\t\tcase {index}:\n"));
         let fields = case_fields(case);
-        // Each field is read by a statement of its own, in order.
+        // Each field is read by a separate statement, in order.
         for (field, held) in fields.iter().zip(&case.fields) {
             out.push_str(&format!(
                 "\t\t\t\tvar {field}:{} = {};\n",
@@ -623,7 +626,7 @@ fn tagged_wire_file(tagged: &Tagged) -> File {
     }
 }
 
-// The exception a failure with the data `error` is thrown as.
+// The exception class thrown for a failure with the error type `error`.
 fn exception_file(error: &Data) -> File {
     let name = error.name();
     let class = exception_class(&name);

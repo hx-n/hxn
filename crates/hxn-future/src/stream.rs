@@ -1,10 +1,10 @@
 //! Results that arrive more than once: a queue the library fills from any
-//! thread and the host empties on one of its own.
+//! thread and the host drains on one of its own threads.
 //!
-//! This is how a library reports events. It never calls a host function to
-//! do so: it sends, and the host takes each item and calls whatever it likes
-//! with it. So nothing of the host's is held here to be kept alive, and the
-//! thread that sends needs no standing with the host's runtime.
+//! A library reports events this way. It never calls a host function to do
+//! so: it sends, and the host takes each item and passes it to whatever it
+//! chooses. So no host object is held here and has to be kept alive, and the
+//! sending thread need not be registered with the host's runtime.
 
 use std::collections::VecDeque;
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
@@ -15,29 +15,29 @@ use hxn_abi::{Failure, Fault, Status};
 use crate::outbox::{self, Tag};
 use crate::{THREADS, local};
 
-/// Where a stream stands. The values are what a host sees.
+/// The state of a stream. The discriminants are the values a host receives.
 #[repr(i32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Flow {
     /// Nothing to take yet.
     Waiting = 0,
-    /// An item, or the failure that ended the stream, is there to take.
+    /// An item, or the failure that ended the stream, is ready to take.
     Ready = 1,
-    /// Everything was taken and nothing more will come.
+    /// Every item was taken and the stream is closed.
     Ended = 2,
 }
 
 enum End {
     Open,
     Closed,
-    // Taken as the last thing in the stream, after the items before it.
+    // Taken as the final entry of the stream, after the items sent before it.
     Failed(Failure),
 }
 
 struct Queue<T> {
     items: VecDeque<T>,
     end: End,
-    // Set when the reading side is dropped, which is how a sender learns to stop.
+    // Set when the read side is dropped, which tells a sender to stop.
     unread: bool,
 }
 
@@ -76,7 +76,8 @@ impl<T> Shared<T> {
     }
 }
 
-// Shared by every clone of a sender; the last one to go closes the stream.
+// Shared by every clone of a sender. Dropping the last clone closes the
+// stream.
 struct Owner<T> {
     shared: Arc<Shared<T>>,
 }
@@ -87,8 +88,8 @@ impl<T> Drop for Owner<T> {
     }
 }
 
-/// The sending side. Clones feed the same stream, which ends when the last
-/// of them is dropped.
+/// The write side of a stream. All clones send to the same stream, which ends
+/// when the last clone is dropped.
 pub struct Sender<T> {
     owner: Arc<Owner<T>>,
 }
@@ -102,13 +103,14 @@ impl<T> Clone for Sender<T> {
 }
 
 impl<T> Sender<T> {
-    /// Adds `item` to the stream. `false` if nothing will read it, because
-    /// the stream has ended or its reader is gone: the sign to stop.
+    /// Adds `item` to the stream. Returns `false` if the stream has ended or
+    /// its reader was dropped, which tells the caller to stop.
     pub fn send(&self, item: T) -> bool {
         let shared = &self.owner.shared;
         let mut queue = shared.lock();
         if !matches!(queue.end, End::Open) || queue.unread {
-            // Unlocked before `item` is dropped: its `Drop` is the library's.
+            // Unlocked before `item` is dropped, because its `Drop` is
+            // library code.
             drop(queue);
             return false;
         }
@@ -119,8 +121,8 @@ impl<T> Sender<T> {
         true
     }
 
-    /// Ends the stream with a failure, which the reader meets after the
-    /// items already sent. `false` if it had ended.
+    /// Ends the stream with a failure, which the reader receives after the
+    /// items already sent. Returns `false` if the stream had already ended.
     pub fn fail(&self, failure: impl Into<Failure>) -> bool {
         self.owner.shared.end(End::Failed(failure.into()))
     }
@@ -131,7 +133,7 @@ impl<T> Sender<T> {
     }
 }
 
-/// The reading side.
+/// The read side of a stream.
 pub struct Stream<T> {
     shared: Arc<Shared<T>>,
 }
@@ -142,9 +144,9 @@ impl<T> Stream<T> {
     }
 
     /// Blocks until there is something to take, the stream has ended, or
-    /// `timeout` has passed, and returns where it stands then. `None` waits
-    /// without limit. Without threads it runs queued work for a short slice
-    /// instead of blocking.
+    /// `timeout` has elapsed, and returns its state at that point. `None`
+    /// waits indefinitely. Without threads it runs queued work for a short
+    /// time slice instead of blocking.
     pub fn wait(&self, timeout: Option<Duration>) -> Flow {
         if !THREADS {
             return self.wait_driving(timeout);
@@ -184,8 +186,9 @@ impl<T> Stream<T> {
         self.flow()
     }
 
-    /// The next item, `None` once the stream has ended, or the failure that
-    /// ended it. [`Status::PENDING`] while there is nothing to take yet.
+    /// Takes the next item. Returns `None` once the stream has ended, or the
+    /// failure that ended it, and [`Status::PENDING`] while there is nothing
+    /// to take yet.
     pub fn take(&self) -> Result<Option<T>, Failure> {
         let mut queue = self.shared.lock();
         if let Some(item) = queue.items.pop_front() {
@@ -208,12 +211,12 @@ impl<T> Drop for Stream<T> {
         queue.unread = true;
         let unread = std::mem::take(&mut queue.items);
         drop(queue);
-        // Outside the lock, like every other drop of the library's values.
+        // Dropped outside the lock, like every other library value.
         drop(unread);
     }
 }
 
-/// A stream and what feeds it.
+/// Creates a stream and its sender.
 pub fn channel<T>() -> (Sender<T>, Stream<T>) {
     let shared = Arc::new(Shared {
         queue: Mutex::new(Queue {
@@ -255,8 +258,8 @@ impl<T: Send + 'static> Erased for Stream<T> {
     }
 }
 
-/// A stream of any type, which is what a host holds. Only
-/// [`next`](Self::next) needs the type again.
+/// A type-erased stream, which is what a host holds. Only
+/// [`next`](Self::next) needs the concrete type.
 pub struct AnyStream(Box<dyn Erased>);
 
 impl<T: Send + 'static> From<Stream<T>> for AnyStream {
@@ -274,21 +277,23 @@ impl AnyStream {
         self.0.wait(timeout)
     }
 
-    /// Has the stream noted in the [`outbox`](crate::outbox) when there is
-    /// something to take, and returns the id it is noted under.
+    /// Registers the stream to be posted to the [`outbox`](crate::outbox)
+    /// when there is something to take, and returns the id it is posted
+    /// under.
     pub fn watch(&self) -> i32 {
         self.0.watch()
     }
 
-    /// As [`wait`](Self::wait), with the timeout a host passes: milliseconds,
-    /// or negative for no limit.
+    /// Like [`wait`](Self::wait), with the timeout in the form a host passes
+    /// it: milliseconds, or negative for no limit.
     pub fn wait_millis(&self, milliseconds: i32) -> Flow {
         self.wait(u64::try_from(milliseconds).ok().map(Duration::from_millis))
     }
 
-    /// The next item, for a host that has seen [`Flow::Ready`]. The failure
-    /// that ended the stream is returned in its turn; asking past the end is
-    /// [`Fault::Closed`], and for another type [`Fault::InvalidHandle`].
+    /// Takes the next item, for a host that has seen [`Flow::Ready`]. The
+    /// failure that ended the stream is returned in order after the items.
+    /// Reading past the end returns [`Fault::Closed`], and reading with the
+    /// wrong type returns [`Fault::InvalidHandle`].
     pub fn next<T: Send + 'static>(&self) -> Result<T, Failure> {
         match self.0.as_any().downcast_ref::<Stream<T>>() {
             Some(stream) => stream.take()?.ok_or_else(|| Fault::Closed.into()),

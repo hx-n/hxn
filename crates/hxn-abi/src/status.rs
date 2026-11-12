@@ -1,14 +1,15 @@
-/// What an exported function returns. Zero is success, negative values are
-/// hxn's own and positive values belong to the library.
+/// The return value of an exported function. Zero is success, negative values
+/// are reserved for hxn, and positive values are defined by the library.
 ///
-/// A struct and not an enum, so a value hxn does not know is still a valid one.
+/// A struct rather than an enum, so that a code hxn does not define is still a
+/// valid value.
 #[repr(transparent)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct Status(pub i32);
 
 impl Status {
     pub const OK: Self = Self(0);
-    /// The library failed and named no code of its own.
+    /// The library failed without specifying a code of its own.
     pub const ERROR: Self = Self(1);
     /// The library panicked. Its state is whatever the panic left behind.
     pub const PANIC: Self = Self(-1);
@@ -18,15 +19,15 @@ impl Status {
     pub const BUSY: Self = Self(-5);
     pub const ENCODING: Self = Self(-6);
     pub const TOO_LARGE: Self = Self(-7);
-    /// A future's result was asked for before it had one.
+    /// A future's result was requested before the future was settled.
     pub const PENDING: Self = Self(-8);
-    /// A future lost everything that could settle it.
+    /// Everything that could settle the future was dropped.
     pub const CANCELLED: Self = Self(-9);
-    /// A host callback failed. The host has its own account of why, and
-    /// reports that one once the call returns.
+    /// A host callback failed. The host has recorded the cause and reports it
+    /// once the call returns.
     pub const CALLBACK: Self = Self(-10);
     pub const RANGE: Self = Self(-11);
-    /// Data that holds more of its own kind, deeper than is read.
+    /// Recursive data nested deeper than the reader accepts.
     pub const DEPTH: Self = Self(-12);
 
     pub const fn is_ok(self) -> bool {
@@ -34,7 +35,7 @@ impl Status {
     }
 }
 
-/// A misuse of the boundary itself, as opposed to a failure of the library.
+/// An incorrect use of the boundary, as opposed to a failure in the library.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Fault {
     /// A required pointer was null.
@@ -43,16 +44,16 @@ pub enum Fault {
     InvalidHandle,
     /// The handle's value was already taken.
     Closed,
-    /// The value is borrowed in a way that excludes this use: by another
-    /// thread, or by a call further up this one's stack.
+    /// The value has a borrow that conflicts with this use, held by another
+    /// thread or by a call further up this thread's stack.
     Busy,
     /// Text that is not valid in its encoding.
     Encoding,
-    /// A length no allocation can have.
+    /// A length larger than any allocation can be.
     TooLarge,
-    /// A number that does not fit the type it is for.
+    /// A number out of range for its target type.
     Range,
-    /// Data that nests deeper than is read.
+    /// Data nested deeper than the reader accepts.
     Depth,
 }
 
@@ -84,17 +85,18 @@ impl Fault {
     }
 }
 
-/// Why a call failed: the status it returns and the message its caller reads.
+/// The reason a call failed: the status it returns and the message for its
+/// caller.
 ///
-/// Any `Display` error converts with `?` and reports [`Status::ERROR`]. It
-/// implements neither `Display` nor `Error` itself, which is what leaves room
-/// for that conversion.
+/// Any `Display` error converts to it with `?` and reports [`Status::ERROR`].
+/// `Failure` implements neither `Display` nor `Error`, because either would
+/// conflict with that blanket conversion.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Failure {
     pub status: Status,
     pub message: String,
-    /// The library's own error as the bytes of plain data, for a host that
-    /// throws it as a typed value. Empty when the message is all there is.
+    /// The library's error serialized as plain data, for a host that throws it
+    /// as a typed error. Empty when the failure has only a message.
     pub value: Vec<u8>,
 }
 
@@ -107,7 +109,7 @@ impl Failure {
         }
     }
 
-    /// The same failure, carrying `value`.
+    /// Returns the same failure with `value` attached.
     pub fn with_value(mut self, value: Vec<u8>) -> Self {
         self.value = value;
         self

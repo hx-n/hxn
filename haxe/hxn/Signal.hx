@@ -3,11 +3,11 @@ package hxn;
 import hxn.reactive.Node;
 
 /**
-	A value that can change, and that remembers who read it.
+	A mutable value that tracks its readers.
 
-	Reading one inside an effect or a computed value subscribes that reader:
-	it runs again when the signal is set to something different. Nothing is
-	subscribed by hand.
+	Reading a signal inside an effect or a computed value subscribes that
+	reader, which reruns when the signal is set to a different value.
+	Subscriptions are automatic.
 
 	```haxe
 	var count = new Signal(0);
@@ -19,26 +19,26 @@ import hxn.reactive.Node;
 class Signal<T> {
 	@:allow(hxn) final node:Node;
 
-	/** Reads and subscribes; assigning sets. **/
+	/** Reading returns the value and subscribes the reader. Assigning sets the value. **/
 	public var value(get, set):T;
 
 	/** `equals` decides whether a new value is a change. The default is `==`. **/
 	public function new(initial:T, ?equals:(T, T) -> Bool)
 		node = new Node(initial, null, false, cast equals);
 
-	/** The value. The effect or computed value that is running will rerun when it changes. **/
+	/** Returns the value and subscribes the running effect or computed value, which reruns when the value changes. **/
 	public inline function get():T
 		return node.read();
 
-	/** The value, without subscribing whoever asks. **/
+	/** Returns the value without subscribing the reader. **/
 	public inline function peek():T
 		return node.value;
 
-	/** Sets the value and reruns what depends on it, unless it is the same. **/
+	/** Sets the value and reruns its dependents, unless the value is unchanged. **/
 	public inline function set(next:T):Void
 		node.write(next);
 
-	/** Sets the value from the one it has. **/
+	/** Sets the value to the result of `change` applied to the current value. **/
 	public inline function update(change:T->T):Void
 		node.write(change(node.value));
 

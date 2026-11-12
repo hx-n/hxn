@@ -1,35 +1,36 @@
-//! The library in the current directory, as cargo describes it.
+//! The library in the current directory, read from `cargo metadata`.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use serde_json::Value;
 
-/// A library's crate, and what `hxn` needs to know to bind it.
+/// A library's crate and the settings `hxn` needs to generate its binding.
 pub struct Project {
     /// The crate's directory.
     pub dir: PathBuf,
-    /// The package's name, which the adapter crates depend on it by.
+    /// The package name, which the adapter crates use to depend on it.
     pub package: String,
-    /// The library target's name, which its items are found under in Rust.
+    /// The library target's name, which is the crate name in Rust paths to
+    /// its items.
     pub krate: String,
-    /// The name its binaries and symbols carry.
+    /// The name used in its binaries' file names and in its exported symbols.
     pub library: String,
-    /// The package's version and description, which its haxelib repeats.
+    /// The package's version and description, copied into its haxelib.json.
     pub version: String,
     pub description: String,
-    /// What else its haxelib lists.
+    /// The other fields of its haxelib.json.
     pub listing: Listing,
-    /// The Rust file holding its marked items.
+    /// The Rust source file that contains its marked items.
     pub source: PathBuf,
-    /// Where its Haxe program is, and that program's main class.
+    /// The directory of its Haxe program, and that program's main class.
     pub haxe: PathBuf,
     pub main: String,
-    /// What the program's compile is passed beside what hxn passes.
+    /// Extra `haxe` arguments for compiling the program, added to hxn's own.
     pub flags: Vec<String>,
     /// Cargo's target directory for it.
     pub target: PathBuf,
-    /// Where it gets `hxn` from, so the adapters get the same.
+    /// The source of its `hxn` dependency, which the adapters also use.
     pub hxn: Source,
 }
 
@@ -38,7 +39,7 @@ pub struct Project {
 pub struct Listing {
     /// The crate's `repository`, or its `homepage`.
     pub url: Option<String>,
-    /// The crate's `license`, as cargo has it.
+    /// The crate's `license`, as cargo reports it.
     pub license: Option<String>,
     /// The crate's `keywords`.
     pub tags: Vec<String>,
@@ -91,7 +92,8 @@ impl Listing {
     }
 }
 
-// A list of strings in cargo's account of a package, or none.
+// A list of strings from cargo's metadata for a package, or an empty list
+// if it is absent.
 fn texts(value: Option<&Value>) -> Vec<String> {
     value
         .and_then(Value::as_array)
@@ -104,20 +106,20 @@ fn texts(value: Option<&Value>) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// Where a crate of hxn's comes from.
+/// The source of hxn's crates.
 pub enum Source {
-    /// A checkout: the directory its crates are in.
+    /// A local checkout: the directory that contains its crates.
     Path(PathBuf),
-    /// A repository, and the branch, tag or revision asked for, if any.
+    /// A git repository, and the requested branch, tag or revision, if any.
     Git {
         url: String,
         reference: Option<(String, String)>,
     },
-    /// A registry, at a version.
+    /// A registry, at this version.
     Registry(String),
 }
 
-/// A string as TOML writes it.
+/// `text` as a quoted TOML string.
 pub fn quoted(text: &str) -> String {
     let mut out = String::from("\"");
     for letter in text.chars() {
@@ -132,9 +134,9 @@ pub fn quoted(text: &str) -> String {
 }
 
 impl Source {
-    /// How a manifest specifies a dependency on `name`, one of hxn's crates,
-    /// from here. Each of them must come from one place: two copies of `hxn-abi`
-    /// would not agree on a handle.
+    /// The manifest value for a dependency on `name`, one of hxn's crates,
+    /// from this source. All of hxn's crates must come from the same source:
+    /// two copies of `hxn-abi` would each define their own handle type.
     pub fn dependency(&self, name: &str) -> String {
         match self {
             Self::Path(crates) => format!(
@@ -154,7 +156,8 @@ impl Source {
     }
 }
 
-// `git+https://host/repo?rev=abc#0123…` as the url and what was asked for.
+// Parses `git+https://host/repo?rev=abc#0123…` into the URL and the
+// requested reference.
 fn git_source(source: &str) -> Source {
     let rest = source.trim_start_matches("git+");
     let rest = rest.split('#').next().unwrap_or(rest);
@@ -202,12 +205,12 @@ fn flags(settings: Option<&Value>) -> Result<Vec<String>, String> {
         })
         .ok_or_else(|| {
             String::from(
-                "`haxe-flags` under `[package.metadata.hxn]` is a list of strings, as in [\"-lib\", \"format\"]",
+                "`haxe-flags` under `[package.metadata.hxn]` must be a list of strings, such as [\"-lib\", \"format\"]",
             )
         })
 }
 
-/// A name C symbols and Haxe classes can be made from.
+/// Whether `name` can be used in both C symbol names and Haxe class names.
 pub fn is_library_name(name: &str) -> bool {
     let mut letters = name.chars();
     letters
@@ -222,7 +225,7 @@ impl Project {
         let manifest = dir.join("Cargo.toml");
         if !manifest.is_file() {
             return Err(format!(
-                "no Cargo.toml in {}: run this in a library's directory, or make one with `hxn new`",
+                "no Cargo.toml in {}: run this in a library's directory, or create one with `hxn new`",
                 dir.display()
             ));
         }
@@ -239,7 +242,7 @@ impl Project {
         let packages = metadata
             .get("packages")
             .and_then(Value::as_array)
-            .ok_or("cargo listed no packages")?;
+            .ok_or("`cargo metadata` listed no packages")?;
 
         let package = packages
             .iter()
@@ -247,8 +250,8 @@ impl Project {
                 text(package, "manifest_path")
                     .is_some_and(|path| same_file(Path::new(path), &manifest))
             })
-            .ok_or("cargo does not list this directory's package")?;
-        let name = text(package, "name").ok_or("a package with no name")?;
+            .ok_or("`cargo metadata` does not list the package in this directory")?;
+        let name = text(package, "name").ok_or("the package has no name")?;
         let target = package
             .get("targets")
             .and_then(Value::as_array)
@@ -262,11 +265,11 @@ impl Project {
             })
             .ok_or_else(|| format!("`{name}` has no library target"))?;
         let krate = text(target, "name")
-            .ok_or("a target with no name")?
+            .ok_or("the library target has no name")?
             .replace('-', "_");
 
-        // `[package.metadata.hxn]` overrides what is otherwise taken from
-        // the crate.
+        // `[package.metadata.hxn]` overrides the defaults taken from the
+        // crate.
         let settings = package.get("metadata").and_then(|m| m.get("hxn"));
         let setting = |key: &str| settings.and_then(|settings| text(settings, key));
         let library = setting("library").unwrap_or(&krate).to_owned();
@@ -277,7 +280,9 @@ impl Project {
         }
         let source = match setting("source") {
             Some(source) => dir.join(source),
-            None => PathBuf::from(text(target, "src_path").ok_or("a target with no source")?),
+            None => PathBuf::from(
+                text(target, "src_path").ok_or("the library target has no source path")?,
+            ),
         };
 
         let hxn = packages
@@ -289,13 +294,13 @@ impl Project {
                 let crates = text(hxn, "manifest_path")
                     .map(Path::new)
                     .and_then(|manifest| manifest.parent()?.parent())
-                    .ok_or("`hxn` has no directory")?;
+                    .ok_or("cannot find the directory of the `hxn` crate")?;
                 Source::Path(crates.to_owned())
             }
             Some(source) if source.starts_with("git+") => git_source(source),
             Some(_) => Source::Registry(
                 text(hxn, "version")
-                    .ok_or("`hxn` has no version")?
+                    .ok_or("the `hxn` crate has no version")?
                     .to_owned(),
             ),
         };
@@ -321,7 +326,8 @@ impl Project {
             main: setting("main").unwrap_or("Main").to_owned(),
             flags: flags(settings)?,
             target: PathBuf::from(
-                text(&metadata, "target_directory").ok_or("cargo named no target directory")?,
+                text(&metadata, "target_directory")
+                    .ok_or("`cargo metadata` reported no target directory")?,
             ),
             hxn,
         })
@@ -392,7 +398,7 @@ mod tests {
     #[test]
     fn a_checkout_gives_each_crate_its_directory() {
         let crates = PathBuf::from("/work/hxn/crates");
-        // Joined as the system joins a path, and quoted for TOML.
+        // Joined with the platform's path separator and quoted for TOML.
         let expected = quoted(&crates.join("hxn-abi").to_string_lossy());
         assert!(expected.contains("hxn-abi") && expected.starts_with("\"/work/hxn/crates"));
         assert_eq!(

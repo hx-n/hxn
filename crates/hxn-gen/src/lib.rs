@@ -1,4 +1,5 @@
-//! From a library's source to everything a runtime needs to call it.
+//! Generates everything a runtime needs to call a library, from the
+//! library's source.
 //!
 //! [`parse`] reads the items a library marked with `#[hxn::interface]` and
 //! `#[hxn::methods]` into a [`Library`]. The emitters write from that:
@@ -6,17 +7,18 @@
 //! | Output | From |
 //! |---|---|
 //! | the manifest, which is committed and reviewed | [`manifest`] |
-//! | the same as WebIDL | [`webidl`] |
+//! | the manifest as WebIDL | [`webidl`] |
 //! | the adapter over the plain C ABI, for hxcpp | [`c_adapter`] |
-//! | the adapter of HashLink primitives | [`hl_adapter`] |
-//! | the C header for the first | [`c_header`] |
+//! | the adapter exporting HashLink primitives | [`hl_adapter`] |
+//! | the C header for the C ABI adapter | [`c_header`] |
 //! | the C++ glue hxcpp calls it through | [`cpp_glue`] |
 //! | the Haxe classes | [`haxe_hl`], [`haxe_cpp`] |
-//! | their declarations, for a CPPIA script | [`haxe_cppia`] |
+//! | declarations of the hxcpp classes, for a CPPIA script | [`haxe_cppia`] |
 //!
-//! The library itself is not changed and gains no runtime. Each adapter is
-//! the text of a file that a thin crate of its own includes, usually from a
-//! build script, so the library is compiled once for whatever is built.
+//! The library itself is not changed and depends on no runtime. Each adapter
+//! is emitted as the text of a source file that a separate thin crate
+//! includes, usually from a build script, so the library is compiled once for
+//! whichever binding is built.
 
 mod c;
 mod data;

@@ -4,19 +4,19 @@
   "enums": [
     {
       "name": "Trouble",
-      "docs": "An error that is a name.",
+      "docs": "A typed error that is a C-like enum.",
       "variants": [{ "name": "Minor", "value": 1 }, { "name": "Major", "value": 5 }]
     },
     {
       "name": "Mode",
-      "docs": "How loud. Two of its numbers are written and one follows on.",
+      "docs": "A loudness level. Two discriminants are explicit and the third is\nimplicit.",
       "variants": [{ "name": "Quiet", "value": 3 }, { "name": "Loud", "value": 9 }, { "name": "Off", "value": 10 }]
     }
   ],
   "records": [
     {
       "name": "Refusal",
-      "docs": "An error that is a record.",
+      "docs": "A typed error that is a struct.",
       "fields": [
         { "name": "code", "type": "i32" },
         { "name": "reason", "type": "str" }
@@ -24,7 +24,7 @@
     },
     {
       "name": "Point",
-      "docs": "A place.",
+      "docs": "A point.",
       "fields": [
         { "name": "x", "type": "f64" },
         { "name": "y", "type": "f64" }
@@ -32,7 +32,7 @@
     },
     {
       "name": "Settings",
-      "docs": "One of each thing a record holds.",
+      "docs": "A struct with one field of each supported type.",
       "fields": [
         { "name": "title", "type": "str" },
         { "name": "count", "type": "i32" },
@@ -56,7 +56,7 @@
   "tagged": [
     {
       "name": "Event",
-      "docs": "What happened, each kind with what it holds.",
+      "docs": "An event: a tagged enum whose variants carry different fields.",
       "cases": [
         { "name": "Started", "fields": [] },
         { "name": "Progress", "fields": [{ "name": "done", "type": "u32" }, { "name": "total", "type": "u32" }] },
@@ -70,7 +70,7 @@
     },
     {
       "name": "CountError",
-      "docs": "Why a count was refused: an error with a case for each reason.",
+      "docs": "Why a count was rejected: a typed error with one variant per reason.",
       "cases": [
         { "name": "Empty", "fields": [] },
         { "name": "TooMany", "fields": [{ "name": "limit", "type": "u32" }, { "name": "given", "type": "u32" }] },
@@ -81,7 +81,7 @@
   "interfaces": [
     {
       "name": "Counter",
-      "docs": "A number that is added to, with one of each thing a binding carries.",
+      "docs": "An integer counter, with one method for each feature a binding supports.",
       "methods": [
         {
           "name": "new",
@@ -93,7 +93,7 @@
         },
         {
           "name": "fill",
-          "docs": "`count` bytes, each the value's low byte. Fails for a negative count.",
+          "docs": "Returns `count` bytes, each set to the value's low byte. Fails for a\nnegative count.",
           "kind": "method",
           "params": [{ "name": "count", "type": "i32" }],
           "returns": "bytes",
@@ -102,7 +102,7 @@
         },
         {
           "name": "add",
-          "docs": "Adds to the value and returns it. Fails if it would overflow. A\nlocked counter leaves the value as it is.",
+          "docs": "Adds `amount` to the value and returns the new value. Fails on\noverflow. A locked counter leaves the value unchanged.",
           "kind": "mutating",
           "params": [{ "name": "amount", "type": "i32" }],
           "returns": "i32",
@@ -111,7 +111,7 @@
         },
         {
           "name": "adds",
-          "docs": "How many adds have been made, as a cell the host reads directly.",
+          "docs": "The number of adds made, as an atomic the host reads directly.",
           "kind": "method",
           "params": [],
           "returns": "atomic_i32",
@@ -120,7 +120,7 @@
         },
         {
           "name": "locked",
-          "docs": "Set to make the counter ignore adds.",
+          "docs": "A flag that makes the counter ignore adds while it is set.",
           "kind": "method",
           "params": [],
           "returns": "atomic_flag",
@@ -129,7 +129,7 @@
         },
         {
           "name": "work",
-          "docs": "Does `units` of work, counting each in `progress`, and stops early\nonce `cancel` is set. Returns how many were done.",
+          "docs": "Does `units` of work, incrementing `progress` for each unit, and stops\nearly once `cancel` is set. Returns the number of units done.",
           "kind": "method",
           "params": [{ "name": "units", "type": "i32" }, { "name": "progress", "type": "atomic_i32" }, { "name": "cancel", "type": "atomic_flag" }],
           "returns": "i32",
@@ -170,7 +170,7 @@
         },
         {
           "name": "set",
-          "docs": "Sets the value, or its negation.",
+          "docs": "Sets the value, negated if `negate` is set.",
           "kind": "mutating",
           "params": [{ "name": "value", "type": "i32" }, { "name": "negate", "type": "bool" }],
           "returns": "void",
@@ -188,7 +188,7 @@
         },
         {
           "name": "swap",
-          "docs": "Exchanges values with another counter.",
+          "docs": "Swaps values with another counter.",
           "kind": "mutating",
           "params": [{ "name": "other", "type": "Counter", "borrow": "exclusive" }],
           "returns": "void",
@@ -206,7 +206,7 @@
         },
         {
           "name": "larger",
-          "docs": "A counter at the larger of the two values, or nothing without\nanother to compare with.",
+          "docs": "Returns a counter holding the larger of the two values, or `None` if\n`other` is `None`.",
           "kind": "method",
           "params": [{ "name": "other", "type": "Counter?" }],
           "returns": "Counter?",
@@ -215,7 +215,7 @@
         },
         {
           "name": "into_value",
-          "docs": "Gives the counter up for its value.",
+          "docs": "Consumes the counter and returns its value.",
           "kind": "consuming",
           "params": [],
           "returns": "i32",
@@ -224,7 +224,7 @@
         },
         {
           "name": "into_value_later",
-          "docs": "Gives the counter up to work that reports its value later.",
+          "docs": "Consumes the counter in an async function that returns its value\nlater.",
           "kind": "consuming",
           "params": [{ "name": "milliseconds", "type": "i32" }],
           "returns": "future<i32>",
@@ -234,7 +234,7 @@
         },
         {
           "name": "live",
-          "docs": "How many counters exist.",
+          "docs": "The number of live counters.",
           "kind": "static",
           "params": [],
           "returns": "i32",
@@ -243,7 +243,7 @@
         },
         {
           "name": "fail",
-          "docs": "Panics, to show what a binding makes of that.",
+          "docs": "Panics, to test how a binding handles a panic.",
           "kind": "static",
           "params": [],
           "returns": "void",
@@ -252,7 +252,7 @@
         },
         {
           "name": "nap",
-          "docs": "Sleeps, as a call that waits on something would.",
+          "docs": "Sleeps, to stand in for a blocking call.",
           "kind": "static",
           "params": [{ "name": "milliseconds", "type": "i32" }],
           "returns": "void",
@@ -261,7 +261,7 @@
         },
         {
           "name": "each",
-          "docs": "Calls `f` with each of 1 to `count` and half of it, and stops at the\nfirst failure.",
+          "docs": "Calls `f` with each number from 1 to `count` and half that number,\nand stops at the first failure.",
           "kind": "static",
           "params": [{ "name": "count", "type": "i32" }, { "name": "f", "type": "fn(i32, f64) -> void" }],
           "returns": "void",
@@ -270,7 +270,7 @@
         },
         {
           "name": "test",
-          "docs": "Whether `f` holds for the value.",
+          "docs": "Returns the result of calling `f` with the value.",
           "kind": "method",
           "params": [{ "name": "f", "type": "fn(i32) -> bool" }],
           "returns": "bool",
@@ -279,7 +279,7 @@
         },
         {
           "name": "scaled_by",
-          "docs": "`f` of half the value, and of whether the value is odd.",
+          "docs": "Returns the result of calling `f` with half the value and whether\nthe value is odd.",
           "kind": "method",
           "params": [{ "name": "f", "type": "fn(f64, bool) -> f64" }],
           "returns": "f64",
@@ -288,7 +288,7 @@
         },
         {
           "name": "described",
-          "docs": "What `f` makes of a name and the value: text lent to the function,\nand its own text given back.",
+          "docs": "Calls `f` with a name and the value and returns its result. The\ncallback takes a borrowed string and returns an owned one.",
           "kind": "method",
           "params": [{ "name": "f", "type": "fn(str, i32) -> str" }],
           "returns": "str",
@@ -297,7 +297,7 @@
         },
         {
           "name": "words",
-          "docs": "How many words of `text` the function keeps.",
+          "docs": "Returns the number of words in `text` for which `f` returns true.",
           "kind": "static",
           "params": [{ "name": "text", "type": "str" }, { "name": "f", "type": "fn(str) -> bool" }],
           "returns": "i32",
@@ -306,7 +306,7 @@
         },
         {
           "name": "titled",
-          "docs": "How many characters the text `f` gives has.",
+          "docs": "Returns the number of characters in the string `f` returns.",
           "kind": "static",
           "params": [{ "name": "f", "type": "fn() -> str" }],
           "returns": "i32",
@@ -315,7 +315,7 @@
         },
         {
           "name": "chunks",
-          "docs": "Calls `f` with the value's bytes, a few at a time, and returns how\nmany it was shown.",
+          "docs": "Calls `f` with the value's bytes in chunks of `size`, and returns the\nnumber of bytes passed.",
           "kind": "method",
           "params": [{ "name": "size", "type": "i32" }, { "name": "f", "type": "fn(bytes, i32) -> void" }],
           "returns": "i32",
@@ -324,7 +324,7 @@
         },
         {
           "name": "spawn_each",
-          "docs": "Makes `count` counters, 1, 2 and so on, and gives each to `f` to\nkeep. Returns what `f` said of them, added up.",
+          "docs": "Creates `count` counters with values 1, 2 and so on, and passes\nownership of each to `f`. Returns the sum of `f`'s return values.",
           "kind": "static",
           "params": [{ "name": "count", "type": "i32" }, { "name": "f", "type": "fn(Counter, str) -> i32" }],
           "returns": "i32",
@@ -333,7 +333,7 @@
         },
         {
           "name": "ask",
-          "docs": "What `f` gives.",
+          "docs": "Returns what `f` returns.",
           "kind": "static",
           "params": [{ "name": "f", "type": "fn() -> i32" }],
           "returns": "i32",
@@ -342,7 +342,7 @@
         },
         {
           "name": "from_fn",
-          "docs": "A counter starting at what `f` gives.",
+          "docs": "Returns a counter starting at the value `f` returns.",
           "kind": "static",
           "params": [{ "name": "f", "type": "fn() -> i32" }],
           "returns": "Counter",
@@ -351,7 +351,7 @@
         },
         {
           "name": "attempt",
-          "docs": "What `f` gives, or -1 if it fails: a library that makes nothing of\nthe failure.",
+          "docs": "Returns what `f` returns, or -1 if it fails. Here the library\ndiscards the callback's error.",
           "kind": "static",
           "params": [{ "name": "f", "type": "fn() -> i32" }],
           "returns": "i32",
@@ -360,7 +360,7 @@
         },
         {
           "name": "apply",
-          "docs": "Replaces the value with `f` of it, `times` over, and stops at the\nfirst failure with the value as the last success left it.",
+          "docs": "Replaces the value with `f(value)`, `times` times. Stops at the first\nfailure and keeps the value from the last successful call.",
           "kind": "mutating",
           "params": [{ "name": "times", "type": "i32" }, { "name": "f", "type": "fn(i32) -> i32" }],
           "returns": "i32",
@@ -369,7 +369,7 @@
         },
         {
           "name": "version",
-          "docs": "What the library calls itself. With no class named, a function is a\nstatic of the one named after the library, which here is `Counter`'s.",
+          "docs": "Returns the library's name and version. A function with no `class`\nargument becomes a static method of the class named after the library,\nwhich here is the `Counter` class.",
           "kind": "static",
           "params": [],
           "returns": "str",
@@ -380,11 +380,11 @@
     },
     {
       "name": "Job",
-      "docs": "Work on a thread of the library's own, watched and stopped through two\ncells.",
+      "docs": "Work on a thread the library starts, monitored and stopped through two\natomics.",
       "methods": [
         {
           "name": "new",
-          "docs": "Starts counting to `units`, one a millisecond.",
+          "docs": "Starts counting to `units`, one per millisecond.",
           "kind": "constructor",
           "params": [{ "name": "units", "type": "i32" }],
           "returns": "Job",
@@ -411,7 +411,7 @@
     },
     {
       "name": "Tally",
-      "docs": "A running total of counters: one interface that takes and makes another.",
+      "docs": "A running total of counters: an interface whose methods accept and\nreturn another interface.",
       "methods": [
         {
           "name": "new",
@@ -451,11 +451,11 @@
     },
     {
       "name": "Later",
-      "docs": "Results that arrive later, as the generator binds them: a class of\nfunctions, with no value behind it.",
+      "docs": "Asynchronous results as the generator binds them: a class of static\nfunctions with no instance.",
       "methods": [
         {
           "name": "square",
-          "docs": "The square of `value`, after a wait.",
+          "docs": "The square of `value`, after a delay.",
           "kind": "static",
           "params": [{ "name": "value", "type": "i32" }, { "name": "milliseconds", "type": "i32" }],
           "returns": "future<i32>",
@@ -472,7 +472,7 @@
         },
         {
           "name": "sum",
-          "docs": "The sum of 1 to `limit`, added a term a step.",
+          "docs": "The sum of 1 to `limit`, adding one term per step.",
           "kind": "static",
           "params": [{ "name": "limit", "type": "i32" }],
           "returns": "future<i32>",
@@ -481,7 +481,7 @@
         },
         {
           "name": "combined",
-          "docs": "`square` and `sum` awaited by one piece of work, and added.",
+          "docs": "One async task that awaits `square` and `sum` and adds the results.",
           "kind": "static",
           "params": [{ "name": "value", "type": "i32" }, { "name": "limit", "type": "i32" }],
           "returns": "future<i32>",
@@ -506,7 +506,7 @@
         },
         {
           "name": "counter",
-          "docs": "A counter, made by the work and handed over when it is taken.",
+          "docs": "A counter created by the task and transferred to the caller when the\nresult is taken.",
           "kind": "static",
           "params": [{ "name": "start", "type": "i32" }],
           "returns": "future<Counter>",
@@ -515,7 +515,7 @@
         },
         {
           "name": "pot",
-          "docs": "A shared value, likewise.",
+          "docs": "The same for a shared value.",
           "kind": "static",
           "params": [{ "name": "start", "type": "i32" }],
           "returns": "future<Pot>",
@@ -524,7 +524,7 @@
         },
         {
           "name": "abandoned",
-          "docs": "A future nothing will settle.",
+          "docs": "A future that is never settled.",
           "kind": "static",
           "params": [],
           "returns": "future<i32>",
@@ -533,7 +533,7 @@
         },
         {
           "name": "checked",
-          "docs": "Refuses a negative limit at once, and is `sum` otherwise.",
+          "docs": "Returns an error immediately for a negative limit, and otherwise\nbehaves as `sum`.",
           "kind": "static",
           "params": [{ "name": "limit", "type": "i32" }],
           "returns": "future<i32>",
@@ -542,7 +542,7 @@
         },
         {
           "name": "count_up",
-          "docs": "1 to `limit` an item at a time, then the end or, with `fail`, a failure.",
+          "docs": "Yields 1 to `limit` one item at a time, then ends or, with `fail`,\nfails.",
           "kind": "static",
           "params": [{ "name": "limit", "type": "i32" }, { "name": "fail", "type": "bool" }],
           "returns": "stream<i32>",
@@ -551,7 +551,7 @@
         },
         {
           "name": "counters",
-          "docs": "`count` counters, starting at 1, 2 and so on.",
+          "docs": "A stream of `count` counters with values 1, 2 and so on.",
           "kind": "static",
           "params": [{ "name": "count", "type": "i32" }],
           "returns": "stream<Counter>",
@@ -560,7 +560,7 @@
         },
         {
           "name": "squared",
-          "docs": "`square` as an async function, whose body is the work.",
+          "docs": "`square` as an async function: the function body is the task.",
           "kind": "static",
           "params": [{ "name": "value", "type": "i32" }, { "name": "milliseconds", "type": "i32" }],
           "returns": "future<i32>",
@@ -570,7 +570,7 @@
         },
         {
           "name": "shout",
-          "docs": "Text and bytes an async function takes are its own by the time it\nruns, long after the call that passed them returned.",
+          "docs": "String and byte parameters of an async function are owned copies,\nbecause it runs after the call that passed them has returned.",
           "kind": "static",
           "params": [{ "name": "name", "type": "str" }, { "name": "data", "type": "bytes" }],
           "returns": "future<str>",
@@ -580,7 +580,7 @@
         },
         {
           "name": "settle",
-          "docs": "Gives nothing but that it is done.",
+          "docs": "Returns no value, only completion.",
           "kind": "static",
           "params": [{ "name": "milliseconds", "type": "i32" }],
           "returns": "future<void>",
@@ -590,7 +590,7 @@
         },
         {
           "name": "agree",
-          "docs": "Nothing, or a failure.",
+          "docs": "Returns no value, or an error.",
           "kind": "static",
           "params": [{ "name": "really", "type": "bool" }],
           "returns": "future<void>",
@@ -600,7 +600,7 @@
         },
         {
           "name": "counted",
-          "docs": "A counter made by async work.",
+          "docs": "A counter created by an async function.",
           "kind": "static",
           "params": [{ "name": "start", "type": "i32" }],
           "returns": "future<Counter>",
@@ -610,7 +610,7 @@
         },
         {
           "name": "stamp",
-          "docs": "The time `value` names, as 64 bits a future carries.",
+          "docs": "A timestamp derived from `value`: a future that resolves to a 64-bit\ninteger.",
           "kind": "static",
           "params": [{ "name": "value", "type": "i32" }],
           "returns": "future<i64>",
@@ -620,7 +620,7 @@
         },
         {
           "name": "frame",
-          "docs": "`count` bytes, each `fill`, made by the work.",
+          "docs": "`count` bytes, each set to `fill`, created by the async function.",
           "kind": "static",
           "params": [{ "name": "count", "type": "i32" }, { "name": "fill", "type": "i32" }],
           "returns": "future<bytes>",
@@ -630,7 +630,7 @@
         },
         {
           "name": "frames",
-          "docs": "Frames of 1 to `count` bytes, one after another.",
+          "docs": "A stream of frames with lengths from 1 to `count` bytes.",
           "kind": "static",
           "params": [{ "name": "count", "type": "i32" }],
           "returns": "stream<bytes>",
@@ -639,7 +639,7 @@
         },
         {
           "name": "odometer",
-          "docs": "A count too wide for 32 bits, followed as it climbs.",
+          "docs": "A signal of a count that does not fit in 32 bits, updated as it\nincreases.",
           "kind": "static",
           "params": [{ "name": "limit", "type": "i32" }],
           "returns": "signal<i64>",
@@ -648,7 +648,7 @@
         },
         {
           "name": "ticks",
-          "docs": "`count` items of nothing: each is only that something happened.",
+          "docs": "A stream of `count` unit items. Each carries no data and only reports\nthat something happened.",
           "kind": "static",
           "params": [{ "name": "count", "type": "i32" }],
           "returns": "stream<void>",
@@ -657,7 +657,7 @@
         },
         {
           "name": "ramp",
-          "docs": "A value that climbs from 0 to `limit`.",
+          "docs": "A signal whose value increases from 0 to `limit`.",
           "kind": "static",
           "params": [{ "name": "limit", "type": "i32" }],
           "returns": "signal<i32>",
@@ -666,7 +666,7 @@
         },
         {
           "name": "label",
-          "docs": "The same as text.",
+          "docs": "The same, with the value as a string.",
           "kind": "static",
           "params": [{ "name": "limit", "type": "i32" }],
           "returns": "signal<str>",
@@ -677,7 +677,7 @@
     },
     {
       "name": "Pot",
-      "docs": "A total several things add to. Shared: the library and any number of\nHaxe objects hold the same one, and it lives while any of them does.",
+      "docs": "A total with several contributors. It is shared: the library and any\nnumber of Haxe objects hold references to the same value, which lives\nuntil the last reference is dropped.",
       "shared": true,
       "methods": [
         {
@@ -707,7 +707,7 @@
         },
         {
           "name": "add_later",
-          "docs": "Adds after a wait. An async function of a shared value holds a share\nof it while it runs, whatever becomes of the object that called it.",
+          "docs": "Adds after a delay. An async method of a shared value holds a\nreference to it while it runs, whatever happens to the object it was\ncalled on.",
           "kind": "method",
           "params": [{ "name": "amount", "type": "i32" }, { "name": "milliseconds", "type": "i32" }],
           "returns": "future<i32>",
@@ -717,7 +717,7 @@
         },
         {
           "name": "pour",
-          "docs": "Adds what another pot holds, and what a third does if there is one.",
+          "docs": "Adds another pot's total, and a third pot's total if one is given.",
           "kind": "method",
           "params": [{ "name": "from", "type": "Pot" }, { "name": "also", "type": "Pot?" }],
           "returns": "future<Pot>",
@@ -727,7 +727,7 @@
         },
         {
           "name": "offer",
-          "docs": "Gives `f` a share of `pot` and a new pot of half of it, and adds\nwhat `f` says to the total.",
+          "docs": "Passes `f` a reference to `pot` and a new pot holding half its total,\nand adds `f`'s return value to the total.",
           "kind": "static",
           "params": [{ "name": "pot", "type": "Pot" }, { "name": "f", "type": "fn(Pot, Pot) -> i32" }],
           "returns": "i32",
@@ -736,7 +736,7 @@
         },
         {
           "name": "split",
-          "docs": "A pot of its own starting at this one's total, made already shared.",
+          "docs": "A separate pot starting at this one's total, returned as a shared\nreference.",
           "kind": "method",
           "params": [],
           "returns": "Pot",
@@ -745,7 +745,7 @@
         },
         {
           "name": "live",
-          "docs": "How many pots exist, however many hold each.",
+          "docs": "The number of live pots, regardless of how many references each has.",
           "kind": "static",
           "params": [],
           "returns": "i32",
@@ -756,7 +756,7 @@
     },
     {
       "name": "Player",
-      "docs": "Something that pays into a pot it keeps a share of.",
+      "docs": "A player that pays into a pot and holds a shared reference to it.",
       "methods": [
         {
           "name": "new",
@@ -777,7 +777,7 @@
         },
         {
           "name": "pot",
-          "docs": "The pot this pays into: the same one each time.",
+          "docs": "The pot this player pays into. Each call returns a reference to the\nsame pot.",
           "kind": "method",
           "params": [],
           "returns": "Pot",
@@ -786,7 +786,7 @@
         },
         {
           "name": "pays_into",
-          "docs": "Whether this pays into `pot`.",
+          "docs": "Whether this player pays into `pot`.",
           "kind": "method",
           "params": [{ "name": "pot", "type": "Pot" }],
           "returns": "bool",
@@ -795,7 +795,7 @@
         },
         {
           "name": "move_to",
-          "docs": "Moves to another pot, or stays for none. Returns the one left behind.",
+          "docs": "Switches to another pot, or keeps the current one if given `None`.\nReturns the previous pot.",
           "kind": "mutating",
           "params": [{ "name": "pot", "type": "Pot?" }],
           "returns": "Pot?",
@@ -804,7 +804,7 @@
         },
         {
           "name": "fuller",
-          "docs": "The fuller of this player's pot and another, if there is another.",
+          "docs": "A new pot holding the larger total of this player's pot and `other`,\nor `None` if `other` is `None`.",
           "kind": "method",
           "params": [{ "name": "other", "type": "Pot?" }],
           "returns": "Pot?",
@@ -815,7 +815,7 @@
     },
     {
       "name": "Blob",
-      "docs": "Bytes the collector cannot see, which it is told of: to the host, one of\nthese is a few words whatever its size here.",
+      "docs": "A byte buffer the garbage collector cannot see, whose size is reported\nto it. To the host, a blob is a few words regardless of how much native\nmemory it holds.",
       "weighed": true,
       "methods": [
         {
@@ -844,7 +844,7 @@
         },
         {
           "name": "copy",
-          "docs": "Another blob with the same bytes, as heavy as this one.",
+          "docs": "A copy of this blob with the same bytes and the same reported size.",
           "kind": "method",
           "params": [],
           "returns": "Blob",
@@ -853,7 +853,7 @@
         },
         {
           "name": "live",
-          "docs": "How many blobs exist.",
+          "docs": "The number of live blobs.",
           "kind": "static",
           "params": [],
           "returns": "i32",
@@ -862,7 +862,7 @@
         },
         {
           "name": "crowded",
-          "docs": "Asks the host to collect at its next chance.",
+          "docs": "Asks the host to run a garbage collection at its next opportunity.",
           "kind": "static",
           "params": [],
           "returns": "void",
@@ -873,11 +873,11 @@
     },
     {
       "name": "Events",
-      "docs": "Functions over events, with no value behind them.",
+      "docs": "Static functions over events, with no instance.",
       "methods": [
         {
           "name": "depth",
-          "docs": "How deep the events in `event` nest.",
+          "docs": "The nesting depth of the events in `event`.",
           "kind": "static",
           "params": [{ "name": "event", "type": "Event" }],
           "returns": "i32",
@@ -886,7 +886,7 @@
         },
         {
           "name": "show",
-          "docs": "The event as the library read it.",
+          "docs": "A string showing the event as the library received it.",
           "kind": "static",
           "params": [{ "name": "event", "type": "Event" }],
           "returns": "str",
@@ -895,7 +895,7 @@
         },
         {
           "name": "history",
-          "docs": "One of each case.",
+          "docs": "One event of each variant.",
           "kind": "static",
           "params": [],
           "returns": "list<Event>",
@@ -904,7 +904,7 @@
         },
         {
           "name": "wrapped",
-          "docs": "The event, inside `times` others.",
+          "docs": "The event wrapped `times` times.",
           "kind": "static",
           "params": [{ "name": "event", "type": "Event" }, { "name": "times", "type": "i32" }],
           "returns": "Event",
@@ -913,7 +913,7 @@
         },
         {
           "name": "inverted",
-          "docs": "The names by their counts: a map in, and a sorted one out.",
+          "docs": "The names keyed by their counts. Takes a hash map and returns a\nsorted map.",
           "kind": "static",
           "params": [{ "name": "counts", "type": "map<str, i32>" }],
           "returns": "map<i32, str>",
@@ -922,7 +922,7 @@
         },
         {
           "name": "checked",
-          "docs": "The count, or which of the reasons it was refused for.",
+          "docs": "The count, or a typed error giving the reason it was rejected.",
           "kind": "static",
           "params": [{ "name": "count", "type": "u32" }],
           "returns": "u32",
@@ -932,7 +932,7 @@
         },
         {
           "name": "mode_named",
-          "docs": "The mode `name` names, or the name back in the error.",
+          "docs": "The mode called `name`, or an error carrying the name.",
           "kind": "static",
           "params": [{ "name": "name", "type": "str" }],
           "returns": "Mode",
@@ -942,7 +942,7 @@
         },
         {
           "name": "refuse",
-          "docs": "Nothing, or a record of why not.",
+          "docs": "Returns no value, or a struct error describing the refusal.",
           "kind": "static",
           "params": [{ "name": "code", "type": "i32" }],
           "returns": "void",
@@ -952,7 +952,7 @@
         },
         {
           "name": "trouble",
-          "docs": "The level, or the trouble it names.",
+          "docs": "The level, or the `Trouble` that level corresponds to.",
           "kind": "static",
           "params": [{ "name": "level", "type": "i32" }],
           "returns": "i32",
@@ -962,7 +962,7 @@
         },
         {
           "name": "checked_later",
-          "docs": "A record later, or the error of the work that would have made it.",
+          "docs": "A future that resolves to a struct, or fails with the typed error of\nthe task that would have produced it.",
           "kind": "static",
           "params": [{ "name": "count", "type": "u32" }],
           "returns": "future<Point>",
@@ -973,7 +973,7 @@
         },
         {
           "name": "mode_later",
-          "docs": "An enum a future carries.",
+          "docs": "A future that resolves to an enum.",
           "kind": "static",
           "params": [{ "name": "mode", "type": "Mode" }],
           "returns": "future<Mode>",
@@ -983,7 +983,7 @@
         },
         {
           "name": "small_later",
-          "docs": "A narrow number a future carries.",
+          "docs": "A future that resolves to a narrow integer.",
           "kind": "static",
           "params": [{ "name": "value", "type": "i32" }],
           "returns": "future<u8>",
@@ -993,7 +993,7 @@
         },
         {
           "name": "path_later",
-          "docs": "A list of records a future carries.",
+          "docs": "A future that resolves to a list of structs.",
           "kind": "static",
           "params": [{ "name": "count", "type": "i32" }],
           "returns": "future<list<Point>>",
@@ -1003,7 +1003,7 @@
         },
         {
           "name": "maybe_later",
-          "docs": "A number that may be missing, later.",
+          "docs": "A future that resolves to an optional number.",
           "kind": "static",
           "params": [{ "name": "value", "type": "i32" }],
           "returns": "future<option<i32>>",
@@ -1013,7 +1013,7 @@
         },
         {
           "name": "feed",
-          "docs": "The first `count` of `history`, one after another.",
+          "docs": "A stream of the first `count` events of `history`.",
           "kind": "static",
           "params": [{ "name": "count", "type": "i32" }],
           "returns": "stream<Event>",
@@ -1022,7 +1022,7 @@
         },
         {
           "name": "mode_now",
-          "docs": "A mode that goes from quiet to off.",
+          "docs": "A signal of a mode that changes from quiet to off.",
           "kind": "static",
           "params": [],
           "returns": "signal<Mode>",
@@ -1031,7 +1031,7 @@
         },
         {
           "name": "place_now",
-          "docs": "A place that moves right until it is at `limit`.",
+          "docs": "A signal of a point whose `x` increases until it reaches `limit`.",
           "kind": "static",
           "params": [{ "name": "limit", "type": "i32" }],
           "returns": "signal<Point>",
@@ -1040,7 +1040,7 @@
         },
         {
           "name": "each_point",
-          "docs": "What `f` makes of each point: a record lent to the function, and an\nenum given back.",
+          "docs": "The result of `f` for each point. The callback takes a borrowed\nstruct and returns an enum.",
           "kind": "static",
           "params": [{ "name": "points", "type": "list<Point>" }, { "name": "f", "type": "fn(Point) -> Mode" }],
           "returns": "list<Mode>",
@@ -1049,7 +1049,7 @@
         },
         {
           "name": "reshaped",
-          "docs": "The event `f` makes of `event`: one handed over, and one given back.",
+          "docs": "The event `f` returns for `event`. The callback takes an owned event\nand returns one.",
           "kind": "static",
           "params": [{ "name": "event", "type": "Event" }, { "name": "f", "type": "fn(Event) -> Event" }],
           "returns": "Event",
@@ -1058,7 +1058,7 @@
         },
         {
           "name": "picked",
-          "docs": "The point `f` picks, if it picks one: a list lent as a slice, beside\nan enum.",
+          "docs": "The point `f` picks, if any. The callback takes a list borrowed as a\nslice, and an enum.",
           "kind": "static",
           "params": [{ "name": "points", "type": "list<Point>" }, { "name": "f", "type": "fn(list<Point>, Mode) -> option<Point>" }],
           "returns": "option<Point>",
@@ -1067,7 +1067,7 @@
         },
         {
           "name": "stamped",
-          "docs": "The bytes `f` gives for 1, then for 2.",
+          "docs": "The bytes `f` returns for 1, followed by the bytes it returns for 2.",
           "kind": "static",
           "params": [{ "name": "f", "type": "fn(i32) -> bytes" }],
           "returns": "bytes",
@@ -1076,7 +1076,7 @@
         },
         {
           "name": "graded",
-          "docs": "What `f` makes of quiet: an enum each way and nothing else.",
+          "docs": "The result of `f` for quiet. The callback takes an enum and returns\none, with no other values.",
           "kind": "static",
           "params": [{ "name": "f", "type": "fn(Mode) -> Mode" }],
           "returns": "Mode",
@@ -1087,7 +1087,7 @@
     },
     {
       "name": "Numbers",
-      "docs": "Numbers narrower than those that cross, the unsigned ones, and 64 bits.",
+      "docs": "Integer types narrower than the wire types, unsigned types, and 64-bit\ntypes.",
       "methods": [
         {
           "name": "byte",
@@ -1123,7 +1123,7 @@
         },
         {
           "name": "inverted",
-          "docs": "Every bit of `bits` turned over.",
+          "docs": "`bits` with every bit inverted.",
           "kind": "static",
           "params": [{ "name": "bits", "type": "u32" }],
           "returns": "u32",
@@ -1132,7 +1132,7 @@
         },
         {
           "name": "doubled",
-          "docs": "Twice `count`, which may be more than fits going back.",
+          "docs": "Twice `count`, which may be too large to convert back.",
           "kind": "static",
           "params": [{ "name": "count", "type": "usize" }],
           "returns": "usize",
@@ -1157,7 +1157,7 @@
         },
         {
           "name": "squared",
-          "docs": "`value` times itself, which 32 bits may not hold.",
+          "docs": "The square of `value`, which may not fit in 32 bits.",
           "kind": "static",
           "params": [{ "name": "value", "type": "i32" }],
           "returns": "i64",
@@ -1166,7 +1166,7 @@
         },
         {
           "name": "inverted_wide",
-          "docs": "Every bit of `bits` turned over, all 64.",
+          "docs": "`bits` with all 64 bits inverted.",
           "kind": "static",
           "params": [{ "name": "bits", "type": "u64" }],
           "returns": "u64",
@@ -1175,7 +1175,7 @@
         },
         {
           "name": "third",
-          "docs": "A third of `value`, to the precision an `f32` has.",
+          "docs": "A third of `value`, at `f32` precision.",
           "kind": "static",
           "params": [{ "name": "value", "type": "f32" }],
           "returns": "f32",
@@ -1184,7 +1184,7 @@
         },
         {
           "name": "sized",
-          "docs": "A length, checked by the library after the binding let it through.",
+          "docs": "A length the library validates after the binding has accepted it.",
           "kind": "static",
           "params": [{ "name": "count", "type": "usize" }],
           "returns": "usize",
@@ -1195,11 +1195,11 @@
     },
     {
       "name": "Shapes",
-      "docs": "Functions over data, with no value behind them.",
+      "docs": "Static functions over data types, with no instance.",
       "methods": [
         {
           "name": "describe",
-          "docs": "The record as the library read it, taken by reference.",
+          "docs": "A string showing the struct as the library received it. Takes the\nstruct by reference.",
           "kind": "static",
           "params": [{ "name": "settings", "type": "Settings" }],
           "returns": "str",
@@ -1208,7 +1208,7 @@
         },
         {
           "name": "bumped",
-          "docs": "A record taken by value and given back changed.",
+          "docs": "Takes a struct by value and returns it modified.",
           "kind": "static",
           "params": [{ "name": "settings", "type": "Settings" }],
           "returns": "Settings",
@@ -1235,7 +1235,7 @@
         },
         {
           "name": "mode_of",
-          "docs": "The mode a number names, if it names one.",
+          "docs": "The mode with discriminant `number`, if there is one.",
           "kind": "static",
           "params": [{ "name": "number", "type": "i32" }],
           "returns": "option<Mode>",
@@ -1244,7 +1244,7 @@
         },
         {
           "name": "midpoint",
-          "docs": "Halfway between two points, one taken each way.",
+          "docs": "The midpoint of two points, one taken by value and one by reference.",
           "kind": "static",
           "params": [{ "name": "a", "type": "Point" }, { "name": "b", "type": "Point" }],
           "returns": "Point",
@@ -1253,7 +1253,7 @@
         },
         {
           "name": "right_of",
-          "docs": "The first point right of `x`, taken from a slice.",
+          "docs": "The first point to the right of `x`, from a slice parameter.",
           "kind": "static",
           "params": [{ "name": "points", "type": "list<Point>" }, { "name": "x", "type": "f64" }],
           "returns": "option<Point>",
@@ -1262,7 +1262,7 @@
         },
         {
           "name": "total",
-          "docs": "A list of numbers, added up.",
+          "docs": "The sum of a list of numbers.",
           "kind": "static",
           "params": [{ "name": "values", "type": "list<i32>" }],
           "returns": "i32",
@@ -1271,7 +1271,7 @@
         },
         {
           "name": "doubled",
-          "docs": "A number that may be missing, doubled if it is there.",
+          "docs": "Doubles an optional number, if it is present.",
           "kind": "static",
           "params": [{ "name": "value", "type": "option<i32>" }],
           "returns": "option<i32>",
@@ -1289,7 +1289,7 @@
         },
         {
           "name": "preset",
-          "docs": "A record, or a failure.",
+          "docs": "Returns a struct, or an error.",
           "kind": "static",
           "params": [{ "name": "mode", "type": "Mode" }],
           "returns": "Settings",
@@ -1298,7 +1298,7 @@
         },
         {
           "name": "counter",
-          "docs": "A counter starting at what a record says: data in, an object out.",
+          "docs": "A counter starting at the struct's `count`. Takes data and returns an\nobject.",
           "kind": "static",
           "params": [{ "name": "settings", "type": "Settings" }],
           "returns": "Counter",
@@ -1313,7 +1313,7 @@
       "methods": [
         {
           "name": "clamp",
-          "docs": "`value`, held between `low` and `high`. Fails if they are the wrong way\nround.",
+          "docs": "Clamps `value` to the range `low` to `high`. Fails if `low` is greater\nthan `high`.",
           "kind": "static",
           "params": [{ "name": "value", "type": "i32" }, { "name": "low", "type": "i32" }, { "name": "high", "type": "i32" }],
           "returns": "i32",
@@ -1322,7 +1322,7 @@
         },
         {
           "name": "total",
-          "docs": "What two counters hold between them.",
+          "docs": "Returns the sum of two counters' values.",
           "kind": "static",
           "params": [{ "name": "first", "type": "Counter" }, { "name": "second", "type": "Counter" }],
           "returns": "i32",
@@ -1331,7 +1331,7 @@
         },
         {
           "name": "starting_at",
-          "docs": "A counter, made by a function that is no counter's.",
+          "docs": "Creates a counter from a free function instead of a `Counter` method.",
           "kind": "static",
           "params": [{ "name": "value", "type": "i32" }],
           "returns": "Counter",
@@ -1340,7 +1340,7 @@
         },
         {
           "name": "halve",
-          "docs": "Half of `value`: a function of a module, on a class of the library's.",
+          "docs": "Half of `value`: a free function in a submodule, bound to a class the\nlibrary names.",
           "kind": "static",
           "params": [{ "name": "value", "type": "f64" }],
           "returns": "f64",

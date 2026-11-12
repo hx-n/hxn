@@ -1,7 +1,8 @@
-//! counter-core as HashLink primitives. Each is one `prim` call and nothing
-//! else, so a throw leaves no Rust value behind.
+//! counter-core as HashLink primitives. Each primitive is a single `prim`
+//! call, so a throw leaves no Rust value undropped.
 
-// Every export's contract is the ABI's: arguments are what the host's glue passes.
+// Every export has the ABI's safety contract: its arguments are whatever the
+// host's glue passes.
 #![allow(clippy::missing_safety_doc)]
 
 use std::ffi::c_void;
@@ -16,7 +17,8 @@ use hxn_hl::{
     utf16, vclosure,
 };
 
-// A side module shares the program's heap, so it allocates from the program.
+// A wasm side module shares the main program's heap, so it uses the
+// program's allocator.
 #[cfg(target_family = "wasm")]
 #[global_allocator]
 static ALLOCATOR: hl_abi::ProgramAllocator = hl_abi::ProgramAllocator;
@@ -39,8 +41,8 @@ define_prim!(hlp_add, counter_add, "PXhxn_counter_i_i");
 
 type IntToInt = unsafe extern "C" fn(*mut c_void, i32, *mut i32) -> Status;
 
-// What a callback of `Int->Null<Int>` is called through. The binding's
-// wrapper returns null when the user's function threw.
+// The trampoline for an `Int->Null<Int>` callback. The binding's wrapper
+// returns null when the user's function threw.
 unsafe extern "C" fn int_to_int(env: *mut c_void, value: i32, out: *mut i32) -> Status {
     let mut args = [box_i32(value)];
     match unsafe { unbox_i32(call(env.cast(), &mut args)) } {
@@ -56,7 +58,8 @@ unsafe extern "C" fn int_to_int(env: *mut c_void, value: i32, out: *mut i32) -> 
 pub unsafe extern "C" fn counter_apply(this: *mut Managed, times: i32, f: *mut vclosure) -> i32 {
     unsafe {
         prim(|| {
-            // Lent: the VM keeps `f` alive for the call, so nothing is dropped.
+            // Borrowed: the VM keeps `f` alive for the duration of the call,
+            // so the callback has no drop function.
             let f = Callback::from_raw(int_to_int as IntToInt, f.cast(), None);
             counter(this)?
                 .borrow_mut()?
@@ -81,7 +84,8 @@ define_prim!(hlp_label, counter_label, "PXhxn_counter_OBi__B");
 pub unsafe extern "C" fn counter_sum(this: *mut Managed, data: *mut vbyte, length: i32) -> i32 {
     unsafe {
         prim(|| {
-            // An argument needs no root for the call; this one is here to run `Root`.
+            // An argument needs no GC root during the call. This one exists
+            // to exercise `Root`.
             let data = Root::new(data);
             Ok(counter(this)?
                 .borrow()?
@@ -401,7 +405,7 @@ pub unsafe extern "C" fn counter_gauge_set(this: *mut Managed, value: i32) -> bo
 }
 define_prim!(hlp_gauge_set, counter_gauge_set, "PXhxn_gauge_i_b");
 
-// The library's one queue of what it has for the host.
+// The library's single queue of items ready for the host.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn counter_outbox_wait(milliseconds: i32) -> bool {
     unsafe { blocking(|| outbox::wait_millis(milliseconds)) }

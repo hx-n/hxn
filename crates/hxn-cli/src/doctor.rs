@@ -1,21 +1,23 @@
-//! What each target needs installed, and whether it is there.
+//! Checks which tools each target requires and whether they are installed.
 
 use std::path::Path;
 use std::process::Command;
 
 use crate::make::{on_path, printed};
 
-/// What was found on this machine. A tool is the first line it prints of
-/// itself, or `None` when it is not there.
+/// The tools found on this machine. A tool is recorded as the first line of
+/// its version output, or `None` if it is not installed.
 #[derive(Default)]
 pub struct Found {
     pub cargo: Option<String>,
-    /// Whether that cargo is a nightly one, which a wasm build takes.
+    /// Whether that cargo is from a nightly toolchain, which a wasm build
+    /// requires.
     pub nightly: bool,
-    /// Whether Rust's own source is installed, which a wasm build rebuilds.
+    /// Whether the source of Rust's standard library is installed. A wasm
+    /// build rebuilds it.
     pub source: bool,
     pub haxe: Option<String>,
-    /// The HashLink VM, and the command it was looked for by.
+    /// The HashLink VM, and the command name used to look for it.
     pub vm: Option<String>,
     pub vm_command: String,
     pub hxcpp: Option<String>,
@@ -23,7 +25,8 @@ pub struct Found {
     pub emcc: bool,
     pub node: bool,
     pub sccache: bool,
-    /// A linker faster than the system's, where there is one to use.
+    /// A linker faster than the system's, if the platform has one and it is
+    /// installed.
     pub linker: Option<&'static str>,
 }
 
@@ -31,8 +34,8 @@ fn first_line(command: &mut Command) -> Option<String> {
     printed(command).map(|text| text.lines().next().unwrap_or_default().trim().to_owned())
 }
 
-/// Looks for everything. `vm` is the HashLink VM's command, as `--vm` or
-/// `HXN_VM` names it.
+/// Detects every tool. `vm` is the HashLink VM command given with `--vm` or
+/// `HXN_VM`.
 pub fn find(vm: &str) -> Found {
     let release = first_line(Command::new("rustc").arg("--version")).unwrap_or_default();
     let source =
@@ -75,7 +78,7 @@ pub fn find(vm: &str) -> Found {
 }
 
 impl Found {
-    // What a wasm build is missing of Rust's.
+    // The Rust components a wasm build requires that are missing.
     fn wasm_missing(&self) -> Vec<String> {
         let mut missing = Vec::new();
         if !self.nightly {
@@ -85,14 +88,14 @@ impl Found {
         }
         if !self.source {
             missing.push(String::from(
-                "Rust's source (`rustup component add rust-src`)",
+                "the source of Rust's standard library (`rustup component add rust-src`)",
             ));
         }
         missing
     }
 
-    /// Each target `hxn` builds for, with what it still needs. Nothing
-    /// needed means it is ready.
+    /// Each target `hxn` builds for, with the tools it is missing. An empty
+    /// list means the target is ready.
     pub fn targets(&self) -> Vec<(&'static str, Vec<String>)> {
         let mut base = Vec::new();
         if self.cargo.is_none() {
@@ -110,7 +113,7 @@ impl Found {
             Vec::new()
         } else {
             vec![format!(
-                "`{}`, a HashLink VM, on PATH (or name one with --vm or HXN_VM)",
+                "`{}`, a HashLink VM, on PATH (or set one with --vm or HXN_VM)",
                 self.vm_command
             )]
         };
@@ -131,7 +134,7 @@ impl Found {
             cpp_wasm.push(String::from("`emcc`, from the Emscripten SDK, on PATH"));
         }
         if !self.node {
-            cpp_wasm.push(String::from("`node`, which runs the result"));
+            cpp_wasm.push(String::from("`node`, which runs the built program"));
         }
         vec![
             ("hl", with(vm)),
@@ -142,14 +145,14 @@ impl Found {
         ]
     }
 
-    /// Whether `target` has all it needs.
+    /// Whether everything `target` requires is installed.
     pub fn ready(&self, target: &str) -> bool {
         self.targets()
             .iter()
             .any(|(name, missing)| *name == target && missing.is_empty())
     }
 
-    /// What `hxn doctor` prints.
+    /// The text `hxn doctor` prints.
     pub fn report(&self) -> String {
         let mut out = String::from("Found:\n");
         let found = [
@@ -184,17 +187,17 @@ impl Found {
         let mut faster = Vec::new();
         if !self.sccache {
             faster.push(
-                "sccache keeps compiled dependencies across checkouts and in CI: `cargo install sccache`, then RUSTC_WRAPPER=sccache. It turns off incremental builds, so leave it off for everyday work.",
+                "sccache caches compiled dependencies across checkouts and in CI: `cargo install sccache`, then set RUSTC_WRAPPER=sccache. It disables incremental compilation, so leave it off for everyday work.",
             );
         }
         if self.linker.is_none() && cfg!(target_os = "linux") {
-            faster.push("mold links faster than the system's linker, and linking is what an incremental build spends its time on.");
+            faster.push("mold links faster than the system linker, and linking takes most of the time in an incremental build.");
         }
         if self.linker.is_none() && cfg!(windows) {
-            faster.push("lld-link links faster than link.exe, and linking is what an incremental build spends its time on.");
+            faster.push("lld-link links faster than link.exe, and linking takes most of the time in an incremental build.");
         }
         if !faster.is_empty() {
-            out.push_str("\nFaster builds, none of them needed:\n");
+            out.push_str("\nOptional, for faster builds:\n");
             for note in faster {
                 out.push_str(&format!("  - {note}\n"));
             }

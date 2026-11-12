@@ -1,9 +1,9 @@
-//! `hxn`: makes, builds and runs a library written for hxn.
+//! `hxn`: creates, builds and runs a library written for hxn.
 //!
-//! A library is one crate of plain Rust. This program reads its marked
-//! items, writes the adapter crate and the Haxe classes for a runtime beside
-//! cargo's other output, builds the adapter, and can compile and run a Haxe
-//! program against the result.
+//! A library is a single crate of plain Rust. This program parses its marked
+//! items, generates the adapter crate and the Haxe classes for a runtime
+//! under cargo's target directory, builds the adapter, and can compile and
+//! run a Haxe program against the result.
 
 mod doctor;
 mod make;
@@ -22,39 +22,42 @@ use project::Project;
 const USAGE: &str = "usage: hxn <command>
 
   hxn new <name> [--hxn <checkout>]
-      Makes a library in a new directory: a crate, and a Haxe program that
-      uses it. It depends on hxn's repository at this version's tag, or
-      with --hxn on that local copy of the repository.
+      Creates a library in a new directory: a Rust crate and a Haxe program
+      that uses it. The crate depends on hxn's git repository at the tag
+      for this version, or with --hxn on a local checkout of it.
 
   hxn build <hl|cpp|cppia> [--wasm] [--target <triple>] [--release]
-      Writes the library's binding for HashLink or hxcpp and builds it.
-      Prints what to pass haxe to compile against it.
+      Generates the library's binding for HashLink or hxcpp and builds it.
+      Prints the haxe arguments for compiling a program against it.
 
   hxn run <hl|cpp|cppia> [--wasm] [--release] [--vm <command>] [-- <arguments>]
-      Builds, then compiles the Haxe program in haxe/ and runs it. --vm, or
-      HXN_VM, names the HashLink-compatible program to run it with, and
-      any options for it: --vm \"ash --mode jit\".
+      Builds the binding, then compiles the Haxe program in haxe/ and runs
+      it. --vm, or the HXN_VM environment variable, sets the
+      HashLink-compatible VM to run it with, including any options:
+      --vm \"ash --mode jit\".
 
-`cppia` is the hxcpp binding used from a script: it also builds a host, an
-hxcpp program that holds the library's classes, and the Haxe program is
-compiled as a script and run by that host.
+`cppia` uses the hxcpp binding from a CPPIA script. It also builds a host,
+an hxcpp executable that contains the library's classes. The Haxe program
+is compiled as a script and run by that host.
 
   hxn check [hl] [cpp] [cppia] [--wasm] [--release] [--vm <command>]
-      Runs the Haxe program on each runtime named, or on HashLink and hxcpp
-      when both are installed and none is, and fails unless each run
-      succeeds and they all print the same. Fails first if the committed
-      manifest is not what the source gives.
+      Runs the Haxe program on each runtime listed. With none listed, it
+      runs on whichever of HashLink and hxcpp are installed. Fails unless
+      every run succeeds and all runs print the same output. Before
+      running, it fails if the committed manifest does not match the
+      source.
 
   hxn doctor [--vm <command>]
-      Reports what is installed, which targets are ready, and what each of
-      the others still needs.
+      Reports which tools are installed, which targets are ready, and what
+      each other target still needs.
 
   hxn package [hl] [cpp] [--wasm] [--target <triple>] [--release] [--out <directory>]
-      Builds the library for both runtimes, or the ones named, and gathers
-      what a Haxe program needs of it into one directory: a haxelib that
-      `-lib` names, or a class path beside --macro 'hxn.Bind.lib(\"<name>\")'.
-      Packaging again on another machine, or with --wasm or --target, adds
-      to the same directory.
+      Builds the library for both runtimes, or only the ones listed, and
+      copies everything a Haxe program needs to use it into one directory.
+      The directory works as a haxelib (`-lib`), or as a class path
+      together with --macro 'hxn.Bind.lib(\"<name>\")'. Packaging again on
+      another machine, or with --wasm or --target, adds to the same
+      directory.
 
 --target cross-compiles the `cpp` binding for a Rust target triple, such as
 `aarch64-apple-ios` or `aarch64-linux-android`. It needs that target
@@ -63,20 +66,21 @@ binding is a static library that is linked with the program. An .hdll is
 linked when it is built, so it has to be built on the platform it runs on.
 
 With --wasm the binding and the program are built for wasm. `hl --wasm` is
-built and run by Ash, which --vm or HXN_VM names if it is not `ash`.
-`cpp --wasm` is built by hxcpp through Emscripten and run by node, or by the
-program --vm names. Both rebuild Rust's standard library, which takes a
-nightly toolchain.
+built and run by Ash. Set --vm or HXN_VM if its command is not `ash`.
+`cpp --wasm` is built by hxcpp with Emscripten and run by node, or by the
+command given with --vm. Both rebuild Rust's standard library, which
+requires a nightly toolchain.
 
-build takes --timings, which has cargo report the crates the build spent
-its time on.
+build accepts --timings, which makes cargo report how long each crate took
+to build.
 
-build and run work on the crate in the current directory. Under
+build and run operate on the crate in the current directory. Under
 [package.metadata.hxn] in its Cargo.toml, `library`, `source`, `haxe` and
-`main` replace the crate's name, src/lib.rs, haxe and Main, and `haxe-flags`
-lists what else to pass haxe: [\"-lib\", \"format\"].";
+`main` override the defaults (the crate's name, src/lib.rs, haxe and Main),
+and `haxe-flags` lists extra arguments for haxe: [\"-lib\", \"format\"].";
 
-/// A command's arguments: what is positional, and what each flag was given.
+/// A command's parsed arguments: the positional ones and the value of each
+/// flag.
 struct Arguments {
     positional: Vec<String>,
     release: bool,
@@ -112,7 +116,8 @@ fn arguments(mut given: impl Iterator<Item = String>) -> Result<Arguments, Strin
             "--release" => out.release = true,
             "--timings" => out.timings = true,
             "--wasm" => out.wasm = true,
-            // Read once, and kept for as long as the command runs.
+            // Leaked on purpose: it is parsed once and used until the process
+            // exits.
             "--target" => out.cross = Some(Box::leak(value("--target")?.into_boxed_str())),
             "--vm" => out.vm = Some(value("--vm")?),
             "--hxn" => out.hxn = Some(PathBuf::from(value("--hxn")?)),
@@ -124,8 +129,8 @@ fn arguments(mut given: impl Iterator<Item = String>) -> Result<Arguments, Strin
     Ok(out)
 }
 
-// Whether the program is to be a CPPIA script, which is the hxcpp binding
-// with a host around it.
+// Whether the program is built as a CPPIA script, which uses the hxcpp
+// binding through a host program.
 fn script(arguments: &Arguments) -> bool {
     arguments.positional == ["cppia"]
 }
@@ -133,13 +138,19 @@ fn script(arguments: &Arguments) -> bool {
 fn target(arguments: &Arguments) -> Result<Target, String> {
     let runtime = match arguments.positional.as_slice() {
         [_] if script(arguments) && arguments.wasm => {
-            return Err(String::from("a script's host is not built for wasm"));
+            return Err(String::from(
+                "`cppia` does not support --wasm: the script host is not built for wasm",
+            ));
         }
         [_] if script(arguments) => Runtime::Cpp,
         [name] => Runtime::parse(name).ok_or(format!(
-            "unknown runtime `{name}`: it is `hl`, `cpp` or `cppia`"
+            "unknown runtime `{name}`: expected `hl`, `cpp` or `cppia`"
         ))?,
-        _ => return Err(String::from("name one runtime: `hl`, `cpp` or `cppia`")),
+        _ => {
+            return Err(String::from(
+                "expected exactly one runtime: `hl`, `cpp` or `cppia`",
+            ));
+        }
     };
     Ok(Target {
         runtime,
@@ -169,14 +180,17 @@ fn cross(arguments: &Arguments, runtime: Runtime) -> Result<Option<&'static str>
     Ok(Some(triple))
 }
 
-// A program and its options, from how a command line names them.
+// Splits a command string into the program and its options.
 fn words(command: &str) -> Result<(&str, Vec<&str>), String> {
     let mut words = command.split_whitespace();
-    let program = words.next().ok_or("--vm names no program")?;
+    let program = words
+        .next()
+        .ok_or("--vm is empty: it must name a program")?;
     Ok((program, words.collect()))
 }
 
-// The directory a program named on the command line is in.
+// The directory that contains `program`, searched for on PATH if it is a
+// bare name.
 fn directory_of(program: &str) -> Option<PathBuf> {
     let path = Path::new(program);
     if path.components().count() > 1 {
@@ -186,7 +200,8 @@ fn directory_of(program: &str) -> Option<PathBuf> {
         .find(|dir| dir.join(program).is_file() || dir.join(format!("{program}.exe")).is_file())
 }
 
-// What runs a HashLink program: the VM named with its options, or `default`.
+// The command that runs a HashLink program: the value of `--vm` or `HXN_VM`,
+// including its options, otherwise `default`.
 fn vm_command(arguments: &Arguments, default: &str) -> String {
     let named = arguments.vm.clone();
     named
@@ -194,8 +209,9 @@ fn vm_command(arguments: &Arguments, default: &str) -> String {
         .unwrap_or_else(|| default.to_owned())
 }
 
-// Where HashLink is, for a native build of its binding: on Windows a
-// library is linked against the VM's own, which is beside it.
+// The HashLink VM's directory, for a native build of the HashLink binding.
+// On Windows the binding is linked against the VM's library, which is in
+// that directory.
 fn hashlink(arguments: &Arguments, target: Target) -> Option<PathBuf> {
     if target.runtime != Runtime::Hl || target.wasm {
         return None;
@@ -204,7 +220,7 @@ fn hashlink(arguments: &Arguments, target: Target) -> Option<PathBuf> {
     directory_of(words(&vm).ok()?.0)
 }
 
-// How the command line says to build.
+// The build options given on the command line.
 fn options<'a>(arguments: &Arguments, hashlink: Option<&'a Path>) -> make::Options<'a> {
     make::Options {
         release: arguments.release,
@@ -222,7 +238,7 @@ fn exit(command: &mut Command) -> Result<u8, String> {
             format!("running {program}: {error}")
         }
     })?;
-    // A program ended by a signal has no code of its own.
+    // A process killed by a signal has no exit code, so 1 is returned.
     Ok(status
         .code()
         .map_or(1, |code| u8::try_from(code).unwrap_or(1)))
@@ -238,8 +254,8 @@ fn run(project: &Project, target: Target, arguments: Arguments) -> Result<u8, St
     exit(&mut program(project, target, script, &arguments)?)
 }
 
-// Builds the binding and the Haxe program for `target`, as a script if
-// `script`, and gives the command that runs it.
+// Builds the binding and the Haxe program for `target`, as a CPPIA script
+// if `script` is set, and returns the command that runs it.
 fn program(
     project: &Project,
     target: Target,
@@ -253,7 +269,7 @@ fn program(
     )?;
     if !project.haxe.is_dir() {
         return Err(format!(
-            "no Haxe program in {}: put one there, or name its directory as `haxe` under `[package.metadata.hxn]`",
+            "no Haxe program in {}: create one there, or set `haxe` under `[package.metadata.hxn]` to its directory",
             project.haxe.display()
         ));
     }
@@ -293,9 +309,10 @@ fn program(
             let vm = vm("ash");
             let (ash, options) = words(&vm)?;
             let module = built.dir.join("main.wasm");
-            // Ash finds the library's module beside its output. With fibers
-            // a Haxe thread that waits suspends and lets the others run.
-            // Its options are for the build.
+            // Ash looks for the library's module next to its output file.
+            // ASH_WASM_FIBERS makes a waiting Haxe thread suspend so that
+            // the others can run. The `--vm` options are passed to the
+            // build step only.
             make::run(
                 Command::new(ash)
                     .env("ASH_WASM_FIBERS", "1")
@@ -315,8 +332,9 @@ fn program(
             make::run(&mut haxe)?;
             let vm = vm("hl");
             let (vm, options) = words(&vm)?;
-            // The VM asks the system's loader for the library by name, and
-            // for its own beside itself.
+            // The VM loads the binding by name through the system's dynamic
+            // loader, and its own shared library from the VM's directory.
+            // Both directories go on the loader's search path.
             let mut places = vec![built.dir.clone()];
             places.extend(directory_of(vm));
             let mut command = Command::new(vm);
@@ -338,14 +356,16 @@ fn program(
             let out = built.dir.join("out");
             haxe.arg("-cpp").arg(&out);
             if target.wasm {
-                // hxcpp would take a compiler named here in place of emcc.
+                // hxcpp would use a compiler set in CC or CXX instead of emcc.
                 haxe.env_remove("CC").env_remove("CXX");
             }
             make::run(&mut haxe)?;
-            // hxcpp names the program after the main class, less its package.
+            // hxcpp names the executable after the main class, without its
+            // package.
             let name = project.main.rsplit('.').next().unwrap_or(&project.main);
             if target.wasm {
-                // HXN_VM names a HashLink VM, which this is not run by.
+                // HXN_VM is not read here: it names a HashLink VM, and this
+                // program runs under node.
                 let (node, options) = words(arguments.vm.as_deref().unwrap_or("node"))?;
                 let mut command = Command::new(node);
                 command
@@ -366,18 +386,19 @@ fn program(
     }
 }
 
-// The same program on each runtime: every run has to succeed, and print
-// what the others print.
+// Runs the same program on each runtime. Every run must succeed, and all
+// runs must print the same output.
 fn check(project: &Project, arguments: &Arguments) -> Result<u8, String> {
     let name = &project.library;
-    // Before any build, which would write the manifest over the one committed.
+    // Checked before any build, because a build overwrites the committed
+    // manifest.
     let committed = project.dir.join(format!("{name}.hxn.json"));
     if let Ok(committed) = std::fs::read_to_string(&committed) {
         let (library, _) =
             hxn_gen::parse_crate(name, &project.source).map_err(|error| error.to_string())?;
         if hxn_gen::manifest(&library) != committed {
             return Err(format!(
-                "{name}.hxn.json is not what the source gives: the library's API changed. `hxn build` rewrites it, and the change is one to review and commit"
+                "{name}.hxn.json is not what the source gives: the library's API changed. Run `hxn build` to regenerate it, then review and commit the change"
             ));
         }
     }
@@ -394,7 +415,7 @@ fn check(project: &Project, arguments: &Arguments) -> Result<u8, String> {
     };
     if named.is_empty() {
         return Err(String::from(
-            "neither HashLink nor hxcpp is ready to run a program: `hxn doctor` reports what each needs",
+            "neither HashLink nor hxcpp is ready to run a program: run `hxn doctor` to see what each needs",
         ));
     }
     if arguments.cross.is_some() {
@@ -406,14 +427,16 @@ fn check(project: &Project, arguments: &Arguments) -> Result<u8, String> {
     for runtime in &named {
         let script = runtime == "cppia";
         if script && arguments.wasm {
-            return Err(String::from("a script's host is not built for wasm"));
+            return Err(String::from(
+                "`cppia` does not support --wasm: the script host is not built for wasm",
+            ));
         }
         let target = Target {
             runtime: if script {
                 Runtime::Cpp
             } else {
                 Runtime::parse(runtime).ok_or(format!(
-                    "unknown runtime `{runtime}`: it is `hl`, `cpp` or `cppia`"
+                    "unknown runtime `{runtime}`: expected `hl`, `cpp` or `cppia`"
                 ))?
             },
             wasm: arguments.wasm,
@@ -429,7 +452,7 @@ fn check(project: &Project, arguments: &Arguments) -> Result<u8, String> {
             .stderr(std::process::Stdio::inherit())
             .output()
             .map_err(|error| format!("running the program on {label}: {error}"))?;
-        // Less the carriage returns a Windows program ends its lines with.
+        // Strips the carriage returns of Windows line endings.
         let text = String::from_utf8_lossy(&output.stdout).replace('\r', "");
         println!("== {label}\n{}", text.trim_end());
         if !output.status.success() {
@@ -446,7 +469,7 @@ fn check(project: &Project, arguments: &Arguments) -> Result<u8, String> {
                 .position(|(one, other)| one != other)
                 .unwrap_or_else(|| expected.lines().count().min(text.lines().count()));
             return Err(format!(
-                "the program printed something else on {label} than on {first}, from line {}",
+                "the program's output on {label} differs from its output on {first}, starting at line {}",
                 line + 1
             ));
         }
@@ -455,7 +478,7 @@ fn check(project: &Project, arguments: &Arguments) -> Result<u8, String> {
     match labels.as_slice() {
         [only] => println!("PASS: {name} ran on {only}"),
         [most @ .., last] => println!(
-            "PASS: {name} ran on {} and {last}, and printed the same on each",
+            "PASS: {name} ran on {} and {last}, and printed the same output on each",
             most.join(", ")
         ),
         [] => {}
@@ -473,11 +496,11 @@ fn command() -> Result<u8, String> {
         "new" => {
             let arguments = arguments(given)?;
             let [name] = arguments.positional.as_slice() else {
-                return Err(String::from("name the library: `hxn new <name>`"));
+                return Err(String::from("expected one library name: `hxn new <name>`"));
             };
             let dir = new::new(name, arguments.hxn.as_deref(), &here)?;
             println!(
-                "Made {}:\n  Cargo.toml\n  src/lib.rs     the library, in Rust\n  haxe/Main.hx   a Haxe program that uses it\n\nIn that directory, `hxn run hl` or `hxn run cpp` builds and runs it.",
+                "Created {}:\n  Cargo.toml\n  src/lib.rs     the library, in Rust\n  haxe/Main.hx   a Haxe program that uses it\n\nRun `hxn run hl` or `hxn run cpp` in that directory to build and run it.",
                 dir.display()
             );
             Ok(0)
@@ -494,7 +517,7 @@ fn command() -> Result<u8, String> {
             if script(&arguments) {
                 let host = script::host(&project, &built)?;
                 println!(
-                    "Built {} and a host for scripts that use it. To compile a script and run it:\n  haxe {} -cp <your classes> -main <Main> -cppia main.cppia\n  {} main.cppia",
+                    "Built {} and a CPPIA host for scripts that use it. To compile and run a script:\n  haxe {} -cp <your classes> -main <Main> -cppia main.cppia\n  {} main.cppia",
                     project.library,
                     host.hxml.display(),
                     host.program.display()
@@ -518,7 +541,7 @@ fn command() -> Result<u8, String> {
                     built.dir.display()
                 ),
                 (Runtime::Hl, true) => println!(
-                    "Ash builds the wasm program, and loads {}.wasm from beside it. With main.hl in {}:\n  ASH_WASM_FIBERS=1 ash --build main.wasm --target wasm32-wasip1 main.hl\n  ash run main.wasm",
+                    "Ash builds the wasm program and loads {}.wasm from the same directory. With main.hl in {}:\n  ASH_WASM_FIBERS=1 ash --build main.wasm --target wasm32-wasip1 main.hl\n  ash run main.wasm",
                     project.library,
                     built.dir.display()
                 ),
@@ -550,7 +573,7 @@ fn command() -> Result<u8, String> {
             };
             for name in if named.is_empty() { all } else { named } {
                 let runtime = Runtime::parse(name)
-                    .ok_or(format!("unknown runtime `{name}`: it is `hl` or `cpp`"))?;
+                    .ok_or(format!("unknown runtime `{name}`: expected `hl` or `cpp`"))?;
                 targets.push(Target {
                     runtime,
                     wasm: arguments.wasm,
@@ -573,7 +596,7 @@ fn command() -> Result<u8, String> {
             )?;
             let name = &project.library;
             println!(
-                "Packaged {name} in {}, with what was built for {}.\nAs a haxelib:\n  haxelib dev {name} {}\n  haxe -lib {name} ...\nOr as it is:\n  haxe -cp {} --macro 'hxn.Bind.lib(\"{name}\")' ...",
+                "Packaged {name} in {}, with the libraries built for {}.\nAs a haxelib:\n  haxelib dev {name} {}\n  haxe -lib {name} ...\nOr as a class path:\n  haxe -cp {} --macro 'hxn.Bind.lib(\"{name}\")' ...",
                 out.display(),
                 triples.join(" and "),
                 out.display(),

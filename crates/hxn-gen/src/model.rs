@@ -1,24 +1,24 @@
-//! What a library exposes, as every emitter reads it.
+//! The parsed model of a library's API, shared by all emitters.
 
 use std::fmt;
 
 /// A library's marked API.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Library {
-    /// The name its binaries and symbols carry: `counter` for
+    /// The name used for its binaries and symbol prefixes: `counter` for
     /// `counter.hdll` and `libcounter.a`.
     pub name: String,
     pub interfaces: Vec<Interface>,
-    /// The `#[hxn::data]` structs: values that cross whole, by copy.
+    /// The `#[hxn::data]` structs, passed by value (copied).
     pub records: Vec<Record>,
-    /// The `#[hxn::data]` enums whose variants hold nothing: names for
-    /// numbers.
+    /// The `#[hxn::data]` C-like enums.
     pub enums: Vec<Enumeration>,
-    /// The `#[hxn::data]` enums with a variant that holds values.
+    /// The `#[hxn::data]` tagged enums (at least one variant has fields).
     pub tagged: Vec<Tagged>,
 }
 
-/// A struct of public fields, each plain data: a Haxe class of the same.
+/// A struct whose public fields are all plain data. It becomes a Haxe class
+/// with the same fields.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Record {
     pub name: String,
@@ -33,7 +33,7 @@ pub struct Field {
     pub ty: Data,
 }
 
-/// An enum whose variants hold nothing: a Haxe `enum abstract` over `Int`.
+/// A C-like enum: a Haxe `enum abstract` over `Int`.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Enumeration {
     pub name: String,
@@ -45,12 +45,11 @@ pub struct Enumeration {
 pub struct Variant {
     pub name: String,
     pub docs: Vec<String>,
-    /// What it is as a number, on both sides.
+    /// Its integer value, the same on both sides.
     pub value: i32,
 }
 
-/// An enum with a variant that holds values: a Haxe `enum` of the same
-/// cases.
+/// A tagged enum: a Haxe `enum` with the same cases.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Tagged {
     pub name: String,
@@ -58,43 +57,45 @@ pub struct Tagged {
     pub cases: Vec<Case>,
 }
 
-/// One variant of a [`Tagged`]. On the wire it is its place among them,
-/// counted from 0.
+/// One variant of a [`Tagged`]. Its wire tag is its 0-based index among the
+/// variants.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Case {
     pub name: String,
     pub docs: Vec<String>,
-    /// What it holds, in order. Fields Rust leaves unnamed are `value`, or
+    /// Its fields, in order. Unnamed (tuple) fields are named `value`, or
     /// `value0`, `value1` when there is more than one.
     pub fields: Vec<Field>,
-    /// Written `Name { field: T }` in Rust, and not `Name(T)`.
+    /// Declared with named fields, `Name { field: T }`, rather than `Name(T)`.
     pub named: bool,
 }
 
-/// Plain data: what a record's field holds, and what crosses by value. An
-/// enum of names crosses as its number. Anything made of parts crosses as
-/// bytes that hold the parts in order, which `hxn_abi::wire` lays out.
+/// Plain data: the type of a record field, or of a value passed by value. A
+/// C-like enum is passed as its integer value. A composite value is
+/// serialized to bytes, its parts in order, in the format `hxn_abi::wire`
+/// defines.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Data {
     Bool,
     I32,
     I64,
     F64,
-    /// A number Rust has and Haxe does not, converted as one is anywhere.
+    /// A Rust numeric type with no Haxe equivalent, converted the same way as
+    /// everywhere else.
     Number(Number),
     Text,
     Bytes,
     Enum(String),
     Record(String),
-    /// An enum whose variants hold values.
+    /// A tagged enum.
     Tagged(String),
     Option(Box<Data>),
     List(Box<Data>),
-    /// `Box<T>`, which is its `T` everywhere but in Rust: how data holds
-    /// more of its own kind.
+    /// `Box<T>`, treated as `T` everywhere except in Rust: how a recursive
+    /// type is declared.
     Boxed(Box<Data>),
-    /// A `HashMap`, or with `sorted` a `BTreeMap`: a Haxe `Map`. A key is
-    /// text or a whole number of at most 32 bits.
+    /// A `HashMap`, or a `BTreeMap` when `sorted`: a Haxe `Map`. A key is
+    /// text or an integer of at most 32 bits.
     Map {
         key: Box<Data>,
         value: Box<Data>,
@@ -103,8 +104,8 @@ pub enum Data {
 }
 
 impl Data {
-    /// What it crosses as when it is a parameter or a result of its own:
-    /// `None` for what has a way across already.
+    /// Its wire type when it is passed directly as a parameter or return
+    /// value: `None` for a type the boundary already supports.
     pub fn wire(&self) -> Option<Type> {
         match self {
             Self::Enum(_) => Some(Type::I32),
@@ -135,8 +136,8 @@ impl Data {
         }
     }
 
-    /// What it is called in a symbol, where it is carried by a result over
-    /// time: `point`, `list_point`.
+    /// Its name within a symbol, used for the exports of a future, stream or
+    /// signal that carries it: `point`, `list_point`.
     pub fn symbol(&self) -> String {
         match self {
             Self::Bool => String::from("bool"),
@@ -154,7 +155,8 @@ impl Data {
         }
     }
 
-    /// What a value of its own crosses as, a number among them.
+    /// Like [`Data::wire`], but also gives the wire type of a converted
+    /// number.
     pub fn crosses(&self) -> Option<Type> {
         match self {
             Self::Number(number) => Some(number.wire()),
@@ -170,13 +172,14 @@ pub struct Interface {
     pub name: String,
     pub docs: Vec<String>,
     /// Marked `#[hxn::interface(shared)]`: a handle holds an `Arc` of the
-    /// value, so the library and any number of Haxe objects can hold one.
+    /// value, so the library and any number of Haxe objects can share it.
     pub shared: bool,
-    /// Marked `#[hxn::interface(weighed)]`: its values hold memory worth
-    /// collecting for, so making one checks what the library holds.
+    /// Marked `#[hxn::interface(weighed)]`: its values hold enough memory to
+    /// justify a collection, so creating one checks the library's memory
+    /// meter.
     pub weighed: bool,
-    /// Not a struct of the library's: a class that is only where its
-    /// `#[hxn::function]`s are found. Nothing is made of it or released.
+    /// Not a struct of the library: a class that only holds
+    /// `#[hxn::function]`s. It is never instantiated or released.
     pub namespace: bool,
     pub methods: Vec<Method>,
 }
@@ -190,27 +193,29 @@ pub struct Method {
     pub returns: Type,
     /// Returns a `Result`, whose error is thrown to Haxe.
     pub fallible: bool,
-    /// An `async fn`. The adapter starts it and hands back a future of what
-    /// it gives, which is what `returns` is; `fallible` is then whether it
-    /// gives a `Result`, whose error fails the future and not the call.
+    /// An `async fn`. The adapter starts it and returns a future of its
+    /// output; `returns` is that future. `fallible` is then whether the
+    /// output is a `Result`, whose error rejects the future rather than
+    /// failing the call.
     pub asynchronous: bool,
-    /// Marked `#[hxn(blocking)]`: the collector may run while it waits.
+    /// Marked `#[hxn(blocking)]`: the garbage collector may run while it
+    /// blocks.
     pub blocking: bool,
-    /// `new`, which makes the value a Haxe `new` wraps.
+    /// `new`, the constructor behind a Haxe `new`.
     pub constructor: bool,
-    /// Returns a shared interface as the `Arc` it is already in, and not
-    /// as a value for the adapter to put in one.
+    /// Returns a shared interface already wrapped in an `Arc`, rather than
+    /// a value for the adapter to wrap.
     pub returns_arc: bool,
-    /// The number the function returns, when `returns` is what it crosses as.
+    /// The numeric type the function returns, when `returns` is its wire type.
     pub returns_number: Option<Number>,
-    /// The data the function returns, when `returns` is what it crosses as.
+    /// The data type the function returns, when `returns` is its wire type.
     pub returns_data: Option<Data>,
-    /// The data the function fails with, when its `Result`'s error is the
-    /// library's own `#[hxn::data]`: Haxe is thrown an exception that holds
-    /// the value.
+    /// The error type, when the `Result`'s error is one of the library's
+    /// `#[hxn::data]` types: Haxe receives a typed exception holding the
+    /// value.
     pub error: Option<Data>,
-    /// A function outside an `impl`, marked `#[hxn::function]`: found at the
-    /// crate's root and not on the interface.
+    /// A free function marked `#[hxn::function]`: called by its path at the
+    /// crate's root, not as a method of the interface.
     pub free: bool,
 }
 
@@ -232,31 +237,32 @@ pub struct Param {
     pub ty: Type,
     /// For an interface, borrowed as `&mut` and not `&`.
     pub exclusive: bool,
-    /// For a shared interface, taken as `Arc<T>`: a share the library keeps.
+    /// For a shared interface, accepted as `Arc<T>`: a reference the library
+    /// keeps.
     pub kept: bool,
-    /// The number the function takes, when `ty` is what it crosses as.
+    /// The parameter's numeric type, when `ty` is its wire type.
     pub number: Option<Number>,
-    /// The data the function takes, when `ty` is what it crosses as.
+    /// The parameter's data type, when `ty` is its wire type.
     pub data: Option<Data>,
-    /// For data, taken by reference: `&Options`, or `&[T]` for a list.
+    /// For data, accepted by reference: `&Options`, or `&[T]` for a list.
     pub borrowed: bool,
 }
 
-/// A number Rust has and the boundary does not. It crosses as an `i32`, an
-/// `i64` or an `f64` and the adapter converts it, failing where it does not
-/// fit: a parameter, or a result, and not what a callback or a result over
-/// time carries.
+/// A Rust numeric type the boundary does not support. It is passed as an
+/// `i32`, `i64` or `f64` and the adapter converts it, failing when the value
+/// does not fit. Allowed as a parameter, a return value, and in a future,
+/// stream or signal; not as a callback's parameter or return value.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Number {
     I8,
     I16,
     U8,
     U16,
-    /// The same 32 bits as the `i32` it crosses as: a Haxe `UInt`.
+    /// Reinterprets the 32 bits of its `i32` wire type: a Haxe `UInt`.
     U32,
     Isize,
     Usize,
-    /// The same 64 bits as the `i64` it crosses as.
+    /// Reinterprets the 64 bits of its `i64` wire type.
     U64,
     F32,
 }
@@ -274,12 +280,12 @@ impl Number {
         Self::F32,
     ];
 
-    /// The one Rust calls `name`.
+    /// The numeric type whose Rust name is `name`.
     pub fn parse(name: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|number| number.name() == name)
     }
 
-    /// What Rust and the manifest call it.
+    /// Its name in Rust and in the manifest.
     pub fn name(self) -> &'static str {
         match self {
             Self::I8 => "i8",
@@ -294,7 +300,7 @@ impl Number {
         }
     }
 
-    /// What it crosses as.
+    /// Its wire type.
     pub fn wire(self) -> Type {
         match self {
             Self::F32 => Type::F64,
@@ -305,7 +311,7 @@ impl Number {
 }
 
 impl Param {
-    /// The same parameter, taking `data`.
+    /// The same parameter, with `data` as its data type.
     pub fn of(mut self, data: Data) -> Self {
         self.data = Some(data);
         self
@@ -322,7 +328,7 @@ impl Param {
 }
 
 impl Method {
-    /// Its result's name in the manifest.
+    /// Its return type's name in the manifest.
     pub fn returns_name(&self) -> String {
         if let Some(data) = &self.returns_data {
             return data.name();
@@ -332,53 +338,55 @@ impl Method {
     }
 }
 
-/// The types that cross. A parameter is borrowed for the call and a result
-/// is handed over, so `Str` is `&str` coming in and `String` going out,
-/// `Bytes` is `&[u8]` and `Vec<u8>`, and
-/// an interface is `&T` or `&mut T` coming in and `T` going out. A shared
-/// interface may also be `Arc<T>` either way.
+/// The types passed across the boundary. A parameter is borrowed for the
+/// duration of the call and a return value is transferred, so `Str` is `&str`
+/// as a parameter and `String` as a return value, `Bytes` is `&[u8]` and
+/// `Vec<u8>`, and an interface is `&T` or `&mut T` as a parameter and `T` as
+/// a return value. A shared interface may also be `Arc<T>` in either position.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Type {
     Void,
     Bool,
     I32,
-    /// A Haxe `haxe.Int64`: a parameter or a result, and not what a
-    /// callback or a result over time carries.
+    /// A Haxe `haxe.Int64`: allowed as a parameter, a return value, and in a
+    /// future, stream or signal; not as a callback's parameter or return value.
     I64,
     F64,
     Str,
     Bytes,
-    /// A value of an interface, or with `nullable` possibly none.
+    /// A handle to an interface value, which may be null when `nullable`.
     Handle {
         interface: String,
         nullable: bool,
     },
-    /// A cell both sides read and write: `&AtomicI32` coming in, lent for
-    /// the call, and `Arc<AtomicI32>` going out, kept by the library.
+    /// An atomic cell both sides read and write: `&AtomicI32` as a parameter,
+    /// borrowed for the call, and `Arc<AtomicI32>` as a return value, owned
+    /// by the library.
     AtomicInt,
     /// The same for a flag: `&AtomicFlag` and `Arc<AtomicFlag>`.
     AtomicBool,
-    /// One result, later: `Future<T>`, a result only.
+    /// `Future<T>`, a single asynchronous result. Return type only.
     Future(Box<Type>),
-    /// Many results in order: `Stream<T>`, a result only.
+    /// `Stream<T>`, a sequence of results. Return type only.
     Stream(Box<Type>),
-    /// A value that changes: `Signal<T>`, a result only.
+    /// `Signal<T>`, a value that changes over time. Return type only.
     Signal(Box<Type>),
-    /// A Haxe function lent for the call: `impl Fn(..) -> Result<T, E>`, a
-    /// parameter only.
+    /// A Haxe callback, borrowed for the duration of the call:
+    /// `impl Fn(..) -> Result<T, E>`. Parameter type only.
     Lent {
         params: Vec<Type>,
         returns: Box<Type>,
     },
-    /// Plain data, where a result over time carries it or a lent function
-    /// takes or gives it. A parameter or a result of data is what it
-    /// crosses as, with the data noted beside it.
+    /// Plain data carried by a future, stream or signal, or as a callback's
+    /// parameter or return value. A data parameter or return value of a
+    /// function is instead its wire type, with the data type recorded beside
+    /// it.
     Data(Data),
 }
 
 impl Library {
-    /// Whether any function returns a future, a stream or a signal, which
-    /// takes `hxn-future` in the adapter.
+    /// Whether any function returns a future, stream or signal, which makes
+    /// the adapter depend on `hxn-future`.
     pub fn returns_later(&self) -> bool {
         self.interfaces
             .iter()
@@ -391,9 +399,9 @@ impl Library {
             })
     }
 
-    /// The data the library's functions fail with, in the order met. Each
-    /// is thrown to Haxe as an exception of its own class, and is told from
-    /// the others on the way by its place here.
+    /// The error types the library's functions fail with, in order of first
+    /// use. Each is thrown to Haxe as its own exception class, and is
+    /// identified on the wire by its index in this list.
     pub fn errors(&self) -> Vec<&Data> {
         let mut out: Vec<&Data> = Vec::new();
         for method in self.interfaces.iter().flat_map(|i| &i.methods) {
@@ -413,8 +421,8 @@ impl Library {
             .any(|known| known.shared && known.name == interface)
     }
 
-    /// Whether any function hands the host a cell, which takes a call of
-    /// the library's own to reach.
+    /// Whether any function returns an atomic cell to the host, which needs
+    /// a library export to get the cell's address.
     pub fn returns_cells(&self) -> bool {
         self.interfaces
             .iter()
@@ -458,12 +466,12 @@ impl Type {
     }
 }
 
-/// Why a source could not be read, and where.
+/// A parse error, with its location.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Error {
     /// The file, when the library was read from files and not from text.
     pub file: Option<String>,
-    /// 1-based, or zero when the whole source is at fault.
+    /// 1-based, or zero when the error applies to the whole source.
     pub line: usize,
     pub message: String,
 }

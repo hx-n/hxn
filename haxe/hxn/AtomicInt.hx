@@ -1,13 +1,15 @@
 package hxn;
 
 /**
-	An integer that a native library and Haxe both read and write, from any
-	thread, without a call between them.
+	An integer shared by a native library and Haxe. Either side reads and
+	writes it from any thread without a native call.
 
-	The cell is four bytes that this runtime's own atomic operations and the
-	library's both work on. One made here with `new` can be lent to a native
-	call; one a library returns lives in the library and is read and written
-	from here directly. The operations are those of `haxe.atomic.AtomicInt`.
+	The cell is four bytes of memory that both this runtime's atomic
+	operations and the library's operate on. A cell created here with `new`
+	can be passed to a native call, which borrows it for the duration of the
+	call. A cell returned by a library is in the library's memory and is read
+	and written from Haxe directly. The operations are those of
+	`haxe.atomic.AtomicInt`.
 **/
 class AtomicInt {
 	#if hl
@@ -18,10 +20,10 @@ class AtomicInt {
 	#error "hxn.AtomicInt needs HashLink or hxcpp"
 	#end
 
-	// Whatever owns the memory, so it lives as long as this does.
+	// The owner of the cell's memory, referenced so the memory lives as long as this object.
 	var keep:Any;
 
-	/** What a binding passes to a native call that takes the cell. **/
+	/** The pointer a binding passes to a native call that has the cell as a parameter. **/
 	@:noCompletion public var pointer(get, never):#if hl hl.Ref<Int> #else cpp.Pointer<Int> #end;
 
 	public function new(value:Int = 0) {
@@ -37,7 +39,7 @@ class AtomicInt {
 		#end
 	}
 
-	/** The cell at `pointer`, which lives as long as `keep` is referenced. **/
+	/** Wraps the cell at `pointer`. Its memory stays valid as long as `keep` is referenced. **/
 	@:noCompletion public static function over(pointer:#if hl hl.Ref<Int> #else cpp.Pointer<Int> #end, keep:Any):AtomicInt {
 		var made:AtomicInt = Type.createEmptyInstance(AtomicInt);
 		@:privateAccess {
@@ -53,15 +55,15 @@ class AtomicInt {
 	public inline function load():Int
 		return #if hl hl.Atomics.load32(cell) #else cell.load() #end;
 
-	/** Sets the value and returns it. **/
+	/** Sets the value and returns the new value. **/
 	public inline function store(value:Int):Int
 		return #if hl hl.Atomics.store32(cell, value) #else cell.store(value) #end;
 
-	/** Adds, and returns the value before. **/
+	/** Adds `by` and returns the previous value. **/
 	public inline function add(by:Int):Int
 		return #if hl hl.Atomics.add32(cell, by) #else cell.add(by) #end;
 
-	/** Subtracts, and returns the value before. **/
+	/** Subtracts `by` and returns the previous value. **/
 	public inline function sub(by:Int):Int
 		return #if hl hl.Atomics.sub32(cell, by) #else cell.sub(by) #end;
 
@@ -74,11 +76,11 @@ class AtomicInt {
 	public inline function xor(bits:Int):Int
 		return #if hl hl.Atomics.xor32(cell, bits) #else cell.xor(bits) #end;
 
-	/** Sets the value and returns the one before. **/
+	/** Sets the value and returns the previous value. **/
 	public inline function exchange(value:Int):Int
 		return #if hl hl.Atomics.exchange32(cell, value) #else cell.exchange(value) #end;
 
-	/** Sets the value if it is `expected`, and returns what it was either way. **/
+	/** Sets the value if it equals `expected`. Returns the previous value in both cases. **/
 	public inline function compareExchange(expected:Int, replacement:Int):Int
 		return #if hl hl.Atomics.compareExchange32(cell, expected, replacement) #else cell.compareExchange(expected, replacement) #end;
 }

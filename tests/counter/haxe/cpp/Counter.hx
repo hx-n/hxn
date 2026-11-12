@@ -22,7 +22,7 @@
 ')
 @:headerInclude("counter_glue.h")
 class Counter {
-	/** Where everything this library produces reaches the app. **/
+	/** The queue through which every result from this library is delivered to the app. **/
 	public static final inbox = new hxn.Inbox(limit -> untyped __cpp__("counter_glue::outbox_wait({0})", limit), () -> untyped __cpp__("counter_glue::outbox_next()"));
 
 	@:unreflective var raw:cpp.RawPointer<cpp.Void>;
@@ -32,7 +32,8 @@ class Counter {
 		cpp.vm.Gc.setFinalizer(this, cpp.Function.fromStaticFunction(finalize));
 	}
 
-	// Runs inside a collection: it may free, and may not touch the Haxe heap.
+	// Runs during a garbage collection: it may free native memory but must
+	// not touch the Haxe heap.
 	static function finalize(counter:Counter):Void {
 		untyped __cpp__("counter_release((hxn_handle *){0})", counter.raw);
 	}
@@ -41,8 +42,9 @@ class Counter {
 		return untyped __cpp__("counter_glue::add({0}, {1})", raw, amount);
 
 	public function apply(times:Int, f:Int->Int):Int {
-		// Native code cannot be thrown through: keep the exception, tell the
-		// library its callback failed, and let `during` throw it afterwards.
+		// An exception cannot unwind through native code: store it, report
+		// the callback as failed to the library, and let `during` rethrow it
+		// after the call returns.
 		var guarded = function(value:Int):Null<Int> {
 			try {
 				return f(value);
@@ -54,9 +56,10 @@ class Counter {
 		return hxn.Callback.during(() -> untyped __cpp__("counter_glue::apply({0}, {1}, {2})", raw, times, guarded));
 	}
 
-	// A function used by later calls is kept here, where the collector can
-	// see it, and lent to each of them. Native code holds nothing, so one
-	// that refers back to this counter is collected with it.
+	// A callback used by later calls is stored here, where the garbage
+	// collector can see it, and borrowed for each call. Native code holds no
+	// reference, so a callback that references this counter is collected
+	// along with it.
 	var step:Null<Int->Int>;
 
 	public function setStep(f:Int->Int):Void
@@ -130,7 +133,7 @@ class Counter {
 	}
 }
 
-/** Owns a native future; `hxn.Future` holds it through its three calls. **/
+/** Owns a native future. The functions passed to `hxn.Future` keep it alive. **/
 @:headerInclude("counter_glue.h")
 private class FutureHandle {
 	@:unreflective public var raw:cpp.RawPointer<cpp.Void>;
@@ -220,7 +223,7 @@ class Emitter {
 		return untyped __cpp__("counter_glue::emitter_end({0})", raw);
 }
 
-/** Owns a native stream; `hxn.Stream` holds it through its two calls. **/
+/** Owns a native stream. The functions passed to `hxn.Stream` keep it alive. **/
 @:headerInclude("counter_glue.h")
 private class StreamHandle {
 	@:unreflective public var raw:cpp.RawPointer<cpp.Void>;
@@ -247,7 +250,7 @@ private class StreamHandle {
 		return untyped __cpp__("counter_glue::stream_next_int({0})", raw);
 }
 
-/** A value the Haxe side sets, and follows as a signal. **/
+/** A value the Haxe side sets and observes as a signal. **/
 @:headerInclude("counter_glue.h")
 class Gauge {
 	@:unreflective var raw:cpp.RawPointer<cpp.Void>;
@@ -261,8 +264,8 @@ class Gauge {
 		untyped __cpp__("counter_release((hxn_handle *){0})", gauge.raw);
 	}
 
-	// Kept, so a set made here reaches the signal at once and is not seen
-	// only when the library's results are next delivered.
+	// Cached, so a value set here updates the signal immediately instead of
+	// at the library's next delivery.
 	var level:Null<hxn.Signal<Int>>;
 
 	public function signal():hxn.Signal<Int> {
@@ -282,7 +285,7 @@ class Gauge {
 	}
 }
 
-/** Owns a native signal; the Haxe signal follows it through its two calls. **/
+/** Owns a native signal. The functions passed to `Reactive.follow` keep it alive. **/
 @:headerInclude("counter_glue.h")
 private class SignalHandle {
 	@:unreflective public var raw:cpp.RawPointer<cpp.Void>;

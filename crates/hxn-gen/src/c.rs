@@ -27,7 +27,7 @@ fn declaration(library: &Library, interface: &Interface, method: &Method) -> Str
             Type::Str | Type::Bytes => "hxn_slice ",
             Type::Handle { .. } => "hxn_handle *",
             Type::AtomicInt | Type::AtomicBool => "int32_t *",
-            // Lent for the call: its `drop` is null.
+            // Borrowed for the call, so its `drop` is null.
             Type::Lent { .. } => "hxn_callback ",
             Type::Void | Type::Future(_) | Type::Stream(_) | Type::Signal(_) | Type::Data(_) => {
                 unreachable!("not a parameter type")
@@ -59,7 +59,7 @@ fn declaration(library: &Library, interface: &Interface, method: &Method) -> Str
     )
 }
 
-/// `<library>_abi.h`: what the plain-ABI adapter exports.
+/// `<library>_abi.h`: declarations of the plain-ABI adapter's exports.
 pub fn c_header(library: &Library) -> String {
     let guard = guard_name(library, "ABI");
     let mut out = String::from(HEADER);
@@ -165,7 +165,8 @@ fn glue(library: &Library, interface: &Interface, method: &Method) -> String {
                 returns,
             } => {
                 params.push(format!("Dynamic {name}"));
-                // On this stack for the call, so the library drops nothing.
+                // On this stack frame for the call, so the library drops
+                // nothing.
                 locals.push(format!(
                     "hxn_callback {name}_lent = {{ (void *){}, {name}.mPtr, 0 }};",
                     lent::trampoline(taken, returns)
@@ -217,8 +218,8 @@ fn glue(library: &Library, interface: &Interface, method: &Method) -> String {
         body.push_str(&format!("\t{local}\n"));
     }
     if method.blocking {
-        // The collector may run while this thread waits; the zone ends
-        // before anything is thrown.
+        // The garbage collector may run while this thread blocks; the
+        // blocking zone ends before any exception is thrown.
         body.push_str(&format!(
             "\thxn_status status;\n\t{{\n\t\thxn::Blocking zone;\n\t\tstatus = {call};\n\t}}\n\thxn::check(status, err);\n"
         ));
@@ -236,8 +237,9 @@ fn glue(library: &Library, interface: &Interface, method: &Method) -> String {
     )
 }
 
-/// `<library>_glue.h`: what hxcpp calls. Each function returns before its
-/// failure is thrown, and frees what the library handed it.
+/// `<library>_glue.h`: the functions hxcpp calls. Each one frees what the
+/// library returned to it, and throws a failure only after the library call
+/// has returned.
 pub fn cpp_glue(library: &Library) -> String {
     let guard = guard_name(library, "GLUE");
     let mut out = String::from(HEADER);

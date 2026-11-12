@@ -3,27 +3,28 @@ package hxn;
 import haxe.Exception;
 
 /**
-	What a binding needs to lend a Haxe function to native code.
+	Support for a binding that passes a Haxe function to native code as a
+	callback.
 
-	Native code cannot be thrown through, so a binding wraps the function it
-	passes: the wrapper catches, hands the exception to `failed`, and returns
-	the value that tells the library its callback failed. The library stops
-	and returns, and `during`, which the binding made the native call inside,
-	throws the function's own exception to the caller.
+	An exception cannot unwind through native code, so a binding wraps the
+	function it passes. The wrapper catches the exception, passes it to
+	`failed`, and returns the value that reports a failed callback to the
+	library. The library stops and returns. The binding makes the native call
+	inside `during`, which then rethrows the original exception to the caller.
 **/
 class Callback {
 	static final pending = new sys.thread.Tls<Exception>();
 
-	/** Keeps what a callback threw. The first of a call is the one reported. **/
+	/** Records the exception a callback threw. Only the first one in a native call is reported. **/
 	public static function failed(error:Exception):Void {
 		if (pending.value == null)
 			pending.value = error;
 	}
 
 	/**
-		Runs `call`, a native call that was lent callbacks, and returns its
-		result. If a callback threw, that is thrown here in place of whatever
-		the library made of it.
+		Runs `call`, a native call that was passed callbacks, and returns its
+		result. If a callback threw, its exception is rethrown here and
+		replaces the result or error the library returned.
 	**/
 	public static function during<T>(call:() -> T):T {
 		var result:T;

@@ -1,5 +1,5 @@
-//! The manifest as WebIDL: the same API as the JSON form, in the language
-//! interfaces are usually specified in. What WebIDL has no word for is an
+//! The manifest as WebIDL: the same API as the JSON form, in a standard
+//! interface definition language. Anything WebIDL has no construct for is an
 //! extended attribute named `Hxn...`.
 //!
 //! | Rust | WebIDL |
@@ -10,22 +10,22 @@
 //! | an interface, an `Option` of one | its name, with `?` |
 //! | `Future<T>`, an `async fn` | `Promise<T>` |
 //! | a function returning `Stream<T>` or `Signal<T>` | `[HxnStream]` or `[HxnSignal]` on one returning `T` |
-//! | a cell | `[HxnAtomic]` on a `long` or a `boolean` |
-//! | a lent function | a `callback` named after where it is passed |
-//! | a `#[hxn::data]` struct, enum of names | a `dictionary`, an `enum` of the names |
-//! | a `#[hxn::data]` enum whose variants hold values | a `dictionary` with a `tag` and a member a variant, each a `dictionary` of its own |
+//! | an atomic cell | `[HxnAtomic]` on a `long` or a `boolean` |
+//! | a callback parameter | a `callback` named after where it is passed |
+//! | a `#[hxn::data]` struct, C-like enum | a `dictionary`, an `enum` of the variant names |
+//! | a `#[hxn::data]` tagged enum | a `dictionary` with a `tag` and one member per variant, each its own `dictionary` |
 //! | an `Option`, a `Vec` or a map of data | `T?`, `sequence<T>`, `record<USVString, T>` |
 //! | a `Result` | `[Throws]`, or `[Throws=E]` where the error is data |
 //!
-//! A map keyed by a number is a `record` too, which WebIDL keys by text
-//! alone; the JSON form names the key's type.
+//! A map with integer keys is also a `record`, although WebIDL only has
+//! string keys; the JSON form specifies the key's type.
 
 use crate::model::{
     Data, Enumeration, Interface, Library, Method, Number, Param, Receiver, Record, Tagged, Type,
 };
 use crate::names::{camel, pascal};
 
-// The words WebIDL keeps for itself, which a name is told apart from by a
+// WebIDL's reserved words. A name that matches one is escaped with a
 // leading underscore.
 const RESERVED: [&str; 32] = [
     "any",
@@ -70,8 +70,8 @@ fn name(name: &str) -> String {
     }
 }
 
-// A size is as wide as the machine the library was built for, which WebIDL
-// has no type for: it is a `long` marked `HxnSize`.
+// A size type is as wide as the target machine's word, which WebIDL has no
+// type for: it is a `long` marked `HxnSize`.
 fn number(number: Number) -> &'static str {
     match number {
         Number::I8 => "byte",
@@ -89,7 +89,8 @@ fn sized(number: Option<Number>) -> bool {
     matches!(number, Some(Number::Isize | Number::Usize))
 }
 
-// Plain data. An option of an option has no WebIDL of its own, and is one.
+// Plain data. WebIDL has no nested nullable type, so an option of an option
+// is written as a single option.
 fn data(data: &Data) -> String {
     match data {
         Data::Bool => String::from("boolean"),
@@ -107,12 +108,12 @@ fn data(data: &Data) -> String {
     }
 }
 
-// The members of a dictionary, one a field.
+// The members of a dictionary, one per field.
 fn members(fields: &[crate::model::Field]) -> String {
     let mut out = String::new();
     for field in fields {
         out.push_str(&comment(&field.docs, "  "));
-        // What may be missing is a member that may be left out.
+        // An optional field is a member that is not `required`.
         let required = if matches!(field.ty, Data::Option(_)) {
             ""
         } else {
@@ -127,9 +128,8 @@ fn members(fields: &[crate::model::Field]) -> String {
     out
 }
 
-// WebIDL has no type that is one of several shapes, so an enum whose
-// variants hold values is a dictionary: `tag` names the variant, and the
-// member of that name holds its fields.
+// WebIDL has no tagged union type, so a tagged enum is a dictionary: `tag`
+// names the variant, and the member of that name holds its fields.
 fn tagged(tagged: &Tagged) -> String {
     let own = &tagged.name;
     let tags: Vec<String> = tagged
@@ -169,7 +169,8 @@ fn dictionary(record: &Record) -> String {
     out
 }
 
-// WebIDL's enums are of names alone, so each number is a comment.
+// A WebIDL enum has string values only, so each variant's integer value is
+// written as a comment.
 fn enumeration(known: &Enumeration) -> String {
     let mut out = comment(&known.docs, "");
     out.push_str(&format!("enum {} {{\n", known.name));
@@ -186,7 +187,7 @@ fn enumeration(known: &Enumeration) -> String {
     out
 }
 
-// A type, given the callback a lent function was named.
+// A type, given the callback name assigned to a callback parameter.
 fn ty(ty: &Type, lent: &str) -> String {
     match ty {
         Type::Void => String::from("undefined"),
@@ -196,8 +197,8 @@ fn ty(ty: &Type, lent: &str) -> String {
         Type::F64 => String::from("double"),
         Type::Str => String::from("USVString"),
         Type::Bytes => String::from("Uint8Array"),
-        // What says it is a cell, a stream or a signal is an attribute,
-        // written where the grammar has a place for one.
+        // An atomic cell, a stream or a signal is marked by an extended
+        // attribute, placed where the grammar allows one.
         Type::AtomicInt => String::from("long"),
         Type::AtomicBool => String::from("boolean"),
         Type::Future(of) => format!("Promise<{}>", self::ty(of, lent)),
@@ -217,8 +218,8 @@ fn ty(ty: &Type, lent: &str) -> String {
     }
 }
 
-// The callback a function lent as `param` of `method` is: named after
-// where it is passed, since WebIDL has no unnamed function type.
+// The callback name for the parameter `param` of `method`: named after where
+// it is passed, since WebIDL has no anonymous function type.
 fn callback(interface: &Interface, method: &Method, param: &Param) -> String {
     format!(
         "{}{}{}",
@@ -271,8 +272,8 @@ fn operation(interface: &Interface, method: &Method) -> String {
         .map(|param| self::param(interface, method, param))
         .collect();
     let mut out = comment(&method.docs, "  ");
-    // An error that is data is named, whether the call fails with it or the
-    // future an async function gives does.
+    // An error type that is data is named, whether the call fails with it or
+    // an async function's future is rejected with it.
     let thrown = method
         .error
         .as_ref()
@@ -296,8 +297,8 @@ fn operation(interface: &Interface, method: &Method) -> String {
     if method.blocking {
         notes.push("HxnBlocking");
     }
-    // A result's own attribute goes with the operation's: a return type
-    // takes none.
+    // An attribute describing the return value goes on the operation, since
+    // a return type cannot carry one.
     match &method.returns {
         Type::AtomicInt | Type::AtomicBool => notes.push("HxnAtomic"),
         Type::Stream(_) => notes.push("HxnStream"),
@@ -317,7 +318,7 @@ fn operation(interface: &Interface, method: &Method) -> String {
     } else {
         format!("[{}] ", notes.join(", "))
     };
-    // A namespace's operations are static without saying so.
+    // A namespace's operations are implicitly static.
     let modifier = if method.receiver == Receiver::None && !interface.namespace {
         "static "
     } else {
@@ -370,8 +371,8 @@ fn interface(interface: &Interface) -> String {
     if interface.namespace {
         out.push_str(&format!("namespace {} {{\n", interface.name));
     } else {
-        // No `Exposed`: that is about a browser's globals, and says nothing
-        // of a native library.
+        // No `Exposed`: it concerns a browser's global scopes and does not
+        // apply to a native library.
         let mut notes = Vec::new();
         if interface.shared {
             notes.push("HxnShared");

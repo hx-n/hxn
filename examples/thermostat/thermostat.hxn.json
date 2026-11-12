@@ -4,7 +4,7 @@
   "interfaces": [
     {
       "name": "Thermostat",
-      "docs": "A thermostat, and the temperature it is set to.",
+      "docs": "A thermostat and its target temperature.",
       "methods": [
         {
           "name": "new",
@@ -16,7 +16,7 @@
         },
         {
           "name": "target",
-          "docs": "The temperature it is set to, as a value that changes. Haxe reads\nthe latest, and whatever was computed from it is computed again.",
+          "docs": "The target temperature as a signal. Haxe reads the latest value, and\nvalues computed from it are recomputed when it changes.",
           "kind": "mutating",
           "params": [],
           "returns": "signal<f64>",

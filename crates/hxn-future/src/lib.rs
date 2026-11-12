@@ -1,37 +1,40 @@
-//! One result from an asynchronous native operation, the same on every
-//! runtime hxn supports.
+//! The single result of an asynchronous native operation, with the same API on
+//! every runtime hxn supports.
 //!
-//! [`pending`] makes a pair. The library keeps the [`Completer`] and settles
-//! it from any thread; the host is given the [`Future`], erased to an
-//! [`AnyFuture`] inside a handle, and asks it for its state, waits on it, and
-//! takes the result. `hxn.Future` is the Haxe side.
+//! [`pending`] creates a pair. The library keeps the [`Completer`] and settles
+//! it from any thread. The host receives the [`Future`], type-erased to an
+//! [`AnyFuture`] inside a handle, and uses it to query the state, wait, and
+//! take the result. `hxn.Future` is the Haxe counterpart.
 //!
-//! Most libraries never touch a completer. [`spawn`] runs an `async` block,
-//! [`stepped`] runs work written as steps, and [`spawn_blocking`] runs a
-//! closure that blocks; each returns the future its result settles. A
-//! [`Future`] can itself be awaited, so one operation can be built on others.
+//! Most libraries never use a completer directly. [`spawn`] runs an `async`
+//! block, [`stepped`] runs work written as steps, and [`spawn_blocking`] runs
+//! a blocking closure. Each returns a future that the work's result settles.
+//! A [`Future`] can itself be awaited, so one operation can be composed from
+//! others.
 //!
-//! [`channel`] is the same idea for results that arrive more than once: a
-//! [`Stream`] the library sends to and the host takes from, item by item.
-//! [`signal()`] is for a value that changes, where only the latest matters.
+//! [`channel`] does the same for results that arrive more than once: a
+//! [`Stream`] the library sends to and the host takes from, one item at a
+//! time. [`signal()`] is for a changing value where only the latest matters.
 //!
-//! The result stays in Rust until a Haxe thread takes it. Settling touches no
-//! runtime, so the thread that settles needs no standing with a collector,
-//! and nothing of the runtime's has to be kept alive in the meantime.
+//! The result stays in Rust until a Haxe thread takes it. Settling does not
+//! call into any runtime, so the settling thread need not be registered with
+//! a garbage collector, and no runtime object has to be kept alive meanwhile.
 //!
 //! A future is settled once: the first [`resolve`](Completer::resolve) or
-//! [`reject`](Completer::reject) wins and later ones return `false`. If every
-//! completer is dropped first it is rejected as [`Status::CANCELLED`], so a
-//! waiter is never left waiting on nothing.
+//! [`reject`](Completer::reject) takes effect and later calls return `false`.
+//! If every completer is dropped first, the future is rejected with
+//! [`Status::CANCELLED`], so a waiter never waits forever on a future nothing
+//! can settle.
 //!
 //! # Without threads
 //!
-//! A wasm build without threads has nowhere to run work beside its caller.
-//! There [`spawn_blocking`] runs its work before it returns, and [`spawn`]
-//! and [`stepped`] queue theirs on the calling thread, to be advanced by
-//! whoever waits: [`Future::wait`] runs the queue for a short slice and
-//! returns, pending or not, so the host can yield and ask again. The queue
-//! is a `krio` scheduler; [`pump`] runs one round of it directly.
+//! A wasm build without threads cannot run work concurrently with its caller.
+//! There [`spawn_blocking`] runs its work before returning, and [`spawn`] and
+//! [`stepped`] queue theirs on the calling thread, where it is advanced by
+//! whichever caller waits: [`Future::wait`] runs the queue for a short time
+//! slice and returns, whether or not the future is still pending, so the host
+//! can yield and wait again. The queue is a `krio` scheduler; [`pump`] runs
+//! one round of it directly.
 
 #![forbid(unsafe_code)]
 
@@ -65,7 +68,7 @@ const THREADS: bool = cfg!(not(all(
     not(target_feature = "atomics")
 )));
 
-/// Where a future stands. The values are what a host sees.
+/// The state of a future. The discriminants are the values a host receives.
 #[repr(i32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum State {
@@ -75,10 +78,10 @@ pub enum State {
 }
 
 enum Slot<T> {
-    // With whoever is awaiting it from `async` code.
+    // Holds the wakers of `async` code awaiting the future.
     Pending(Vec<Waker>),
     Settled(Result<T, Failure>),
-    // The result was taken; what it was is still its state.
+    // The result was taken. The state it had is kept.
     Taken(State),
 }
 
@@ -100,8 +103,8 @@ struct Shared<T> {
 }
 
 impl<T> Shared<T> {
-    // No code of the library's runs under the lock, so a poisoned one still
-    // holds a whole slot.
+    // No library code runs while the lock is held, so a poisoned lock still
+    // guards a consistent slot.
     fn lock(&self) -> MutexGuard<'_, Slot<T>> {
         self.slot.lock().unwrap_or_else(PoisonError::into_inner)
     }
@@ -109,7 +112,8 @@ impl<T> Shared<T> {
     fn settle(&self, result: Result<T, Failure>) -> bool {
         let mut slot = self.lock();
         let Slot::Pending(wakers) = &mut *slot else {
-            // Unlocked before `result` is dropped: its `Drop` is the library's.
+            // Unlocked before `result` is dropped, because its `Drop` is
+            // library code.
             drop(slot);
             return false;
         };
@@ -160,9 +164,9 @@ impl<T> Shared<T> {
         }
     }
 
-    // Waiting where nothing else can run: this thread does the queued work
-    // itself, a round at a time, and gives up at the end of its slice so the
-    // host gets the thread back.
+    // Waits where no other thread can run the work: this thread runs the
+    // queued work itself, one round at a time, and returns at the end of its
+    // time slice so the host gets the thread back.
     fn wait_driving(&self, timeout: Option<Duration>) -> State {
         local::drive(timeout, || self.state() != State::Pending);
         self.state()
@@ -182,7 +186,8 @@ impl<T> Shared<T> {
     }
 }
 
-// Shared by every clone of a completer; the last one to go cancels.
+// Shared by every clone of a completer. Dropping the last clone cancels the
+// future.
 struct Owner<T> {
     shared: Arc<Shared<T>>,
 }
@@ -196,7 +201,7 @@ impl<T> Drop for Owner<T> {
     }
 }
 
-/// The settling side. Clones settle the same future.
+/// The write side of a future. All clones settle the same future.
 pub struct Completer<T> {
     owner: Arc<Owner<T>>,
 }
@@ -210,13 +215,13 @@ impl<T> Clone for Completer<T> {
 }
 
 impl<T> Completer<T> {
-    /// `false` if the future was already settled, in which case `value` is
-    /// dropped.
+    /// Returns `false` if the future was already settled, in which case
+    /// `value` is dropped.
     pub fn resolve(&self, value: T) -> bool {
         self.settle(Ok(value))
     }
 
-    /// `false` if the future was already settled.
+    /// Returns `false` if the future was already settled.
     pub fn reject(&self, failure: impl Into<Failure>) -> bool {
         self.settle(Err(failure.into()))
     }
@@ -226,7 +231,7 @@ impl<T> Completer<T> {
     }
 }
 
-/// The reading side.
+/// The read side of a future.
 pub struct Future<T> {
     shared: Arc<Shared<T>>,
 }
@@ -236,21 +241,23 @@ impl<T> Future<T> {
         self.shared.state()
     }
 
-    /// Blocks until the future is settled or `timeout` has passed, and
-    /// returns its state then. `None` waits without limit. Without threads
-    /// it runs queued work for a short slice instead of blocking.
+    /// Blocks until the future is settled or `timeout` has elapsed, and
+    /// returns its state at that point. `None` waits indefinitely. Without
+    /// threads it runs queued work for a short time slice instead of blocking.
     pub fn wait(&self, timeout: Option<Duration>) -> State {
         self.shared.wait(timeout)
     }
 
-    /// The result, once. [`Status::PENDING`] before there is one, which
-    /// leaves it to be taken later, and [`Fault::Closed`] after it was taken.
+    /// Takes the result; it can be taken only once. Returns
+    /// [`Status::PENDING`] before the future is settled, in which case the
+    /// result can still be taken later, and [`Fault::Closed`] after it has
+    /// been taken.
     pub fn take(&self) -> Result<T, Failure> {
         self.shared.take()
     }
 }
 
-/// Awaiting one gives its result, which no one else can then take.
+/// Awaiting a future takes its result, so it cannot be taken again.
 impl<T> std::future::Future for Future<T> {
     type Output = Result<T, Failure>;
 
@@ -267,7 +274,7 @@ impl<T> std::future::Future for Future<T> {
     }
 }
 
-/// A pending future and what settles it.
+/// Creates a pending future and its completer.
 pub fn pending<T>() -> (Completer<T>, Future<T>) {
     let shared = Arc::new(Shared {
         slot: Mutex::new(Slot::Pending(Vec::new())),
@@ -280,12 +287,14 @@ pub fn pending<T>() -> (Completer<T>, Future<T>) {
     (Completer { owner }, Future { shared })
 }
 
-/// Runs `work` and settles a future with its output. A panic rejects it.
+/// Runs `work` and settles a future with its output. A panic rejects the
+/// future.
 ///
-/// It is polled once before this returns, so work that never waits is done
-/// by then. After that it runs on the library's workers, or without threads
-/// on this thread's queue, and only when something it awaits wakes it: an
-/// awaited [`Future`] does, when it is settled.
+/// `work` is polled once before this returns, so work that never awaits
+/// anything has finished by then. After that it runs on the library's worker
+/// threads, or without threads on this thread's queue, and is polled again
+/// only when something it awaits wakes it. An awaited [`Future`] wakes it
+/// when settled.
 pub fn spawn<F, T, E>(work: F) -> Future<T>
 where
     F: std::future::Future<Output = Result<T, E>> + Send + 'static,
@@ -300,9 +309,9 @@ where
     future
 }
 
-/// Runs `work`, which may block, on a thread of its own and settles a future
-/// with what it returns. A panic rejects it. Without threads `work` runs
-/// here, and the future is settled when this returns.
+/// Runs `work`, which may block, on a dedicated thread and settles a future
+/// with its return value. A panic rejects the future. Without threads `work`
+/// runs on the calling thread, and the future is settled when this returns.
 pub fn spawn_blocking<T, E>(work: impl FnOnce() -> Result<T, E> + Send + 'static) -> Future<T>
 where
     T: Send + 'static,
@@ -313,7 +322,8 @@ where
         completer.settle(catch(|| work().map_err(Into::into)));
     };
     if THREADS {
-        // If no thread starts, the closure is dropped and the future cancelled.
+        // If the thread fails to start, the closure is dropped and the future
+        // is cancelled.
         let _ = std::thread::Builder::new().spawn(settle);
     } else {
         settle();
@@ -321,17 +331,18 @@ where
     future
 }
 
-/// Work done a step at a time: `step` is called until it returns
-/// [`Poll::Ready`], and that result settles the future. A panic rejects it.
+/// Runs work one step at a time: `step` is called until it returns
+/// [`Poll::Ready`], and that result settles the future. A panic rejects the
+/// future.
 ///
-/// The first step runs before this returns, so work that finishes at once
-/// never waits for anyone. With threads the rest goes to the library's pool
-/// of workers. Without them it is queued on this thread and advances only
-/// while the host waits on a future from this library or calls [`pump`],
-/// which is what lets one thread interleave it with everything else.
+/// The first step runs before this returns, so work that finishes
+/// immediately is never queued. With threads the remaining steps run on the
+/// library's worker pool. Without threads the work is queued on this thread
+/// and advances only while the host waits on a future from this library or
+/// calls [`pump`], which lets a single thread interleave it with other work.
 ///
-/// `Poll::Pending` means there is more to do, not that the work is waiting
-/// on something: a worker takes the next step straight away.
+/// `Poll::Pending` means there is more to do, not that the work is blocked
+/// on something: a worker runs the next step immediately.
 pub fn stepped<T, E>(step: impl FnMut() -> Poll<Result<T, E>> + Send + 'static) -> Future<T>
 where
     T: Send + 'static,
@@ -407,9 +418,9 @@ impl<T: Send + 'static> Erased for Shared<T> {
     }
 }
 
-/// A future of any type, which is what a host holds: one handle type, and
-/// one `state` and `wait` export, serve every future a library returns. Only
-/// [`take`](Self::take) needs the type again.
+/// A type-erased future, which is what a host holds: one handle type, and one
+/// `state` and `wait` export, serve every future a library returns. Only
+/// [`take`](Self::take) needs the concrete type.
 pub struct AnyFuture(Arc<dyn Erased>);
 
 impl<T: Send + 'static> From<Future<T>> for AnyFuture {
@@ -427,20 +438,20 @@ impl AnyFuture {
         self.0.wait(timeout)
     }
 
-    /// Has the future noted in the [`outbox`] when it is settled, and returns
-    /// the id it is noted under.
+    /// Registers the future to be posted to the [`outbox`] when it is
+    /// settled, and returns the id it is posted under.
     pub fn watch(&self) -> i32 {
         self.0.watch()
     }
 
-    /// As [`wait`](Self::wait), with the timeout a host passes: milliseconds,
-    /// or negative for no limit.
+    /// Like [`wait`](Self::wait), with the timeout in the form a host passes
+    /// it: milliseconds, or negative for no limit.
     pub fn wait_millis(&self, milliseconds: i32) -> State {
         self.wait(u64::try_from(milliseconds).ok().map(Duration::from_millis))
     }
 
-    /// As [`Future::take`], or [`Fault::InvalidHandle`] if this is not a
-    /// future of `T`.
+    /// Like [`Future::take`], or returns [`Fault::InvalidHandle`] if this is
+    /// not a future of `T`.
     pub fn take<T: Send + 'static>(&self) -> Result<T, Failure> {
         match self.0.as_any().downcast_ref::<Shared<T>>() {
             Some(shared) => shared.take(),
@@ -715,7 +726,7 @@ mod tests {
         }
     }
 
-    // What `stepped` does where there are no threads, on this thread's queue.
+    // Does what `stepped` does without threads: queues on this thread.
     fn queued<T: Send + 'static>(
         step: impl FnMut() -> Poll<Result<T, Failure>> + 'static,
     ) -> Future<T> {
@@ -791,7 +802,8 @@ mod tests {
         let mut inner = None;
         let outer = queued(move || match &inner {
             None => {
-                // A round is under way, so this one cannot start another.
+                // A round is already running, so this step cannot start
+                // another.
                 assert!(!pump());
                 inner = Some(queued(counting(2)));
                 Poll::Pending
@@ -873,8 +885,8 @@ mod tests {
         assert_eq!(stream.flow(), Flow::Ended);
     }
 
-    // The outbox is the library's one queue, so everything about it is
-    // checked in one test: two would take each other's entries.
+    // The outbox is a single queue per library, so it is tested in one test:
+    // two tests running in parallel would take each other's entries.
     #[test]
     fn the_host_is_told_what_happened_in_the_order_it_did() {
         let (unwatched, _future) = pending::<i32>();
@@ -896,7 +908,8 @@ mod tests {
         sender.send(2);
         source.set(2);
         assert!(outbox::wait(None));
-        // Each once, however often it changed, in the order they first did.
+        // Each id appears once, however often it changed, in the order of
+        // first change.
         let taken = [
             outbox::next(),
             outbox::next(),
@@ -905,7 +918,7 @@ mod tests {
         ];
         assert_eq!(taken, [stream, value, future, -1]);
 
-        // Taken, so the next change is noted again.
+        // Taking an id lets the next change post it again.
         sender.send(3);
         drop(source);
         assert_eq!([outbox::next(), outbox::next()], [stream, value]);

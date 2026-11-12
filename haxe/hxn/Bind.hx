@@ -8,25 +8,27 @@ import sys.FileSystem;
 import sys.io.File;
 
 /**
-	Points a compile at a library that `hxn package` packaged.
+	Configures a Haxe compilation to use a library packaged by `hxn package`.
 
-	`--macro hxn.Bind.lib("name")`, which the package's `extraParams.hxml`
-	specifies, so that `-lib name` is all a program's build names. The package
-	is found by its manifest, `name.hxn.json`, on the class path. From what
-	the compile is for, this adds the library's classes for HashLink or hxcpp,
-	tells hxcpp where the headers and the built library are, and puts a
-	HashLink library beside the program.
+	The package's `extraParams.hxml` specifies
+	`--macro hxn.Bind.lib("name")`, so a program's build only needs
+	`-lib name`. The package is located by its manifest, `name.hxn.json`, on
+	the class path. Depending on the compilation target, this adds the
+	library's HashLink or hxcpp classes to the class path, defines the header
+	and library paths for hxcpp, and copies a HashLink library next to the
+	compiled program.
 
-	A CPPIA script gets declarations of the hxcpp classes, which its host
-	holds: an hxcpp program compiled with `-D scriptable` and this same macro,
-	which then keeps the library's classes whether or not it uses them.
+	A CPPIA script gets declarations of the hxcpp classes. The classes
+	themselves are in its host, an hxcpp program compiled with
+	`-D scriptable` and this same macro. In the host, the macro includes the
+	library's classes whether or not the host uses them.
 
-	The library taken is the one built for this machine, or for wasm when
-	`wasm` or `emscripten` is defined. `-D hxn_triple=<triple>` names another,
-	as Rust names what it builds for.
+	The native library used is the one built for the host machine, or for
+	wasm when `wasm` or `emscripten` is defined. `-D hxn_triple=<triple>`
+	selects another, given as a Rust target triple.
 **/
 class Bind {
-	/** The manifest version this reads. **/
+	/** The manifest version this macro reads. **/
 	static inline final VERSION = 1;
 
 	public static function lib(name:String):Void {
@@ -43,13 +45,13 @@ class Bind {
 		var runtime = if (Context.defined("hl")) "hl" else if (Context.defined("cpp")) "cpp" else null;
 		if (runtime == null)
 			fail('$name is bound for HashLink and hxcpp, and this compile is for neither');
-		// A script is compiled for hxcpp too, and calls nothing native itself.
+		// A CPPIA script is also compiled as hxcpp, and makes no native calls itself.
 		var script = Context.defined("cppia");
 		var classes = Path.join([root, "binding", script ? "cppia" : runtime]);
 		if (!FileSystem.isDirectory(classes))
 			fail('the package in $root was not built for $runtime: run `hxn package $runtime` on the library');
 		Compiler.addClassPath(classes);
-		// An editor asks for types, and builds nothing to find a library for.
+		// A display request from an editor only needs types. Nothing is built, so no native library is looked up.
 		if (script || Context.defined("display"))
 			return;
 		if (runtime == "cpp" && Context.defined("scriptable")) {
@@ -73,8 +75,9 @@ class Bind {
 				var wasm = StringTools.startsWith(triple, "wasm32");
 				var file = name + (wasm ? ".wasm" : ".hdll");
 				var from = library([file]);
-				// The VM asks for the library by name, and Ash for the module
-				// beside the program it builds: both look where the program is.
+				// The VM loads the library by name, and Ash loads the module
+				// next to the program it builds: both search the program's
+				// directory.
 				Context.onAfterGenerate(() -> {
 					var output = Compiler.getOutput();
 					if (Path.extension(output) == "hl")
@@ -86,8 +89,9 @@ class Bind {
 				Compiler.define("HXN_INCLUDE", include);
 				Compiler.define('${upper}_INCLUDE', include);
 				Compiler.define('${upper}_LIB', library(['lib${name}_cpp.a', '${name}_cpp.lib']));
-				// hxcpp builds for 32 bits on Windows and for the host's 64
-				// under Emscripten unless told, and the library is neither.
+				// Unless one of these is defined, hxcpp builds 32-bit on
+				// Windows and the host's 64-bit under Emscripten. Neither
+				// matches the library.
 				if (!Lambda.exists(["HXCPP_M64", "HXCPP_ARM64", "HXCPP_M32"], Context.defined)) {
 					if (StringTools.endsWith(triple, "windows-msvc"))
 						Compiler.define(StringTools.startsWith(triple, "aarch64") ? "HXCPP_ARM64" : "HXCPP_M64");
@@ -97,7 +101,7 @@ class Bind {
 		}
 	}
 
-	// What the library was built for, as Rust names it.
+	// The Rust target triple the library was built for.
 	static function triple(runtime:String):String {
 		var named = Context.definedValue("hxn_triple");
 		if (named != null && named != "1")
@@ -106,7 +110,7 @@ class Bind {
 			return "wasm32-unknown-emscripten";
 		if (Context.defined("wasm"))
 			return runtime == "hl" ? "wasm32-wasip1" : "wasm32-unknown-emscripten";
-		// A phone, by the defines hxcpp builds for one with.
+		// iOS and Android, detected from the defines hxcpp sets when building for them.
 		if (runtime == "cpp") {
 			if (Context.defined("iphoneos"))
 				return "aarch64-apple-ios";

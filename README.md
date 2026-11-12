@@ -9,13 +9,13 @@ hxcpp, natively and on wasm. The library stays plain Rust: you annotate the
 types and methods to expose, and hxn generates the Haxe classes and the native
 glue for each target.
 
-How it works is in [docs/design.md](docs/design.md), and the rules it follows
-in [docs/conventions.md](docs/conventions.md).
+[docs/design.md](docs/design.md) describes how it works, and
+[docs/conventions.md](docs/conventions.md) lists the rules it follows.
 
 ## Quick setup
 
-You need Rust, Haxe, and HashLink or hxcpp. Install the `hxn` command and make
-a library with it:
+You need Rust, Haxe, and HashLink or hxcpp. Install the `hxn` command and
+create a library with it:
 
 ```
 cargo install --git https://github.com/hx-n/hxn hxn-cli
@@ -23,7 +23,7 @@ hxn new greeter
 cd greeter
 ```
 
-The library lives in `src/lib.rs`. It is ordinary Rust: `#[hxn::interface]`
+The library is in `src/lib.rs`. It is ordinary Rust: `#[hxn::interface]`
 exposes a struct to Haxe as a class, and `#[hxn::methods]` exposes its public
 functions as that class's public Haxe methods. A function outside an `impl`
 is marked `#[hxn::function]` and becomes a static method.
@@ -103,17 +103,17 @@ through Ash, and `hxn run cpp --wasm` through hxcpp and Emscripten. Both need
 a nightly Rust toolchain.
 
 `hxn run cppia` runs the same program as a CPPIA script: it builds the hxcpp
-binding into a host program and has that run the script. A script calls the
-library through the host, which is the only thing that needs rebuilding when
-the library changes.
+binding into a host executable, which runs the script. The script calls the
+library through the host, so only the host needs rebuilding when the library
+changes.
 
 `hxn check` runs the program on HashLink and hxcpp, or on the runtimes you
-name, and passes only if they all print the same. `hxn doctor` lists which
-targets your machine is ready for and what the others need.
+name, and passes only if their output is identical. `hxn doctor` lists the
+targets your machine can build for and what is missing for the others.
 
-`hxn package` builds the library for both runtimes and gathers the classes,
-the headers and the native libraries into one directory, for a Haxe project
-that does not have the Rust source. That directory is a haxelib:
+`hxn package` builds the library for both runtimes and collects the Haxe
+classes, the headers and the native libraries into one directory, for a Haxe
+project that does not have the Rust source. That directory is a haxelib:
 
 ```
 hxn package --release --out ../greeter-haxelib
@@ -121,13 +121,13 @@ haxelib dev greeter ../greeter-haxelib
 haxe -lib greeter -cp src -main Main -hl main.hl
 ```
 
-`-lib greeter` runs the macro `hxn.Bind.lib("greeter")`, which picks the
-classes for the target being compiled, tells hxcpp where the headers and the
-library are, and for HashLink puts `greeter.hdll` beside `main.hl`. The
-package holds native libraries for the machine it was made on; run
-`hxn package` into the same directory on another machine, or with `--wasm`,
-to add more. The hxcpp library can also be cross-compiled, including for
-iOS and Android:
+`-lib greeter` runs the macro `hxn.Bind.lib("greeter")`, which selects the
+classes for the compile target, passes hxcpp the header and library paths,
+and for HashLink copies `greeter.hdll` next to `main.hl`. The package
+contains native libraries for the machine it was built on. To add more, run
+`hxn package` with the same output directory on another machine, or with
+`--wasm`. The hxcpp library can also be cross-compiled, including for iOS
+and Android:
 
 ```
 rustup target add aarch64-apple-ios aarch64-linux-android
@@ -150,16 +150,16 @@ releasenote = "First release."
 
 ## Examples
 
-[examples/](examples) has this library and six more, each a crate and a Haxe
-program that run from a checkout:
+[examples/](examples) contains this library and six more. Each is a crate
+and a Haxe program, and runs from a checkout:
 
 | Example | What it shows |
 |---|---|
-| [greeter](examples/greeter) | A struct used as a Haxe class, text in and out, and a failure thrown as an exception. |
-| [picture](examples/picture) | A Haxe function called by the library, bytes returned, and one object passed to another. |
-| [primes](examples/primes) | Work done on another thread: a future to wait for or be called back by, and a stream. |
-| [downloads](examples/downloads) | An `async fn`, a value shared between the library and Haxe, and a counter Haxe reads without a call. |
-| [thermostat](examples/thermostat) | A value the library keeps current, followed from Haxe as a signal. |
+| [greeter](examples/greeter) | A struct exposed as a Haxe class, string parameters and return values, and an error thrown as an exception. |
+| [picture](examples/picture) | A Haxe callback called by the library, a byte array return value, and an object passed as a parameter to another object's method. |
+| [primes](examples/primes) | Work done on another thread: a future that can be awaited or given a completion callback, and a stream. |
+| [downloads](examples/downloads) | An `async fn`, a value shared between the library and Haxe, and an atomic counter that Haxe reads without a native call. |
+| [thermostat](examples/thermostat) | A value the library updates, observed from Haxe as a signal. |
 | [pantry](examples/pantry) | Records and enums passed by value, an optional field, a list of records returned, and a typed error. |
 | [document](examples/document) | Wraps an existing crate (`serde_json`): JSON values as a recursive enum, objects as a map, and parse errors as a typed exception with line and column. |
 

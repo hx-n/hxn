@@ -1,22 +1,23 @@
-//! Writes and builds a library's binding for one runtime.
+//! Generates and builds a library's binding for one runtime.
 //!
-//! Everything goes under cargo's target directory, in `hxn/<library>`:
+//! All output goes under cargo's target directory, in `hxn/<library>`:
 //!
 //! | Path | What it is |
 //! |---|---|
 //! | `<library>.hxn.webidl` | the manifest as WebIDL |
-//! | `support/` | hxn's own Haxe classes, a class path |
+//! | `support/` | hxn's Haxe support classes (a class path) |
 //! | `include/` | `hxn.h` and the library's headers |
-//! | `<runtime>/crate/` | the adapter, a crate that depends on the library |
-//! | `<runtime>/haxe/` | the library's Haxe classes, a class path |
-//! | `<runtime>/build.hxml` | what to pass `haxe` to compile against them |
-//! | `hl/<library>.hdll` | the built library, for HashLink |
-//! | `cppia/` | what a CPPIA script needs, which [`crate::script`] writes |
-//! | `hl-wasm/<library>.wasm` | the same as a module Ash loads into a wasm program |
+//! | `<runtime>/crate/` | the adapter crate, which depends on the library |
+//! | `<runtime>/haxe/` | the library's Haxe classes (a class path) |
+//! | `<runtime>/build.hxml` | the `haxe` arguments for compiling against them |
+//! | `hl/<library>.hdll` | the built library for HashLink |
+//! | `cppia/` | the files a CPPIA script needs, written by [`crate::script`] |
+//! | `hl-wasm/<library>.wasm` | the built library as a wasm module that Ash loads into a wasm program |
 //!
-//! `<runtime>` is `hl` or `cpp`, and `hl-wasm` or `cpp-wasm` for a wasm
-//! build. The library's own crate gains one file, its manifest. `package/`
-//! beside these is what [`crate::package`] gathers from them.
+//! `<runtime>` is `hl` or `cpp`, or `hl-wasm` or `cpp-wasm` for a wasm
+//! build. One file is written into the library's own crate: its manifest.
+//! The `package/` directory next to these is assembled from them by
+//! [`crate::package`].
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -47,8 +48,8 @@ impl Runtime {
     }
 }
 
-/// What a binding is built for: a runtime, on this machine, as wasm, or
-/// for another machine.
+/// The build target of a binding: a runtime, built for the host, for wasm,
+/// or cross-compiled.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Target {
     pub runtime: Runtime,
@@ -59,7 +60,7 @@ pub struct Target {
 }
 
 impl Target {
-    /// The directory its output goes in: `hl`, `cpp-wasm`, or
+    /// The name of its output directory, such as `hl`, `cpp-wasm` or
     /// `cpp-aarch64-apple-ios`.
     pub fn name(self) -> String {
         let runtime = self.runtime.name();
@@ -70,8 +71,9 @@ impl Target {
         }
     }
 
-    // What rustc calls it, where that is not the host. HashLink bytecode
-    // becomes wasm through Ash, and hxcpp's C++ through Emscripten.
+    // The rustc target triple, or `None` for the host. The wasm triple
+    // depends on what compiles the program: Ash compiles HashLink bytecode
+    // to wasm, and Emscripten compiles hxcpp's C++.
     pub fn triple(self) -> Option<&'static str> {
         match (self.cross, self.wasm, self.runtime) {
             (Some(triple), _, _) => Some(triple),
@@ -81,14 +83,16 @@ impl Target {
         }
     }
 
-    // Whether what it is built for is Windows.
+    // Whether the target platform is Windows.
     fn windows(self) -> bool {
         self.cross
             .map_or(cfg!(windows), |triple| triple.contains("windows"))
     }
 
-    // A side module is position-independent. Emscripten's exceptions are
-    // JavaScript's, which a library that unwinds cannot link against.
+    // Extra rustc flags. A wasm side module must be position-independent.
+    // Emscripten implements exceptions as JavaScript exceptions, which a
+    // library that unwinds cannot link against, so that build aborts on
+    // panic.
     fn rustflags(self) -> Option<&'static str> {
         match (self.wasm, self.runtime) {
             // hxcpp links the static C runtime on Windows, and a library
@@ -103,29 +107,30 @@ impl Target {
     }
 }
 
-/// What a build leaves for a Haxe compile.
+/// The outputs of a build that a Haxe compile uses.
 pub struct Built {
-    /// The runtime's directory: where the built library is, and where a
-    /// compiled program goes.
+    /// The runtime's output directory: it holds the built library, and a
+    /// compiled program is written there.
     pub dir: PathBuf,
-    /// Flags for `haxe` with their values: the class paths, and for hxcpp
-    /// where the headers and the library are.
+    /// `haxe` flags and their values: the class paths, and for hxcpp the
+    /// locations of the headers and the library.
     pub arguments: Vec<(&'static str, String)>,
-    /// The same, as a file `haxe` takes.
+    /// The same arguments as an hxml file.
     pub hxml: PathBuf,
-    /// The library's Haxe classes for the runtime, a class path.
+    /// The class path of the library's Haxe classes for the runtime.
     pub classes: PathBuf,
     /// `hxn.h` and the library's headers, which hxcpp compiles against.
     pub include: PathBuf,
-    /// What was built: the library a VM loads, or the archive hxcpp links.
+    /// The build artifact: the library a VM loads, or the static library
+    /// hxcpp links.
     pub library: PathBuf,
-    /// Declarations of the hxcpp classes for a CPPIA script, a class path.
-    /// Written with a native hxcpp build and no other.
+    /// The class path of the declarations of the hxcpp classes, for a CPPIA
+    /// script. Written only by a native hxcpp build.
     pub declarations: PathBuf,
 }
 
-// Leaves a file that already holds this text alone, so cargo and haxe
-// rebuild only what changed.
+// Writes `text` to `path` unless the file already has that content, so that
+// cargo and haxe rebuild only what changed.
 pub fn write(path: &Path, text: &str) -> Result<(), String> {
     if std::fs::read_to_string(path).is_ok_and(|existing| existing == text) {
         return Ok(());
@@ -137,7 +142,8 @@ pub fn write(path: &Path, text: &str) -> Result<(), String> {
     std::fs::write(path, text).map_err(|error| format!("{}: {error}", path.display()))
 }
 
-/// Runs a program the user sees the output of, and fails if it does.
+/// Runs a command with its output shown to the user, and returns an error
+/// if it fails.
 pub fn run(command: &mut Command) -> Result<(), String> {
     let program = command.get_program().to_string_lossy().into_owned();
     let status = command.status().map_err(|error| {
@@ -160,12 +166,14 @@ pub fn text(path: &Path) -> String {
 
 const NOTE: &str = "# Written by hxn. Do not edit.\n";
 
-// The manifest of an adapter crate. It names the library and hxn's crates
-// from where the library gets them, and stands outside any workspace.
+// The Cargo manifest of an adapter crate. It depends on the library, and on
+// hxn's crates from the same source the library uses. Its empty
+// `[workspace]` table keeps it out of any enclosing workspace.
 fn manifest(project: &Project, target: Target, later: bool) -> String {
     let (kind, crates): (&str, &[&str]) = match target.runtime {
-        // Nothing here can link a wasm library whose imports are the
-        // program's, so that one is linked from an archive afterwards.
+        // cargo cannot link a wasm library whose imports are provided by
+        // the program, so it is built as a static library and linked in a
+        // later step.
         Runtime::Hl if target.wasm => ("staticlib", &["hxn-abi", "hxn-hl"]),
         Runtime::Hl => ("cdylib", &["hxn-abi", "hxn-hl"]),
         Runtime::Cpp => ("staticlib", &["hxn-abi"]),
@@ -180,7 +188,8 @@ fn manifest(project: &Project, target: Target, later: bool) -> String {
     for name in crates {
         out.push_str(&format!("{name} = {}\n", project.hxn.dependency(name)));
     }
-    // Named by the adapter of a library with results over time, and by no other.
+    // Only the adapter of a library with asynchronous results depends on
+    // hxn-future.
     if later {
         out.push_str(&format!(
             "hxn-future = {}\n",
@@ -191,13 +200,13 @@ fn manifest(project: &Project, target: Target, later: bool) -> String {
     out
 }
 
-// The VM's symbols are resolved when it loads the library. Other Unix
-// linkers leave them undefined in a shared object; Apple's must be told,
-// and Windows resolves them at link time against the VM's `libhl.lib`,
-// found in HXN_HL_DIR.
+// The VM's symbols are resolved when the VM loads the library. Most Unix
+// linkers allow undefined symbols in a shared object. Apple's linker needs
+// `-undefined dynamic_lookup` for that. On Windows the symbols are resolved
+// at link time against the VM's `libhl.lib`, found in HXN_HL_DIR.
 const HL_BUILD_SCRIPT: &str = "// Written by hxn. Do not edit.\nfn main() {\n    println!(\"cargo:rerun-if-changed=build.rs\");\n    println!(\"cargo:rerun-if-env-changed=HXN_HL_DIR\");\n    if std::env::var(\"CARGO_CFG_TARGET_VENDOR\").as_deref() == Ok(\"apple\") {\n        println!(\"cargo:rustc-cdylib-link-arg=-Wl,-undefined,dynamic_lookup\");\n    }\n    if std::env::var(\"CARGO_CFG_TARGET_OS\").as_deref() == Ok(\"windows\") {\n        if let Ok(dir) = std::env::var(\"HXN_HL_DIR\") {\n            println!(\"cargo:rustc-link-search=native={dir}\");\n        }\n        println!(\"cargo:rustc-link-lib=dylib=libhl\");\n    }\n}\n";
 
-// What cargo calls the library it builds from an adapter crate.
+// The file name of the library cargo builds from an adapter crate.
 fn artifact(library: &str, target: Target) -> String {
     match target.runtime {
         Runtime::Hl if target.wasm => format!("lib{library}_hl.a"),
@@ -209,7 +218,7 @@ fn artifact(library: &str, target: Target) -> String {
     }
 }
 
-// What a command prints, when it ran and printed something.
+// A command's standard output, or `None` if it could not be run or failed.
 pub fn printed(command: &mut Command) -> Option<String> {
     let output = command.output().ok()?;
     output
@@ -225,7 +234,7 @@ pub fn rustc_reports(key: &str) -> Result<String, String> {
             text.lines()
                 .find_map(|line| line.strip_prefix(key).map(|value| value.trim().to_owned()))
         })
-        .ok_or_else(|| String::from("`rustc -vV` did not report what it is"))
+        .ok_or_else(|| String::from("`rustc -vV` did not print the expected line"))
 }
 
 /// Whether `program` is in a directory on PATH.
@@ -236,8 +245,8 @@ pub fn on_path(program: &str) -> bool {
     })
 }
 
-// The name of each primitive's resolver in a HashLink adapter, which is
-// what a VM looks a primitive up by.
+// The name of each primitive's resolver function in a HashLink adapter. A
+// VM looks up a primitive by that name.
 fn resolvers(adapter: &str) -> Vec<&str> {
     adapter
         .split("define_prim!(")
@@ -247,12 +256,12 @@ fn resolvers(adapter: &str) -> Vec<&str> {
         .collect()
 }
 
-// Links the adapter's archive into a module a wasm program loads. What it
-// leaves undefined, the VM's own functions and the allocator, becomes
-// imports the program answers.
+// Links the adapter's static library into a side module that a wasm program
+// loads. Its undefined symbols, the VM's functions and the allocator, become
+// imports that the program provides.
 fn side_module(archive: &Path, adapter: &str, module: &Path) -> Result<(), String> {
     let sysroot = printed(Command::new("rustc").args(["--print", "sysroot"]))
-        .ok_or("`rustc --print sysroot` did not print where it is")?;
+        .ok_or("`rustc --print sysroot` did not print a path")?;
     let linker = Path::new(sysroot.trim())
         .join("lib/rustlib")
         .join(rustc_reports("host:")?)
@@ -272,8 +281,9 @@ fn side_module(archive: &Path, adapter: &str, module: &Path) -> Result<(), Strin
     run(&mut link)
 }
 
-// Makes `dir` hold these classes and no others: one for an interface the
-// library no longer has would still compile.
+// Writes these classes to `dir` and deletes every other file there. A stale
+// class for an interface the library has removed would otherwise still be
+// compiled.
 fn classes_in(dir: &Path, classes: &[hxn_gen::File]) -> Result<(), String> {
     for class in classes {
         write(&dir.join(&class.path), &class.text)?;
@@ -289,18 +299,19 @@ fn classes_in(dir: &Path, classes: &[hxn_gen::File]) -> Result<(), String> {
     Ok(())
 }
 
-/// How a build is made.
+/// Build options.
 #[derive(Clone, Copy, Default)]
 pub struct Options<'a> {
     pub release: bool,
-    /// Has cargo report which crates the build spent its time on.
+    /// Passes `--timings` to cargo, which reports how long each crate took
+    /// to build.
     pub timings: bool,
-    /// The directory the HashLink VM is in.
+    /// The directory that contains the HashLink VM.
     pub hashlink: Option<&'a Path>,
 }
 
-/// Reads the library's marked items, writes its binding for `target` and
-/// builds the adapter.
+/// Parses the library's marked items, generates its binding for `target`
+/// and builds the adapter.
 pub fn build(project: &Project, target: Target, options: Options) -> Result<Built, String> {
     let Options {
         release,
@@ -310,12 +321,12 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
     let name = &project.library;
     let runtime = target.runtime;
     if target.wasm {
-        // std is rebuilt for a wasm target, to be position-independent or
-        // to abort, and only a nightly cargo will do that.
+        // A wasm target needs std rebuilt as position-independent code or
+        // with panic=abort, and only a nightly cargo can rebuild std.
         let release = rustc_reports("release:")?;
         if !release.contains("nightly") && !release.contains("dev") {
             return Err(format!(
-                "a wasm build rebuilds Rust's standard library, which takes a nightly toolchain, and this one is {release}: install one with `rustup toolchain install nightly --component rust-src` and set RUSTUP_TOOLCHAIN=nightly"
+                "a wasm build rebuilds Rust's standard library, which requires a nightly toolchain, but the current toolchain is {release}: install one with `rustup toolchain install nightly --component rust-src` and set RUSTUP_TOOLCHAIN=nightly"
             ));
         }
         if runtime == Runtime::Cpp && !on_path("emcc") {
@@ -333,15 +344,15 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
         ));
     }
 
-    // Beside the crate, to be committed: a change to it is a change to the
-    // library's ABI.
+    // The manifest is written into the crate's directory so that it is
+    // committed: a change to it is a change to the library's ABI.
     write(
         &project.dir.join(format!("{name}.hxn.json")),
         &hxn_gen::manifest(&library),
     )?;
 
     let out = project.target.join("hxn").join(name);
-    // The same API as WebIDL, for whoever reads interfaces in that.
+    // The same API in WebIDL, for readers and tools that use that format.
     write(
         &out.join(format!("{name}.hxn.webidl")),
         &hxn_gen::webidl(&library),
@@ -383,8 +394,9 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
             )
         }
     };
-    // Every export's contract is the ABI's: its arguments are what the
-    // runtime passes.
+    // The exports carry no safety docs of their own: each one's safety
+    // contract is the ABI's, and its arguments are the ones the runtime
+    // passes.
     write(
         &krate.join("src/lib.rs"),
         &format!("#![allow(clippy::missing_safety_doc)]\n\n{adapter}"),
@@ -397,7 +409,8 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
         classes_in(&declarations, &hxn_gen::haxe_cppia(&library))?;
     }
 
-    // Built with what the library's own lock file resolved, the first time.
+    // The first build starts from the library's Cargo.lock, so the adapter
+    // uses the dependency versions the library resolved.
     let lock = krate.join("Cargo.lock");
     if !lock.exists() {
         for above in project.dir.ancestors() {
@@ -427,15 +440,15 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
         }
         built.push(triple);
     }
-    // Where the adapter's build script finds the VM's library, unless the
-    // environment already specifies it.
+    // HXN_HL_DIR tells the adapter's build script where the VM's library is.
+    // A value already set in the environment is kept.
     if let Some(dir) = hashlink
         && std::env::var_os("HXN_HL_DIR").is_none()
     {
         cargo.env("HXN_HL_DIR", dir);
     }
-    // With the flags the environment already asks for, which these would
-    // otherwise replace.
+    // Appended to the RUSTFLAGS already in the environment, which setting
+    // the variable would otherwise replace.
     if let Some(flags) = target.rustflags() {
         let given = std::env::var("RUSTFLAGS").unwrap_or_default();
         cargo.env("RUSTFLAGS", format!("{given} {flags}"));
@@ -455,7 +468,7 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
             built = module;
         }
         Runtime::Hl => {
-            // Under the name the Haxe classes ask the VM for.
+            // Copied to the file name the Haxe classes load it by.
             let hdll = dir.join(format!("{name}.hdll"));
             std::fs::copy(&built, &hdll)
                 .map_err(|error| format!("{}: {error}", built.display()))?;
@@ -463,14 +476,15 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
         }
         Runtime::Cpp => {
             if target.wasm {
-                // hxcpp assumes the host's 64 bits, and its UTF-16 strings
-                // reach for a Windows-only call under Emscripten.
+                // hxcpp assumes the host's 64-bit pointers unless told
+                // otherwise, and its UTF-16 strings call a Windows-only
+                // function under Emscripten.
                 for define in ["emscripten", "HXCPP_M32", "disable_unicode_strings"] {
                     arguments.push(("-D", String::from(define)));
                 }
             } else if cfg!(windows) && target.cross.is_none() {
-                // hxcpp builds for 32 bits there unless told, and the
-                // library is built for the host.
+                // On Windows hxcpp builds a 32-bit program by default, and
+                // the library is built for the host architecture.
                 let bits = if cfg!(target_arch = "aarch64") {
                     "HXCPP_ARM64"
                 } else {

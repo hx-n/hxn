@@ -1,10 +1,10 @@
-//! The value of the last failure on this thread.
+//! Thread-local storage for the typed value of the last failure.
 //!
-//! A failure crosses as a status and a message. When the library failed with
-//! plain data of its own, the bytes of that are kept here, and the binding,
-//! having caught what the message was thrown as, takes them and throws the
-//! typed value instead. Every failure replaces what was kept, so what is
-//! taken belongs to the failure just caught.
+//! A failure is passed across the boundary as a status and a message. When
+//! the library failed with a plain-data error of its own, the serialized bytes
+//! are stored here. The binding catches the exception thrown for the message,
+//! takes the bytes, and throws the typed error instead. Every failure replaces
+//! the stored bytes, so the bytes taken belong to the failure just caught.
 
 use std::cell::RefCell;
 
@@ -12,9 +12,10 @@ thread_local! {
     static KEPT: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
 }
 
-/// Keeps `value` as the last failure's, in place of any before it.
+/// Stores `value` as the last failure's value, replacing any earlier one.
 pub fn keep(value: Vec<u8>) {
-    // A thread that is ending has nowhere to keep it, and nothing to read it.
+    // On an exiting thread the storage is gone and nothing would read the
+    // value, so it is dropped.
     let _ = KEPT.try_with(|kept| {
         if let Ok(mut kept) = kept.try_borrow_mut() {
             *kept = value;
@@ -22,7 +23,7 @@ pub fn keep(value: Vec<u8>) {
     });
 }
 
-/// The last failure's value, which is then kept no longer. Empty if it had
+/// Returns the last failure's value and clears it. Empty if the failure had
 /// none.
 pub fn take() -> Vec<u8> {
     KEPT.try_with(|kept| {

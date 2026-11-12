@@ -5,19 +5,22 @@ import sys.thread.Mutex;
 import sys.thread.Thread;
 
 /**
-	One native library's results on their way to the app.
+	Delivers one native library's results to the app.
 
-	The library notes each thing that has something new, a settled future, a
-	stream with an item, a changed value, in one queue. This drains that queue
-	and calls whoever is watching each one, so everything from a library
-	arrives through one door, in order, and with one wait between them all.
+	The library has a single queue. It adds an entry for each watched future,
+	stream or value that has something new: a settled future, a stream with
+	an item, a changed value. This class drains that queue and calls the
+	watchers registered for each entry. All results from a library are
+	therefore delivered through one path, in order, and one wait covers all
+	of them.
 
-	A binding makes one for its library from two calls: a wait taking a limit
-	in milliseconds (negative for none) that returns whether anything is
-	queued, and a next that returns the id of what is, or -1.
+	A binding creates one for its library from two functions: `wait` takes a
+	timeout in milliseconds (negative for no timeout) and returns whether
+	anything is queued, and `next` returns the id of the next queued entry,
+	or -1.
 
 	`Future.then`, `Stream.listen` and `Reactive.follow` are built on `watch`.
-	An app with a reactive graph of its own can use `follow` here directly.
+	An app with its own reactive graph can call `follow` here directly.
 **/
 class Inbox {
 	final wait:Int->Bool;
@@ -25,7 +28,7 @@ class Inbox {
 	final lock = new Mutex();
 	final watchers = new Map<Int, Array<() -> Bool>>();
 	var watching = 0;
-	// Watched since the last sync, and owed a first look whatever the queue holds.
+	// Ids watched since the last sync. Each gets an initial delivery regardless of what is queued.
 	var due:Array<Int> = [];
 	var driven = false;
 	var looking = false;
@@ -37,9 +40,9 @@ class Inbox {
 	}
 
 	/**
-		Has `deliver` called during `sync` whenever the library has something
-		new under `id`, and once to begin with. It returns whether to go on
-		being called. Returns what stops it.
+		Registers `deliver` to be called during `sync` whenever the library
+		queues `id`, and once initially. `deliver` returns whether it should
+		keep being called. Returns a function that unregisters it.
 	**/
 	public function watch(id:Int, deliver:() -> Bool):() -> Void {
 		lock.acquire();
@@ -56,10 +59,10 @@ class Inbox {
 	}
 
 	/**
-		Calls `sink` with a value the library keeps current, each time it has
-		changed since `seen`, the version the caller read it at. `wait` and
-		`read` are the library's calls for that value, as `Reactive.follow`
-		describes them. Returns what stops it.
+		Calls `sink` with a value the library keeps up to date, each time it
+		has changed since `seen`, the version at which the caller read it.
+		`wait` and `read` are the library's functions for that value, as
+		described in `Reactive.follow`. Returns a function that stops it.
 	**/
 	public function follow<T>(id:Int, seen:Int, wait:(seen:Int, limit:Int) -> Int, read:() -> T, sink:T->Void):() -> Void {
 		return watch(id, () -> {
@@ -86,8 +89,8 @@ class Inbox {
 	}
 
 	/**
-		Delivers what this library has ready, on the calling thread. Returns
-		whether anything is still being watched. `Loop.sync` does this for
+		Delivers this library's ready results on the calling thread. Returns
+		whether anything is still being watched. `Loop.sync` calls this for
 		every library.
 	**/
 	public function sync():Bool {
@@ -104,7 +107,7 @@ class Inbox {
 			if (called != null)
 				for (deliver in called) {
 					var keep = false;
-					// One watcher that throws does not cost the others their turn.
+					// An exception from one watcher does not stop the others from being called.
 					try {
 						keep = deliver();
 					} catch (error:Exception) {
@@ -125,20 +128,20 @@ class Inbox {
 				id = next();
 			}
 		});
-		// What was delivered may have been the last use of something large.
+		// The delivery may have dropped the last reference to a large native value.
 		Gc.check();
 		if (failure != null)
 			throw failure;
 		return watching > 0;
 	}
 
-	// Sees that `sync` gets called while anything is watched, unless the app does.
+	// Arranges for `sync` to be called while anything is watched, unless the app calls it itself.
 	function drive():Void {
 		if (Loop.manual)
 			return;
 		var events = Thread.current().events;
 		#if (emscripten || hxn_no_threads)
-		// No thread to wait on the library with, so each turn of the loop asks.
+		// No thread can block waiting on the library, so each event loop iteration polls it.
 		if (driven)
 			return;
 		driven = true;
@@ -162,7 +165,7 @@ class Inbox {
 		};
 		events.run(turn);
 		#else
-		// A new watcher's first look need not wait for the library to stir.
+		// Schedules a sync so a new watcher's initial delivery does not wait for the library to queue something.
 		if (!looking) {
 			looking = true;
 			events.run(() -> {
@@ -174,13 +177,14 @@ class Inbox {
 		if (driven)
 			return;
 		driven = true;
-		// Kept alive while anything is watched.
+		// Keeps the event loop alive while anything is watched.
 		events.promise();
 		var handled = new sys.thread.Lock();
 		Thread.create(() -> {
 			while (!Loop.manual && watching > 0) {
-				// In slices with a sleep between, for runtimes that run their
-				// other threads only while this one sleeps.
+				// Waits in short slices with a sleep between them, for
+				// runtimes that run their other threads only while this one
+				// sleeps.
 				if (!wait(20)) {
 					Sys.sleep(0.001);
 					continue;
@@ -198,8 +202,8 @@ class Inbox {
 					if (failure != null)
 						throw failure;
 				});
-				// One delivery at a time, so the library is asked again only
-				// once the app has caught up.
+				// Blocks until this delivery has run, so the library is
+				// polled again only after the app has handled it.
 				handled.wait();
 			}
 			events.runPromised(() -> {

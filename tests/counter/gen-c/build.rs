@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
-// Writes the adapter from the library's source. The header, the glue and
-// the Haxe classes come from the same source through the hxn-gen command.
+// Generates the adapter from the library's source. The header, the glue and
+// the Haxe classes are generated from the same source by the hxn-gen command.
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
     let (library, files) = hxn_gen::parse_crate("counter", Path::new("../core/src/lib.rs"))

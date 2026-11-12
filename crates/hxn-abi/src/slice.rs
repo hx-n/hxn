@@ -2,11 +2,12 @@ use std::marker::PhantomData;
 
 use crate::Fault;
 
-/// Bytes borrowed for `'a`: a pointer and a length, in C's layout.
+/// A byte slice borrowed for `'a`: a pointer and a length with C layout.
 ///
-/// As a parameter of an `extern "C"` function `'a` is the call, which is how
-/// long a host keeps an argument alive. Whoever builds one promises `ptr` is
-/// readable for `len` bytes for `'a`; reading it checks the rest.
+/// As a parameter of an `extern "C"` function, `'a` is the duration of the
+/// call, which is how long a host keeps an argument alive. The code that
+/// constructs one guarantees that `ptr` is readable for `len` bytes for `'a`.
+/// The accessors check everything else.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct Slice<'a> {
@@ -25,8 +26,8 @@ impl<'a> Slice<'a> {
     }
 
     /// # Safety
-    /// `ptr` is readable for `len` bytes for `'a` and nothing writes them
-    /// meanwhile, or `len` is zero.
+    /// `ptr` is readable for `len` bytes for `'a` and nothing writes to them
+    /// during `'a`, or `len` is zero.
     pub const unsafe fn from_raw(ptr: *const u8, len: usize) -> Self {
         Self {
             ptr,
@@ -60,7 +61,8 @@ impl<'a> From<&'a str> for Slice<'a> {
     }
 }
 
-/// Bytes borrowed for `'a` to be written. Not `Copy`: there is one writer.
+/// A byte slice borrowed mutably for `'a`. Not `Copy`, because there must be
+/// only one writer.
 #[repr(C)]
 pub struct SliceMut<'a> {
     ptr: *mut u8,
@@ -79,7 +81,7 @@ impl<'a> SliceMut<'a> {
 
     /// # Safety
     /// `ptr` is writable for `len` bytes for `'a` and nothing else reads or
-    /// writes them meanwhile, or `len` is zero.
+    /// writes them during `'a`, or `len` is zero.
     pub const unsafe fn from_raw(ptr: *mut u8, len: usize) -> Self {
         Self {
             ptr,

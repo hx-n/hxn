@@ -1,27 +1,28 @@
-//! Makes a library to start from: a crate, an example of the marked API,
-//! and a Haxe program that uses it.
+//! Creates a starter library: a crate with an example of a marked API, and
+//! a Haxe program that uses it.
 
 use std::path::{Path, PathBuf};
 
 use crate::project::{is_library_name, quoted};
 
-// What it starts from is the repository's first example.
+// The starter files are the repository's first example.
 const LIBRARY: &str = include_str!("../../../examples/greeter/src/lib.rs");
 const PROGRAM: &str = include_str!("../../../examples/greeter/haxe/Main.hx");
 const IGNORE: &str = "/target\n";
-// The tag a release of this version is published under.
+// The git tag of this version's release.
 const RELEASE: &str = concat!("v", env!("CARGO_PKG_VERSION"));
 
-/// The new crate's manifest. `hxn` is how it depends on hxn.
+/// The new crate's manifest. `hxn` is the value of its `hxn` dependency.
 fn manifest(name: &str, hxn: &str) -> String {
     format!(
         "[package]\nname = \"{name}\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\nhxn = {hxn}\n"
     )
 }
 
-/// Makes the library `name` in a directory of that name under `at`. With
-/// `checkout` it depends on that copy of hxn's repository; otherwise on the
-/// repository at the release tag of this program's version.
+/// Creates the library `name` in a directory of that name under `at`. With
+/// `checkout` it depends on that local checkout of hxn's repository.
+/// Otherwise it depends on the git repository at the release tag of this
+/// program's version.
 pub fn new(name: &str, checkout: Option<&Path>, at: &Path) -> Result<PathBuf, String> {
     if !is_library_name(&name.replace('-', "_")) {
         return Err(format!(
@@ -34,14 +35,14 @@ pub fn new(name: &str, checkout: Option<&Path>, at: &Path) -> Result<PathBuf, St
     }
     let hxn = match checkout {
         Some(checkout) => {
-            // Not canonical: on Windows that is a path cargo takes and
-            // other tools do not.
+            // Absolute rather than canonical: on Windows a canonical path
+            // has a form that cargo accepts and other tools do not.
             let krate = std::path::absolute(checkout)
                 .map_err(|error| format!("{}: {error}", checkout.display()))?
                 .join("crates/hxn");
             if !krate.join("Cargo.toml").is_file() {
                 return Err(format!(
-                    "{} is not a copy of hxn's repository",
+                    "{} is not a checkout of hxn's repository",
                     checkout.display()
                 ));
             }
@@ -73,8 +74,8 @@ pub fn new(name: &str, checkout: Option<&Path>, at: &Path) -> Result<PathBuf, St
 mod tests {
     use super::*;
 
-    // The example is what a new user reads first, and nothing else here
-    // compiles it.
+    // The example is the first code a new user reads, and nothing else in
+    // this crate compiles it.
     #[test]
     fn the_example_is_one_the_generator_takes() {
         let library = hxn_gen::parse("greeter", LIBRARY).unwrap();
@@ -90,7 +91,8 @@ mod tests {
         }
     }
 
-    // The readme shows a new library's two files as they are made.
+    // The readme shows a new library's two files exactly as `hxn new`
+    // creates them.
     #[test]
     fn the_readme_shows_the_example_as_it_is() {
         let readme = include_str!("../../../README.md");

@@ -1,27 +1,27 @@
-//! Haxe functions lent to a call.
+//! Haxe callbacks, borrowed for the duration of a call.
 //!
-//! A library function takes one as `impl Fn(..) -> Result<T, E>`. It is
-//! called during the call, on the calling thread, and it can fail, because
-//! the Haxe function can throw. Native code cannot be thrown through, so the
-//! Haxe side wraps what the user passed: the wrapper keeps the exception and
-//! returns a value that marks it, the trampoline turns that into
-//! `Status::CALLBACK`, the library sees an `Err` and returns, and the binding
-//! throws the kept exception afterwards.
+//! A library function accepts one as `impl Fn(..) -> Result<T, E>`. It is
+//! invoked during the call, on the calling thread, and it can fail, because
+//! the Haxe function can throw. An exception cannot unwind through native
+//! code, so the Haxe side wraps the function the user passed: the wrapper
+//! catches and stores the exception and returns a sentinel value, the
+//! trampoline turns that into `Status::CALLBACK`, the library sees an `Err`
+//! and returns, and the binding rethrows the stored exception afterwards.
 //!
-//! Over the C ABI a lent function is an `hxn_callback`; to HashLink it is a
+//! Over the C ABI a callback is an `hxn_callback`; on HashLink it is a
 //! closure, called through a trampoline that boxes its arguments.
 //!
-//! Text and bytes go to one borrowed, as a slice the host copies during the
-//! call, and come back owned: a buffer the host fills and the library
-//! frees. An object goes to one for good: the host owns it from then on, as
-//! it owns one a function returns. Data goes and comes back as what it
-//! crosses as anywhere, an enum's number or the bytes of its parts, which
-//! the adapter's closure writes and reads.
+//! Text and bytes are passed to a callback borrowed, as a slice the host
+//! copies during the call, and are returned owned: a buffer the host fills
+//! and the library frees. An object passed to a callback is transferred: the
+//! host owns it from then on, as it owns an object a function returns. Data
+//! is passed and returned in its usual wire format, an enum's integer value
+//! or the serialized bytes, which the adapter's closure writes and reads.
 
 use crate::data;
 use crate::model::{Data, Library, Type};
 
-/// What a lent function takes and gives, if `ty` is one.
+/// A callback's parameter types and return type, if `ty` is a callback.
 pub fn of(ty: &Type) -> Option<(&[Type], &Type)> {
     match ty {
         Type::Lent { params, returns } => Some((params, returns)),
@@ -29,9 +29,9 @@ pub fn of(ty: &Type) -> Option<(&[Type], &Type)> {
     }
 }
 
-/// Each shape of function the library is lent somewhere, in the order met.
-/// Two that differ only in which interface an object is of are one shape:
-/// at the boundary an object is a pointer whatever it is.
+/// Each callback shape (its signature at the boundary) the library accepts
+/// somewhere, in order of first use. Two that differ only in an object's
+/// interface are one shape: at the boundary every object is a pointer.
 pub fn used(library: &Library) -> Vec<&Type> {
     let mut out: Vec<&Type> = Vec::new();
     let mut seen: Vec<String> = Vec::new();
@@ -50,7 +50,8 @@ pub fn used(library: &Library) -> Vec<&Type> {
     out
 }
 
-/// The interfaces a lent function is given an object of, in the order met.
+/// The interfaces whose objects are passed to a callback, in order of first
+/// use.
 pub fn given(library: &Library) -> Vec<&str> {
     let mut out: Vec<&str> = Vec::new();
     for method in library.interfaces.iter().flat_map(|i| &i.methods) {
@@ -70,8 +71,8 @@ pub fn given(library: &Library) -> Vec<&str> {
     out
 }
 
-// What a type is at the boundary: itself, or what data crosses as. Two
-// shapes that differ only in which data they pass are one.
+// A type's wire type: the type itself, or its data's wire type. Two shapes
+// that differ only in their data types are one shape.
 fn crossed(ty: &Type) -> Type {
     match ty {
         Type::Data(data) => data.wire().unwrap_or(Type::Bytes),
@@ -92,17 +93,17 @@ fn letter(ty: &Type) -> char {
     }
 }
 
-/// Which runtime a Haxe class is written for: they differ in what a
-/// function's wrapper is handed for text.
+/// The runtime a Haxe class is generated for: runtimes differ in what a
+/// callback's wrapper receives for text.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Host {
     Hl,
     Cpp,
 }
 
-// A shape that passes more than numbers is called through a function of its
-// own: the conventional `invoke` has no place for a borrowed argument or a
-// result that is converted.
+// A shape that passes more than numbers is called through a dedicated
+// function: the standard `invoke` cannot take a borrowed argument or convert
+// a return value.
 fn texts(params: &[Type], returns: &Type) -> bool {
     params
         .iter()
@@ -115,7 +116,8 @@ fn caller(params: &[Type], returns: &Type) -> String {
     format!("call_{}", key(params, returns))
 }
 
-// A shape's name in a function: `id_to_b`, or `to_i` for one taking nothing.
+// A shape's name within a function name: `id_to_b`, or `to_i` for one with
+// no parameters.
 fn key(params: &[Type], returns: &Type) -> String {
     let taken: String = params.iter().map(letter).collect();
     if taken.is_empty() {
@@ -139,7 +141,7 @@ pub fn alias(params: &[Type], returns: &Type) -> String {
     format!("Lent{taken}To{}", letter(returns).to_ascii_uppercase())
 }
 
-// What an argument is at the boundary: a bool is an int, text and bytes are
+// An argument's type at the boundary: a bool is an int, text and bytes are
 // borrowed for the call, and an object is the pointer the host will own.
 fn c_type(ty: &Type) -> &'static str {
     match crossed(ty) {
@@ -150,9 +152,9 @@ fn c_type(ty: &Type) -> &'static str {
     }
 }
 
-// What a result is there: a function that returns nothing writes an int
-// nobody reads, and text or bytes are the host's copy for the library to
-// free.
+// A return value's type at the boundary: a callback that returns nothing
+// writes an int that is never read, and text or bytes are a copy made by the
+// host for the library to free.
 fn c_given(ty: &Type) -> &'static str {
     match crossed(ty) {
         Type::F64 => "f64",
@@ -193,8 +195,8 @@ pub fn aliases(library: &Library) -> String {
     out
 }
 
-// The function a shape with text is called through. What the host wrote is
-// read only after it reported success.
+// The function a shape with text is called through. The host's output is
+// read only after it reports success.
 fn call(params: &[Type], returns: &Type) -> String {
     let declared: String = params
         .iter()
@@ -202,7 +204,7 @@ fn call(params: &[Type], returns: &Type) -> String {
         .map(|(n, ty)| match crossed(ty) {
             Type::Str => format!(", a{n}: &str"),
             Type::Bytes => format!(", a{n}: &[u8]"),
-            // Already the pointer the host is handed.
+            // Already the pointer passed to the host.
             Type::Handle { .. } => format!(", a{n}: *mut c_void"),
             other => format!(", a{n}: {}", rust_type(&other)),
         })
@@ -232,9 +234,9 @@ fn call(params: &[Type], returns: &Type) -> String {
     )
 }
 
-/// The closure an adapter passes the library's function for the callback
-/// `name`: it calls through, and gives the library an `Err` when the Haxe
-/// function failed.
+/// The closure an adapter passes to the library's function for the callback
+/// `name`: it invokes the callback, and returns an `Err` to the library when
+/// the Haxe function threw.
 pub fn closure(host: Host, name: &str, params: &[Type], returns: &Type) -> String {
     let names: Vec<String> = (0..params.len()).map(|n| format!("a{n}")).collect();
     if params
@@ -245,7 +247,7 @@ pub fn closure(host: Host, name: &str, params: &[Type], returns: &Type) -> Strin
         return data_closure(host, name, params, returns, &names);
     }
     if texts(params, returns) {
-        // An object is given away here, as the handle the host will own.
+        // An object is transferred here, as the handle the host will own.
         let passed: String = params
             .iter()
             .zip(&names)
@@ -255,7 +257,7 @@ pub fn closure(host: Host, name: &str, params: &[Type], returns: &Type) -> Strin
                 _ => format!(", {name}"),
             })
             .collect();
-        // Inside the adapter's own `unsafe` block, as every call here is.
+        // Inside the adapter's `unsafe` block, like every call here.
         return format!(
             "|{}| {}(&{name}{passed})",
             names.join(", "),
@@ -282,9 +284,9 @@ pub fn closure(host: Host, name: &str, params: &[Type], returns: &Type) -> Strin
     )
 }
 
-// The closure for a shape that passes data. Each argument of data is
-// written as what crosses before the call, whether the library's function
-// hands it over or lends it, and a result of data is read after it.
+// The closure for a shape that passes data. Each data argument is serialized
+// to its wire type before the call, whether the library passes it by value or
+// by reference, and a data return value is deserialized after it.
 fn data_closure(
     host: Host,
     name: &str,
@@ -341,11 +343,11 @@ fn data_closure(
     )
 }
 
-/// The closure's type as a HashLink primitive's signature writes it.
+/// The closure's type, in HashLink primitive signature notation.
 pub fn hl_signature(params: &[Type], returns: &Type) -> String {
-    // Text reaches the wrapper as the VM's bytes, which it makes a `String`
-    // of; bytes come with their length; and an object is a pointer the
-    // wrapper knows the type of.
+    // Text reaches the wrapper as VM bytes, which it converts to a `String`;
+    // bytes come with their length; and an object is a pointer whose type the
+    // wrapper knows.
     let taken: String = params
         .iter()
         .map(|ty| match crossed(ty) {
@@ -355,7 +357,7 @@ pub fn hl_signature(params: &[Type], returns: &Type) -> String {
         })
         .collect();
     let given = match crossed(returns) {
-        // The wrapper's result is whether the function returned.
+        // The wrapper returns whether the function returned without throwing.
         Type::Void => String::from("b"),
         // A `String`, which is null when it threw.
         Type::Str => String::from("OBi_"),
@@ -399,9 +401,9 @@ pub fn hl_trampolines(library: &Library) -> String {
                 Type::F64 => format!("box_f64(a{n})"),
                 Type::Str => format!("box_bytes(utf16(a{n}))"),
                 Type::Bytes => format!("box_bytes(bytes(a{n})), box_i32(a{n}_length)"),
-                // The VM's own pointer to the object, passed as bytes: a
-                // closure called this way is not given a typed pointer. The
-                // wrapper gets its type back from a primitive.
+                // The VM's pointer to the object, passed as bytes, because a
+                // closure called this way cannot receive a typed pointer. The
+                // wrapper restores its type with a primitive.
                 Type::Handle { .. } => format!("box_bytes(a{n}.cast())"),
                 _ => format!("box_i32(a{n})"),
             })
@@ -470,7 +472,8 @@ pub fn cpp_trampolines(library: &Library) -> String {
             Type::Void => ("int", "result == null() || !(bool)result", "*out = 0;"),
             Type::Bool => ("int", "result == null()", "*out = (bool)result ? 1 : 0;"),
             Type::F64 => ("double", "result == null()", "*out = (double)result;"),
-            // A copy the library frees, since the string is the collector's.
+            // A copy for the library to free, since the string is owned by
+            // the garbage collector.
             Type::Str => (
                 "hxn_buf",
                 "result == null()",
@@ -511,9 +514,9 @@ fn haxe_taken(params: &[Type]) -> String {
     taken.join(", ")
 }
 
-// What the wrapper is handed for an argument: the types, and each with the
-// name it is declared by. HashLink's native code cannot make a `String` or a
-// `haxe.io.Bytes`, so both reach the wrapper there as the VM's bytes, bytes
+// The types the wrapper receives for an argument, each declared as its own
+// parameter. HashLink native code cannot create a `String` or a
+// `haxe.io.Bytes`, so on HashLink both reach the wrapper as VM bytes, bytes
 // with their length, and so does an object's pointer.
 fn haxe_handed(host: Host, ty: &Type) -> Vec<String> {
     match (host, crossed(ty)) {
@@ -533,14 +536,14 @@ fn haxe_declared(host: Host, n: usize, ty: &Type) -> String {
     }
 }
 
-/// The type of the function a Haxe method takes: `(Int, Float) -> Bool`.
+/// The type of a Haxe method's callback parameter: `(Int, Float) -> Bool`.
 pub fn haxe_type(params: &[Type], returns: &Type) -> String {
     format!("({}) -> {}", haxe_taken(params), haxe_scalar(returns))
 }
 
-// What the wrapper returns: the result or null, or whether it returned.
-// HashLink's native code reads a `haxe.io.Bytes` as it is; hxcpp's is given
-// what one holds.
+// The wrapper's return type: the value or null, or whether it returned
+// without throwing. HashLink native code reads a `haxe.io.Bytes` directly;
+// hxcpp native code receives its underlying data.
 fn haxe_guarded(host: Host, returns: &Type) -> String {
     match (host, crossed(returns)) {
         (_, Type::Void) => String::from("Bool"),
@@ -550,7 +553,7 @@ fn haxe_guarded(host: Host, returns: &Type) -> String {
     }
 }
 
-/// The type of the wrapper, which is what native code is given.
+/// The type of the wrapper, which is what native code receives.
 pub fn haxe_native_type(host: Host, params: &[Type], returns: &Type) -> String {
     let handed: Vec<String> = params.iter().flat_map(|ty| haxe_handed(host, ty)).collect();
     format!("({}) -> {}", handed.join(", "), haxe_guarded(host, returns))
@@ -561,16 +564,17 @@ pub fn guarded(name: &str) -> String {
     format!("{name}Guarded")
 }
 
-/// The statement that wraps the function `name`: the wrapper catches,
-/// keeps the exception and returns what tells the library the call failed.
+/// The statement that wraps the callback `name`: the wrapper catches and
+/// stores an exception and returns a value that tells the library the call
+/// failed.
 pub fn haxe_guard(host: Host, name: &str, params: &[Type], returns: &Type) -> String {
     let declared: Vec<String> = params
         .iter()
         .enumerate()
         .map(|(n, ty)| haxe_declared(host, n, ty))
         .collect();
-    // An object is owned before anything can throw, so it is released
-    // whatever the function does with it.
+    // An object is given an owner before anything can throw, so it is
+    // released whatever the function does with it.
     let owned: String = params
         .iter()
         .enumerate()
@@ -584,7 +588,8 @@ pub fn haxe_guard(host: Host, name: &str, params: &[Type], returns: &Type) -> St
             _ => String::new(),
         })
         .collect();
-    // Data is read inside the `try`, one argument a statement, in order.
+    // Data is deserialized inside the `try`, one statement per argument, in
+    // order.
     let mut read = String::new();
     let passed: Vec<String> = params
         .iter()
@@ -611,7 +616,7 @@ pub fn haxe_guard(host: Host, name: &str, params: &[Type], returns: &Type) -> St
         })
         .collect();
     let call = format!("{name}({})", passed.join(", "));
-    // What the runtime is handed for bytes the function gave.
+    // What the runtime receives for bytes the function returned.
     let handed = |bytes: &str| match host {
         Host::Hl => bytes.to_owned(),
         Host::Cpp => format!("{bytes}.getData()"),
@@ -634,7 +639,8 @@ pub fn haxe_guard(host: Host, name: &str, params: &[Type], returns: &Type) -> St
             lines.push(format!("return {};", handed("out.getBytes()")));
             (lines.join("\n").replace('\n', "\n\t\t\t\t"), "null")
         }
-        // Null is how the wrapper reports a throw, so it is not a result.
+        // Null is how the wrapper reports a throw, so it is not a valid
+        // return value.
         Type::Str => (
             format!(
                 "var result = {call};\n\t\t\t\tif (result == null)\n\t\t\t\t\tthrow new haxe.Exception(\"a function lent to a library returned null\");\n\t\t\t\treturn result;"

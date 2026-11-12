@@ -1,6 +1,7 @@
 //! counter-core over the plain C ABI. Declared for C in `counter_abi.h`.
 
-// Every export's contract is the ABI's: arguments are what the host's glue passes.
+// Every export has the ABI's safety contract: its arguments are whatever the
+// host's glue passes.
 #![allow(clippy::missing_safety_doc)]
 
 use std::ffi::c_void;
@@ -447,7 +448,7 @@ pub unsafe extern "C" fn counter_gauge_set(
     }
 }
 
-// The library's one queue of what it has for the host. The caller is in a
+// The library's single queue of items ready for the host. The caller is in a
 // GC-free zone, so this only waits.
 #[unsafe(no_mangle)]
 pub extern "C" fn counter_outbox_wait(milliseconds: i32) -> i32 {

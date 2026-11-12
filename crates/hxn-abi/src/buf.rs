@@ -1,11 +1,12 @@
 use std::mem::ManuallyDrop;
 
-/// Bytes the library allocated and the host now owns.
+/// A byte buffer the library allocated and has transferred to the host.
 ///
-/// The host copies them into its own heap and calls `free` with the other
-/// three fields, exactly once. The buffer carries its own `free` because each
-/// library has its own allocator, and only the one that allocated can release.
-/// An empty buffer has no `free` and needs none.
+/// The host copies the bytes into its own heap and calls `free` with the
+/// other three fields, exactly once. The buffer carries its own `free` because
+/// each library has its own allocator, and only the allocator that allocated
+/// the bytes can free them. An empty buffer has a null `free` and does not
+/// need freeing.
 #[repr(C)]
 pub struct Buf {
     ptr: *mut u8,
@@ -119,7 +120,7 @@ mod tests {
 
     #[test]
     fn host_frees_through_the_buffer() {
-        // What a host does: read the fields, call `free`, never run `Drop`.
+        // Mimics a host: reads the fields, calls `free`, never runs `Drop`.
         let buf = ManuallyDrop::new(Buf::from(String::from("released by the host")));
         unsafe { (buf.free.unwrap())(buf.ptr, buf.len, buf.cap) };
     }

@@ -1,6 +1,7 @@
-//! counter-core over the plain C ABI, as hxn-gen writes it.
+//! counter-core over the plain C ABI, using the adapter hxn-gen generates.
 
-// Every export's contract is the ABI's: arguments are what the host's glue passes.
+// Every export has the ABI's safety contract: its arguments are whatever the
+// host's glue passes.
 #![allow(clippy::missing_safety_doc)]
 
 include!(concat!(env!("OUT_DIR"), "/adapter.rs"));

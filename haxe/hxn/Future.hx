@@ -4,18 +4,20 @@ import haxe.Exception;
 import sys.thread.Mutex;
 
 /**
-	One result or failure from an asynchronous native operation.
+	The single result or failure of an asynchronous native operation.
 
-	`await()` returns the value or throws the failure, blocking the calling
-	thread while letting the collector run. `then()` delivers either one later,
-	when the library's results are next delivered: see `Loop`.
+	`await()` returns the value or throws the failure. It blocks the calling
+	thread but lets the garbage collector run. `then()` delivers the value or
+	failure later, the next time the library's results are delivered: see
+	`Loop`.
 
-	A binding builds one from its library's `Inbox` and four calls: one that
-	starts the future being noted there and returns its id, the state
-	(0 pending, 1 resolved, 2 rejected), a wait taking a limit in milliseconds
-	(negative for none) and returning the state, and a take that returns the
-	value or throws. The result stays in the library until `take` runs here, so
-	the native thread that settles the future never touches this runtime.
+	A binding constructs one from its library's `Inbox` and four functions:
+	`watch` registers the future with the library's queue and returns its id,
+	`state` returns the state (0 pending, 1 resolved, 2 rejected), `wait`
+	takes a timeout in milliseconds (negative for no timeout) and returns the
+	state, and `take` returns the value or throws. The result stays in the
+	library until `take` runs on a Haxe thread, so the native thread that
+	settles the future never calls into this runtime.
 **/
 class Future<T> {
 	final inbox:Inbox;
@@ -36,7 +38,7 @@ class Future<T> {
 		this.take = take;
 	}
 
-	/** True once there is a value or a failure. **/
+	/** True once the future has a value or a failure. **/
 	public function isReady():Bool
 		return taken || state() != 0;
 
@@ -45,12 +47,13 @@ class Future<T> {
 
 	/** Waits for the result. Any thread may call it, any number of times. **/
 	public function await():T {
-		// In slices, with a sleep between them. Some runtimes run their other
-		// threads only while this one sleeps, and one without threads cannot
-		// block in the library at all: its wait returns while still pending.
+		// Waits in short slices with a sleep between them. Some runtimes run
+		// their other threads only while this one sleeps. A runtime without
+		// threads cannot block in the library at all: its wait returns while
+		// the future is still pending.
 		while (wait(20) == 0)
 			Sys.sleep(0.001);
-		// The library gives the result up once; every caller reads this copy.
+		// The library hands over the result only once, so it is cached here for every caller.
 		lock.acquire();
 		if (!taken) {
 			try
@@ -66,12 +69,13 @@ class Future<T> {
 	}
 
 	/**
-		Calls `onValue` or `onError` once the future is settled, when the
-		library's results are next delivered: from the event loop of the thread
-		that first asked this library for one, or from `Loop.sync` in an app
-		that drives deliveries itself.
+		Calls `onValue` or `onError` after the future has settled, the next
+		time the library's results are delivered. That happens on the event
+		loop of the thread that first requested a delivery from this library,
+		or in `Loop.sync` when the app drives deliveries itself.
 
-		A failure with no `onError` is thrown from there.
+		If the future failed and there is no `onError`, the failure is thrown
+		from that delivery.
 	**/
 	public function then(onValue:T->Void, ?onError:Exception->Void):Void {
 		inbox.watch(watch(), () -> {

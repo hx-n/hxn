@@ -1,9 +1,9 @@
-//! A value the library keeps current and the host reads when it likes.
+//! A value the library keeps up to date and the host reads when it chooses.
 //!
-//! Where a stream hands over everything that was sent, in order, this hands
-//! over the latest and nothing else: a host that looks after ten changes
-//! sees the tenth. `hxn.Reactive.follow` turns one into a Haxe signal, which
-//! effects and computed values then depend on like any other.
+//! A stream delivers every item sent, in order; a signal delivers only the
+//! latest value: a host that reads after ten changes sees the tenth.
+//! `hxn.Reactive.follow` turns one into a Haxe signal, which effects and
+//! computed values can depend on like any other.
 
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
@@ -16,9 +16,9 @@ use crate::{THREADS, local};
 struct State<T> {
     value: T,
     version: u64,
-    // Every source is gone, so the value will not change again.
+    // Every source was dropped, so the value will not change again.
     closed: bool,
-    // The reading side is gone, which is how a source learns to stop.
+    // The read side was dropped, which tells a source to stop.
     unread: bool,
 }
 
@@ -34,7 +34,8 @@ impl<T> Shared<T> {
     }
 }
 
-// Shared by every clone of a source; the last one to go closes the signal.
+// Shared by every clone of a source. Dropping the last clone closes the
+// signal.
 struct Owner<T> {
     shared: Arc<Shared<T>>,
 }
@@ -47,8 +48,8 @@ impl<T> Drop for Owner<T> {
     }
 }
 
-/// The setting side. Clones set the same signal, which closes when the last
-/// of them is dropped.
+/// The write side of a signal. All clones set the same signal, which closes
+/// when the last clone is dropped.
 pub struct Source<T> {
     owner: Arc<Owner<T>>,
 }
@@ -62,13 +63,14 @@ impl<T> Clone for Source<T> {
 }
 
 impl<T> Source<T> {
-    /// Replaces the value. `false` if nothing will read it, because the
-    /// reader is gone: the sign to stop.
+    /// Replaces the value. Returns `false` if the reader was dropped, which
+    /// tells the caller to stop.
     pub fn set(&self, value: T) -> bool {
         let shared = &self.owner.shared;
         let mut state = shared.lock();
         if state.unread {
-            // Unlocked before `value` is dropped: its `Drop` is the library's.
+            // Unlocked before `value` is dropped, because its `Drop` is
+            // library code.
             drop(state);
             return false;
         }
@@ -82,24 +84,25 @@ impl<T> Source<T> {
     }
 }
 
-/// The reading side.
+/// The read side of a signal.
 pub struct Signal<T> {
     shared: Arc<Shared<T>>,
 }
 
-/// What a wait found.
+/// The outcome of a wait.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Change {
-    /// The value is at this version, which is not the one the waiter had.
+    /// The value is at this version, which differs from the one the waiter
+    /// had seen.
     At(u64),
-    /// The time ran out with the value as the waiter had it.
+    /// The timeout elapsed with the value unchanged since the waiter saw it.
     Unchanged,
-    /// The waiter has the last value there will be.
+    /// The waiter has seen the final value.
     Closed,
 }
 
 impl<T> Signal<T> {
-    /// A number that changes with every [`Source::set`].
+    /// A version number that changes with every [`Source::set`].
     pub fn version(&self) -> u64 {
         self.shared.lock().version
     }
@@ -115,9 +118,10 @@ impl<T> Signal<T> {
     }
 
     /// Blocks until the value is no longer at version `seen`, the signal is
-    /// closed, or `timeout` has passed. `None` for `seen` returns the current
-    /// version at once, and `None` for `timeout` waits without limit. Without
-    /// threads it runs queued work for a short slice instead of blocking.
+    /// closed, or `timeout` has elapsed. `None` for `seen` returns the current
+    /// version immediately, and `None` for `timeout` waits indefinitely.
+    /// Without threads it runs queued work for a short time slice instead of
+    /// blocking.
     pub fn wait(&self, seen: Option<u64>, timeout: Option<Duration>) -> Change {
         if !THREADS {
             local::drive(timeout, || {
@@ -157,7 +161,7 @@ impl<T> Signal<T> {
 }
 
 impl<T: Clone> Signal<T> {
-    /// The value as it is now.
+    /// Returns a clone of the current value.
     pub fn get(&self) -> T {
         self.shared.lock().value.clone()
     }
@@ -169,7 +173,7 @@ impl<T> Drop for Signal<T> {
     }
 }
 
-/// A signal holding `initial`, and what sets it.
+/// Creates a signal holding `initial`, and its source.
 pub fn signal<T>(initial: T) -> (Source<T>, Signal<T>) {
     let shared = Arc::new(Shared {
         state: Mutex::new(State {
@@ -207,8 +211,8 @@ impl<T: Send + 'static> Erased for Signal<T> {
     }
 }
 
-/// A signal of any type, which is what a host holds. Only
-/// [`get`](Self::get) needs the type again.
+/// A type-erased signal, which is what a host holds. Only
+/// [`get`](Self::get) needs the concrete type.
 pub struct AnySignal(Box<dyn Erased>);
 
 impl<T: Send + 'static> From<Signal<T>> for AnySignal {
@@ -217,24 +221,25 @@ impl<T: Send + 'static> From<Signal<T>> for AnySignal {
     }
 }
 
-// A host counts versions in a non-negative int, and negative ones mean
-// something else.
+// A host represents versions as a non-negative `Int`; negative values have
+// other meanings.
 const VERSIONS: u64 = i32::MAX as u64;
 
-/// What [`AnySignal::wait_millis`] returns once the host has the last value.
+/// The value [`AnySignal::wait_millis`] returns once the host has seen the
+/// final value.
 pub const CLOSED: i32 = -1;
 
 impl AnySignal {
-    /// Has the signal noted in the [`outbox`](crate::outbox) when it changes,
-    /// and returns the id it is noted under.
+    /// Registers the signal to be posted to the [`outbox`](crate::outbox)
+    /// when it changes, and returns the id it is posted under.
     pub fn watch(&self) -> i32 {
         self.0.watch()
     }
 
-    /// As [`Signal::wait`], in the terms a host passes: the version it last
-    /// saw, or any negative number for none, and a limit in milliseconds, or
-    /// negative for none. Returns the version the value is at, which is
-    /// `seen` if the time ran out, or [`CLOSED`].
+    /// Like [`Signal::wait`], with arguments in the form a host passes them:
+    /// the version it last saw, or any negative number for none, and a
+    /// timeout in milliseconds, or negative for none. Returns the current
+    /// version, which is `seen` if the timeout elapsed, or [`CLOSED`].
     pub fn wait_millis(&self, seen: i32, milliseconds: i32) -> i32 {
         let timeout = u64::try_from(milliseconds).ok().map(Duration::from_millis);
         let mut deadline = timeout.and_then(|timeout| Instant::now().checked_add(timeout));
@@ -244,7 +249,7 @@ impl AnySignal {
             match self.0.wait(known, left) {
                 Change::At(version) => {
                     let host = (version % VERSIONS) as i32;
-                    // Only a version the host has not seen is news to it.
+                    // Return only a version the host has not seen yet.
                     if host != seen {
                         return host;
                     }
@@ -259,7 +264,8 @@ impl AnySignal {
         }
     }
 
-    /// The value as it is now, or [`Fault::InvalidHandle`] for another type.
+    /// Returns a clone of the current value, or [`Fault::InvalidHandle`] if
+    /// `T` is not the signal's type.
     pub fn get<T: Clone + Send + 'static>(&self) -> Result<T, Failure> {
         match self.0.as_any().downcast_ref::<Signal<T>>() {
             Some(signal) => Ok(signal.get()),
@@ -314,7 +320,7 @@ mod tests {
             Change::Unchanged
         );
         drop(other);
-        // Not yet seen by a waiter that is a version behind.
+        // A waiter one version behind still receives the last change.
         assert_eq!(signal.wait(Some(0), None), Change::At(1));
         assert_eq!(signal.wait(Some(1), None), Change::Closed);
         assert_eq!(signal.get(), 2);

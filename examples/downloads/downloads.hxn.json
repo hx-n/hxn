@@ -4,7 +4,7 @@
   "interfaces": [
     {
       "name": "Tally",
-      "docs": "What several downloads add up to. Shared: a download holds a share of it\nwhile it runs, whatever becomes of the object that started it.",
+      "docs": "The total size of several downloads. A shared interface: a download holds\nits own reference while it runs, independent of the Haxe object that\nstarted it.",
       "shared": true,
       "methods": [
         {
@@ -17,7 +17,7 @@
         },
         {
           "name": "fetch",
-          "docs": "Fetches `size` bytes a chunk at a time and adds them to the tally.\nHaxe gets a future of the text this returns, or of its failure.",
+          "docs": "Fetches `size` bytes in chunks and adds them to the tally. In Haxe\nthis returns a future that resolves to the returned text or rejects\nwith the error.",
           "kind": "method",
           "params": [{ "name": "name", "type": "str" }, { "name": "size", "type": "i32" }],
           "returns": "future<str>",
@@ -27,7 +27,7 @@
         },
         {
           "name": "bytes",
-          "docs": "The bytes fetched so far, as a cell Haxe reads without a call.",
+          "docs": "The number of bytes fetched so far, as an atomic cell that Haxe reads\nwithout a native call.",
           "kind": "method",
           "params": [],
           "returns": "atomic_i32",

@@ -1,5 +1,5 @@
-//! An `async` block as a task: polled when it is stepped, and stepped again
-//! only once something it awaits has woken it.
+//! Runs an `async` block as a task: it is polled when stepped, and stepped
+//! again only after something it awaits has woken it.
 
 use std::pin::Pin;
 use std::sync::Arc;
@@ -11,23 +11,24 @@ use krio_core::{Suspension, Task};
 
 use crate::{Completer, local};
 
-// Returned pending; a wake has to put it back in front of a scheduler.
+// Returned pending; a wake must reschedule it.
 const IDLE: u8 = 0;
-// Due a poll.
+// Waiting to be polled.
 const SCHEDULED: u8 = 1;
 const POLLING: u8 = 2;
-// Woken during a poll, which may have missed why.
+// Woken while a poll was running. That poll may not have seen the change
+// that caused the wake, so the task is polled again.
 const NOTIFIED: u8 = 3;
 const DONE: u8 = 4;
 
 // A step writes `task` and then reads `state`; a wake writes `state` and
-// then reads `task`. Every access is sequentially consistent, so one of the
-// two always sees what the other wrote: with anything weaker both may read
-// the old value, and the task parks with nobody told to wake it.
+// then reads `task`. Every access is sequentially consistent, so at least one
+// of the two sees the other's write. With weaker orderings both could read
+// the old value, and the task would park with no worker told to wake it.
 struct Wakeup {
     state: AtomicU8,
-    // What the workers know the task as, or zero on a thread's own queue,
-    // which offers every task a step each round and needs no telling.
+    // The task's id in the worker pool, or zero on a thread-local queue,
+    // which steps every task each round and needs no notification.
     task: AtomicU64,
 }
 
@@ -48,8 +49,8 @@ impl Wake for Wakeup {
                 .compare_exchange(seen, next, Ordering::SeqCst, Ordering::SeqCst)
                 .is_ok()
             {
-                // Only an idle task is waiting to be woken, so the workers
-                // are told once for each time it parks.
+                // Only an idle task needs rescheduling, so the workers are
+                // notified once each time it parks.
                 if seen == IDLE {
                     reschedule(self.task.load(Ordering::SeqCst));
                 }
@@ -75,8 +76,8 @@ pub(crate) struct Polled<F, T> {
     completer: Completer<T>,
     wakeup: Arc<Wakeup>,
     waker: Waker,
-    // Set once a scheduler has it. Before that the thread stepping it may be
-    // a worker in the middle of some other task.
+    // Set once the task is owned by a scheduler. Before that the thread
+    // stepping it may be a worker in the middle of another task.
     scheduled: bool,
 }
 
@@ -107,7 +108,8 @@ where
     E: Into<Failure>,
 {
     fn step(&mut self) -> Suspension {
-        // First, so a wake that finds the task idle knows whom to tell.
+        // Stored first, so a wake that finds the task idle knows which task
+        // to reschedule.
         let task = if self.scheduled { current() } else { 0 };
         self.wakeup.task.store(task, Ordering::SeqCst);
         if self

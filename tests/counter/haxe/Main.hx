@@ -1,4 +1,4 @@
-/** The same checks on every runtime; `Counter` is that runtime's binding. **/
+/** Checks run on every runtime. `Counter` is the hand-written binding for that runtime. **/
 class Main {
 	static var failed = 0;
 	static var returned = false;
@@ -30,7 +30,7 @@ class Main {
 			new Counter(i);
 	}
 
-	// Counters whose kept function refers back to them.
+	// Counters whose stored callback references the counter, forming a cycle.
 	static function cycles(count:Int) {
 		for (i in 0...count) {
 			var counter = new Counter(i);
@@ -117,7 +117,7 @@ class Main {
 			total += future.await();
 		check('many at once: $total', total == 328350);
 
-		// Work done in steps: on its own thread, or by this one as it waits.
+		// Stepped work: run on a worker thread, or by this thread while it waits.
 		var sum = Counter.sumLater(20000);
 		#if wasm
 		check("stepped work is still pending when the call returns", !sum.isReady());
@@ -131,7 +131,7 @@ class Main {
 			all += future.await() - 500500;
 		check('stepped work interleaves: $all', all == 191330);
 
-		// Async work, built on the two kinds above.
+		// Async work that awaits the two kinds of future above.
 		check("async work awaits other futures", Counter.combinedLater(7, 100).await() == 5099);
 		throws("and passes their failures on", () -> Counter.combinedLater(100000, 1).await(), "counter overflow");
 		var combined = [for (i in 0...50) Counter.combinedLater(i, 10)];
@@ -140,7 +140,7 @@ class Main {
 			sumOfAll += future.await();
 		check('many async at once: $sumOfAll', sumOfAll == 43175);
 
-		// Streams: results that arrive more than once, read like an iterator.
+		// Streams: several results over time, read with an iterator.
 		check("a stream is read item by item", [for (item in Counter.countUp(5)) item].join(",") == "1,2,3,4,5");
 		check("one with nothing in it just ends", [for (item in Counter.countUp(0)) item].length == 0);
 		var read = 0;
@@ -179,8 +179,9 @@ class Main {
 		#end
 	}
 
-	// An app with a loop of its own: nothing is delivered until it asks,
-	// and then everything is, in the order the library produced it.
+	// An app that runs its own loop: nothing is delivered until it calls
+	// `Loop.sync`, which then delivers everything in the order the library
+	// produced it.
 	static function frames() {
 		hxn.Loop.manual = true;
 		var log = [];
@@ -199,7 +200,7 @@ class Main {
 		hxn.Loop.sync();
 		check('then everything is, in the order it happened: $log', log.join(",") == "first 1,item 2,end,second 3");
 
-		// A frame loop waiting on work the library does in steps.
+		// A frame loop waiting on stepped work in the library.
 		var sum = -1;
 		Counter.sumLater(20000).then(value -> sum = value);
 		var turns = 0;
@@ -209,8 +210,8 @@ class Main {
 		}
 		check('a frame loop is all it takes to finish stepped work: $sum', sum == 200010000);
 
-		// Two values set together are one rerun, and a set made through the
-		// binding is seen at once, not a delivery later.
+		// Two values set in one batch cause one rerun, and a set made through
+		// the binding takes effect immediately, not at the next delivery.
 		var width = new Counter.Gauge(2);
 		var height = new Counter.Gauge(3);
 		var areas = [];
@@ -244,7 +245,8 @@ class Main {
 		});
 	}
 
-	// Still pending when `then` is called, and settled by a later turn of the loop.
+	// A future still pending when `then` is called, settled by a later
+	// iteration of the event loop.
 	static function settledLater() {
 		var promise = new Counter.Promise();
 		var future = promise.future();
@@ -259,8 +261,8 @@ class Main {
 		sys.thread.Thread.current().events.run(() -> check("the loop settles it", promise.resolve(7)));
 	}
 
-	// Async work waiting on something the loop settles later: it is woken,
-	// not asked over and over.
+	// Async work awaiting a future the loop settles later: the task is woken,
+	// not polled repeatedly.
 	static function wokenLater() {
 		var promise = new Counter.Promise();
 		var doubled = promise.doubled();
@@ -272,7 +274,8 @@ class Main {
 		sys.thread.Thread.current().events.run(() -> check("the loop settles what it awaits", promise.resolve(7)));
 	}
 
-	// Items sent by later turns of the loop, each handed to the listener.
+	// Items sent by later iterations of the event loop, each passed to the
+	// listener.
 	static function listened() {
 		var emitter = new Counter.Emitter();
 		var got = [];
@@ -299,8 +302,8 @@ class Main {
 		});
 	}
 
-	// A signal that follows a value in the library, with a computed value
-	// and an effect depending on it.
+	// A signal that tracks a value in the library, with a computed value and
+	// an effect that depend on it.
 	static function followed() {
 		var loop = sys.thread.Thread.current().events;
 		var gauge = new Counter.Gauge(5);
@@ -322,13 +325,14 @@ class Main {
 		});
 		check("a followed signal starts at the library's value", seen.join(",") == "10");
 		gauge.set(6);
-		// This runs inside a delivery, which is one batch: the signal has
-		// the value at once and effects rerun when the delivery ends.
+		// This runs inside a delivery, which is a single batch: the signal
+		// updates immediately and effects rerun when the delivery ends.
 		check('and has a value set here at once: $seen', gauge.signal().peek() == 6 && seen.join(",") == "10");
 		loop.run(() -> gauge.set(7));
 	}
 
-	// A value the library changes by itself, faster than the loop turns.
+	// A value the library updates on its own, faster than the event loop
+	// iterates.
 	static function ramped() {
 		var loop = sys.thread.Thread.current().events;
 		var values = [];
@@ -353,7 +357,7 @@ class Main {
 	static function finish() {
 		#if emscripten
 		// hxcpp's collector does not return from a forced collection under
-		// Emscripten, so nothing here can show a finalizer running.
+		// Emscripten, so this test cannot check that a finalizer runs.
 		check("and hxn reports that it cannot run one", !hxn.Gc.collect());
 		var collected = "no collection was run";
 		#else

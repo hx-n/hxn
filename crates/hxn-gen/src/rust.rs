@@ -1,5 +1,6 @@
-//! The two Rust adapters: one over the plain C ABI, for hxcpp, and one of
-//! HashLink primitives. Each is the text of a file a thin crate includes.
+//! The two Rust adapters: one over the plain C ABI, for hxcpp, and one
+//! exporting HashLink primitives. Each is emitted as the text of a source
+//! file that a thin crate includes.
 
 use crate::data;
 use crate::later;
@@ -20,12 +21,13 @@ fn question(method: &Method) -> &'static str {
     }
 }
 
-// An async function's call as the future the host gets. The work owns
-// everything it uses, so `owned` has already made each argument its own; a
-// function that cannot fail is given a failure type to not fail with.
+// An async function's call, wrapped as the future returned to the host. The
+// spawned task owns everything it uses, so `owned` has already converted each
+// argument to an owned value; a function that cannot fail is given a failure
+// type that is never produced.
 fn started(method: &Method, call: &str) -> String {
     if let Some(error) = &method.error {
-        // The future fails with the library's own error.
+        // The future is rejected with the library's error type.
         format!(
             "hxn_future::spawn(async move {{ {call}.await.map_err({}) }})",
             data::thrower(error)
@@ -41,17 +43,18 @@ fn started(method: &Method, call: &str) -> String {
     }
 }
 
-// For an async function: the statements that turn what was borrowed for the
-// call into what the work can keep, and each argument as the work passes it.
+// For an async function: the statements that convert each argument borrowed
+// for the call into a value the task can own, and each argument as the task
+// passes it.
 fn owned(library: &Library, method: &Method, arguments: &mut [String]) -> Vec<String> {
     let mut body = Vec::new();
-    // A shared object is kept by a share of its own.
+    // A shared object is kept alive by its own `Arc` clone.
     if method.receiver == Receiver::Shared {
         body.push(String::from("let this = Arc::clone(&this);"));
     }
     for (param, argument) in method.params.iter().zip(arguments) {
         let name = &param.name;
-        // Data was decoded into a value of the adapter's own already.
+        // Data has already been deserialized into a value the adapter owns.
         if param.data.is_some() {
             continue;
         }
@@ -84,7 +87,7 @@ fn owned(library: &Library, method: &Method, arguments: &mut [String]) -> Vec<St
                     };
                 }
             }
-            // A number is converted, and may be refused, before the work
+            // A number is converted, and may be rejected, before the task
             // starts.
             _ if argument != name => {
                 body.push(format!("let {name} = {argument};"));
@@ -105,7 +108,8 @@ fn call(interface: &Interface, method: &Method, arguments: &[String]) -> String 
     } else {
         format!("{}::{}", interface.name, method.name)
     };
-    // A failure with the library's own data carries it.
+    // A failure with one of the library's error types carries the error
+    // value.
     let thrown = match &method.error {
         Some(error) if !method.asynchronous => format!(".map_err({})", data::thrower(error)),
         _ => String::new(),
@@ -117,8 +121,8 @@ fn call(interface: &Interface, method: &Method, arguments: &[String]) -> String 
     )
 }
 
-// What crossed, as the number the library's function takes. One that may
-// not fit fails the call before the function is reached.
+// Converts a wire value to the numeric type the library's function accepts.
+// A value that does not fit fails the call before the function is called.
 fn narrowed(number: Option<Number>, value: &str) -> String {
     match number {
         None => value.to_owned(),
@@ -132,7 +136,7 @@ fn narrowed(number: Option<Number>, value: &str) -> String {
     }
 }
 
-// The number a function gave, as what crosses.
+// Converts a number the function returned to its wire type.
 pub(crate) fn widened(number: Option<Number>, value: &str) -> String {
     match number {
         None => value.to_owned(),
@@ -146,7 +150,7 @@ pub(crate) fn widened(number: Option<Number>, value: &str) -> String {
     }
 }
 
-// The receiver as `this`, borrowed or taken from what `open` yields: a
+// The receiver bound as `this`, borrowed or taken from what `open` yields: a
 // `Result` of the handle behind the pointer.
 fn receiver(method: &Method, open: &str) -> Option<String> {
     match method.receiver {
@@ -167,8 +171,8 @@ pub(crate) fn held(library: &Library, interface: &str) -> String {
     }
 }
 
-// A result of an interface as the pointer the host gets. `into` makes one
-// from what a handle holds.
+// An interface return value as the pointer returned to the host. `into`
+// makes the pointer from what a handle holds.
 fn handed(library: &Library, method: &Method, call: &str, into: &str) -> String {
     let Type::Handle {
         interface,
@@ -188,7 +192,8 @@ fn handed(library: &Library, method: &Method, call: &str, into: &str) -> String 
 
 // A borrowed interface: the statement that borrows it, and the argument.
 // `open` turns the parameter's name into a `Result` of its handle. A shared
-// one is borrowed as its `Arc`, which gives the value or a share of it.
+// one is borrowed as its `Arc`, which yields the value or a clone of the
+// `Arc`.
 fn borrowed(
     param: &Param,
     nullable: bool,
@@ -233,8 +238,8 @@ fn borrowed(
     }
 }
 
-// A cell the host lent: the statement that turns its address into a
-// reference, refusing a null one, and the argument.
+// An atomic cell the host lent for the call: the statement that turns its
+// address into a reference, rejecting null, and the argument.
 fn lent(param: &Param) -> (String, String) {
     let name = &param.name;
     let ty = if param.ty == Type::AtomicBool {
@@ -250,9 +255,10 @@ fn lent(param: &Param) -> (String, String) {
     )
 }
 
-// A function generic in its callback's error fails here with the adapter's
-// own, and so does one whose error the adapter made a failure of, which
-// makes the `?` on its result a conversion to the same type.
+// A function generic over its callback's error type is instantiated here
+// with the adapter's failure type, and so is one whose error the adapter
+// maps to a failure. In both cases the `?` on its result converts to the
+// same type.
 fn lent_allow(method: &Method) -> &'static str {
     if method.error.is_some() || method.params.iter().any(|p| lent::of(&p.ty).is_some()) {
         "#[allow(clippy::needless_question_mark)]\n"
@@ -261,9 +267,9 @@ fn lent_allow(method: &Method) -> &'static str {
     }
 }
 
-// A parameter of data: the statement that makes the library's value of
-// what crossed, if it takes one, and the argument. `bytes` is the
-// expression for the bytes a record, an option or a list crossed as.
+// A data parameter: the statement that deserializes the library's value from
+// its wire form, if it needs one, and the argument. `bytes` is the
+// expression for the serialized bytes of a record, an option or a list.
 fn decoded(param: &Param, data: &Data, bytes: &str) -> (Option<String>, String) {
     let name = &param.name;
     let reference = if param.borrowed { "&" } else { "" };
@@ -276,8 +282,8 @@ fn decoded(param: &Param, data: &Data, bytes: &str) -> (Option<String>, String) 
     }
 }
 
-// A call whose result is data, as what crosses: an enum's number, or the
-// bytes of anything made of parts.
+// A call whose return value is data, converted to its wire type: an enum's
+// integer value, or the serialized bytes of a composite value.
 fn encoded(method: &Method, call: String) -> String {
     match &method.returns_data {
         Some(Data::Enum(known)) => format!("{}(&{call})", data::writer(known)),
@@ -320,7 +326,7 @@ fn c_method(library: &Library, interface: &Interface, method: &Method) -> String
             continue;
         }
         let (ty, argument) = match &param.ty {
-            // An int at the boundary: C has no one size for a bool.
+            // An int at the boundary: C has no fixed size for a bool.
             Type::Bool => ("i32", format!("{name} != 0")),
             Type::I32 => ("i32", narrowed(param.number, name)),
             Type::I64 => ("i64", narrowed(param.number, name)),
@@ -385,12 +391,13 @@ fn c_method(library: &Library, interface: &Interface, method: &Method) -> String
             Some("RawHandle"),
             handed(library, method, &call, "Handle::into_raw"),
         ),
-        // Handed over as the integer cell both kinds are, with the handle
-        // keeping it alive.
+        // Returned as a type-erased handle; see `later`.
         Type::Future(_) | Type::Stream(_) | Type::Signal(_) => {
             let (kind, _) = later::of(&method.returns).expect("a result over time");
             (Some("RawHandle"), later::c_result(kind, &call))
         }
+        // Both cell kinds are returned as a handle to an `AtomicI32`, which
+        // keeps the cell alive.
         Type::AtomicInt => (Some("RawHandle"), format!("Ok(Handle::into_raw({call}))")),
         Type::AtomicBool => (
             Some("RawHandle"),
@@ -415,8 +422,9 @@ fn c_method(library: &Library, interface: &Interface, method: &Method) -> String
     )
 }
 
-// What every shared interface has: whether two handles hold one value, a
-// weak reference to it, and that reference's own upgrade and close.
+// The exports every shared interface has: whether two handles refer to the
+// same value, a weak reference to it, and that weak reference's upgrade and
+// close.
 fn c_shared(library: &Library, interface: &Interface) -> String {
     let name = &interface.name;
     format!(
@@ -477,8 +485,9 @@ fn hl_shared(library: &Library, interface: &Interface) -> String {
     out
 }
 
-// What an adapter calls the library's crate, to reach a function at its
-// root by a path: its name alone could be one of the adapter's own.
+// The name an adapter imports the library's crate under, to call a function
+// at its root by path: the bare function name could collide with one of the
+// adapter's own.
 const LIBRARY: &str = "hxn_library";
 
 fn imports(library: &Library, core: &str) -> String {
@@ -564,8 +573,9 @@ fn hl_letter(library: &Library, ty: &Type) -> String {
         Type::I32 => String::from("i"),
         Type::I64 => String::from("l"),
         Type::F64 => String::from("d"),
-        // A result: UTF-16 bytes for `String.fromUCS2`.
-        // Bytes are the VM's own, with their length written beside them.
+        // As a return value, text is UTF-16 bytes for `String.fromUCS2`, and
+        // bytes are VM bytes with their length written to a separate
+        // parameter.
         Type::Str | Type::Bytes => String::from("B"),
         Type::Lent { .. } | Type::Data(_) => unreachable!("not a result type"),
         Type::Handle { interface, .. } => format!("X{}_", abstract_name(library, interface)),
@@ -596,7 +606,8 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
         if let Some((taken, given)) = lent::of(&param.ty) {
             params.push(format!("{name}: *mut vclosure"));
             signature.push_str(&lent::hl_signature(taken, given));
-            // Lent: the VM keeps it alive for the call, so nothing is dropped.
+            // Borrowed: the VM keeps it alive for the call, so nothing is
+            // dropped.
             body.push(format!(
                 "if {name}.is_null() {{\n                return Err(Fault::Null.into());\n            }}"
             ));
@@ -679,8 +690,8 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
             }
             Type::AtomicInt | Type::AtomicBool => {
                 params.push(format!("{name}: *mut i32"));
-                // A reference to an int, which is what the VM's own atomic
-                // operations take.
+                // A reference to an int, which is what the VM's atomic
+                // operations accept.
                 signature.push_str("Ri");
                 let (statement, argument) = lent(param);
                 body.push(statement);

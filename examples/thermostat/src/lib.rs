@@ -1,13 +1,13 @@
-//! A value the library keeps current, which Haxe follows: a signal.
+//! A signal: a value the library keeps up to date and Haxe subscribes to.
 
 use hxn_future::{Signal, Source, signal};
 
-/// A thermostat, and the temperature it is set to.
+/// A thermostat and its target temperature.
 #[hxn::interface]
 pub struct Thermostat {
     degrees: f64,
     source: Source<f64>,
-    // Handed to the one reader that asks for it.
+    // Taken by the first call to `target`, its only reader.
     signal: Option<Signal<f64>>,
 }
 
@@ -22,8 +22,8 @@ impl Thermostat {
         }
     }
 
-    /// The temperature it is set to, as a value that changes. Haxe reads
-    /// the latest, and whatever was computed from it is computed again.
+    /// The target temperature as a signal. Haxe reads the latest value, and
+    /// values computed from it are recomputed when it changes.
     pub fn target(&mut self) -> Result<Signal<f64>, &'static str> {
         self.signal.take().ok_or("the target is already followed")
     }

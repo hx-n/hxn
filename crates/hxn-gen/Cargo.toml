@@ -1,6 +1,6 @@
 [package]
 name = "hxn-gen"
-description = "Reads a library's marked API from its source and writes each runtime's adapter, the C header and the Haxe classes"
+description = "Parses a library's marked API from its source and generates each runtime's adapter, the C header and the Haxe classes"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

@@ -3,21 +3,23 @@ package hxn;
 import haxe.Exception;
 
 /**
-	Results from a native library that arrive more than once, such as events.
+	A sequence of results from a native library, such as events.
 
-	It reads like any iterator: `for (item in stream)` waits for each item and
-	stops when the stream ends, and a failure that ended it is thrown in its
-	turn. `listen` delivers the same later, with the library's other results.
+	It is an iterator: `for (item in stream)` blocks for each item and stops
+	when the stream ends. If the stream ended with a failure, the failure is
+	thrown after the items before it have been read. `listen` delivers the
+	same items and failure later, with the library's other results.
 
-	The library never calls a Haxe function to report an item. It queues, and
-	a Haxe thread takes each item and calls what it likes with it, so the
-	native thread that produced the item never touches this runtime.
+	The library never calls a Haxe function to report an item. It queues
+	items, and a Haxe thread takes each one and passes it to Haxe code, so
+	the native thread that produced the item never calls into this runtime.
 
-	A binding builds one from its library's `Inbox` and three calls: one that
-	starts the stream being noted there and returns its id, a wait taking a
-	limit in milliseconds (negative for none) and returning 0 while there is
-	nothing yet, 1 when there is something to take and 2 once the stream has
-	ended, and a take that returns the next item or throws. One reader at a time.
+	A binding constructs one from its library's `Inbox` and three functions:
+	`watch` registers the stream with the library's queue and returns its id,
+	`wait` takes a timeout in milliseconds (negative for no timeout) and
+	returns 0 while there is nothing yet, 1 when there is something to take
+	and 2 once the stream has ended, and `take` returns the next item or
+	throws. A stream supports one reader at a time.
 **/
 class Stream<T> {
 	final inbox:Inbox;
@@ -36,11 +38,11 @@ class Stream<T> {
 	public function hasNext():Bool
 		return settle() == 1;
 
-	/** The item `hasNext` found, or the failure that ended the stream, thrown. **/
+	/** Returns the item `hasNext` found, or throws the failure that ended the stream. **/
 	public function next():T
 		return take();
 
-	// In slices, with a sleep between them, as `Future.await` waits.
+	// Waits in short slices with a sleep between them, as `Future.await` does.
 	function settle():Int {
 		var flow = wait(20);
 		while (flow == 0) {
@@ -51,10 +53,10 @@ class Stream<T> {
 	}
 
 	/**
-		Calls `onItem` with each item and `onEnd` when the stream ends, when
-		the library's results are next delivered: see `Loop`. A failure that
-		ends it goes to `onError` instead, or is thrown from there if there is
-		none.
+		Calls `onItem` with each item and `onEnd` when the stream ends. The
+		calls are made when the library's results are delivered: see `Loop`.
+		A failure that ends the stream is passed to `onError` instead, or is
+		thrown from that delivery if there is no `onError`.
 	**/
 	public function listen(onItem:T->Void, ?onEnd:() -> Void, ?onError:Exception->Void):Void {
 		inbox.watch(watch(), () -> {

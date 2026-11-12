@@ -1,9 +1,9 @@
-//! The Haxe classes: one module an interface, written once for HashLink and
-//! once for hxcpp, with the same public API.
+//! The Haxe classes: one module per interface, generated once for HashLink
+//! and once for hxcpp, with the same public API.
 //!
-//! A class owns one handle. A value the library returns is adopted by a new
-//! object of its interface's class, which is how a result of another
-//! interface, or of a function other than `new`, gets an owner.
+//! Each object owns one handle. A value the library returns is adopted by a
+//! new object of its interface's class, which is how a return value of
+//! another interface, or of a function other than `new`, gets an owner.
 
 use crate::data;
 use crate::later;
@@ -50,7 +50,7 @@ fn haxe_type(ty: &Type) -> String {
     }
 }
 
-// What a future or a stream carries: a type, or `hxn.Unit` for nothing.
+// The Haxe type a future or stream carries, or `hxn.Unit` for `()`.
 fn carried_type(carried: &Type) -> String {
     match carried {
         Type::Void => String::from("hxn.Unit"),
@@ -73,8 +73,8 @@ fn docs(lines: &[String], indent: &str) -> String {
     }
 }
 
-// A number is the Haxe type it crosses as, but for the one that is
-// unsigned in the same 32 bits.
+// A number uses the Haxe type of its wire type, except `u32`, which is a
+// `UInt`.
 fn number_type(number: Option<Number>, ty: &Type) -> String {
     match number {
         Some(Number::U32) => String::from("UInt"),
@@ -97,8 +97,8 @@ fn params(method: &Method) -> String {
     params.join(", ")
 }
 
-// A parameter of data that crosses as bytes: the statements that write it
-// into them, and the variable they end up in.
+// A data parameter passed as bytes: the statements that serialize it, and
+// the variable holding the bytes.
 fn written(name: &str, data: &Data) -> (Vec<String>, String) {
     let out = format!("{name}Out");
     let mut lines = vec![format!("var {out} = new haxe.io.BytesBuffer();")];
@@ -108,7 +108,7 @@ fn written(name: &str, data: &Data) -> (Vec<String>, String) {
     (lines, bytes)
 }
 
-// The statements that read a result of data from the bytes it crossed as.
+// The statements that deserialize a data return value from its bytes.
 fn read(data: &Data, bytes: &str) -> Vec<String> {
     vec![
         format!("var input = new haxe.io.BytesInput({bytes});"),
@@ -152,8 +152,8 @@ fn close_docs(interface: &Interface) -> &'static str {
     }
 }
 
-// The library's meter, held by every class so that it exists whichever of
-// them a program uses.
+// The library's memory meter, referenced by every class so that it exists
+// whichever class a program uses.
 fn meter(library: &Library) -> String {
     format!(
         "\t@:noCompletion static final memory = {}.meter;\n",
@@ -161,7 +161,8 @@ fn meter(library: &Library) -> String {
     )
 }
 
-// What HashLink knows `interface`'s values as, named from `module`.
+// The HashLink abstract type for `interface`'s values, as named from inside
+// `module`.
 fn hl_raw(interface: &str, module: &str) -> String {
     if interface == module {
         format!("{interface}Raw")
@@ -232,18 +233,18 @@ fn hl_native(library: &Library, interface: &Interface, method: &Method) -> Strin
     )
 }
 
-// The class whose `typed` makes the exception a failure of `method` is
-// thrown as, if it fails with data of the library's own. An async
-// function's failure is its future's, which makes its own.
+// The class whose `typed` builds the typed exception for a failure of
+// `method`, if its error type is one of the library's data types. An async
+// function's error rejects its future instead, which builds its own.
 fn thrown(library: &Library, method: &Method) -> Option<String> {
     (method.error.is_some() && !method.asynchronous).then(|| thrown_class(library))
 }
 
-// A method's body from its statements. One that lends functions makes its
-// native call inside `hxn.Callback.during`, which throws what a lent
-// function threw once the library has returned. One that fails with the
-// library's own data catches what the failure was thrown as and throws the
-// exception `thrown` makes of it.
+// A method's body from its statements. A method that passes callbacks makes
+// its native call inside `hxn.Callback.during`, which rethrows a callback's
+// exception once the library has returned. A method whose error type is one
+// of the library's data types catches the thrown failure and throws the
+// typed exception that `thrown` builds from it.
 fn body(guards: &[String], lines: &[String], thrown: Option<&str>) -> String {
     let returns = lines.last().is_some_and(|line| line.starts_with("return "));
     let caught: Vec<String>;
@@ -313,8 +314,8 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
                 arguments.push(name.clone());
                 arguments.push(format!("{name}.length"));
             }
-            // Null goes through as null whether or not the library takes
-            // one: it is the library that refuses it, the same on every runtime.
+            // Null is passed through whether or not the library accepts it:
+            // the library rejects it, the same way on every runtime.
             Type::Handle { .. } => {
                 arguments.push(format!("{name} == null ? null : {name}.raw"));
             }
@@ -373,7 +374,7 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
                     later::maker(carried)
                 ));
             }
-            // The cell lives in the library; what it handed over keeps it
+            // The cell is owned by the library; the returned owner keeps it
             // alive for as long as the atomic is referenced.
             Type::AtomicInt => {
                 lines.push(format!("var owner = {call};"));
@@ -396,7 +397,7 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
     out
 }
 
-// A class that only holds functions: nothing is made of it.
+// A class that only holds static functions and is never instantiated.
 const NAMESPACE_DOCS: &str = "/** The library's functions that belong to no object. **/\n";
 
 fn hl_module(library: &Library, interface: &Interface) -> String {
@@ -418,7 +419,7 @@ fn hl_module(library: &Library, interface: &Interface) -> String {
             cell_abstract(library)
         ));
     }
-    // Under the typedefs, when there are any.
+    // A blank line after the typedefs, when there are any.
     if !interface.namespace || cells {
         out.push('\n');
     }
@@ -501,7 +502,7 @@ fn hl_module(library: &Library, interface: &Interface) -> String {
     out
 }
 
-// The weak reference to a shared interface's value: a class of its own.
+// The weak reference to a shared interface's value, as a separate class.
 fn hl_weak(library: &Library, interface: &Interface) -> String {
     let of = &interface.name;
     let name = weak_class(of);
@@ -543,8 +544,8 @@ fn cpp_method(library: &Library, interface: &Interface, method: &Method) -> Stri
         }
         match &param.ty {
             Type::Bytes => arguments.push(format!("{name}.getData()")),
-            // Null goes through as null whether or not the library takes
-            // one. hxcpp does not check a null object before reading its field.
+            // Null is passed through whether or not the library accepts it.
+            // hxcpp does not null-check an object before reading its field.
             Type::Handle { .. } => {
                 before.push(format!("var {name}Raw:cpp.RawPointer<cpp.Void> = null;"));
                 before.push(format!(
@@ -584,7 +585,8 @@ fn cpp_method(library: &Library, interface: &Interface, method: &Method) -> Stri
                 interface: of,
                 nullable,
             } => {
-                // Owned only once the library has handed the value over.
+                // Given an owner only once the library has returned the
+                // value.
                 body.push(format!("var made = {of}.adopt();"));
                 body.push(format!("made.raw = {call};"));
                 if *nullable {
@@ -594,8 +596,8 @@ fn cpp_method(library: &Library, interface: &Interface, method: &Method) -> Stri
                 body.push(String::from("return made;"));
             }
             Type::AtomicInt | Type::AtomicBool => {
-                // The cell lives in the library; its owner keeps it alive for
-                // as long as the atomic is referenced.
+                // The cell is owned by the library; its owner object keeps it
+                // alive for as long as the atomic is referenced.
                 body.push(format!("var owner = {}.adopt();", cell_class(library)));
                 body.push(format!("owner.raw = {call};"));
                 body.push(String::from("owner.own();"));
@@ -607,7 +609,7 @@ fn cpp_method(library: &Library, interface: &Interface, method: &Method) -> Stri
             }
             Type::Future(_) | Type::Stream(_) | Type::Signal(_) => {
                 let (kind, carried) = later::of(&method.returns).expect("a result over time");
-                // Owned only once the library has handed it over.
+                // Given an owner only once the library has returned it.
                 body.push(format!(
                     "var made = {}.adopt();",
                     later::class(library, kind)
@@ -680,7 +682,7 @@ fn cpp_module(library: &Library, interface: &Interface) -> String {
     out
 }
 
-/// The classes for HashLink, one file an interface.
+/// The classes for HashLink, one file per interface.
 pub fn haxe_hl(library: &Library) -> Vec<File> {
     let mut files: Vec<File> = library
         .interfaces
@@ -713,7 +715,7 @@ pub fn haxe_hl(library: &Library) -> Vec<File> {
 
 const THROWN_DOCS: &str = "Makes the exception a failure is thrown as, where the library failed with\n\tdata of its own: the value is asked for once the message has been caught.";
 
-// What both runtimes' classes share: which error the value is, then the
+// Shared by both runtimes' classes: reads the error type's index, then the
 // error.
 fn thrown_read(library: &Library) -> String {
     let mut out = String::from(
@@ -767,7 +769,7 @@ fn cpp_memory(library: &Library) -> String {
     )
 }
 
-/// The classes for hxcpp, one file an interface.
+/// The classes for hxcpp, one file per interface.
 pub fn haxe_cpp(library: &Library) -> Vec<File> {
     let mut files: Vec<File> = library
         .interfaces
@@ -808,8 +810,8 @@ pub fn haxe_cpp(library: &Library) -> Vec<File> {
     files
 }
 
-// What a script is told of a class its host holds: the public methods and
-// nothing of how they are carried out.
+// The declaration a script sees of a class compiled into its host: the
+// public methods, without their implementation.
 fn cppia_module(interface: &Interface) -> String {
     let name = &interface.name;
     let mut out = String::from(HEADER);
@@ -855,9 +857,9 @@ fn cppia_weak(interface: &Interface) -> String {
     )
 }
 
-/// The classes for a CPPIA script: declarations of the ones `haxe_cpp`
-/// writes, which the script's host holds. A script cannot call C++ or keep a
-/// pointer, so it is given what the classes are called with and no more.
+/// The classes for a CPPIA script: declarations of the classes `haxe_cpp`
+/// writes, which are compiled into the script's host. A script cannot call
+/// C++ or hold a pointer, so it gets only the public signatures.
 pub fn haxe_cppia(library: &Library) -> Vec<File> {
     let mut files: Vec<File> = library
         .interfaces
@@ -885,7 +887,7 @@ pub fn haxe_cppia(library: &Library) -> Vec<File> {
     files
 }
 
-// What the extern class calls a handle: a pointer hxcpp does not look into.
+// The extern class's name for a handle: a pointer that is opaque to hxcpp.
 const CPP_HANDLE: &str = "Handle";
 
 /// A declaration in the extern class: the glue function `name`.
@@ -931,7 +933,8 @@ fn cpp_native(library: &Library, interface: &Interface, method: &Method) -> Stri
         Type::Str => "String",
         Type::Bytes => "haxe.io.BytesData",
         Type::Lent { .. } => unreachable!("not a result type"),
-        // A handle: an object's, a cell's, or a result over time's.
+        // A handle to an object, an atomic cell, or a future, stream or
+        // signal.
         _ => CPP_HANDLE,
     };
     cpp_extern(
@@ -942,15 +945,15 @@ fn cpp_native(library: &Library, interface: &Interface, method: &Method) -> Stri
     )
 }
 
-// The extern class every hxcpp class of the library calls its glue through.
-// It is also where the build is told what to include and link.
+// The extern class through which every hxcpp class of the library calls its
+// glue. It also tells the build what to include and link.
 fn cpp_natives(library: &Library) -> String {
     let upper = library.name.to_uppercase();
     let this = format!("self:{CPP_HANDLE}");
     let mut out = String::from(HEADER);
-    // Where the headers and the library are is the build's to specify, through
-    // defines. hxcpp links its own exceptions under Emscripten but does not
-    // compile for them unless told.
+    // The build specifies the header and library paths through defines. Under
+    // Emscripten hxcpp links its own exception support but does not compile
+    // with it unless told to.
     out.push_str(&format!(
         "private typedef Handle = cpp.RawPointer<cpp.Void>;\n\n/** The library's functions, as its glue header declares them. **/\n@:buildXml('\n<files id=\"haxe\">\n\t<compilerflag value=\"-I${{HXN_INCLUDE}}\"/>\n\t<compilerflag value=\"-I${{{upper}_INCLUDE}}\"/>\n</files>\n<section if=\"emscripten\">\n\t<compiler id=\"emscripten\" exe=\"emcc\">\n\t\t<flag value=\"-fexceptions\"/>\n\t</compiler>\n</section>\n<target id=\"haxe\">\n\t<lib name=\"${{{upper}_LIB}}\"/>\n\t<lib name=\"-lpthread\" if=\"linux\"/>\n\t<lib name=\"-ldl\" if=\"linux\"/>\n\t<lib name=\"kernel32.lib\" if=\"windows\"/>\n\t<lib name=\"ntdll.lib\" if=\"windows\"/>\n\t<lib name=\"userenv.lib\" if=\"windows\"/>\n\t<lib name=\"ws2_32.lib\" if=\"windows\"/>\n\t<lib name=\"dbghelp.lib\" if=\"windows\"/>\n</target>\n')\n@:include(\"{}_glue.h\")\n@:noCompletion extern class {} {{\n",
         library.name,
@@ -1003,8 +1006,8 @@ fn cpp_natives(library: &Library) -> String {
     out
 }
 
-// The class that owns a cell the library handed over. An `hxn.AtomicInt`
-// refers to it, and through it to the memory.
+// The class that owns an atomic cell the library returned. An
+// `hxn.AtomicInt` references it, and through it the cell's memory.
 fn cpp_cell(library: &Library) -> String {
     let name = cell_class(library);
     let mut out = String::from(HEADER);

@@ -1,12 +1,14 @@
-/* The layouts of hxn-abi, for C and C++, and what hxcpp glue needs around
- * them. crates/hxn-abi is the definition; its tests assert these sizes. */
+/* The hxn-abi layouts for C and C++, and the helpers hxcpp glue code needs to
+ * use them. crates/hxn-abi is the authoritative definition; its tests assert
+ * these sizes. */
 #ifndef HXN_H
 #define HXN_H
 
 #include <stddef.h>
 #include <stdint.h>
 
-/* Zero is success, negative values are hxn's and positive the library's. */
+/* Zero is success, negative values are reserved for hxn, and positive values
+ * are defined by the library. */
 typedef int32_t hxn_status;
 
 #define HXN_OK 0
@@ -24,7 +26,7 @@ typedef int32_t hxn_status;
 #define HXN_RANGE (-11)
 #define HXN_DEPTH (-12)
 
-/* Bytes or UTF-8 text the caller keeps alive for the call. */
+/* Bytes or UTF-8 text borrowed for the call. The caller keeps them alive. */
 typedef struct hxn_slice {
 	const uint8_t *ptr;
 	size_t len;
@@ -35,7 +37,8 @@ typedef struct hxn_slice_mut {
 	size_t len;
 } hxn_slice_mut;
 
-/* Bytes the library allocated. Copy them, then hxn_buf_free, exactly once. */
+/* A buffer the library allocated. Copy the bytes, then call hxn_buf_free
+ * exactly once. */
 typedef struct hxn_buf {
 	uint8_t *ptr;
 	size_t len;
@@ -54,17 +57,19 @@ static inline void hxn_buf_free(hxn_buf *buf) {
 	buf->free = 0;
 }
 
-/* A Rust value. Only the library that made one can read it. */
+/* An opaque handle to a Rust value. Only the library that created it can read
+ * it. */
 typedef struct hxn_handle hxn_handle;
 
-/* A host closure. `call` takes `env` first; its real type is the callback's
- * signature, which by convention returns an hxn_status and writes its result
- * through a last `out` parameter. `drop` is null for a callback lent for one
- * call.
+/* A host closure. `call` takes `env` as its first parameter. Its actual type
+ * is the callback's signature, which by convention returns an hxn_status and
+ * writes its result through a final `out` parameter. `drop` is null for a
+ * callback borrowed for one call.
  *
  * `call` must return normally. A binding wraps the host's function so that an
- * exception is kept (hxn.Callback.failed) and HXN_CALLBACK returned in its
- * place, then rethrows it after the library has returned. */
+ * exception is caught and stored (hxn.Callback.failed) and HXN_CALLBACK is
+ * returned instead. The binding rethrows the exception after the library has
+ * returned. */
 typedef struct hxn_callback {
 	void *call;
 	void *env;
@@ -94,12 +99,13 @@ inline Array<unsigned char> take_bytes(hxn_buf &buf) {
 	return data;
 }
 
-/* A Haxe String of the UTF-8 text the library lent. */
+/* Returns a Haxe String made from UTF-8 text borrowed from the library. */
 inline ::String text(hxn_slice slice) {
 	return slice.len ? ::String::create((const char *)slice.ptr, (int)slice.len) : HX_CSTRING("");
 }
 
-/* A copy of the bytes the library lent, for a haxe.io.Bytes to own. */
+/* Returns a copy of bytes borrowed from the library, for a haxe.io.Bytes to
+ * own. */
 inline Array<unsigned char> bytes(hxn_slice slice) {
 	Array<unsigned char> data = Array_obj<unsigned char>::__new((int)slice.len, (int)slice.len);
 	if (slice.len)
@@ -111,8 +117,8 @@ inline void free_text(uint8_t *ptr, size_t, size_t) {
 	free(ptr);
 }
 
-/* Writes a copy of `text` as UTF-8 for the library to free, which is how a
- * host's function gives text back. False if there is no memory for it. */
+/* Writes a UTF-8 copy of `text` to `out` for the library to free. A host
+ * function returns text this way. Returns false if the allocation fails. */
 inline bool give_text(const ::String &text, hxn_buf *out) {
 	hx::strbuf storage;
 	int length = 0;
@@ -148,7 +154,8 @@ inline bool give_bytes(const Array<unsigned char> &data, hxn_buf *out) {
 	return true;
 }
 
-/* `text` as UTF-8, valid while `text` and `storage` both are. */
+/* Returns `text` as a UTF-8 slice, valid while both `text` and `storage` are
+ * alive. */
 inline hxn_slice slice(const ::String &text, hx::strbuf &storage) {
 	int length = 0;
 	const char *utf8 = text.utf8_str(&storage, true, &length);
@@ -156,7 +163,7 @@ inline hxn_slice slice(const ::String &text, hx::strbuf &storage) {
 	return out;
 }
 
-/* Valid while `data` is, and is not resized. */
+/* Returns `data` as a slice, valid while `data` is alive and not resized. */
 inline hxn_slice slice(const Array<unsigned char> &data) {
 	hxn_slice out = { 0, 0 };
 	if (data.mPtr) {
@@ -167,7 +174,7 @@ inline hxn_slice slice(const Array<unsigned char> &data) {
 }
 
 /* Throws a failed call's message to Haxe. Called after the library has
- * returned, so the exception crosses no Rust frame. */
+ * returned, so the exception does not unwind through any Rust frame. */
 inline void check(hxn_status status, hxn_buf &err) {
 	if (status == HXN_OK)
 		return;
@@ -175,8 +182,9 @@ inline void check(hxn_status status, hxn_buf &err) {
 	hx::Throw(message);
 }
 
-/* Lets the collector run without this thread, for a call that waits. Nothing
- * in its scope may touch the Haxe heap. */
+/* Marks its scope as a GC free zone, so the garbage collector can run without
+ * waiting for this thread during a blocking call. Code in the scope must not
+ * touch the Haxe heap. */
 typedef hx::AutoGCFreeZone Blocking;
 
 }

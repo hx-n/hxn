@@ -1,8 +1,8 @@
-//! What a binding needs of hxn's own beside what is generated for it: the
-//! Haxe classes and the C header, carried in this program so that a library
-//! needs nothing but it.
+//! hxn's own files that a binding needs in addition to its generated code:
+//! the Haxe support classes and the C header. They are embedded in this
+//! program so that a library needs only this program.
 
-/// The Haxe classes, each with its path under a class path.
+/// The Haxe classes, each with its path relative to a class path.
 pub const HAXE: &[(&str, &str)] = &[
     (
         "hxn/AtomicBool.hx",

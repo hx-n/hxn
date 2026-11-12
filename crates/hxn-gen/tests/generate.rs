@@ -1,7 +1,8 @@
 use hxn_gen::{File, Library, Number, Receiver, Type, parse};
 
-// The hxcpp classes less the extern class they call the glue through, which
-// HashLink has no file for: each of its classes declares its own natives.
+// The hxcpp classes without the extern class they call the glue through,
+// which has no HashLink counterpart: each HashLink class declares its own
+// natives.
 fn cpp_classes(library: &Library) -> Vec<File> {
     let mut files = hxn_gen::haxe_cpp(library);
     let native = files.pop().unwrap();
@@ -145,7 +146,8 @@ fn reads_the_marked_items_and_nothing_else() {
     assert!(!device.methods[4].constructor);
     assert_eq!(device.methods[5].returns, Type::Str);
 
-    // Another interface borrowed, one that may be absent, and one handed back.
+    // Another interface as a borrowed parameter, a nullable parameter, and a
+    // return value.
     let route = &device.methods[6];
     assert_eq!(route.params[0].ty, handle("Mixer", false));
     assert!(route.params[0].exclusive);
@@ -437,7 +439,7 @@ fn what_a_library_holds_is_read_and_a_weighed_object_checks_it() {
     let library = parse("audio", SOURCE).unwrap();
     assert!(!library.interfaces[0].weighed && library.interfaces[1].weighed);
 
-    // Every library can be asked, whatever it marked.
+    // Every library has these exports, whatever it marked.
     let c = hxn_gen::c_adapter(&library, "audio_core");
     assert!(c.contains("pub extern \"C\" fn audio_memory_held() -> f64"));
     assert!(c.contains("pub extern \"C\" fn audio_memory_wanted() -> i32"));
@@ -456,7 +458,8 @@ fn what_a_library_holds_is_read_and_a_weighed_object_checks_it() {
                 .text
                 .contains("public static final meter = new hxn.Gc.Meter(")
         );
-        // Each class holds the meter; only a weighed one checks it.
+        // Each class references the memory meter; only a weighed one checks
+        // it.
         let (device, mixer) = (&files[0].text, &files[1].text);
         assert!(device.contains("static final memory = HxnAudioMemory.meter;"));
         assert!(!device.contains("memory.check();"));
@@ -464,7 +467,7 @@ fn what_a_library_holds_is_read_and_a_weighed_object_checks_it() {
         assert!(mixer.contains("memory.check();"));
     }
 
-    // Where a value the library returned gets its owner, on each runtime.
+    // Where a value the library returned is given its owner, on each runtime.
     let mixer = &hxn_gen::haxe_hl(&library)[1].text;
     assert!(mixer.contains("made.raw = raw;\n\t\tmemory.check();\n\t\treturn made;"));
     let mixer = &hxn_gen::haxe_cpp(&library)[1].text;
@@ -526,8 +529,8 @@ fn a_shared_value_is_held_through_an_arc() {
     assert_eq!(bus.methods[2].returns, handle("Bus", true));
     assert!(tap.methods[0].params[0].kept && !tap.methods[1].params[0].kept);
 
-    // A value is put in an `Arc` by the adapter unless it came in one, and a
-    // parameter is the value or a share of it, as the function asked.
+    // The adapter wraps a value in an `Arc` unless it is returned in one, and
+    // a parameter is the value or an `Arc` clone, as the function declares.
     let c = hxn_gen::c_adapter(&library, "audio_core");
     assert!(c.contains("Ok(Handle::into_raw(Arc::new(Bus::new())))"));
     assert!(c.contains("Ok(Handle::into_raw(Bus::open()))"));
@@ -652,7 +655,8 @@ fn bytes_come_back_with_their_length() {
     assert!(glue.contains("inline Array<unsigned char> disk_read(void *self, int sector)"));
     assert!(glue.contains("return hxn::take_bytes(out);"));
 
-    // HashLink's bytes do not carry a length, so it is written beside them.
+    // HashLink's bytes do not carry a length, so it is written to a separate
+    // parameter.
     let hl = hxn_gen::hl_adapter(&library, "store_core");
     assert!(hl.contains("this: *mut Managed, sector: i32, out: *mut i32) -> *mut vbyte"));
     assert!(hl.contains("\"PXstore_disk_iRi_B\""));
@@ -726,8 +730,8 @@ fn results_over_time_are_handles_the_library_answers_for() {
     assert_eq!(methods[3].returns, Type::Stream(Box::new(Type::Str)));
     assert_eq!(methods[4].returns, Type::Signal(Box::new(Type::F64)));
 
-    // Handed over erased, and taken by what each carries. One export does
-    // for every function that returns the same.
+    // Returned type-erased, and taken by carried type. One export serves
+    // every function that returns the same type.
     let c = hxn_gen::c_adapter(&library, "fm_core");
     assert!(c.contains("use hxn_future::{AnyFuture, AnySignal, AnyStream, outbox};"));
     assert!(c.contains("Ok(Handle::into_raw(AnyFuture::from(this.tune(station.as_str()?))))"));
@@ -811,7 +815,7 @@ fn results_over_time_are_handles_the_library_answers_for() {
     assert!(manifest.contains("\"returns\": \"future<Radio>\""));
     assert!(manifest.contains("\"returns\": \"signal<f64>\""));
 
-    // A library with none of these names nothing of `hxn-future`.
+    // A library that uses none of these does not reference `hxn-future`.
     let plain = parse("audio", SOURCE).unwrap();
     assert!(!plain.returns_later());
     assert!(!hxn_gen::c_adapter(&plain, "audio_core").contains("hxn_future"));
@@ -905,8 +909,8 @@ impl Mesh {
     );
     assert!(each.fallible);
 
-    // One function pointer type and one trampoline a shape, however many
-    // functions are lent it.
+    // One function pointer type and one trampoline per callback shape,
+    // however many functions accept it.
     let c = hxn_gen::c_adapter(&library, "geo_core");
     assert_eq!(c.matches("type LentIDToB = ").count(), 1);
     assert_eq!(c.matches("type LentToV = ").count(), 1);
@@ -934,7 +938,8 @@ impl Mesh {
     assert!(glue.contains("inline int mesh_each(void *self, double scale, Dynamic f)"));
     assert!(glue.contains("hxn_callback f_lent = { (void *)lent_id_to_b, f.mPtr, 0 };"));
 
-    // The Haxe method wraps what it was passed and calls inside `during`.
+    // The Haxe method wraps the callback it was passed and makes the call
+    // inside `during`.
     for files in [hxn_gen::haxe_hl(&library), cpp_classes(&library)] {
         let mesh = &files[0].text;
         assert!(mesh.contains("public function each(scale:Float, f:(Int, Float) -> Bool):Int {"));
@@ -999,8 +1004,9 @@ fn says_how_a_function_is_lent() {
     }
 }
 
-// A library laid out the ways a crate can be: a module beside the root, one
-// in a directory, one inside an inline module, and one at a path given.
+// A library using every module layout a crate can have: a module beside the
+// root, one in a directory, one inside an inline module, and one at a given
+// `#[path]`.
 #[test]
 fn a_library_is_read_from_every_file_of_its_crate() {
     let dir = std::env::temp_dir().join(format!("hxn-gen-crate-{}", std::process::id()));
@@ -1034,7 +1040,7 @@ fn a_library_is_read_from_every_file_of_its_crate() {
         "#[hxn::interface]\npub struct Elsewhere;\n\n#[hxn::methods]\nimpl Elsewhere {\n    pub fn bad(&self, value: String) {}\n}\n",
     );
 
-    // A refusal names the file it is in.
+    // A parse error names the file it is in.
     let error = hxn_gen::parse_crate("many", &dir.join("src/lib.rs")).unwrap_err();
     assert!(error.file.as_deref().unwrap().ends_with("place.rs"));
     assert_eq!(error.line, 6);
@@ -1055,7 +1061,8 @@ fn a_library_is_read_from_every_file_of_its_crate() {
         ["Root", "Beside", "Child", "Within", "Deep", "Elsewhere"]
     );
     assert_eq!(files.len(), 6);
-    // A block in one file exposes functions on, and names, an interface of another.
+    // A block in one file adds functions to, and refers to, an interface
+    // defined in another.
     let beside = &library.interfaces[1];
     assert_eq!(beside.methods[0].params[0].ty, handle("Root", false));
     assert_eq!(library.interfaces[0].methods[0].name, "depth");
@@ -1081,7 +1088,7 @@ fn a_library_is_read_from_every_file_of_its_crate() {
 }
 
 // The fixture's manifest is committed, as a library's would be, so a change
-// to what it exposes shows up in review. To update it after changing
+// to its API shows up in review. To update it after changing
 // tests/counter/core, run hxn-gen and copy its counter.hxn.json over.
 #[test]
 fn the_counter_manifest_is_current() {
@@ -1100,9 +1107,9 @@ fn the_counter_manifest_is_current() {
     );
 }
 
-// Each example is a library as someone would write one: its manifest is
-// committed and current, and it records what its program prints. To update a
-// manifest, run the example.
+// Each example is a realistic library: its manifest is committed and
+// current, and it records what its program prints. To update a manifest, run
+// the example.
 #[test]
 fn every_example_is_one_the_generator_takes() {
     let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples");
@@ -1135,7 +1142,7 @@ fn a_number_crosses_as_one_of_the_two_the_boundary_has() {
     assert_eq!(methods[3].returns, Type::I32);
     assert_eq!(methods[3].returns_number, Some(Number::I16));
 
-    // Nothing of the boundary changes: the adapters convert on the way.
+    // The boundary types do not change: the adapters convert the values.
     let header = hxn_gen::c_header(&library);
     assert!(
         header.contains(
@@ -1159,7 +1166,7 @@ fn a_number_crosses_as_one_of_the_two_the_boundary_has() {
         );
     }
 
-    // Haxe sees an Int or a Float, and a UInt for the unsigned 32 bits.
+    // Haxe sees an Int or a Float, and a UInt for `u32`.
     for files in [hxn_gen::haxe_hl(&library), cpp_classes(&library)] {
         let gauge = &files[0].text;
         assert!(gauge.contains("public function set(level:Int, gain:Float):Void"));
@@ -1244,8 +1251,8 @@ fn a_function_outside_an_impl_is_a_static_of_a_class() {
         .iter()
         .map(|interface| (interface.name.as_str(), interface.namespace))
         .collect();
-    // The library's own class and one named on the attribute exist only to
-    // hold functions; the third joins an interface that is there.
+    // The library's own class and the one named on the attribute exist only
+    // to hold functions; the third joins an existing interface.
     assert_eq!(
         names,
         [("Shelf", false), ("BookStore", true), ("Paths", true)]
@@ -1258,7 +1265,7 @@ fn a_function_outside_an_impl_is_a_static_of_a_class() {
         ["How many shelves a library may have."]
     );
 
-    // An adapter finds them at the crate's root, by a path.
+    // An adapter calls them by their path at the crate's root.
     for adapter in [
         hxn_gen::c_adapter(&library, "store_core"),
         hxn_gen::hl_adapter(&library, "store_core"),
@@ -1269,7 +1276,7 @@ fn a_function_outside_an_impl_is_a_static_of_a_class() {
         assert!(adapter.contains("hxn_library::merged(&first, &second)"));
         assert!(adapter.contains("hxn_library::join("));
         assert!(adapter.contains("fn book_store_paths_join("));
-        // Nothing is made of such a class, so nothing closes one.
+        // Such a class is never instantiated, so it has no close function.
         assert!(adapter.contains("fn book_store_shelf_close("));
         assert!(!adapter.contains("book_store_paths_close"));
         assert!(!adapter.contains("book_store_book_store_close"));
@@ -1355,7 +1362,7 @@ fn says_what_a_function_outside_an_impl_cannot_be() {
             error.message
         );
     }
-    // A library may be functions and nothing else.
+    // A library may consist only of functions.
     let only = parse(
         "maths",
         "#[hxn::function]\npub fn double(value: i32) -> i32 { value * 2 }\n",
@@ -1365,7 +1372,7 @@ fn says_what_a_function_outside_an_impl_cannot_be() {
     assert!(hxn_gen::hl_adapter(&only, "maths").contains("Ok(hxn_library::double(value))"));
 }
 
-// The public functions a class file has, as they are declared.
+// The public functions declared in a class file, as written.
 fn public_functions(text: &str) -> Vec<String> {
     text.lines()
         .filter(|line| line.starts_with("\tpublic ") && line.contains("function "))
@@ -1378,8 +1385,9 @@ fn public_functions(text: &str) -> Vec<String> {
         .collect()
 }
 
-// A script calls the classes its host holds, so each declaration it is
-// compiled against has to list what the hxcpp class of that name has.
+// A script calls the classes compiled into its host, so each declaration it
+// is compiled against must list the public functions of the hxcpp class of
+// that name.
 #[test]
 fn a_script_is_told_what_each_class_is_called_with() {
     let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/counter");
@@ -1396,7 +1404,7 @@ fn a_script_is_told_what_each_class_is_called_with() {
             .iter()
             .find(|file| file.path == declaration.path)
             .unwrap_or_else(|| panic!("{} declares a class no host holds", declaration.path));
-        // Data is plain Haxe: a script is given the class itself.
+        // Data is plain Haxe: a script gets the class itself.
         if declaration.text == class.text {
             continue;
         }
@@ -1411,7 +1419,7 @@ fn a_script_is_told_what_each_class_is_called_with() {
             "{}",
             declaration.path
         );
-        // Nothing of how the class reaches the library.
+        // No implementation detail of how the class calls the library.
         for inside in ["raw", "Native", "cpp."] {
             assert!(
                 !declaration.text.contains(inside),
@@ -1432,7 +1440,7 @@ fn a_script_is_told_what_each_class_is_called_with() {
 }
 
 // An async function runs after the call that starts it has returned: the
-// host gets a future, and the work owns everything it was passed.
+// host gets a future, and the task owns all its arguments.
 #[test]
 fn an_async_function_is_a_future_of_what_it_gives() {
     let source = r#"
@@ -1473,7 +1481,7 @@ impl Band {
         hxn_gen::c_adapter(&library, "thing"),
         hxn_gen::hl_adapter(&library, "thing"),
     ] {
-        // Converted, and refused if it does not fit, before the work starts.
+        // Converted, and rejected if it does not fit, before the task starts.
         assert!(
             adapter.contains("let limit = u8::try_from(limit)"),
             "{adapter}"
@@ -1489,10 +1497,10 @@ impl Band {
             "hxn_future::spawn(async move { Thing::rest().await; Ok::<_, hxn_future::Failure>(()) })"
         ));
         assert!(adapter.contains("Ok::<_, hxn_future::Failure>(this.spend().await)"));
-        // The object is taken out, so it is closed whatever the work does.
+        // The object is taken out, so it is closed whatever the task does.
         assert!(adapter.contains(".take()?.ok_or(Fault::Closed)?;"));
         assert!(adapter.contains("this.spend().await"));
-        // A share each, and none where there was no object.
+        // An `Arc` clone for each object, and none where there is no object.
         assert!(adapter.contains("let this = Arc::clone(&this);"));
         assert!(adapter.contains("let with = Arc::clone(&with);"));
         assert!(adapter.contains("let after = after.as_deref().cloned();"));
@@ -1628,7 +1636,7 @@ impl Thing {
             .contains("public static function count():hxn.Signal<haxe.Int64>")
     );
 
-    // A signal is read any number of times, and bytes are handed over once.
+    // A signal is read any number of times, and bytes are transferred once.
     let refused = source.replace("Signal<i64>", "Signal<Vec<u8>>");
     assert!(
         parse("thing", &refused)
@@ -1638,8 +1646,8 @@ impl Thing {
     );
 }
 
-// Text is lent to a Haxe function for the call and comes back as the
-// library's own.
+// Text is passed to a Haxe callback borrowed for the call, and is returned
+// owned by the library.
 #[test]
 fn a_lent_function_takes_and_gives_text() {
     let source = r#"
@@ -1684,7 +1692,7 @@ impl Thing {
     assert!(glue.contains("Dynamic((hx::Object *)env)(hxn::text(a0), a1 != 0)"));
     assert!(glue.contains("hxn::give_text((::String)result, out)"));
 
-    // HashLink's wrapper is handed the VM's bytes and makes the string.
+    // HashLink's wrapper receives VM bytes and converts them to a string.
     let hl_class = &hxn_gen::haxe_hl(&library)[0].text;
     assert!(hl_class.contains("public function name(f:(String, Bool) -> String):String"));
     assert!(hl_class.contains("f:(hl.Bytes, Bool) -> Null<String>"));
@@ -1694,8 +1702,8 @@ impl Thing {
     assert!(cpp_class.contains("a function lent to a library returned null"));
 }
 
-// Bytes are lent to a Haxe function as text is. An object is given to it:
-// one lent for the call could be kept past it.
+// Bytes are passed to a Haxe callback the same way as text. An object is
+// transferred to it: a borrowed one could be kept past the call.
 #[test]
 fn a_lent_function_takes_bytes_and_is_given_objects() {
     let source = r#"
@@ -1731,7 +1739,8 @@ impl Thing {
     assert!(hl.contains("box_bytes(bytes(a0)), box_i32(a0_length), box_bytes(a1.cast())"));
     assert!(hl.contains("let mut args: [*mut vdynamic; 3]"));
     assert!(hl.contains("PBiB_b"), "{hl}");
-    // The primitive that gives a lent object's pointer its type back.
+    // The primitive that restores the type of a pointer to an object passed
+    // to a callback.
     assert!(
         hl.contains("pub extern \"C\" fn thing_thing_adopt_lent(raw: *mut vbyte) -> *mut Managed")
     );
@@ -1775,8 +1784,8 @@ impl Thing {
     }
 }
 
-// The manifest has a second form, WebIDL, with the same API in it. The
-// fixture's is committed, as its JSON is.
+// The manifest has a second form, WebIDL, with the same API. The fixture's
+// WebIDL is committed, like its JSON.
 #[test]
 fn the_manifest_is_also_webidl() {
     let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/counter");
@@ -1786,7 +1795,7 @@ fn the_manifest_is_also_webidl() {
     let committed = std::fs::read_to_string(format!("{root}/counter.hxn.webidl")).unwrap();
     assert_eq!(idl, committed);
 
-    // Every interface and every function the JSON names is here too.
+    // Every interface and every function the JSON lists is here too.
     for interface in &library.interfaces {
         let opening = if interface.namespace {
             format!("\nnamespace {} {{\n", interface.name)
@@ -1795,7 +1804,7 @@ fn the_manifest_is_also_webidl() {
         };
         assert!(idl.contains(&opening), "{}", interface.name);
         for method in &interface.methods {
-            // A name WebIDL keeps for itself is written with an underscore.
+            // A WebIDL reserved word is escaped with an underscore.
             let found = if method.constructor {
                 idl.contains("constructor(")
             } else {
@@ -1805,8 +1814,9 @@ fn the_manifest_is_also_webidl() {
             assert!(found, "{}::{}", interface.name, method.name);
         }
     }
-    // What WebIDL has no word for is an attribute, where the grammar has a
-    // place for one: before an operation or an argument, never a return type.
+    // Anything WebIDL has no construct for is an extended attribute, where
+    // the grammar allows one: before an operation or an argument, never a
+    // return type.
     assert!(idl.contains("[HxnShared]\ninterface Pot {"));
     assert!(idl.contains("[HxnWeighed]\ninterface Blob {"));
     assert!(idl.contains("  [HxnStream] static long count_up(long limit, boolean fail);"));
@@ -1834,7 +1844,7 @@ fn the_manifest_is_also_webidl() {
         }
     }
 
-    // And it is WebIDL: a parser of the language takes all of it, and finds
+    // And it is valid WebIDL: a WebIDL parser accepts all of it, and finds
     // each interface, namespace and callback.
     let parsed = weedle::parse(&idl).unwrap_or_else(|error| panic!("not WebIDL: {error:?}"));
     let lent: usize = library
@@ -1844,8 +1854,8 @@ fn the_manifest_is_also_webidl() {
         .flat_map(|method| &method.params)
         .filter(|param| matches!(param.ty, Type::Lent { .. }))
         .count();
-    // An enum whose variants hold values is its tags, a dictionary of its
-    // own, and one for each variant that holds something.
+    // A tagged enum becomes an enum of its tags, its own dictionary, and one
+    // dictionary for each variant with fields.
     let tagged: usize = library
         .tagged
         .iter()
@@ -1871,7 +1881,7 @@ fn the_manifest_is_also_webidl() {
     );
 }
 
-// Every example's API is WebIDL a parser takes too.
+// Every example's API is also valid WebIDL.
 #[test]
 fn every_example_has_a_webidl_form() {
     let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples");
@@ -1888,8 +1898,8 @@ fn every_example_has_a_webidl_form() {
     }
 }
 
-// Plain data crosses by value: an enum as its number, and a record, an
-// option or a list as bytes both sides write and read in the same order.
+// Plain data is passed by value: an enum as its integer value, and a record,
+// an option or a list as bytes both sides serialize in the same order.
 #[test]
 fn data_crosses_by_value() {
     let source = r#"
@@ -1933,7 +1943,8 @@ impl Thing {
         options.fields[5].ty,
         hxn_gen::Data::List(Box::new(hxn_gen::Data::Record(String::from("Point"))))
     );
-    // What a function takes or gives is noted beside what it crosses as.
+    // A function's data parameter and return types are recorded beside their
+    // wire types.
     let open = &library.interfaces[0].methods[0];
     assert_eq!(
         (&open.params[0].ty, open.params[0].borrowed),
@@ -1968,12 +1979,13 @@ impl Thing {
         assert!(adapter.contains("value if value == Mode::Loud as i32 => Ok(Mode::Loud),"));
         assert!(adapter.contains("_ => Err(Fault::Range),"));
         assert!(adapter.contains("Mode::Off => Mode::Off as i32,"));
-        // Read whole, with nothing left over, and passed as it is taken.
+        // Deserialized with no bytes left over, and passed by value or by
+        // reference as the function declares.
         assert!(adapter.contains("let value = hxn_read_options(input)?; input.end()?; value };"));
         assert!(adapter.contains("Thing::open(&options, hxn_read_mode(mode)?)"));
         assert!(adapter.contains("Thing::find(&points, limit)"));
         assert!(adapter.contains("hxn_write_mode(&this.mode()?)"));
-        // An async function owns the data it was passed.
+        // An async function owns its data arguments.
         assert!(adapter.contains("hxn_future::spawn(async move { Ok::<_, hxn_future::Failure>(Thing::later(options).await) })"));
     }
     let c = hxn_gen::c_adapter(&library, "thing");
@@ -2104,9 +2116,9 @@ fn text_of(files: &[hxn_gen::File], path: &str) -> String {
         .clone()
 }
 
-// An enum with a variant that holds values is a Haxe enum of the same
-// cases, written as which case and then its fields. A box is its value, and
-// a map a Haxe `Map`.
+// A tagged enum is a Haxe enum with the same cases, serialized as the
+// variant's index and then its fields. A box is its inner value, and a map
+// is a Haxe `Map`.
 #[test]
 fn an_enum_whose_variants_hold_values_is_a_haxe_enum() {
     let source = r#"
@@ -2147,7 +2159,7 @@ impl Thing {
         ]
     );
     assert!(event.cases[1].named && !event.cases[2].named);
-    // Fields Rust leaves unnamed are numbered when there is more than one.
+    // Unnamed (tuple) fields are numbered when there is more than one.
     let fields = |case: usize| -> Vec<&str> {
         event.cases[case]
             .fields
@@ -2172,13 +2184,13 @@ impl Thing {
         hxn_gen::hl_adapter(&library, "thing"),
     ] {
         assert!(adapter.contains("use thing::{Thing, Kind, Event};"));
-        // Which case, and a case past the last is refused.
+        // The variant's index, and an index past the last is rejected.
         assert!(adapter.contains("0 => Event::Started,"));
         assert!(adapter.contains("_ => return Err(Fault::Range),"));
-        // A field is bound by its place, whatever it is called.
+        // A field is bound by its position, whatever its name.
         assert!(adapter.contains("Event::Progress { done: f0, out: f1 } => {"));
         assert!(adapter.contains("Event::Moved(f0, f1) => {"));
-        // A value that may hold its own kind is entered and left.
+        // A recursive value is entered and left.
         assert!(adapter.contains("input.enter()?;") && adapter.contains("input.leave();"));
         assert!(adapter.contains("4 => Event::Wrapped(Box::new(hxn_read_event(input)?)),"));
         assert!(adapter.contains("let inner = &**f0; hxn_write_event(inner, out)?;"));
@@ -2201,7 +2213,7 @@ impl Thing {
         assert!(
             event.contains("\tCounted(value0:Map<String, Int>, value1:Map<Int, Array<Event>>);\n")
         );
-        // An enum has no functions, so a class beside it writes and reads.
+        // A Haxe enum cannot have methods, so a separate class serializes it.
         let wire = text_of(&files, "EventWire.hx");
         assert!(
             wire.contains(
@@ -2210,7 +2222,7 @@ impl Thing {
         );
         assert!(wire.contains("\t\t\tcase Progress(done, out):\n\t\t\t\tout.addInt32(1);"));
         assert!(wire.contains("EventWire.write(value, out);"));
-        // Each field is read by a statement of its own, in order.
+        // Each field is read by a separate statement, in order.
         assert!(wire.contains(
             "\t\t\t\tvar value0:Float = input.readDouble();\n\t\t\t\tvar value1:Kind = (input.readInt32() : Kind);\n\t\t\t\treturn Event.Moved(value0, value1);"
         ));
@@ -2231,10 +2243,10 @@ impl Thing {
     weedle::parse(&idl).unwrap_or_else(|error| panic!("not WebIDL: {error:?}"));
 }
 
-// A function whose error is the library's own data throws an exception
-// that holds it. The value crosses beside the message: the adapter makes a
-// failure that carries it, and the binding asks for it once it has caught
-// the message.
+// A function whose error type is one of the library's data types throws a
+// typed exception holding the error. The value is passed alongside the
+// message: the adapter creates a failure that carries it, and the binding
+// fetches it after catching the message.
 #[test]
 fn a_failure_that_is_data_is_thrown_as_its_exception() {
     let source = r#"
@@ -2282,8 +2294,8 @@ impl Thing {
         hxn_gen::c_adapter(&library, "thing"),
         hxn_gen::hl_adapter(&library, "thing"),
     ] {
-        // The failure is the error's own message, with which error it is and
-        // then the error.
+        // The failure has the error's own message, with the error type's
+        // index and then the error.
         assert!(
             adapter
                 .contains("fn hxn_thrown_pantry_error(error: PantryError) -> hxn_abi::Failure {")
@@ -2292,12 +2304,12 @@ impl Thing {
         assert!(adapter.contains("hxn_abi::wire::i32(&mut value, 1);\n    match hxn_write_pantry_error(&error, &mut value) {"));
         assert!(adapter.contains("hxn_abi::wire::i32(&mut value, hxn_write_level(&error));"));
         assert!(adapter.contains("this.take(amount as u32).map_err(hxn_thrown_pantry_error)?"));
-        // An async function's future fails with it.
+        // An async function's future is rejected with it.
         assert!(adapter.contains(
             "hxn_future::spawn(async move { Thing::later().await.map_err(hxn_thrown_pantry_error) })"
         ));
         assert!(adapter.contains("this.plain()?"));
-        // What the binding asks for the value with.
+        // The export the binding fetches the value with.
         assert!(adapter.contains("fn thing_thrown_take("));
         assert!(adapter.contains("hxn_abi::thrown::take()"));
     }
@@ -2309,7 +2321,7 @@ impl Thing {
     assert!(hxn_gen::cpp_glue(&library).contains("inline Array<unsigned char> thrown_take() {"));
 
     for files in [hxn_gen::haxe_hl(&library), hxn_gen::haxe_cpp(&library)] {
-        // The exception is named after the error, less a closing `Error`.
+        // The exception is named after the error, without a trailing `Error`.
         let exception = text_of(&files, "PantryException.hx");
         assert!(exception.contains(
             "class PantryException extends haxe.Exception {\n\tpublic final error:PantryError;"
@@ -2324,19 +2336,21 @@ impl Thing {
             "\t\t\tcase 1:\n\t\t\t\tvar value:PantryError = PantryErrorWire.read(input);\n\t\t\t\treturn new PantryException(error.message, value, error);"
         ));
         assert!(thrown.contains("var value:Level = (input.readInt32() : Level);"));
-        // A function that fails with data catches what the message was
-        // thrown as; one that fails with anything else does not.
+        // A function whose error type is data catches the exception the
+        // message was thrown as; a function with any other error does not.
         let thing = text_of(&files, "Thing.hx");
         assert!(
             thing.contains("\tpublic function take(amount:UInt):Int {\n\t\ttry {\n\t\t\treturn ")
         );
         assert!(thing.contains("\t\t} catch (error:haxe.Exception) {\n\t\t\tthrow HxnThingThrown.typed(error);\n\t\t}\n\t}"));
         assert_eq!(thing.matches("HxnThingThrown.typed(error)").count(), 3);
-        // A future's failure is made typed where it is taken.
+        // A future's failure is converted to a typed exception when its value
+        // is taken.
         let future = text_of(&files, "HxnThingFuture.hx");
         assert!(future.contains("catch (error:haxe.Exception) throw HxnThingThrown.typed(error)"));
     }
-    // A script is given the exceptions and not what makes them.
+    // A script gets the exception classes but not the class that builds
+    // them.
     let script = hxn_gen::haxe_cppia(&library);
     assert!(script.iter().any(|file| file.path == "PantryException.hx"));
     assert!(!script.iter().any(|file| file.path == "HxnThingThrown.hx"));
@@ -2349,7 +2363,7 @@ impl Thing {
     assert!(idl.contains("[Throws=PantryError, HxnAsync] static Promise<USVString> later();"));
     weedle::parse(&idl).unwrap_or_else(|error| panic!("not WebIDL: {error:?}"));
 
-    // A library with no such error has none of it.
+    // A library with no such error type generates none of this.
     let plain = parse(
         "thing",
         "#[hxn::interface]\npub struct Thing;\n#[hxn::methods]\nimpl Thing {\n    pub fn plain(&self) -> Result<i32, String> { todo!() }\n}\n",
@@ -2362,7 +2376,7 @@ impl Thing {
             .any(|file| file.path.contains("Thrown"))
     );
 
-    // The exception's name is the library's to leave free.
+    // The library is responsible for keeping the exception's name free.
     let clash = parse(
         "thing",
         "#[hxn::data]\npub enum PantryError { Empty }\n#[hxn::data]\npub struct PantryException { pub x: i32 }\n#[hxn::interface]\npub struct Thing;\n#[hxn::methods]\nimpl Thing {\n    pub fn take(&self) -> Result<i32, PantryError> { todo!() }\n}\n",
@@ -2377,9 +2391,9 @@ impl Thing {
     );
 }
 
-// A future, a stream and a signal carry data as what it crosses as, and a
-// lent function takes and gives it the same way: the adapter writes and
-// reads on the library's side, and the binding on Haxe's.
+// A future, a stream and a signal carry data in its wire format, and a
+// callback's data parameters and return value use the same format: the
+// adapter serializes on the library's side, and the binding on Haxe's.
 #[test]
 fn data_is_carried_over_time_and_by_lent_functions() {
     let source = r#"
@@ -2429,14 +2443,16 @@ impl Thing {
     let c = hxn_gen::c_adapter(&library, "thing");
     let hl = hxn_gen::hl_adapter(&library, "thing");
     for adapter in [&c, &hl] {
-        // What is taken is the library's type, written as what crosses.
+        // The value taken is the library's type, serialized to its wire
+        // format.
         assert!(adapter.contains("this.take::<Point>()?"));
         assert!(adapter.contains("this.next::<Vec<Mode>>()?"));
         assert!(adapter.contains("hxn_write_mode(&this.get::<Mode>()?)"));
         assert!(adapter.contains("i32::from(this.take::<u8>()?)"));
         assert!(adapter.contains("this.take::<Option<i32>>()?"));
-        // A lent function's data is written before the call, whether the
-        // library hands it over or lends it, and its result read after.
+        // A callback's data arguments are serialized before the call, whether
+        // the library passes them by value or by reference, and its return
+        // value is deserialized after.
         assert!(adapter.contains("std::borrow::Borrow::<Point>::borrow(&a0)"));
         assert!(
             adapter.contains("let a1 = hxn_write_mode(std::borrow::Borrow::<Mode>::borrow(&a1));")
@@ -2453,7 +2469,7 @@ impl Thing {
         "define_prim!(hlp_future_take_point, thing_future_take_point, \"PXthing_future_Ri_B\");"
     ));
     assert!(hl.contains("define_prim!(hlp_stream_next_list_mode, thing_stream_next_list_mode, \"PXthing_stream_Ri_B\");"));
-    // Bytes a lent function gives are a `haxe.io.Bytes`, read as it is.
+    // Bytes a callback returns are a `haxe.io.Bytes`, read directly.
     assert!(hl.contains("\"PPi_OiB_Ri_B\""));
     assert!(hl.contains("buffer(call(env.cast(), &mut args).cast())"));
     assert!(
@@ -2495,7 +2511,8 @@ impl Thing {
     weedle::parse(&hxn_gen::webidl(&library))
         .unwrap_or_else(|error| panic!("not WebIDL: {error:?}"));
 
-    // Two types a kind's calls would name alike are refused.
+    // Two carried types whose take calls would have the same name are
+    // rejected.
     let clash = parse(
         "thing",
         "#[hxn::data]\npub struct Point { pub x: f64 }\n#[hxn::data]\npub struct ListPoint { pub x: f64 }\n#[hxn::interface]\npub struct Thing;\n#[hxn::methods]\nimpl Thing {\n    pub fn one() -> Future<Vec<Point>> { todo!() }\n    pub fn other() -> Future<ListPoint> { todo!() }\n}\n",

@@ -1,6 +1,6 @@
 [package]
 name = "hxn-future"
-description = "hxn's future: one result from an asynchronous native operation, on every runtime"
+description = "hxn's future type: the single result of an asynchronous native operation, on every runtime"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

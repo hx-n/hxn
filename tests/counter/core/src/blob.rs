@@ -1,5 +1,5 @@
-//! A value that declares how much it holds, kept in a file of its own: the
-//! generator reads every module of a library.
+//! A type that reports how much memory it holds. It is defined in a separate
+//! file: the generator reads every module of a library.
 
 use std::sync::atomic::{AtomicI32, Ordering};
 
@@ -7,8 +7,9 @@ use hxn::{Weight, collect_soon};
 
 static BLOBS: AtomicI32 = AtomicI32::new(0);
 
-/// Bytes the collector cannot see, which it is told of: to the host, one of
-/// these is a few words whatever its size here.
+/// A byte buffer the garbage collector cannot see, whose size is reported
+/// to it. To the host, a blob is a few words regardless of how much native
+/// memory it holds.
 #[hxn::interface(weighed)]
 pub struct Blob {
     bytes: Vec<u8>,
@@ -41,7 +42,7 @@ impl Blob {
         Ok(())
     }
 
-    /// Another blob with the same bytes, as heavy as this one.
+    /// A copy of this blob with the same bytes and the same reported size.
     pub fn copy(&self) -> Blob {
         BLOBS.fetch_add(1, Ordering::SeqCst);
         Blob {
@@ -50,12 +51,12 @@ impl Blob {
         }
     }
 
-    /// How many blobs exist.
+    /// The number of live blobs.
     pub fn live() -> i32 {
         BLOBS.load(Ordering::SeqCst)
     }
 
-    /// Asks the host to collect at its next chance.
+    /// Asks the host to run a garbage collection at its next opportunity.
     pub fn crowded() {
         collect_soon();
     }

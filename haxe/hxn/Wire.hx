@@ -5,19 +5,19 @@ import haxe.io.BytesBuffer;
 import haxe.io.BytesInput;
 
 /**
-	What a library's generated data classes share when they write a value's
-	parts into bytes and read them back: the parts that are not one call of
-	`haxe.io`. The layout is the one `hxn_abi::wire` describes.
+	Serialization helpers shared by a library's generated data classes: the
+	encoding and decoding steps that are not a single `haxe.io` call. The
+	wire format is the one `hxn_abi::wire` describes.
 **/
 @:noCompletion class Wire {
-	/** A length, then the text as UTF-8. **/
+	/** Writes a length, then the text as UTF-8. **/
 	public static function text(out:BytesBuffer, value:String):Void {
 		if (value == null)
 			throw new haxe.Exception("null where text is needed");
 		bytes(out, Bytes.ofString(value));
 	}
 
-	/** A length, then the bytes. **/
+	/** Writes a length, then the bytes. **/
 	public static function bytes(out:BytesBuffer, value:Bytes):Void {
 		if (value == null)
 			throw new haxe.Exception("null where bytes are needed");
@@ -38,7 +38,7 @@ import haxe.io.BytesInput;
 		return value.getString(0, value.length);
 	}
 
-	/** Eight bytes, the low four first. **/
+	/** Reads eight bytes, the low four first. **/
 	public static function readInt64(input:BytesInput):haxe.Int64 {
 		var low = input.readInt32();
 		var high = input.readInt32();

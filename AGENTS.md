@@ -20,13 +20,13 @@ natively and on wasm. Read these before changing anything:
   `tests/mobile/run.sh ios-sim|android` runs the examples in an iOS
   simulator and on an Android device or emulator. Run it after changing how
   an hxcpp program is compiled or linked.
-- **Run runtime tests under a timeout.** A wrong wait hangs; it does not fail.
+- **Run runtime tests under a timeout.** A wrong wait hangs instead of failing.
 - **Repeat anything concurrent**, and on more than one machine if you can.
   A change to `hxn-abi` or `hxn-future` is also run under Miri
   (`cargo miri test -p hxn-abi`, `-p hxn-future`).
-- **Windows is run by CI** (`.github/workflows/ci.yml`), with HashLink and
-  hxcpp on Linux beside it. A change is not known to work there until that
-  has run.
+- **Windows is run by CI** (`.github/workflows/ci.yml`), along with HashLink
+  and hxcpp on Linux. A change is not known to work on Windows until CI has
+  run it.
 - **Say what was not run.** If a runtime was unavailable, report that, not a
   pass.
 - `cargo fmt --all` and `cargo clippy --workspace --all-targets` are clean.
@@ -38,8 +38,8 @@ natively and on wasm. Read these before changing anything:
 - A library's core is plain Rust with no runtime in it, and never selects a
   runtime with a cargo feature.
 - Native code does not call a host function to report a result, does not keep
-  a host function alive, and does not start threads or block where the build
-  has none.
+  a host function alive, and does not start threads or block in a build
+  without threads.
 - Nothing unwinds across the boundary. A runtime's exception is thrown by the
   adapter after the library has returned.
 
@@ -47,11 +47,11 @@ natively and on wasm. Read these before changing anything:
 
 - **Keep the two documents current.** When an approach or a rule changes,
   change `docs/design.md` or `docs/conventions.md` in the same commit. They
-  describe how hxn is, not its history.
+  describe the current design, not its history.
 - **No planning, backlog or status documents.** History, measurements,
   alternatives weighed and open questions go in `git-bug` issues. Look at
-  `git-bug bug` before starting on an area: its issue records what is known and
-  what is still open.
+  `git-bug bug` before starting on an area: the area's issue records what is
+  known and what is still open.
 - **Comments** describe what the code does, and why it is shaped that way
   when that is not obvious. No account of what was tried, and no measurements.
 - **Commit messages** are short: what changed, and a few sentences of why
@@ -70,18 +70,18 @@ natively and on wasm. Read these before changing anything:
 
 | Path | What it is |
 |---|---|
-| `crates/hxn` | What a library depends on: the marker attributes. |
-| `crates/hxn-abi` | The runtime-neutral core: what crosses the boundary, and who owns it. |
-| `crates/hxn-hl` | The HashLink side: finalized handles, text, deferred throws. |
+| `crates/hxn` | The crate a library depends on: the marker attributes. |
+| `crates/hxn-abi` | The runtime-neutral core: the types passed across the boundary, and their ownership. |
+| `crates/hxn-hl` | HashLink support: handles with finalizers, string conversion, exceptions thrown after the Rust call returns. |
 | `crates/hxn-future` | Futures, streams, signals, and running work with or without threads. |
-| `crates/hxn-gen` | Reads a library's marked source and writes its adapters, header and Haxe classes. |
-| `crates/hxn-cli` | The `hxn` command: makes a library, builds its binding for a runtime, runs its Haxe program. |
-| `include/hxn.h` | The same layouts for C, and what hxcpp glue needs around them. |
+| `crates/hxn-gen` | Parses a library's annotated source and generates its adapters, C header and Haxe classes. |
+| `crates/hxn-cli` | The `hxn` command: creates a library, builds its binding for a runtime, and runs its Haxe program. |
+| `include/hxn.h` | The `hxn-abi` layouts as C declarations, and the helpers the hxcpp glue uses. |
 | `haxe/hxn` | The Haxe side: `Future`, `Stream`, `Signal`, `Computed`, `Reactive`, `Inbox`, `Loop`, `Callback`, `AtomicInt`, `AtomicBool`, `Gc`, `Unit`, `Wire`, and the macro `Bind`. |
-| `examples` | Small libraries to read and run: each a crate, a Haxe program and what it prints. |
-| `tests/counter` | The fixture: a small library bound for every runtime, and the Haxe test they all run. |
-| `tests/cli` | Makes a library with `hxn new`, runs it as the readme describes, and packages it. |
-| `tests/examples` | Runs each example and compares what it prints. |
+| `examples` | Small example libraries: each a crate, a Haxe program and its expected output. |
+| `tests/counter` | The test fixture: a small library with bindings for every runtime, and the Haxe test that runs on all of them. |
+| `tests/cli` | Creates a library with `hxn new`, runs it as the readme describes, and packages it. |
+| `tests/examples` | Runs each example and compares its output with the expected output. |
 | `tests/mobile` | Runs each example in an iOS simulator and on Android. |
 
 `internal/` is not part of the repository.

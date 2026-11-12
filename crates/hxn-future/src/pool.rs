@@ -1,5 +1,5 @@
-//! The library's worker threads: a `krio` cluster that stepped work is
-//! submitted to where the build has threads.
+//! The library's worker thread pool: a `krio` cluster that runs stepped work
+//! when the build has threads.
 
 use std::cell::Cell;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -10,13 +10,13 @@ use krio_core::{Clock, Task, TaskId};
 use krio_parallel::{Cluster, Park, TaskObserver};
 use krio_runtime::{AgentId, ParallelScheduler};
 
-// A library is one of several in a process, each with a pool of its own.
+// A process may load several libraries, each with its own pool.
 const MOST_WORKERS: usize = 4;
 
 /// Parks an idle worker on a condition variable.
 ///
-/// One for every slot: a wake reaches all parked workers, and those it was
-/// not meant for look at their own slot and park again.
+/// One instance serves every slot: a wake notifies all parked workers, and
+/// each worker the wake was not meant for checks its own slot and parks again.
 struct Blocking {
     lock: Mutex<()>,
     woken: Condvar,
@@ -25,8 +25,8 @@ struct Blocking {
 impl Park for Blocking {
     fn park(&self, slot: &AtomicU32, expected: u32) {
         let guard = self.lock.lock().unwrap_or_else(PoisonError::into_inner);
-        // Read under the lock a waker takes, so a wake that lands after this
-        // read finds the worker already waiting.
+        // Read while holding the lock a waker takes, so a wake that happens
+        // after this read finds the worker already waiting.
         if slot.load(Ordering::Acquire) == expected {
             drop(self.woken.wait(guard));
         }
@@ -50,7 +50,8 @@ thread_local! {
     static STEPPING: Cell<u64> = const { Cell::new(0) };
 }
 
-// Lets a task learn its own id, which is what a wake is addressed to.
+// Records the id of the task being stepped, so a task can learn its own id,
+// which is what a wake targets.
 struct Stepping;
 
 impl TaskObserver for Stepping {
@@ -63,12 +64,12 @@ impl TaskObserver for Stepping {
     }
 }
 
-/// The id of the task a worker is stepping on this thread, or zero.
+/// Returns the id of the task a worker is stepping on this thread, or zero.
 pub(crate) fn current() -> u64 {
     STEPPING.get()
 }
 
-/// Puts a task that returned pending back in front of the workers.
+/// Reschedules a task that returned pending.
 pub(crate) fn wake(task: u64) {
     if task != 0
         && let Some(pool) = pool()
@@ -79,7 +80,7 @@ pub(crate) fn wake(task: u64) {
 
 type Pool = Cluster<Blocking, Elapsed>;
 
-// `None` if no worker could be started.
+// `None` if no worker thread could be started.
 fn pool() -> Option<&'static Arc<Pool>> {
     static POOL: OnceLock<Option<Arc<Pool>>> = OnceLock::new();
     POOL.get_or_init(|| {
@@ -107,8 +108,8 @@ fn pool() -> Option<&'static Arc<Pool>> {
     .as_ref()
 }
 
-/// Gives `task` to the workers. With none, it is dropped here, which
-/// cancels the future it would have settled.
+/// Submits `task` to the workers. If there are none, it is dropped here,
+/// which cancels the future it would have settled.
 pub(crate) fn submit(task: Box<dyn Task + Send>) {
     if let Some(pool) = pool() {
         pool.spawn(task);

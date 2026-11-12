@@ -1,5 +1,5 @@
-//! From a library's source to its [`Library`]: the items it marked, and
-//! nothing the emitters cannot carry.
+//! Parses a library's source into its [`Library`]: the marked items,
+//! rejecting anything the emitters cannot support.
 
 use std::path::{Path, PathBuf};
 
@@ -21,7 +21,8 @@ fn error<T>(span: Span, message: impl Into<String>) -> Result<T, Error> {
     })
 }
 
-// `#[hxn::interface]` and `#[hxn::methods]`.
+// Whether `attribute` is `#[hxn::<name>]`, such as `#[hxn::interface]` or
+// `#[hxn::methods]`.
 fn is_marker(attribute: &Attribute, name: &str) -> bool {
     let segments: Vec<_> = attribute
         .path()
@@ -91,7 +92,7 @@ fn docs(attributes: &[Attribute]) -> Vec<String> {
         .collect()
 }
 
-// The `#[hxn(...)]` notes on a function. `blocking` is the only one.
+// The `#[hxn(...)]` attribute on a function. `blocking` is the only option.
 fn is_blocking(attributes: &[Attribute]) -> Result<bool, Error> {
     let mut blocking = false;
     for attribute in attributes {
@@ -121,12 +122,12 @@ fn path_name(ty: &syn::Type) -> Option<String> {
     }
 }
 
-// `Option<T>` gives `T`.
+// Unwraps `Option<T>` to `T`.
 fn optional(ty: &syn::Type) -> Option<&syn::Type> {
     wrapped(ty, "Option")
 }
 
-// The cell `ty` names: `AtomicI32` or `AtomicFlag`.
+// The atomic cell type `ty` names: `AtomicI32` or `AtomicFlag`.
 fn cell(ty: &syn::Type) -> Option<Type> {
     match path_name(ty)?.as_str() {
         "AtomicI32" => Some(Type::AtomicInt),
@@ -135,7 +136,7 @@ fn cell(ty: &syn::Type) -> Option<Type> {
     }
 }
 
-// `wrapper<T, ..>` gives `T`.
+// Unwraps `wrapper<T, ..>` to `T`.
 fn wrapped_first<'a>(ty: &'a syn::Type, wrapper: &str) -> Option<&'a syn::Type> {
     let syn::Type::Path(path) = ty else {
         return None;
@@ -153,7 +154,7 @@ fn wrapped_first<'a>(ty: &'a syn::Type, wrapper: &str) -> Option<&'a syn::Type> 
     }
 }
 
-// `wrapper<T>` gives `T`.
+// Unwraps `wrapper<T>` to `T`.
 fn wrapped<'a>(ty: &'a syn::Type, wrapper: &str) -> Option<&'a syn::Type> {
     let syn::Type::Path(path) = ty else {
         return None;
@@ -181,8 +182,8 @@ struct Scope<'a> {
     known: Known<'a>,
 }
 
-// `HashMap<K, V>` or `BTreeMap<K, V>` gives `K`, `V` and whether it is the
-// sorted one.
+// Unwraps `HashMap<K, V>` or `BTreeMap<K, V>` to `K`, `V` and whether it is
+// the sorted one.
 fn mapped(ty: &syn::Type) -> Option<(&syn::Type, &syn::Type, bool)> {
     let syn::Type::Path(path) = ty else {
         return None;
@@ -205,8 +206,8 @@ fn mapped(ty: &syn::Type) -> Option<(&syn::Type, &syn::Type, bool)> {
     }
 }
 
-// Plain data, given the names of the library's own. `None` for a type that
-// is not data.
+// Plain data, given the names of the library's data types. `None` for a type
+// that is not data.
 fn data_of(ty: &syn::Type, known: Known) -> Option<Data> {
     if let Some(inner) = optional(ty) {
         return Some(Data::Option(Box::new(data_of(inner, known)?)));
@@ -221,7 +222,7 @@ fn data_of(ty: &syn::Type, known: Known) -> Option<Data> {
         return Some(Data::Boxed(Box::new(data_of(inner, known)?)));
     }
     if let Some((key, value, sorted)) = mapped(ty) {
-        // What a Haxe `Map` is keyed by.
+        // The key types a Haxe `Map` supports.
         let key = data_of(key, known).filter(|key| {
             matches!(
                 key,
@@ -274,7 +275,7 @@ impl Scope<'_> {
         ))
     }
 
-    // `Arc<T>` of an interface gives `T`.
+    // Unwraps `Arc<T>` of an interface to `T`.
     fn pointer(&self, ty: &syn::Type) -> Option<String> {
         self.interface(wrapped(ty, "Arc")?)
     }
@@ -283,14 +284,14 @@ impl Scope<'_> {
         self.shared.iter().any(|shared| shared == interface)
     }
 
-    // Data that crosses as a value of its own kind: an enum, a record, or
-    // an `Option` or a list of data. What has a way across already, a bare
-    // number or text, is `None` here.
+    // Data that needs its own wire type: an enum, a record, or an `Option`
+    // or a list of data. A type the boundary already supports, a bare number
+    // or text, is `None` here.
     fn shape(&self, ty: &syn::Type) -> Option<Data> {
         data_of(ty, self.known).filter(|data| data.wire().is_some())
     }
 
-    // The same behind a `&`, where a list is also a slice.
+    // The same behind a `&`, where a list may also be a slice.
     fn lent_shape(&self, ty: &syn::Type) -> Option<Data> {
         match ty {
             syn::Type::Slice(slice) => {
@@ -309,8 +310,9 @@ impl Scope<'_> {
             Some("f64") => Some(Type::F64),
             _ => None,
         };
-        // Text and bytes are borrowed going to the function. An object goes
-        // to it for good: one lent for the call could be kept past it.
+        // Text and bytes passed to the callback are borrowed. An object
+        // passed to it is transferred: a borrowed one could be kept past the
+        // call.
         let taken = |ty: &syn::Type| -> Result<Option<Type>, Error> {
             if let syn::Type::Reference(reference) = ty {
                 if reference.mutability.is_none() {
@@ -322,7 +324,7 @@ impl Scope<'_> {
                     {
                         return Ok(Some(Type::Bytes));
                     }
-                    // Data is copied for the function either way.
+                    // Data is copied for the callback either way.
                     if let Some(data) = self.lent_shape(&reference.elem) {
                         return Ok(Some(Type::Data(data)));
                     }
@@ -506,8 +508,8 @@ impl Scope<'_> {
                 "an interface is taken as `&T` or `&mut T`, not by value",
             );
         }
-        // Data is copied in either way: by value, or behind a reference
-        // that is to the adapter's copy. A list is also taken as a slice.
+        // Data is copied in either way: passed by value, or by a reference
+        // to the adapter's copy. A list may also be accepted as a slice.
         let (target, borrowed) = match ty {
             syn::Type::Reference(reference) if reference.mutability.is_none() => {
                 (&*reference.elem, true)
@@ -546,7 +548,7 @@ impl Scope<'_> {
         }
     }
 
-    // `Future<T>`, `Stream<T>` or `Signal<T>`, with what it carries.
+    // `Future<T>`, `Stream<T>` or `Signal<T>`, with the type it carries.
     fn later(&self, ty: &syn::Type) -> Result<Option<Type>, Error> {
         type Make = fn(Box<Type>) -> Type;
         let kinds: [(&str, Make); 3] = [
@@ -563,7 +565,8 @@ impl Scope<'_> {
         Ok(None)
     }
 
-    // What a `Future`, `Stream` or `Signal`, as `name` has it, carries.
+    // The carried type of a `Future`, `Stream` or `Signal`, whichever `name`
+    // is.
     fn carried(&self, name: &str, carried: &syn::Type) -> Result<Type, Error> {
         let ty = carried;
         let plain = match path_name(carried).as_deref() {
@@ -577,23 +580,23 @@ impl Scope<'_> {
         if let Some(plain) = plain {
             return Ok(plain);
         }
-        // Bytes are handed over once, as an object is.
+        // Bytes are transferred once, like an object.
         if name != "Signal" && wrapped(carried, "Vec").and_then(path_name).as_deref() == Some("u8")
         {
             return Ok(Type::Bytes);
         }
-        // Nothing, which is still news: the work is done, or something
-        // happened. A signal always has a value.
+        // `()`, which still carries information: the work is done, or an
+        // event happened. A signal always has a value.
         if name != "Signal" && matches!(carried, syn::Type::Tuple(tuple) if tuple.elems.is_empty())
         {
             return Ok(Type::Void);
         }
-        // Data, and a number Haxe has no type of its own for.
+        // Data, and a numeric type with no Haxe equivalent.
         if let Some(data) = data_of(carried, self.known).filter(|data| data.crosses().is_some()) {
             return Ok(Type::Data(data));
         }
-        // A signal is read any number of times, which a value held
-        // by one owner cannot be.
+        // A signal is read any number of times, which a value with a single
+        // owner cannot be.
         let interface = if name == "Signal" {
             None
         } else if let Some(interface) = self.interface(carried) {
@@ -696,7 +699,7 @@ impl Scope<'_> {
         if wrapped(ty, "Vec").and_then(path_name).as_deref() == Some("u8") {
             return Ok((Type::Bytes, false));
         }
-        // Which data it is, `method` reads off the signature.
+        // `method` reads the data type from the signature.
         if let Some(wire) = self.shape(ty).and_then(|data| data.wire()) {
             return Ok((wire, false));
         }
@@ -706,7 +709,7 @@ impl Scope<'_> {
             Some("i64") => Type::I64,
             Some("f64") => Type::F64,
             Some("String") => Type::Str,
-            // Which number it is, `method` reads off the signature.
+            // `method` reads the numeric type from the signature.
             Some(name) if Number::parse(name).is_some() => {
                 Number::parse(name).map_or(Type::I32, Number::wire)
             }
@@ -721,7 +724,7 @@ impl Scope<'_> {
         Ok((plain, false))
     }
 
-    // `Result<T, E>` gives `T` and means the function can fail.
+    // Unwraps `Result<T, E>` to `T`, and reports that the function can fail.
     fn returns(&self, output: &ReturnType) -> Result<((Type, bool), bool), Error> {
         match given(output) {
             None => Ok(((Type::Void, false), false)),
@@ -729,9 +732,9 @@ impl Scope<'_> {
         }
     }
 
-    // An `async fn` as the function it is to the host: one that returns a
-    // future of what it gives. It runs after the call that starts it has
-    // returned, so everything it takes is its own by then.
+    // An `async fn` as the host sees it: a function that returns a future of
+    // its output. It runs after the call that starts it has returned, so it
+    // must own all its parameters by then.
     fn started(
         &self,
         signature: &syn::Signature,
@@ -808,8 +811,8 @@ impl Scope<'_> {
         attributes: &[Attribute],
     ) -> Result<Method, Error> {
         let name = signature.ident.to_string();
-        // A function lent to the call may fail with an error of the caller's
-        // choosing, which is the one use a type parameter has here.
+        // A callback may fail with an error type the caller chooses, which is
+        // the only allowed use of a type parameter here.
         let lends = signature.inputs.iter().any(|input| {
             matches!(input, FnArg::Typed(typed) if matches!(&*typed.ty, syn::Type::ImplTrait(_)))
         });
@@ -848,7 +851,7 @@ impl Scope<'_> {
                         return error(typed.pat.span(), "a parameter needs a plain name");
                     };
                     let name = pattern.ident.to_string();
-                    // What the adapters call their own.
+                    // Names the adapters use for their own variables.
                     if ["this", "out", "err"].contains(&name.as_str()) {
                         return error(
                             pattern.ident.span(),
@@ -936,7 +939,7 @@ impl Scope<'_> {
 
 const WIDE: &str = "an integer wider than 64 bits does not cross: Haxe has none. Split the value";
 
-// What a function gives, less the `Result` around it, and whether it had one.
+// A function's return type without its `Result`, and whether it had one.
 fn given(output: &ReturnType) -> Option<(&syn::Type, bool)> {
     let ReturnType::Type(_, ty) = output else {
         return None;
@@ -973,20 +976,20 @@ fn failing(output: &ReturnType) -> Option<&syn::Type> {
     }
 }
 
-/// One file's items, those of its inline modules among them, and where it
-/// is if it came from a file.
+/// One file's items, including those of its inline modules, and its path if
+/// it was read from a file.
 struct Source {
     file: Option<String>,
     items: Vec<Item>,
 }
 
-// A module declared in a file and kept in another.
+// A module declared in one file and defined in another.
 struct Outside {
     name: String,
     line: usize,
     // `#[path = "..."]`, which is relative to the declaring file.
     path: Option<String>,
-    // Where its file is looked for otherwise.
+    // The directory its file is searched for in otherwise.
     dir: PathBuf,
 }
 
@@ -1005,9 +1008,9 @@ fn path_attribute(attributes: &[Attribute]) -> Option<String> {
         })
 }
 
-// Takes a file's items apart: those of inline modules join the rest, and a
-// module kept in another file is noted. `dir` is where this level's modules
-// keep their files.
+// Flattens a file's items: items of inline modules are added to the rest,
+// and a module defined in another file is recorded. `dir` is the directory
+// of this level's module files.
 fn flatten(items: Vec<Item>, dir: &Path, out: &mut Vec<Item>, outside: &mut Vec<Outside>) {
     for item in items {
         match item {
@@ -1036,8 +1039,8 @@ fn parse_text(text: &str, file: Option<&Path>) -> Result<syn::File, Error> {
     })
 }
 
-// Reads the file at `path`, whose own modules keep their files in `dir`,
-// and then those modules.
+// Reads the file at `path`, whose submodules' files are in `dir`, and then
+// those submodules.
 fn load(
     path: &Path,
     dir: &Path,
@@ -1061,9 +1064,9 @@ fn load(
     });
     let beside = path.parent().unwrap_or(Path::new(""));
     for module in outside {
-        // A file named for its module keeps that module's own in a
-        // directory of the same name; `mod.rs`, and a file given by path,
-        // keep them beside themselves.
+        // A file named after its module keeps its submodules in a directory
+        // of the same name; `mod.rs`, and a file given by `#[path]`, keep
+        // them in their own directory.
         let beside_it = module.dir.join(format!("{}.rs", module.name));
         let within = module.dir.join(&module.name).join("mod.rs");
         let (file, dir) = if let Some(given) = &module.path {
@@ -1091,7 +1094,7 @@ fn load(
     Ok(())
 }
 
-// Adds the file an error was met in, if it names none already.
+// Adds the file an error occurred in, if the error has no file yet.
 fn located<T>(result: Result<T, Error>, source: &Source) -> Result<T, Error> {
     result.map_err(|mut error| {
         if error.file.is_none() {
@@ -1101,20 +1104,20 @@ fn located<T>(result: Result<T, Error>, source: &Source) -> Result<T, Error> {
     })
 }
 
-// The interfaces a file marks.
-// What the adapters name their own exports after.
+// Names the adapters use for their own exports.
 const RESERVED: [&str; 6] = ["Atomic", "Memory", "Future", "Stream", "Signal", "Outbox"];
 
-// The names of the library's data, which a signature is read against.
+// The names of the library's data types, used to resolve a signature's
+// types.
 #[derive(Clone, Copy)]
 struct Known<'a> {
     records: &'a [String],
-    // The enums whose variants hold nothing, and those with one that does.
+    // The C-like enums, and the tagged enums.
     enums: &'a [String],
     tagged: &'a [String],
 }
 
-// The names of a library's data as they are gathered.
+// The names of a library's data types, as they are collected.
 #[derive(Default)]
 struct Names {
     records: Vec<String>,
@@ -1122,7 +1125,7 @@ struct Names {
     tagged: Vec<String>,
 }
 
-// A `#[hxn::data]` item's name, checked as an interface's is.
+// A `#[hxn::data]` item's name, checked the same way as an interface's.
 fn data_name(
     item: &syn::Ident,
     vis: &Visibility,
@@ -1148,8 +1151,9 @@ fn data_name(
     Ok(name)
 }
 
-// The names of every `#[hxn::data]` struct and enum, before any field is
-// read: a field of one may be another, declared later or in another file.
+// Collects the names of every `#[hxn::data]` struct and enum before any
+// field is read: a field's type may be another data type, declared later or
+// in another file.
 fn data_names(items: &[Item], taken: &mut Vec<String>, names: &mut Names) -> Result<(), Error> {
     for item in items {
         match item {
@@ -1179,7 +1183,7 @@ fn holds_values(item: &syn::ItemEnum) -> bool {
         .any(|variant| !matches!(variant.fields, syn::Fields::Unit))
 }
 
-// What a field of data holds.
+// The data type of a field.
 fn field_data(ty: &syn::Type, known: Known) -> Result<Data, Error> {
     let Some(data) = data_of(ty, known) else {
         return error(
@@ -1196,7 +1200,7 @@ fn field_data(ty: &syn::Type, known: Known) -> Result<Data, Error> {
     Ok(data)
 }
 
-// The cases of an enum with a variant that holds values.
+// The variants of a tagged enum.
 fn cases(item: &syn::ItemEnum, known: Known) -> Result<Vec<Case>, Error> {
     let mut cases = Vec::new();
     for variant in &item.variants {
@@ -1231,7 +1235,8 @@ fn cases(item: &syn::ItemEnum, known: Known) -> Result<Vec<Case>, Error> {
     Ok(cases)
 }
 
-// A variant's number: the one written, or one more than the last.
+// A variant's integer value: the explicit discriminant, or one more than the
+// previous variant's.
 fn discriminant(variant: &syn::Variant, next: i32) -> Result<i32, Error> {
     const NUMBER: &str =
         "a variant's number is written as a whole number that fits an i32, or left out";
@@ -1255,7 +1260,7 @@ fn discriminant(variant: &syn::Variant, next: i32) -> Result<i32, Error> {
     i32::try_from(if negative { -number } else { number }).or_else(|_| error(value.span(), NUMBER))
 }
 
-// The records and enums themselves, once every name is known.
+// Parses the records and enums once every name is known.
 fn data_items(
     items: &[Item],
     known: Known,
@@ -1342,6 +1347,7 @@ fn data_items(
     Ok(())
 }
 
+// The structs a file marks `#[hxn::interface]`.
 fn interfaces_of(items: &[Item], interfaces: &mut Vec<Interface>) -> Result<(), Error> {
     for item in items {
         let Item::Struct(item) = item else { continue };
@@ -1361,7 +1367,7 @@ fn interfaces_of(items: &[Item], interfaces: &mut Vec<Interface>) -> Result<(), 
                 format!("`{name}` is a name the adapters use; call the interface something else"),
             );
         }
-        // Names are the library's, whatever module an item is in.
+        // Names are unique across the library, whatever module an item is in.
         if interfaces.iter().any(|known| known.name == name) {
             return error(
                 item.ident.span(),
@@ -1381,7 +1387,8 @@ fn interfaces_of(items: &[Item], interfaces: &mut Vec<Interface>) -> Result<(), 
     Ok(())
 }
 
-// A shared interface's weak reference is a class of its name with `Weak`.
+// A shared interface's weak reference is a class named after it with a
+// `Weak` suffix.
 fn weak_clash(items: &[Item], names: &[String], shared: &[String]) -> Result<(), Error> {
     for name in shared {
         let weak = format!("{name}Weak");
@@ -1459,9 +1466,8 @@ fn methods_of(
     Ok(())
 }
 
-// Every interface first, so that a block in one file can name one in another.
-// What `#[hxn::function]` specifies for a function, if it is marked: the class it
-// is a static of, when that is not the library's own.
+// What `#[hxn::function]` specifies for a function, if it is marked: the
+// class it is a static function of, when that is not the library's own.
 fn function_class(attributes: &[Attribute]) -> Result<Option<Option<String>>, Error> {
     let Some(attribute) = attributes.iter().find(|a| is_marker(a, "function")) else {
         return Ok(None);
@@ -1494,8 +1500,9 @@ fn function_class(attributes: &[Attribute]) -> Result<Option<Option<String>>, Er
     Ok(Some(class))
 }
 
-// The functions a file marks outside any `impl`, each added to the class it
-// is a static of: an interface's, or one that exists only to hold them.
+// The functions a file marks outside any `impl`, each added as a static
+// function of its class: an interface's, or one that exists only to hold
+// them.
 fn functions_of(
     items: &[Item],
     library: &str,
@@ -1567,6 +1574,8 @@ fn functions_of(
 }
 
 fn build(name: &str, sources: &[Source]) -> Result<Library, Error> {
+    // Every interface is collected first, so that a `#[hxn::methods]` block
+    // in one file can name an interface declared in another.
     let mut interfaces: Vec<Interface> = Vec::new();
     for source in sources {
         located(interfaces_of(&source.items, &mut interfaces), source)?;
@@ -1587,8 +1596,7 @@ fn build(name: &str, sources: &[Source]) -> Result<Library, Error> {
     for source in sources {
         located(data_names(&source.items, &mut taken, &mut data), source)?;
     }
-    // An enum whose variants hold values is written and read by a class
-    // named after it.
+    // A tagged enum is serialized and deserialized by a class named after it.
     for name in &data.tagged {
         let wire = wire_class(name);
         if taken.contains(&wire) {
@@ -1619,7 +1627,8 @@ fn build(name: &str, sources: &[Source]) -> Result<Library, Error> {
             source,
         )?;
     }
-    // After every `impl`, so a function finds what its class already has.
+    // After every `impl`, so that a function's class already holds its
+    // methods.
     for source in sources {
         located(
             functions_of(&source.items, name, &mut interfaces, &names, &shared, known),
@@ -1657,8 +1666,8 @@ fn build(name: &str, sources: &[Source]) -> Result<Library, Error> {
     Ok(library)
 }
 
-/// Reads the marked items of `source`, the text of one Rust file, as the
-/// API of the library `name`. Modules it keeps in other files are not read:
+/// Parses the marked items of `source`, the text of one Rust file, as the
+/// API of the library `name`. Modules defined in other files are not read:
 /// [`parse_crate`] reads a library from its files.
 pub fn parse(name: &str, source: &str) -> Result<Library, Error> {
     let file = parse_text(source, None)?;
@@ -1668,11 +1677,11 @@ pub fn parse(name: &str, source: &str) -> Result<Library, Error> {
 }
 
 /// Reads the library `name` from the file at `root`, its `lib.rs`, and from
-/// the file of every module declared from there down. Gives the files read
-/// as well, for a build script to watch.
+/// the file of every module declared from there down. Also returns the files
+/// read, for a build script to watch.
 ///
-/// The adapters name an interface at the crate's root, so one defined in a
-/// module is re-exported there.
+/// The adapters refer to an interface by its path at the crate's root, so one
+/// defined in a module must be re-exported there.
 pub fn parse_crate(name: &str, root: &Path) -> Result<(Library, Vec<PathBuf>), Error> {
     let mut sources = Vec::new();
     let mut files = Vec::new();

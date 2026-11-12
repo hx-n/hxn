@@ -1,7 +1,6 @@
-//! A library small enough to read at a glance, with one of each thing a
-//! binding has to carry: a value with a destructor, a fallible method, text
-//! and bytes in, text out, a function called back, and results that arrive
-//! later.
+//! A small fixture library with one of each feature a binding has to
+//! support: a type with a destructor, a fallible method, string and byte
+//! parameters, a string return value, a callback, and asynchronous results.
 
 use std::fmt;
 use std::sync::Arc;
@@ -16,33 +15,36 @@ use hxn_future::{
     spawn_blocking, stepped,
 };
 
-// An interface in a module is named at the root, where the adapters look.
+// Interfaces defined in submodules are re-exported at the crate root, where
+// the adapters look for them.
 mod blob;
 mod events;
 mod numbers;
 mod shapes;
 pub use blob::Blob;
 pub use events::{CountError, Event, Events, Refusal, Trouble};
-// A function in a module is named at the root too.
+// Functions defined in submodules are re-exported at the root as well.
 pub use numbers::{Numbers, halve};
 pub use shapes::{Mode, Point, Settings, Shapes};
 
 static LIVE: AtomicI32 = AtomicI32::new(0);
 
-/// How many counters exist. A binding that leaks or double-frees shows here.
+/// The number of live counters. A leak or double free in a binding shows up
+/// in this count.
 pub fn live() -> i32 {
     LIVE.load(Ordering::SeqCst)
 }
 
-/// What the library calls itself. With no class named, a function is a
-/// static of the one named after the library, which here is `Counter`'s.
+/// Returns the library's name and version. A function with no `class`
+/// argument becomes a static method of the class named after the library,
+/// which here is the `Counter` class.
 #[hxn::function]
 pub fn version() -> String {
     String::from("counter 1")
 }
 
-/// `value`, held between `low` and `high`. Fails if they are the wrong way
-/// round.
+/// Clamps `value` to the range `low` to `high`. Fails if `low` is greater
+/// than `high`.
 #[hxn::function(class = "Tools")]
 pub fn clamp(value: i32, low: i32, high: i32) -> Result<i32, &'static str> {
     if low > high {
@@ -51,23 +53,23 @@ pub fn clamp(value: i32, low: i32, high: i32) -> Result<i32, &'static str> {
     Ok(value.clamp(low, high))
 }
 
-/// What two counters hold between them.
+/// Returns the sum of two counters' values.
 #[hxn::function(class = "Tools")]
 pub fn total(first: &Counter, second: &Counter) -> i32 {
     first.value + second.value
 }
 
-/// A counter, made by a function that is no counter's.
+/// Creates a counter from a free function instead of a `Counter` method.
 #[hxn::function(class = "Tools")]
 pub fn starting_at(value: i32) -> Counter {
     Counter::new(value)
 }
 
-/// A number that is added to, with one of each thing a binding carries.
+/// An integer counter, with one method for each feature a binding supports.
 #[hxn::interface]
 pub struct Counter {
     value: i32,
-    // Cells the host reads and writes without a call.
+    // Atomics the host reads and writes directly, without a call.
     adds: Arc<AtomicI32>,
     locked: Arc<AtomicFlag>,
 }
@@ -81,8 +83,8 @@ impl fmt::Display for Overflow {
     }
 }
 
-// What the generator exposes. The adapters under `c` and `hl` are written
-// by hand and cover the rest of the file as well.
+// The methods the generator exposes. The hand-written adapters under `c`
+// and `hl` also cover the rest of the file.
 #[hxn::methods]
 impl Counter {
     pub fn new(start: i32) -> Self {
@@ -94,14 +96,15 @@ impl Counter {
         }
     }
 
-    /// `count` bytes, each the value's low byte. Fails for a negative count.
+    /// Returns `count` bytes, each set to the value's low byte. Fails for a
+    /// negative count.
     pub fn fill(&self, count: i32) -> Result<Vec<u8>, &'static str> {
         let count = usize::try_from(count).map_err(|_| "a negative count")?;
         Ok(vec![self.value.to_le_bytes()[0]; count])
     }
 
-    /// Adds to the value and returns it. Fails if it would overflow. A
-    /// locked counter leaves the value as it is.
+    /// Adds `amount` to the value and returns the new value. Fails on
+    /// overflow. A locked counter leaves the value unchanged.
     pub fn add(&mut self, amount: i32) -> Result<i32, Overflow> {
         if self.locked.load() {
             return Ok(self.value);
@@ -111,18 +114,18 @@ impl Counter {
         Ok(self.value)
     }
 
-    /// How many adds have been made, as a cell the host reads directly.
+    /// The number of adds made, as an atomic the host reads directly.
     pub fn adds(&self) -> Arc<AtomicI32> {
         self.adds.clone()
     }
 
-    /// Set to make the counter ignore adds.
+    /// A flag that makes the counter ignore adds while it is set.
     pub fn locked(&self) -> Arc<AtomicFlag> {
         self.locked.clone()
     }
 
-    /// Does `units` of work, counting each in `progress`, and stops early
-    /// once `cancel` is set. Returns how many were done.
+    /// Does `units` of work, incrementing `progress` for each unit, and stops
+    /// early once `cancel` is set. Returns the number of units done.
     #[hxn(blocking)]
     pub fn work(&self, units: i32, progress: &AtomicI32, cancel: &AtomicFlag) -> i32 {
         let mut done = 0;
@@ -149,7 +152,7 @@ impl Counter {
         f64::from(self.value) * factor
     }
 
-    /// Sets the value, or its negation.
+    /// Sets the value, negated if `negate` is set.
     pub fn set(&mut self, value: i32, negate: bool) {
         self.value = if negate { -value } else { value };
     }
@@ -159,7 +162,7 @@ impl Counter {
         self.add(other.value)
     }
 
-    /// Exchanges values with another counter.
+    /// Swaps values with another counter.
     pub fn swap(&mut self, other: &mut Counter) {
         std::mem::swap(&mut self.value, &mut other.value);
     }
@@ -169,46 +172,47 @@ impl Counter {
         Counter::new(self.value)
     }
 
-    /// A counter at the larger of the two values, or nothing without
-    /// another to compare with.
+    /// Returns a counter holding the larger of the two values, or `None` if
+    /// `other` is `None`.
     pub fn larger(&self, other: Option<&Counter>) -> Option<Counter> {
         Some(Counter::new(self.value.max(other?.value)))
     }
 
-    /// Gives the counter up for its value.
+    /// Consumes the counter and returns its value.
     pub fn into_value(self) -> i32 {
         self.value
     }
 
-    /// Gives the counter up to work that reports its value later.
+    /// Consumes the counter in an async function that returns its value
+    /// later.
     pub async fn into_value_later(self, milliseconds: i32) -> i32 {
         let _ = square_later(1, millis(milliseconds)).await;
         self.value
     }
 
-    /// How many counters exist.
+    /// The number of live counters.
     pub fn live() -> i32 {
         live()
     }
 
-    /// Panics, to show what a binding makes of that.
+    /// Panics, to test how a binding handles a panic.
     pub fn fail() {
         panic!("counter failed on request");
     }
 
-    /// Sleeps, as a call that waits on something would.
+    /// Sleeps, to stand in for a blocking call.
     #[hxn(blocking)]
     pub fn nap(milliseconds: i32) {
         sleep(Duration::from_millis(milliseconds.max(0) as u64));
     }
 }
 
-// Functions that are lent one of the host's. Each fails with whatever the
-// function it was lent failed with.
+// Methods that take a host callback. Each returns the callback's error if
+// the callback fails.
 #[hxn::methods]
 impl Counter {
-    /// Calls `f` with each of 1 to `count` and half of it, and stops at the
-    /// first failure.
+    /// Calls `f` with each number from 1 to `count` and half that number,
+    /// and stops at the first failure.
     pub fn each<E>(count: i32, mut f: impl FnMut(i32, f64) -> Result<(), E>) -> Result<(), E> {
         for n in 1..=count {
             f(n, f64::from(n) / 2.0)?;
@@ -216,24 +220,25 @@ impl Counter {
         Ok(())
     }
 
-    /// Whether `f` holds for the value.
+    /// Returns the result of calling `f` with the value.
     pub fn test<E>(&self, f: impl Fn(i32) -> Result<bool, E>) -> Result<bool, E> {
         f(self.value)
     }
 
-    /// `f` of half the value, and of whether the value is odd.
+    /// Returns the result of calling `f` with half the value and whether
+    /// the value is odd.
     pub fn scaled_by<E>(&self, f: impl Fn(f64, bool) -> Result<f64, E>) -> Result<f64, E> {
         f(f64::from(self.value) / 2.0, self.value % 2 != 0)
     }
 
-    /// What `f` makes of a name and the value: text lent to the function,
-    /// and its own text given back.
+    /// Calls `f` with a name and the value and returns its result. The
+    /// callback takes a borrowed string and returns an owned one.
     pub fn described<E>(&self, f: impl Fn(&str, i32) -> Result<String, E>) -> Result<String, E> {
         let made = f("naïve ☃ 𝄞", self.value)?;
         Ok(format!("[{made}]"))
     }
 
-    /// How many words of `text` the function keeps.
+    /// Returns the number of words in `text` for which `f` returns true.
     pub fn words<E>(text: &str, mut f: impl FnMut(&str) -> Result<bool, E>) -> Result<i32, E> {
         let mut kept = 0;
         for word in text.split_whitespace() {
@@ -244,13 +249,13 @@ impl Counter {
         Ok(kept)
     }
 
-    /// How many characters the text `f` gives has.
+    /// Returns the number of characters in the string `f` returns.
     pub fn titled<E>(f: impl FnOnce() -> Result<String, E>) -> Result<i32, E> {
         Ok(f()?.chars().count() as i32)
     }
 
-    /// Calls `f` with the value's bytes, a few at a time, and returns how
-    /// many it was shown.
+    /// Calls `f` with the value's bytes in chunks of `size`, and returns the
+    /// number of bytes passed.
     pub fn chunks<E>(
         &self,
         size: i32,
@@ -267,8 +272,8 @@ impl Counter {
         Ok(shown)
     }
 
-    /// Makes `count` counters, 1, 2 and so on, and gives each to `f` to
-    /// keep. Returns what `f` said of them, added up.
+    /// Creates `count` counters with values 1, 2 and so on, and passes
+    /// ownership of each to `f`. Returns the sum of `f`'s return values.
     pub fn spawn_each<E>(
         count: i32,
         mut f: impl FnMut(Counter, &str) -> Result<i32, E>,
@@ -280,24 +285,24 @@ impl Counter {
         Ok(total)
     }
 
-    /// What `f` gives.
+    /// Returns what `f` returns.
     pub fn ask<E>(f: impl FnOnce() -> Result<i32, E>) -> Result<i32, E> {
         f()
     }
 
-    /// A counter starting at what `f` gives.
+    /// Returns a counter starting at the value `f` returns.
     pub fn from_fn<E>(f: impl FnOnce() -> Result<i32, E>) -> Result<Counter, E> {
         Ok(Counter::new(f()?))
     }
 
-    /// What `f` gives, or -1 if it fails: a library that makes nothing of
-    /// the failure.
+    /// Returns what `f` returns, or -1 if it fails. Here the library
+    /// discards the callback's error.
     pub fn attempt<E>(f: impl FnOnce() -> Result<i32, E>) -> i32 {
         f().unwrap_or(-1)
     }
 
-    /// Replaces the value with `f` of it, `times` over, and stops at the
-    /// first failure with the value as the last success left it.
+    /// Replaces the value with `f(value)`, `times` times. Stops at the first
+    /// failure and keeps the value from the last successful call.
     pub fn apply<E>(
         &mut self,
         times: i32,
@@ -316,8 +321,8 @@ impl Drop for Counter {
     }
 }
 
-/// Work on a thread of the library's own, watched and stopped through two
-/// cells.
+/// Work on a thread the library starts, monitored and stopped through two
+/// atomics.
 #[hxn::interface]
 pub struct Job {
     done: Arc<AtomicI32>,
@@ -326,12 +331,12 @@ pub struct Job {
 
 #[hxn::methods]
 impl Job {
-    /// Starts counting to `units`, one a millisecond.
+    /// Starts counting to `units`, one per millisecond.
     pub fn new(units: i32) -> Self {
         let done = Arc::new(AtomicI32::new(0));
         let stop = Arc::new(AtomicFlag::new(false));
         let (counted, stopped) = (done.clone(), stop.clone());
-        // Nobody waits on this work; it is the cells that are watched.
+        // Nobody awaits this future. Callers watch the atomics instead.
         drop(spawn_blocking(move || {
             for _ in 0..units {
                 if stopped.load() {
@@ -354,7 +359,8 @@ impl Job {
     }
 }
 
-/// A running total of counters: one interface that takes and makes another.
+/// A running total of counters: an interface whose methods accept and
+/// return another interface.
 #[hxn::interface]
 pub struct Tally {
     total: i32,
@@ -392,14 +398,14 @@ fn millis(milliseconds: i32) -> Duration {
     Duration::from_millis(u64::try_from(milliseconds).unwrap_or(0))
 }
 
-/// Results that arrive later, as the generator binds them: a class of
-/// functions, with no value behind it.
+/// Asynchronous results as the generator binds them: a class of static
+/// functions with no instance.
 #[hxn::interface]
 pub struct Later;
 
 #[hxn::methods]
 impl Later {
-    /// The square of `value`, after a wait.
+    /// The square of `value`, after a delay.
     pub fn square(value: i32, milliseconds: i32) -> Future<i32> {
         square_later(value, millis(milliseconds))
     }
@@ -408,12 +414,12 @@ impl Later {
         greet_later(name.to_owned(), millis(milliseconds))
     }
 
-    /// The sum of 1 to `limit`, added a term a step.
+    /// The sum of 1 to `limit`, adding one term per step.
     pub fn sum(limit: i32) -> Future<i32> {
         sum_later(limit)
     }
 
-    /// `square` and `sum` awaited by one piece of work, and added.
+    /// One async task that awaits `square` and `sum` and adds the results.
     pub fn combined(value: i32, limit: i32) -> Future<i32> {
         combined_later(value, limit)
     }
@@ -426,22 +432,24 @@ impl Later {
         spawn_blocking(move || Ok::<_, Overflow>(f64::from(value) / 2.0))
     }
 
-    /// A counter, made by the work and handed over when it is taken.
+    /// A counter created by the task and transferred to the caller when the
+    /// result is taken.
     pub fn counter(start: i32) -> Future<Counter> {
         spawn_blocking(move || Ok::<_, Overflow>(Counter::new(start)))
     }
 
-    /// A shared value, likewise.
+    /// The same for a shared value.
     pub fn pot(start: i32) -> Future<Arc<Pot>> {
         spawn_blocking(move || Ok::<_, Overflow>(Arc::new(Pot::new(start))))
     }
 
-    /// A future nothing will settle.
+    /// A future that is never settled.
     pub fn abandoned() -> Future<i32> {
         abandoned()
     }
 
-    /// Refuses a negative limit at once, and is `sum` otherwise.
+    /// Returns an error immediately for a negative limit, and otherwise
+    /// behaves as `sum`.
     pub fn checked(limit: i32) -> Result<Future<i32>, &'static str> {
         if limit < 0 {
             return Err("a negative limit");
@@ -449,12 +457,13 @@ impl Later {
         Ok(sum_later(limit))
     }
 
-    /// 1 to `limit` an item at a time, then the end or, with `fail`, a failure.
+    /// Yields 1 to `limit` one item at a time, then ends or, with `fail`,
+    /// fails.
     pub fn count_up(limit: i32, fail: bool) -> Stream<i32> {
         count_up(limit, fail)
     }
 
-    /// `count` counters, starting at 1, 2 and so on.
+    /// A stream of `count` counters with values 1, 2 and so on.
     pub fn counters(count: i32) -> Stream<Counter> {
         let (sender, stream) = channel();
         let mut next = 1;
@@ -468,13 +477,13 @@ impl Later {
         stream
     }
 
-    /// `square` as an async function, whose body is the work.
+    /// `square` as an async function: the function body is the task.
     pub async fn squared(value: i32, milliseconds: i32) -> Result<i32, Failure> {
         square_later(value, millis(milliseconds)).await
     }
 
-    /// Text and bytes an async function takes are its own by the time it
-    /// runs, long after the call that passed them returned.
+    /// String and byte parameters of an async function are owned copies,
+    /// because it runs after the call that passed them has returned.
     pub async fn shout(name: &str, data: &[u8]) -> String {
         let greeting = greet_later(name.to_owned(), millis(1))
             .await
@@ -482,35 +491,36 @@ impl Later {
         format!("{greeting}! {}", data.len())
     }
 
-    /// Gives nothing but that it is done.
+    /// Returns no value, only completion.
     pub async fn settle(milliseconds: i32) {
         let _ = square_later(1, millis(milliseconds)).await;
     }
 
-    /// Nothing, or a failure.
+    /// Returns no value, or an error.
     pub async fn agree(really: bool) -> Result<(), &'static str> {
         if really { Ok(()) } else { Err("refused later") }
     }
 
-    /// A counter made by async work.
+    /// A counter created by an async function.
     pub async fn counted(start: i32) -> Counter {
         let _ = square_later(1, millis(1)).await;
         Counter::new(start)
     }
 
-    /// The time `value` names, as 64 bits a future carries.
+    /// A timestamp derived from `value`: a future that resolves to a 64-bit
+    /// integer.
     pub async fn stamp(value: i32) -> i64 {
         let _ = square_later(1, millis(1)).await;
         i64::from(value) << 32
     }
 
-    /// `count` bytes, each `fill`, made by the work.
+    /// `count` bytes, each set to `fill`, created by the async function.
     pub async fn frame(count: i32, fill: i32) -> Result<Vec<u8>, &'static str> {
         let count = usize::try_from(count).map_err(|_| "a negative size")?;
         Ok(vec![fill as u8; count])
     }
 
-    /// Frames of 1 to `count` bytes, one after another.
+    /// A stream of frames with lengths from 1 to `count` bytes.
     pub fn frames(count: i32) -> Stream<Vec<u8>> {
         let (sender, stream) = channel();
         let mut size = 1;
@@ -524,7 +534,8 @@ impl Later {
         stream
     }
 
-    /// A count too wide for 32 bits, followed as it climbs.
+    /// A signal of a count that does not fit in 32 bits, updated as it
+    /// increases.
     pub fn odometer(limit: i32) -> Signal<i64> {
         let base = 1_i64 << 40;
         let (source, odometer) = signal(base);
@@ -539,7 +550,8 @@ impl Later {
         odometer
     }
 
-    /// `count` items of nothing: each is only that something happened.
+    /// A stream of `count` unit items. Each carries no data and only reports
+    /// that something happened.
     pub fn ticks(count: i32) -> Stream<()> {
         let (sender, stream) = channel();
         let mut sent = 0;
@@ -553,12 +565,12 @@ impl Later {
         stream
     }
 
-    /// A value that climbs from 0 to `limit`.
+    /// A signal whose value increases from 0 to `limit`.
     pub fn ramp(limit: i32) -> Signal<i32> {
         ramp(limit)
     }
 
-    /// The same as text.
+    /// The same, with the value as a string.
     pub fn label(limit: i32) -> Signal<String> {
         let (source, label) = signal(String::from("0"));
         let mut next = 1;
@@ -575,8 +587,9 @@ impl Later {
 
 static POTS: AtomicI32 = AtomicI32::new(0);
 
-/// A total several things add to. Shared: the library and any number of
-/// Haxe objects hold the same one, and it lives while any of them does.
+/// A total with several contributors. It is shared: the library and any
+/// number of Haxe objects hold references to the same value, which lives
+/// until the last reference is dropped.
 #[hxn::interface(shared)]
 pub struct Pot {
     total: AtomicI32,
@@ -600,14 +613,15 @@ impl Pot {
         self.total.load(Ordering::SeqCst)
     }
 
-    /// Adds after a wait. An async function of a shared value holds a share
-    /// of it while it runs, whatever becomes of the object that called it.
+    /// Adds after a delay. An async method of a shared value holds a
+    /// reference to it while it runs, whatever happens to the object it was
+    /// called on.
     pub async fn add_later(&self, amount: i32, milliseconds: i32) -> i32 {
         let _ = square_later(1, millis(milliseconds)).await;
         self.add(amount)
     }
 
-    /// Adds what another pot holds, and what a third does if there is one.
+    /// Adds another pot's total, and a third pot's total if one is given.
     pub async fn pour(&self, from: &Pot, also: Option<Arc<Pot>>) -> Arc<Pot> {
         let _ = square_later(1, millis(1)).await;
         self.add(from.total());
@@ -617,8 +631,8 @@ impl Pot {
         Arc::new(Pot::new(self.total()))
     }
 
-    /// Gives `f` a share of `pot` and a new pot of half of it, and adds
-    /// what `f` says to the total.
+    /// Passes `f` a reference to `pot` and a new pot holding half its total,
+    /// and adds `f`'s return value to the total.
     pub fn offer<E>(
         pot: Arc<Pot>,
         f: impl Fn(Arc<Pot>, Arc<Pot>) -> Result<i32, E>,
@@ -627,12 +641,13 @@ impl Pot {
         Ok(pot.add(f(Arc::clone(&pot), half)?))
     }
 
-    /// A pot of its own starting at this one's total, made already shared.
+    /// A separate pot starting at this one's total, returned as a shared
+    /// reference.
     pub fn split(&self) -> Arc<Pot> {
         Arc::new(Pot::new(self.total()))
     }
 
-    /// How many pots exist, however many hold each.
+    /// The number of live pots, regardless of how many references each has.
     pub fn live() -> i32 {
         POTS.load(Ordering::SeqCst)
     }
@@ -644,7 +659,7 @@ impl Drop for Pot {
     }
 }
 
-/// Something that pays into a pot it keeps a share of.
+/// A player that pays into a pot and holds a shared reference to it.
 #[hxn::interface]
 pub struct Player {
     pot: Arc<Pot>,
@@ -661,22 +676,25 @@ impl Player {
         self.pot.add(amount)
     }
 
-    /// The pot this pays into: the same one each time.
+    /// The pot this player pays into. Each call returns a reference to the
+    /// same pot.
     pub fn pot(&self) -> Arc<Pot> {
         Arc::clone(&self.pot)
     }
 
-    /// Whether this pays into `pot`.
+    /// Whether this player pays into `pot`.
     pub fn pays_into(&self, pot: &Pot) -> bool {
         std::ptr::eq(Arc::as_ptr(&self.pot), pot)
     }
 
-    /// Moves to another pot, or stays for none. Returns the one left behind.
+    /// Switches to another pot, or keeps the current one if given `None`.
+    /// Returns the previous pot.
     pub fn move_to(&mut self, pot: Option<Arc<Pot>>) -> Option<Arc<Pot>> {
         pot.map(|pot| std::mem::replace(&mut self.pot, pot))
     }
 
-    /// The fuller of this player's pot and another, if there is another.
+    /// A new pot holding the larger total of this player's pot and `other`,
+    /// or `None` if `other` is `None`.
     pub fn fuller(&self, other: Option<&Pot>) -> Option<Pot> {
         other.map(|other| Pot::new(self.pot.total().max(other.total())))
     }
@@ -696,7 +714,7 @@ pub fn greet_later(name: String, delay: Duration) -> Future<String> {
     })
 }
 
-/// The sum of 1 to `limit`, added one term a step.
+/// The sum of 1 to `limit`, adding one term per step.
 pub fn sum_later(limit: i32) -> Future<i32> {
     let mut total: i32 = 0;
     let mut next = 1;
@@ -713,8 +731,8 @@ pub fn sum_later(limit: i32) -> Future<i32> {
     })
 }
 
-/// The square of `value` plus the sum of 1 to `limit`, each worked out by
-/// one of the operations above.
+/// The square of `value` plus the sum of 1 to `limit`, each computed by one
+/// of the functions above.
 pub fn combined_later(value: i32, limit: i32) -> Future<i32> {
     spawn(async move {
         let square = square_later(value, Duration::from_millis(5)).await?;
@@ -723,12 +741,13 @@ pub fn combined_later(value: i32, limit: i32) -> Future<i32> {
     })
 }
 
-/// A future nothing will settle.
+/// A future that is never settled.
 pub fn abandoned() -> Future<i32> {
     pending().1
 }
 
-/// A future settled from outside the library, as a host callback would.
+/// A future settled from outside the library, the way a host callback would
+/// settle one.
 pub struct Promise {
     completer: Completer<i32>,
     future: Option<Future<i32>>,
@@ -743,12 +762,12 @@ impl Promise {
         }
     }
 
-    /// The future, the first time it is asked for.
+    /// Returns the future on the first call, and `None` afterwards.
     pub fn future(&mut self) -> Option<Future<i32>> {
         self.future.take()
     }
 
-    /// A future of twice the value, in place of the plain one.
+    /// Returns a future of twice the value instead of the plain future.
     pub fn doubled(&mut self) -> Option<Future<i32>> {
         let future = self.future.take()?;
         Some(spawn(async move { Ok::<_, Failure>(future.await? * 2) }))
@@ -765,11 +784,12 @@ impl Default for Promise {
     }
 }
 
-/// 1 to `limit`, one a step, and then the end, or a failure in its place.
+/// Yields 1 to `limit`, one per step, and then ends, or fails instead if
+/// `fail` is set.
 pub fn count_up(limit: i32, fail: bool) -> Stream<i32> {
     let (sender, stream) = channel();
     let mut next = 1;
-    // Nobody waits on this work; it is the stream that is read.
+    // Nobody awaits this future. Callers read the stream instead.
     drop(stepped(move || {
         if next > limit {
             if fail {
@@ -777,7 +797,7 @@ pub fn count_up(limit: i32, fail: bool) -> Stream<i32> {
             }
             return Poll::Ready(Ok::<_, Failure>(()));
         }
-        // A reader that has gone is the sign to stop.
+        // Stop once the reader has been dropped.
         if !sender.send(next) {
             return Poll::Ready(Ok(()));
         }
@@ -787,7 +807,8 @@ pub fn count_up(limit: i32, fail: bool) -> Stream<i32> {
     stream
 }
 
-/// A stream fed from outside the library, as a host's events would be.
+/// A stream fed from outside the library, the way host events would feed
+/// one.
 pub struct Emitter {
     sender: Sender<i32>,
     stream: Option<Stream<i32>>,
@@ -802,7 +823,7 @@ impl Emitter {
         }
     }
 
-    /// The stream, the first time it is asked for.
+    /// Returns the stream on the first call, and `None` afterwards.
     pub fn stream(&mut self) -> Option<Stream<i32>> {
         self.stream.take()
     }
@@ -822,12 +843,12 @@ impl Default for Emitter {
     }
 }
 
-/// Counts from 1 to `limit`, one a step, as a value that changes.
+/// A signal that counts from 1 to `limit`, one per step.
 pub fn ramp(limit: i32) -> Signal<i32> {
     let (source, ramp) = signal(0);
     let mut next = 1;
     drop(stepped(move || {
-        // A reader that has gone is the sign to stop.
+        // Stop once the reader has been dropped.
         if next > limit || !source.set(next) {
             return Poll::Ready(Ok::<_, Failure>(()));
         }
@@ -837,8 +858,8 @@ pub fn ramp(limit: i32) -> Signal<i32> {
     ramp
 }
 
-/// A value set from outside the library and read back as a signal, as a
-/// library's own state would be.
+/// A value set from outside the library and read back as a signal, the way
+/// a library would expose its own state.
 pub struct Gauge {
     source: Source<i32>,
     signal: Option<Signal<i32>>,
@@ -853,7 +874,7 @@ impl Gauge {
         }
     }
 
-    /// The signal, the first time it is asked for.
+    /// Returns the signal on the first call, and `None` afterwards.
     pub fn signal(&mut self) -> Option<Signal<i32>> {
         self.signal.take()
     }

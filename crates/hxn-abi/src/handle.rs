@@ -5,7 +5,8 @@ use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
 use crate::Fault;
 
-/// What a host holds in place of a Rust value. It only passes it back.
+/// An opaque type. A host holds a pointer to it in place of a Rust value and
+/// only passes that pointer back.
 #[repr(C)]
 pub struct Opaque {
     _private: [u8; 0],
@@ -16,7 +17,7 @@ pub type RawHandle = *mut Opaque;
 const MAGIC: u64 = u64::from_le_bytes(*b"hxn:hndl");
 const EXCLUSIVE: usize = usize::MAX;
 
-// First in every `Handle<T>`, so it can be read before `T` is known.
+// The first field of every `Handle<T>`, so it can be read before `T` is known.
 #[repr(C)]
 struct Header {
     magic: AtomicU64,
@@ -30,23 +31,25 @@ struct Header {
 /// A Rust value owned by a host object.
 ///
 /// The value and its allocation have separate lifetimes. [`take`](Self::take)
-/// ends the value's, which is what `close()` does; the allocation lives until
-/// the host's collector calls [`release`], so a pointer the host can still
-/// reach is never dangling and a use after close is an error, not a crash.
+/// ends the value's lifetime and is what `close()` calls. The allocation lives
+/// until the host's garbage collector calls [`release`], so a pointer the host
+/// can still reach is never dangling, and using a handle after close returns
+/// an error instead of crashing.
 ///
-/// Borrows are counted at run time, because a host does not obey `&` and
-/// `&mut`: it can call from two threads, or call back in from a callback.
-/// A conflicting borrow fails with [`Fault::Busy`] instead of waiting.
+/// Borrows are checked at run time, because a host is not bound by `&` and
+/// `&mut`: it can call from two threads, or re-enter from a callback.
+/// A conflicting borrow fails with [`Fault::Busy`] instead of blocking.
 ///
-/// `T: Send` because a collector finalizes on whichever thread it runs on.
+/// `T: Send` because a garbage collector runs finalizers on whichever thread
+/// it runs on.
 #[repr(C)]
 pub struct Handle<T> {
     header: Header,
     value: UnsafeCell<Option<T>>,
 }
 
-// The borrow count makes it a non-blocking `RwLock<Option<T>>`; `borrow`
-// asks for `T: Sync` itself.
+// The borrow count makes this equivalent to a non-blocking
+// `RwLock<Option<T>>`. `borrow` adds its own `T: Sync` bound.
 unsafe impl<T: Send> Send for Handle<T> {}
 unsafe impl<T: Send> Sync for Handle<T> {}
 
@@ -65,11 +68,11 @@ impl<T: Send + 'static> Handle<T> {
         Box::into_raw(handle).cast()
     }
 
-    /// The handle behind `raw`, if it is one of `T`.
+    /// Returns the handle `raw` points to, if it is a handle to a `T`.
     ///
     /// # Safety
-    /// `raw` is null or came from `into_raw` in this library, for any type,
-    /// and is not released during `'a`.
+    /// `raw` is null or was returned by `into_raw` in this library, for any
+    /// type, and is not released during `'a`.
     pub unsafe fn from_raw<'a>(raw: *const Opaque) -> Result<&'a Self, Fault> {
         let header = raw.cast::<Header>();
         if header.is_null() {
@@ -126,8 +129,8 @@ impl<T: Send + 'static> Handle<T> {
         }
     }
 
-    /// Takes the value out, leaving the handle closed. `None` if it already
-    /// was, so closing twice is not an error.
+    /// Takes the value out and leaves the handle closed. Returns `None` if it
+    /// was already closed, so closing twice is not an error.
     pub fn take(&self) -> Result<Option<T>, Fault> {
         self.lock()?;
         let value = unsafe { (*self.value.get()).take() };
@@ -191,15 +194,16 @@ unsafe fn free<T>(header: *mut Header) {
 }
 
 /// Frees a handle of any type, dropping its value if it was never taken.
-/// A host object's finalizer calls this, and nothing else does.
+/// Only a host object's finalizer calls this.
 ///
 /// A handle that is still borrowed is leaked instead: a call is using it, so
-/// the host was wrong that it is unreachable. A panic from the value's `Drop`
-/// stops here, there being no caller to report it to.
+/// the host was wrong to treat it as unreachable. A panic from the value's
+/// `Drop` is caught and discarded here, because there is no caller to report
+/// it to.
 ///
 /// # Safety
-/// `raw` is null or came from [`Handle::into_raw`] in this library, and the
-/// host does not use it again.
+/// `raw` is null or was returned by [`Handle::into_raw`] in this library, and
+/// the host does not use it again.
 pub unsafe extern "C" fn release(raw: RawHandle) {
     let header = raw.cast::<Header>();
     if header.is_null() || !header.is_aligned() {
@@ -284,7 +288,7 @@ mod tests {
         assert!(handle.take().unwrap().is_none());
         assert_eq!(handle.borrow().err(), Some(Fault::Closed));
         assert_eq!(handle.borrow_mut().err(), Some(Fault::Closed));
-        // A failed borrow leaves the count as it found it.
+        // A failed borrow restores the borrow count.
         assert!(handle.take().is_ok());
         unsafe { release(raw) };
     }

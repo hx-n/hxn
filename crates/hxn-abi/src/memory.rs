@@ -1,21 +1,23 @@
-//! Memory the host's collector cannot see.
+//! Accounting for native memory the host's garbage collector cannot see.
 //!
-//! A collector decides when to run from the memory it manages. A handle is a
-//! few words of that, whatever the value behind it holds, so a host can keep
-//! making values and never think it is time to collect the ones it dropped.
-//! A library declares what its values hold with a [`Weight`], and the binding
-//! reads the total and collects when it has grown.
+//! A garbage collector schedules collections by the amount of memory it
+//! manages. A handle takes a few words of that memory regardless of how much
+//! the value behind it holds, so a host can keep creating values without ever
+//! triggering a collection of the ones it dropped. A library declares how many
+//! bytes each value holds with a [`Weight`]. The binding reads the total and
+//! triggers a collection when it has grown.
 //!
-//! The total is the library's: this crate is linked into each one separately.
-//! Nothing here calls the host. The host asks.
+//! The total is per library, because this crate is linked into each library
+//! separately. Nothing here calls the host: the host polls.
 
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 static HELD: AtomicUsize = AtomicUsize::new(0);
 static WANTED: AtomicBool = AtomicBool::new(false);
 
-/// What a value holds outside the collector's sight, in bytes. Kept in the
-/// value, so it is counted for as long as the value lives and no longer.
+/// The number of bytes a value holds that the garbage collector cannot see.
+/// Stored as a field of the value, so the bytes are counted exactly while the
+/// value is alive.
 #[derive(Debug)]
 pub struct Weight(usize);
 
@@ -29,7 +31,7 @@ impl Weight {
         self.0
     }
 
-    /// For a value whose size changes.
+    /// Updates the count, for a value whose size changes.
     pub fn set(&mut self, bytes: usize) {
         if bytes >= self.0 {
             HELD.fetch_add(bytes - self.0, Ordering::Relaxed);
@@ -46,7 +48,8 @@ impl Default for Weight {
     }
 }
 
-// A copy of a value holds as much again.
+// A clone of a value holds the same number of bytes again, so it is counted
+// separately.
 impl Clone for Weight {
     fn clone(&self) -> Self {
         Self::new(self.0)
@@ -59,20 +62,22 @@ impl Drop for Weight {
     }
 }
 
-/// The bytes this library's live values declare.
+/// The total bytes declared by this library's live values.
 pub fn held() -> usize {
     HELD.load(Ordering::Relaxed)
 }
 
-/// Asks the host to collect at its next chance: the next time the binding
-/// makes a weighed object, or delivers. For a library that knows it has just
-/// let go of much, or is short of something a dropped value still holds.
-/// Safe from any thread.
+/// Requests a garbage collection at the host's next opportunity: the next
+/// time the binding creates an object of a weighed interface or runs a
+/// delivery. Intended for a library that has just released a lot of memory,
+/// or is short of a resource that a dropped value still holds. Safe to call
+/// from any thread.
 pub fn collect_soon() {
     WANTED.store(true, Ordering::Relaxed);
 }
 
-/// Whether a collection was asked for since the last call. For the adapter.
+/// Returns whether a collection was requested since the last call. Called by
+/// the adapter.
 pub fn take_request() -> bool {
     WANTED.swap(false, Ordering::Relaxed)
 }
@@ -83,7 +88,7 @@ mod tests {
 
     use super::*;
 
-    // The total is one for the process, so tests of it take turns.
+    // The total is process-wide, so the tests that read it run one at a time.
     static TURN: Mutex<()> = Mutex::new(());
 
     #[test]

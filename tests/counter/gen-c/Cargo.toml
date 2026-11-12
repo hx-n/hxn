@@ -1,6 +1,6 @@
 [package]
 name = "counter-gen-c"
-description = "counter-core over the plain C ABI, with the adapter hxn-gen writes"
+description = "counter-core over the plain C ABI, using the adapter hxn-gen generates"
 publish = false
 version.workspace = true
 edition.workspace = true

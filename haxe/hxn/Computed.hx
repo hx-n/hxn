@@ -3,17 +3,17 @@ package hxn;
 import hxn.reactive.Node;
 
 /**
-	A value worked out from signals and other computed values, and kept until
-	one of them changes. What SolidJS calls a memo.
+	A value derived from signals and other computed values, and cached until
+	one of them changes. SolidJS calls this a memo.
 
-	It is computed when first read, and again only when something it read has
-	changed and it is read again or an effect depends on it. If the new value
-	is the same as the old, what depends on it does not rerun.
+	It is computed on first read. It is recomputed only when a dependency has
+	changed and either it is read again or an effect depends on it. If the
+	new value equals the old one, its dependents do not rerun.
 **/
 class Computed<T> {
 	final node:Node;
 
-	/** Reads and subscribes, computing first if needed. **/
+	/** Reads the value and subscribes the reader, computing it first if needed. **/
 	public var value(get, never):T;
 
 	public function new(compute:() -> T, ?equals:(T, T) -> Bool)
@@ -22,7 +22,7 @@ class Computed<T> {
 	public inline function get():T
 		return node.read();
 
-	/** Stops following its sources. One made inside an effect is disposed with it. **/
+	/** Unsubscribes from its dependencies. A computed value created inside an effect is disposed with that effect. **/
 	public inline function dispose():Void
 		node.dispose();
 

@@ -3,15 +3,15 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use crate::{Buf, Failure, Status};
 
-/// Runs `body`, turning a panic into a [`Status::PANIC`] failure.
+/// Runs `body` and converts a panic into a [`Status::PANIC`] failure.
 pub fn catch<T>(body: impl FnOnce() -> Result<T, Failure>) -> Result<T, Failure> {
-    // Nothing here observes what the panic interrupted; the library's own
-    // state is its own to guard.
+    // `AssertUnwindSafe`: this function reads no state the panic interrupted.
+    // The library is responsible for its own state.
     match catch_unwind(AssertUnwindSafe(body)) {
         Ok(result) => result,
         Err(payload) => {
             let message = message_of(&*payload);
-            // A payload whose `Drop` panics must not escape either.
+            // A panic from the payload's `Drop` must not escape either.
             if let Err(second) = catch_unwind(AssertUnwindSafe(|| drop(payload))) {
                 std::mem::forget(second);
             }
@@ -30,17 +30,18 @@ fn message_of(payload: &(dyn Any + Send)) -> String {
     }
 }
 
-/// The body of an exported function: runs `body`, writes its value to `out`
-/// and returns [`Status::OK`], or writes the message to `err` and returns the
-/// failure's status. Nothing unwinds out of it.
+/// Implements the body of an exported function: runs `body`, then either
+/// writes its return value to `out` and returns [`Status::OK`], or writes the
+/// error message to `err` and returns the failure's status. It never unwinds.
 ///
-/// `out` is left untouched on failure and `err` on success. A function with
-/// nothing to return passes a null `out` and returns `()`. A failure's value
-/// is kept for the host to ask for: see [`thrown`](crate::thrown).
+/// `out` is not written on failure and `err` is not written on success. A
+/// function with no return value passes a null `out` and a `body` that returns
+/// `()`. A failure's value is stored for the host to retrieve: see
+/// [`thrown`](crate::thrown).
 ///
 /// # Safety
-/// `out` is writable for a `T`, or `T` is zero-sized. `err` is null or
-/// writable for a [`Buf`], and holds nothing that needs freeing.
+/// `out` is valid for writing a `T`, or `T` is zero-sized. `err` is null or
+/// valid for writing a [`Buf`], and does not hold a buffer that needs freeing.
 pub unsafe fn guard<T>(
     out: *mut T,
     err: *mut Buf,
@@ -121,7 +122,8 @@ mod tests {
         assert_eq!(crate::thrown::take(), [1, 2]);
         assert!(crate::thrown::take().is_empty());
 
-        // The next failure replaces it, with a value or without.
+        // The next failure replaces the stored value, whether or not it has
+        // one.
         run(&mut out, failed);
         run(&mut out, || Err(Fault::Closed.into()));
         assert!(crate::thrown::take().is_empty());

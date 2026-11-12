@@ -2,33 +2,34 @@
 // The API of `counter`, version 1 of hxn's manifest, as WebIDL. An attribute
 // named Hxn... is hxn's: WebIDL has no word for what it marks.
 
-// An error that is a name.
+// A typed error that is a C-like enum.
 enum Trouble {
   "Minor", // 1
   "Major" // 5
 };
 
-// How loud. Two of its numbers are written and one follows on.
+// A loudness level. Two discriminants are explicit and the third is
+// implicit.
 enum Mode {
   "Quiet", // 3
-  // As loud as it goes.
+  // The loudest level.
   "Loud", // 9
   "Off" // 10
 };
 
-// An error that is a record.
+// A typed error that is a struct.
 dictionary Refusal {
   required long code;
   required USVString reason;
 };
 
-// A place.
+// A point.
 dictionary Point {
   required double x;
   required double y;
 };
 
-// One of each thing a record holds.
+// A struct with one field of each supported type.
 dictionary Settings {
   required USVString title;
   required long count;
@@ -38,9 +39,9 @@ dictionary Settings {
   required unsigned long flags;
   required boolean enabled;
   required Mode mode;
-  // Another record, inside this one.
+  // A nested struct.
   required Point origin;
-  // May be left out.
+  // Optional.
   USVString? note;
   long? limit;
   Mode? fallback;
@@ -52,7 +53,7 @@ dictionary Settings {
 
 enum EventTag { "Started", "Progress", "Message", "Moved", "Batch", "Wrapped", "Labelled", "Maybe" };
 
-// How far along.
+// Progress so far.
 dictionary EventProgress {
   required unsigned long done;
   required unsigned long total;
@@ -67,7 +68,7 @@ dictionary EventMoved {
   required Mode value1;
 };
 
-// Events inside an event.
+// A list of nested events.
 dictionary EventBatch {
   required sequence<Event> value;
 };
@@ -85,7 +86,7 @@ dictionary EventMaybe {
   Event? value;
 };
 
-// What happened, each kind with what it holds.
+// An event: a tagged enum whose variants carry different fields.
 [HxnTagged] dictionary Event {
   required EventTag tag;
   EventProgress progress;
@@ -108,7 +109,7 @@ dictionary CountErrorUnknown {
   required USVString value;
 };
 
-// Why a count was refused: an error with a case for each reason.
+// Why a count was rejected: a typed error with one variant per reason.
 [HxnTagged] dictionary CountError {
   required CountErrorTag tag;
   CountErrorTooMany tooMany;
@@ -128,25 +129,26 @@ callback CounterFromFnF = long ();
 callback CounterAttemptF = long ();
 callback CounterApplyF = long (long a0);
 
-// A number that is added to, with one of each thing a binding carries.
+// An integer counter, with one method for each feature a binding supports.
 interface Counter {
   constructor(long start);
 
-  // `count` bytes, each the value's low byte. Fails for a negative count.
+  // Returns `count` bytes, each set to the value's low byte. Fails for a
+  // negative count.
   [Throws] Uint8Array fill(long count);
 
-  // Adds to the value and returns it. Fails if it would overflow. A
-  // locked counter leaves the value as it is.
+  // Adds `amount` to the value and returns the new value. Fails on
+  // overflow. A locked counter leaves the value unchanged.
   [Throws, HxnMutating] long add(long amount);
 
-  // How many adds have been made, as a cell the host reads directly.
+  // The number of adds made, as an atomic the host reads directly.
   [HxnAtomic] long adds();
 
-  // Set to make the counter ignore adds.
+  // A flag that makes the counter ignore adds while it is set.
   [HxnAtomic] boolean locked();
 
-  // Does `units` of work, counting each in `progress`, and stops early
-  // once `cancel` is set. Returns how many were done.
+  // Does `units` of work, incrementing `progress` for each unit, and stops
+  // early once `cancel` is set. Returns the number of units done.
   [HxnBlocking] long work(long units, [HxnAtomic] long progress, [HxnAtomic] boolean cancel);
 
   USVString label(USVString name);
@@ -157,88 +159,91 @@ interface Counter {
 
   double scaled(double factor);
 
-  // Sets the value, or its negation.
+  // Sets the value, negated if `negate` is set.
   [HxnMutating] undefined set(long value, boolean negate);
 
   // Adds another counter's value to this one.
   [Throws, HxnMutating] long absorb(Counter other);
 
-  // Exchanges values with another counter.
+  // Swaps values with another counter.
   [HxnMutating] undefined swap([HxnExclusive] Counter other);
 
   // A new counter starting at this one's value.
   Counter fork();
 
-  // A counter at the larger of the two values, or nothing without
-  // another to compare with.
+  // Returns a counter holding the larger of the two values, or `None` if
+  // `other` is `None`.
   Counter? larger(Counter? other);
 
-  // Gives the counter up for its value.
+  // Consumes the counter and returns its value.
   [HxnConsuming] long into_value();
 
-  // Gives the counter up to work that reports its value later.
+  // Consumes the counter in an async function that returns its value
+  // later.
   [HxnAsync, HxnConsuming] Promise<long> into_value_later(long milliseconds);
 
-  // How many counters exist.
+  // The number of live counters.
   static long live();
 
-  // Panics, to show what a binding makes of that.
+  // Panics, to test how a binding handles a panic.
   static undefined fail();
 
-  // Sleeps, as a call that waits on something would.
+  // Sleeps, to stand in for a blocking call.
   [HxnBlocking] static undefined nap(long milliseconds);
 
-  // Calls `f` with each of 1 to `count` and half of it, and stops at the
-  // first failure.
+  // Calls `f` with each number from 1 to `count` and half that number,
+  // and stops at the first failure.
   [Throws] static undefined each(long count, CounterEachF f);
 
-  // Whether `f` holds for the value.
+  // Returns the result of calling `f` with the value.
   [Throws] boolean test(CounterTestF f);
 
-  // `f` of half the value, and of whether the value is odd.
+  // Returns the result of calling `f` with half the value and whether
+  // the value is odd.
   [Throws] double scaled_by(CounterScaledByF f);
 
-  // What `f` makes of a name and the value: text lent to the function,
-  // and its own text given back.
+  // Calls `f` with a name and the value and returns its result. The
+  // callback takes a borrowed string and returns an owned one.
   [Throws] USVString described(CounterDescribedF f);
 
-  // How many words of `text` the function keeps.
+  // Returns the number of words in `text` for which `f` returns true.
   [Throws] static long words(USVString text, CounterWordsF f);
 
-  // How many characters the text `f` gives has.
+  // Returns the number of characters in the string `f` returns.
   [Throws] static long titled(CounterTitledF f);
 
-  // Calls `f` with the value's bytes, a few at a time, and returns how
-  // many it was shown.
+  // Calls `f` with the value's bytes in chunks of `size`, and returns the
+  // number of bytes passed.
   [Throws] long chunks(long size, CounterChunksF f);
 
-  // Makes `count` counters, 1, 2 and so on, and gives each to `f` to
-  // keep. Returns what `f` said of them, added up.
+  // Creates `count` counters with values 1, 2 and so on, and passes
+  // ownership of each to `f`. Returns the sum of `f`'s return values.
   [Throws] static long spawn_each(long count, CounterSpawnEachF f);
 
-  // What `f` gives.
+  // Returns what `f` returns.
   [Throws] static long ask(CounterAskF f);
 
-  // A counter starting at what `f` gives.
+  // Returns a counter starting at the value `f` returns.
   [Throws] static Counter from_fn(CounterFromFnF f);
 
-  // What `f` gives, or -1 if it fails: a library that makes nothing of
-  // the failure.
+  // Returns what `f` returns, or -1 if it fails. Here the library
+  // discards the callback's error.
   static long attempt(CounterAttemptF f);
 
-  // Replaces the value with `f` of it, `times` over, and stops at the
-  // first failure with the value as the last success left it.
+  // Replaces the value with `f(value)`, `times` times. Stops at the first
+  // failure and keeps the value from the last successful call.
   [Throws, HxnMutating] long apply(long times, CounterApplyF f);
 
-  // What the library calls itself. With no class named, a function is a
-  // static of the one named after the library, which here is `Counter`'s.
+  // Returns the library's name and version. A function with no `class`
+  // argument becomes a static method of the class named after the library,
+  // which here is the `Counter` class.
   static USVString version();
 };
 
-// Work on a thread of the library's own, watched and stopped through two
-// cells.
+// Work on a thread the library starts, monitored and stopped through two
+// atomics.
 interface Job {
-  // Starts counting to `units`, one a millisecond.
+  // Starts counting to `units`, one per millisecond.
   constructor(long units);
 
   [HxnAtomic] long done();
@@ -246,7 +251,8 @@ interface Job {
   [HxnAtomic] boolean stop();
 };
 
-// A running total of counters: one interface that takes and makes another.
+// A running total of counters: an interface whose methods accept and
+// return another interface.
 interface Tally {
   constructor();
 
@@ -259,84 +265,91 @@ interface Tally {
   Counter to_counter();
 };
 
-// Results that arrive later, as the generator binds them: a class of
-// functions, with no value behind it.
+// Asynchronous results as the generator binds them: a class of static
+// functions with no instance.
 interface Later {
-  // The square of `value`, after a wait.
+  // The square of `value`, after a delay.
   static Promise<long> square(long value, long milliseconds);
 
   static Promise<USVString> greet(USVString name, long milliseconds);
 
-  // The sum of 1 to `limit`, added a term a step.
+  // The sum of 1 to `limit`, adding one term per step.
   static Promise<long> sum(long limit);
 
-  // `square` and `sum` awaited by one piece of work, and added.
+  // One async task that awaits `square` and `sum` and adds the results.
   static Promise<long> combined(long value, long limit);
 
   static Promise<boolean> is_even(long value);
 
   static Promise<double> half(long value);
 
-  // A counter, made by the work and handed over when it is taken.
+  // A counter created by the task and transferred to the caller when the
+  // result is taken.
   static Promise<Counter> counter(long start);
 
-  // A shared value, likewise.
+  // The same for a shared value.
   static Promise<Pot> pot(long start);
 
-  // A future nothing will settle.
+  // A future that is never settled.
   static Promise<long> abandoned();
 
-  // Refuses a negative limit at once, and is `sum` otherwise.
+  // Returns an error immediately for a negative limit, and otherwise
+  // behaves as `sum`.
   [Throws] static Promise<long> checked(long limit);
 
-  // 1 to `limit` an item at a time, then the end or, with `fail`, a failure.
+  // Yields 1 to `limit` one item at a time, then ends or, with `fail`,
+  // fails.
   [HxnStream] static long count_up(long limit, boolean fail);
 
-  // `count` counters, starting at 1, 2 and so on.
+  // A stream of `count` counters with values 1, 2 and so on.
   [HxnStream] static Counter counters(long count);
 
-  // `square` as an async function, whose body is the work.
+  // `square` as an async function: the function body is the task.
   [HxnAsync] static Promise<long> squared(long value, long milliseconds);
 
-  // Text and bytes an async function takes are its own by the time it
-  // runs, long after the call that passed them returned.
+  // String and byte parameters of an async function are owned copies,
+  // because it runs after the call that passed them has returned.
   [HxnAsync] static Promise<USVString> shout(USVString name, Uint8Array data);
 
-  // Gives nothing but that it is done.
+  // Returns no value, only completion.
   [HxnAsync] static Promise<undefined> settle(long milliseconds);
 
-  // Nothing, or a failure.
+  // Returns no value, or an error.
   [HxnAsync] static Promise<undefined> agree(boolean really);
 
-  // A counter made by async work.
+  // A counter created by an async function.
   [HxnAsync] static Promise<Counter> counted(long start);
 
-  // The time `value` names, as 64 bits a future carries.
+  // A timestamp derived from `value`: a future that resolves to a 64-bit
+  // integer.
   [HxnAsync] static Promise<long long> stamp(long value);
 
-  // `count` bytes, each `fill`, made by the work.
+  // `count` bytes, each set to `fill`, created by the async function.
   [HxnAsync] static Promise<Uint8Array> frame(long count, long fill);
 
-  // Frames of 1 to `count` bytes, one after another.
+  // A stream of frames with lengths from 1 to `count` bytes.
   [HxnStream] static Uint8Array frames(long count);
 
-  // A count too wide for 32 bits, followed as it climbs.
+  // A signal of a count that does not fit in 32 bits, updated as it
+  // increases.
   [HxnSignal] static long long odometer(long limit);
 
-  // `count` items of nothing: each is only that something happened.
+  // A stream of `count` unit items. Each carries no data and only reports
+  // that something happened.
   [HxnStream] static undefined ticks(long count);
 
-  // A value that climbs from 0 to `limit`.
+  // A signal whose value increases from 0 to `limit`.
   [HxnSignal] static long ramp(long limit);
 
-  // The same as text.
+  // The same, with the value as a string.
   [HxnSignal] static USVString label(long limit);
 };
 
 callback PotOfferF = long (Pot a0, Pot a1);
 
-// A total several things add to. Shared: the library and any number of
-// Haxe objects hold the same one, and it lives while any of them does.
+// A total with several contributors. It is shared: the library and any
+// number of Haxe objects hold references to the same value, which lives
+// until the last reference is dropped.
 [HxnShared]
 interface Pot {
   constructor(long start);
@@ -346,46 +359,52 @@ interface Pot {
 
   long total();
 
-  // Adds after a wait. An async function of a shared value holds a share
-  // of it while it runs, whatever becomes of the object that called it.
+  // Adds after a delay. An async method of a shared value holds a
+  // reference to it while it runs, whatever happens to the object it was
+  // called on.
   [HxnAsync] Promise<long> add_later(long amount, long milliseconds);
 
-  // Adds what another pot holds, and what a third does if there is one.
+  // Adds another pot's total, and a third pot's total if one is given.
   [HxnAsync] Promise<Pot> pour(Pot from, [HxnKept] Pot? also);
 
-  // Gives `f` a share of `pot` and a new pot of half of it, and adds
-  // what `f` says to the total.
+  // Passes `f` a reference to `pot` and a new pot holding half its total,
+  // and adds `f`'s return value to the total.
   [Throws] static long offer([HxnKept] Pot pot, PotOfferF f);
 
-  // A pot of its own starting at this one's total, made already shared.
+  // A separate pot starting at this one's total, returned as a shared
+  // reference.
   Pot split();
 
-  // How many pots exist, however many hold each.
+  // The number of live pots, regardless of how many references each has.
   static long live();
 };
 
-// Something that pays into a pot it keeps a share of.
+// A player that pays into a pot and holds a shared reference to it.
 interface Player {
   constructor([HxnKept] Pot pot);
 
   // Adds to the pot and returns its total.
   long pay(long amount);
 
-  // The pot this pays into: the same one each time.
+  // The pot this player pays into. Each call returns a reference to the
+  // same pot.
   Pot pot();
 
-  // Whether this pays into `pot`.
+  // Whether this player pays into `pot`.
   boolean pays_into(Pot pot);
 
-  // Moves to another pot, or stays for none. Returns the one left behind.
+  // Switches to another pot, or keeps the current one if given `None`.
+  // Returns the previous pot.
   [HxnMutating] Pot? move_to([HxnKept] Pot? pot);
 
-  // The fuller of this player's pot and another, if there is another.
+  // A new pot holding the larger total of this player's pot and `other`,
+  // or `None` if `other` is `None`.
   Pot? fuller(Pot? other);
 };
 
-// Bytes the collector cannot see, which it is told of: to the host, one of
-// these is a few words whatever its size here.
+// A byte buffer the garbage collector cannot see, whose size is reported
+// to it. To the host, a blob is a few words regardless of how much native
+// memory it holds.
 [HxnWeighed]
 interface Blob {
   [Throws] constructor(long size);
@@ -394,13 +413,13 @@ interface Blob {
 
   [Throws, HxnMutating] undefined resize(long size);
 
-  // Another blob with the same bytes, as heavy as this one.
+  // A copy of this blob with the same bytes and the same reported size.
   Blob copy();
 
-  // How many blobs exist.
+  // The number of live blobs.
   static long live();
 
-  // Asks the host to collect at its next chance.
+  // Asks the host to run a garbage collection at its next opportunity.
   static undefined crowded();
 };
 
@@ -410,78 +429,83 @@ callback EventsPickedF = Point? (sequence<Point> a0, Mode a1);
 callback EventsStampedF = Uint8Array (long a0);
 callback EventsGradedF = Mode (Mode a0);
 
-// Functions over events, with no value behind them.
+// Static functions over events, with no instance.
 interface Events {
-  // How deep the events in `event` nest.
+  // The nesting depth of the events in `event`.
   static long depth(Event event);
 
-  // The event as the library read it.
+  // A string showing the event as the library received it.
   static USVString show(Event event);
 
-  // One of each case.
+  // One event of each variant.
   static sequence<Event> history();
 
-  // The event, inside `times` others.
+  // The event wrapped `times` times.
   static Event wrapped(Event event, long times);
 
-  // The names by their counts: a map in, and a sorted one out.
+  // The names keyed by their counts. Takes a hash map and returns a
+  // sorted map.
   static record<USVString, USVString> inverted(record<USVString, long> counts);
 
-  // The count, or which of the reasons it was refused for.
+  // The count, or a typed error giving the reason it was rejected.
   [Throws=CountError] static unsigned long checked(unsigned long count);
 
-  // The mode `name` names, or the name back in the error.
+  // The mode called `name`, or an error carrying the name.
   [Throws=CountError] static Mode mode_named(USVString name);
 
-  // Nothing, or a record of why not.
+  // Returns no value, or a struct error describing the refusal.
   [Throws=Refusal] static undefined refuse(long code);
 
-  // The level, or the trouble it names.
+  // The level, or the `Trouble` that level corresponds to.
   [Throws=Trouble] static long trouble(long level);
 
-  // A record later, or the error of the work that would have made it.
+  // A future that resolves to a struct, or fails with the typed error of
+  // the task that would have produced it.
   [Throws=CountError, HxnAsync] static Promise<Point> checked_later(unsigned long count);
 
-  // An enum a future carries.
+  // A future that resolves to an enum.
   [HxnAsync] static Promise<Mode> mode_later(Mode mode);
 
-  // A narrow number a future carries.
+  // A future that resolves to a narrow integer.
   [HxnAsync] static Promise<octet> small_later(long value);
 
-  // A list of records a future carries.
+  // A future that resolves to a list of structs.
   [HxnAsync] static Promise<sequence<Point>> path_later(long count);
 
-  // A number that may be missing, later.
+  // A future that resolves to an optional number.
   [HxnAsync] static Promise<long?> maybe_later(long value);
 
-  // The first `count` of `history`, one after another.
+  // A stream of the first `count` events of `history`.
   [HxnStream] static Event feed(long count);
 
-  // A mode that goes from quiet to off.
+  // A signal of a mode that changes from quiet to off.
   [HxnSignal] static Mode mode_now();
 
-  // A place that moves right until it is at `limit`.
+  // A signal of a point whose `x` increases until it reaches `limit`.
   [HxnSignal] static Point place_now(long limit);
 
-  // What `f` makes of each point: a record lent to the function, and an
-  // enum given back.
+  // The result of `f` for each point. The callback takes a borrowed
+  // struct and returns an enum.
   [Throws] static sequence<Mode> each_point(sequence<Point> points, EventsEachPointF f);
 
-  // The event `f` makes of `event`: one handed over, and one given back.
+  // The event `f` returns for `event`. The callback takes an owned event
+  // and returns one.
   [Throws] static Event reshaped(Event event, EventsReshapedF f);
 
-  // The point `f` picks, if it picks one: a list lent as a slice, beside
-  // an enum.
+  // The point `f` picks, if any. The callback takes a list borrowed as a
+  // slice, and an enum.
   [Throws] static Point? picked(sequence<Point> points, EventsPickedF f);
 
-  // The bytes `f` gives for 1, then for 2.
+  // The bytes `f` returns for 1, followed by the bytes it returns for 2.
   [Throws] static Uint8Array stamped(EventsStampedF f);
 
-  // What `f` makes of quiet: an enum each way and nothing else.
+  // The result of `f` for quiet. The callback takes an enum and returns
+  // one, with no other values.
   [Throws] static Mode graded(EventsGradedF f);
 };
 
-// Numbers narrower than those that cross, the unsigned ones, and 64 bits.
+// Integer types narrower than the wire types, unsigned types, and 64-bit
+// types.
 interface Numbers {
   static octet _byte(octet value);
 
@@ -491,35 +515,36 @@ interface Numbers {
 
   static short _short(short value);
 
-  // Every bit of `bits` turned over.
+  // `bits` with every bit inverted.
   static unsigned long inverted(unsigned long bits);
 
-  // Twice `count`, which may be more than fits going back.
+  // Twice `count`, which may be too large to convert back.
   [HxnSize] static unsigned long doubled([HxnSize] unsigned long count);
 
   [HxnSize] static long negated([HxnSize] long by);
 
   static long long wide(long long value);
 
-  // `value` times itself, which 32 bits may not hold.
+  // The square of `value`, which may not fit in 32 bits.
   static long long squared(long value);
 
-  // Every bit of `bits` turned over, all 64.
+  // `bits` with all 64 bits inverted.
   static unsigned long long inverted_wide(unsigned long long bits);
 
-  // A third of `value`, to the precision an `f32` has.
+  // A third of `value`, at `f32` precision.
   static float third(float value);
 
-  // A length, checked by the library after the binding let it through.
+  // A length the library validates after the binding has accepted it.
   [Throws, HxnSize] static unsigned long sized([HxnSize] unsigned long count);
 };
 
-// Functions over data, with no value behind them.
+// Static functions over data types, with no instance.
 interface Shapes {
-  // The record as the library read it, taken by reference.
+  // A string showing the struct as the library received it. Takes the
+  // struct by reference.
   static USVString describe(Settings settings);
 
-  // A record taken by value and given back changed.
+  // Takes a struct by value and returns it modified.
   static Settings bumped(Settings settings);
 
   // The mode one step louder.
@@ -528,42 +553,44 @@ interface Shapes {
   // An enum taken by reference.
   static USVString named(Mode mode);
 
-  // The mode a number names, if it names one.
+  // The mode with discriminant `number`, if there is one.
   static Mode? mode_of(long number);
 
-  // Halfway between two points, one taken each way.
+  // The midpoint of two points, one taken by value and one by reference.
   static Point midpoint(Point a, Point b);
 
-  // The first point right of `x`, taken from a slice.
+  // The first point to the right of `x`, from a slice parameter.
   static Point? right_of(sequence<Point> points, double x);
 
-  // A list of numbers, added up.
+  // The sum of a list of numbers.
   static long total(sequence<long> values);
 
-  // A number that may be missing, doubled if it is there.
+  // Doubles an optional number, if it is present.
   static long? doubled(long? value);
 
   // The words of `text`.
   static sequence<USVString> words(USVString text);
 
-  // A record, or a failure.
+  // Returns a struct, or an error.
   [Throws] static Settings preset(Mode mode);
 
-  // A counter starting at what a record says: data in, an object out.
+  // A counter starting at the struct's `count`. Takes data and returns an
+  // object.
   static Counter counter(Settings settings);
 };
 
 namespace Tools {
-  // `value`, held between `low` and `high`. Fails if they are the wrong way
-  // round.
+  // Clamps `value` to the range `low` to `high`. Fails if `low` is greater
+  // than `high`.
   [Throws] long clamp(long value, long low, long high);
 
-  // What two counters hold between them.
+  // Returns the sum of two counters' values.
   long total(Counter first, Counter second);
 
-  // A counter, made by a function that is no counter's.
+  // Creates a counter from a free function instead of a `Counter` method.
   Counter starting_at(long value);
 
-  // Half of `value`: a function of a module, on a class of the library's.
+  // Half of `value`: a free function in a submodule, bound to a class the
+  // library names.
   double halve(double value);
 };

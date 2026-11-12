@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Makes a library with `hxn new` and runs it with `hxn run`, as someone
-# following the readme would, against this checkout.
+# Creates a library with `hxn new` and runs it with `hxn run` against this
+# checkout, following the readme's steps.
 #   run.sh hl [vm]     vm is a HashLink-compatible executable, default `hl`,
 #                      with any options for it: "ash --mode jit"
 #   run.sh cpp
-#   run.sh cppia       as a script, in an hxcpp program that holds the library
+#   run.sh cppia       as a CPPIA script, in an hxcpp host that contains the library
 #   run.sh wasm [ash]  built and run by Ash
 #   run.sh emcc        hxcpp through Emscripten, run by node; needs emcc on PATH
 set -euo pipefail
@@ -13,8 +13,8 @@ here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "$here/../.." && pwd)"
 runtime="${1:?usage: run.sh hl [vm] | cpp | cppia | wasm [ash] | emcc}"
 
-# What `run` is told, and `package` where that differs: a script uses the
-# package made for hxcpp.
+# Arguments for `run`, and for `package` where they differ: a CPPIA script
+# uses the hxcpp package.
 case "$runtime" in
 	hl) arguments=(hl --vm "${2:-hl}") ;;
 	cpp) arguments=(cpp) ;;
@@ -34,15 +34,15 @@ fi
 cargo build --manifest-path "$root/Cargo.toml" -p hxn-cli
 hxn="$root/target/debug/hxn"
 
-# Outside the checkout: a crate under it would be taken for a stray member
-# of its workspace.
+# Outside the checkout, because cargo would treat a crate inside it as an
+# unlisted member of the workspace.
 work="$(mktemp -d)"
 trap 'rm -r "$work"' EXIT
 cd "$work"
 "$hxn" new greeter --hxn "$root"
 cd greeter
 
-# The program's own lines, whatever the VM prints around them.
+# The program's output lines, ignoring anything else the VM prints.
 expected=$'Hello, Haxe!\nHello, Rust!\n2 greeted\nrefused: nobody to greet'
 greeted() {
 	if [ "$(grep -E '^(Hello, |2 greeted|refused: )' "$work/out.txt")" != "$expected" ]; then
@@ -51,13 +51,13 @@ greeted() {
 	fi
 }
 
-# Less the carriage returns a Windows program ends its lines with.
+# Strip the carriage returns of Windows line endings.
 "$hxn" run "${arguments[@]}" | tr -d '\r' | tee "$work/out.txt"
 greeted "the program"
 test -f greeter.hxn.json || { echo "FAILED: no manifest was written" >&2; exit 1; }
 
-# The same through `check`, which also holds the committed manifest to the
-# source, and `doctor`, which has to find this runtime ready.
+# The same through `check`, which also verifies the committed manifest
+# against the source, and `doctor`, which must report this runtime as ready.
 "$hxn" check "${arguments[@]}" | tr -d '\r' | tee "$work/out.txt"
 greeted "the program under check"
 grep -q '^PASS: greeter ran on ' "$work/out.txt" || { echo "FAILED: check did not pass" >&2; exit 1; }
@@ -72,8 +72,8 @@ cp "$work/manifest" greeter.hxn.json
 "$hxn" doctor --vm "${2:-hl}" | tr -d '\r' | tee "$work/found.txt"
 grep -q ' ready$' "$work/found.txt" || { echo "FAILED: doctor found nothing ready" >&2; exit 1; }
 
-# As a package: a program's build names it and the macro it carries, and
-# nothing of where its classes, headers or library are.
+# As a package: a program's build refers to the package and its macro, and
+# to none of the paths of its classes, headers or library.
 "$hxn" package "${packaged[@]}" --out "$work/package"
 test -f "$work/package/greeter.hxn.webidl" || { echo "FAILED: the package has no WebIDL" >&2; exit 1; }
 mkdir "$work/program"
@@ -83,7 +83,7 @@ mkdir "$work/program"
 	case "$runtime" in
 		hl)
 			"${compile[@]}" -hl main.hl
-			# The library is beside the program, where the VM's loader looks.
+			# The library is next to the program, where the VM's loader looks.
 			read -ra vm <<<"${2:-hl}"
 			"${vm[@]}" main.hl
 			;;
@@ -92,8 +92,9 @@ mkdir "$work/program"
 			./out/Main
 			;;
 		cppia)
-			# The host is someone's hxcpp program that runs scripts and names
-			# the package; the script names the package and the host.
+			# The host is a separate hxcpp program that runs scripts and is
+			# built against the package. The script is compiled against both
+			# the package and the host.
 			mkdir host
 			cat >host/Host.hx <<'EOF'
 // hxcpp's own zlib takes `fdopen` for missing on a Mac unless it is a macro.
@@ -115,8 +116,8 @@ EOF
 			"${2:-ash}" run main.wasm
 			;;
 		emcc)
-			# hxcpp takes CXX from the environment in place of emcc, and its
-			# UTF-16 strings reach for a Windows-only call under Emscripten.
+			# hxcpp would use CXX from the environment instead of emcc, and its
+			# UTF-16 strings call a Windows-only function under Emscripten.
 			unset CC CXX
 			"${compile[@]}" -D wasm -D emscripten -D disable_unicode_strings -cpp out
 			node out/Main.js
@@ -125,8 +126,8 @@ EOF
 ) | tr -d '\r' | tee "$work/out.txt"
 greeted "the program built against the package"
 
-# What the crate's settings and the command line pass on: another main
-# class, a flag for haxe, and arguments for the program.
+# Settings from the crate and the command line are passed through: another
+# main class, a haxe flag, and program arguments.
 cat >haxe/Other.hx <<'EOF'
 class Other {
 	static function main() {
@@ -146,8 +147,8 @@ if [ "$(grep '^Howdy' "$work/out.txt")" != "Howdy, one and two" ]; then
 	echo "FAILED: the settings or the arguments did not reach the program" >&2
 	exit 1
 fi
-# What the crate gives of what haxelib lists is in the package, and what it
-# does not give is named.
+# haxelib.json fields the crate provides go into the package, and the ones
+# it does not provide are reported.
 cat >>Cargo.toml <<'EOF'
 contributors = ["someone"]
 EOF
@@ -156,7 +157,8 @@ if ! grep -q '"contributors": \["someone"\]' "$work/listed/haxelib.json" || ! gr
 	echo "FAILED: the package's haxelib.json does not list what the crate gives" >&2
 	exit 1
 fi
-# A binding for another machine is not run, and an .hdll is not built for one.
+# `hxn run` refuses a cross-compilation target, and `hxn build hl` refuses
+# to cross-compile an .hdll.
 for refused in "run cpp" "build hl"; do
 	if "$hxn" $refused --target aarch64-apple-ios >/dev/null 2>&1; then
 		echo "FAILED: \`hxn $refused --target\` was not refused" >&2

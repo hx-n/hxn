@@ -1,11 +1,11 @@
-//! Results over time: what a library that returns a `Future`, a `Stream` or
-//! a `Signal` needs beside its own functions.
+//! Futures, streams and signals: the extra exports a library needs when it
+//! returns a `Future`, a `Stream` or a `Signal`.
 //!
-//! Each is handed to the host type-erased, as a handle of `AnyFuture`,
+//! Each is returned to the host type-erased, as a handle to an `AnyFuture`,
 //! `AnyStream` or `AnySignal`. The library then exports, once for all its
-//! functions, the calls that wait on one and watch it, one call a kind of
-//! value to take what it carries, and its queue of what is ready. On the
-//! Haxe side a class a kind turns such a handle into an `hxn.Future`,
+//! functions, the calls that wait on and watch a handle, one call per kind
+//! and carried type to take the value, and its queue of ready results. On
+//! the Haxe side one class per kind wraps such a handle in an `hxn.Future`,
 //! `hxn.Stream` or `hxn.Signal`.
 
 use crate::data;
@@ -40,7 +40,7 @@ impl Kind {
         }
     }
 
-    /// The call that hands over what it carries.
+    /// The method that takes the carried value.
     fn take(self) -> &'static str {
         match self {
             Self::Future => "take",
@@ -50,7 +50,7 @@ impl Kind {
     }
 }
 
-/// The kind of a result over time, and what it carries.
+/// The kind of a future, stream or signal type, and the type it carries.
 pub fn of(ty: &Type) -> Option<(Kind, &Type)> {
     match ty {
         Type::Future(carried) => Some((Kind::Future, carried)),
@@ -60,8 +60,8 @@ pub fn of(ty: &Type) -> Option<(Kind, &Type)> {
     }
 }
 
-/// Each kind the library returns, with everything that kind carries
-/// somewhere in it, in the order met.
+/// Each kind the library returns, with every type that kind carries anywhere
+/// in the API, in order of first use.
 pub fn used(library: &Library) -> Vec<(Kind, Vec<Type>)> {
     let mut out: Vec<(Kind, Vec<Type>)> = Vec::new();
     for method in library.interfaces.iter().flat_map(|i| &i.methods) {
@@ -89,7 +89,7 @@ fn interface(carried: &Type) -> Option<&str> {
     }
 }
 
-// What a carried type is called in a symbol: `int`, `text`, `counter`.
+// A carried type's name within a symbol: `int`, `text`, `counter`.
 fn suffix(carried: &Type) -> String {
     match carried {
         Type::Void => String::from("unit"),
@@ -105,8 +105,8 @@ fn suffix(carried: &Type) -> String {
     }
 }
 
-/// Why two types the library carries cannot both be, if there are two a
-/// kind's calls would name alike.
+/// An error message if two carried types of one kind would give their take
+/// calls the same name.
 pub fn clash(library: &Library) -> Option<String> {
     for (kind, carried) in used(library) {
         for (index, one) in carried.iter().enumerate() {
@@ -126,7 +126,7 @@ pub fn clash(library: &Library) -> Option<String> {
     None
 }
 
-// What a carried value crosses as: itself, or what data does.
+// The wire type of a carried value: the type itself, or its data's wire type.
 fn crossed(carried: &Type) -> Type {
     match carried {
         Type::Data(data) => data.crosses().unwrap_or(Type::Bytes),
@@ -134,7 +134,7 @@ fn crossed(carried: &Type) -> Type {
     }
 }
 
-// The same in a Haxe name: `Int`, `Text`, `Counter`.
+// A carried type's name within a Haxe name: `Int`, `Text`, `Counter`.
 fn title(carried: &Type) -> String {
     match carried {
         Type::Void => String::from("Unit"),
@@ -181,12 +181,12 @@ fn rust_type(library: &Library, carried: &Type) -> String {
     }
 }
 
-/// What HashLink knows a kind's handles as: `counter_future`.
+/// The HashLink abstract type name for a kind's handles: `counter_future`.
 pub fn handle_abstract(library: &Library, kind: Kind) -> String {
     format!("{}_{}", library.name, kind.name())
 }
 
-// `Hxn<Library><role>`, as the other classes a binding needs are named.
+// `Hxn<Library><role>`, named like the binding's other helper classes.
 fn helper(library: &Library, role: &str) -> String {
     let mut name = String::from("Hxn");
     let mut upper = true;
@@ -204,7 +204,7 @@ fn helper(library: &Library, role: &str) -> String {
     name
 }
 
-/// The Haxe class that makes a kind's objects: `HxnCounterFuture`.
+/// The Haxe class that creates a kind's objects: `HxnCounterFuture`.
 pub fn class(library: &Library, kind: Kind) -> String {
     helper(library, kind.title())
 }
@@ -214,7 +214,7 @@ pub fn inbox_class(library: &Library) -> String {
     helper(library, "Inbox")
 }
 
-/// The name of the Haxe function that makes one carrying `carried`: `ofInt`.
+/// The name of the Haxe function that creates one carrying `carried`: `ofInt`.
 pub fn maker(carried: &Type) -> String {
     format!("of{}", title(carried))
 }
@@ -223,8 +223,8 @@ fn export(library: &Library, kind: Kind, call: &str) -> String {
     format!("{}_{}_{call}", library.name, kind.name())
 }
 
-/// What an adapter imports for these. Nothing, for a library with none, so
-/// that its adapter crate need not depend on `hxn-future`.
+/// The adapter's imports for these. Empty for a library that uses none, so
+/// that its adapter crate does not need to depend on `hxn-future`.
 pub fn imports(library: &Library) -> &'static str {
     if used(library).is_empty() {
         ""
@@ -233,7 +233,8 @@ pub fn imports(library: &Library) -> &'static str {
     }
 }
 
-/// A function's result as the handle the host gets, over the C ABI.
+/// A function's return value as the handle returned to the host, over the C
+/// ABI.
 pub fn c_result(kind: Kind, call: &str) -> String {
     format!("Ok(Handle::into_raw(Any{}::from({call})))", kind.title())
 }
@@ -243,7 +244,7 @@ pub fn hl_result(kind: Kind, call: &str) -> String {
     format!("Ok(manage(Any{}::from({call})))", kind.title())
 }
 
-// The names in `milliseconds: i32, `, each an int.
+// The parameter names in a list like `milliseconds: i32, `, all of them ints.
 fn names(params: &str) -> Vec<&str> {
     params
         .split(", ")
@@ -252,8 +253,8 @@ fn names(params: &str) -> Vec<&str> {
         .collect()
 }
 
-// The calls every handle of a kind answers, beside taking what it carries:
-// name, extra parameters, and the expression over `this`.
+// The calls every handle of a kind supports besides taking its value: name,
+// extra parameters, and the expression on `this`.
 fn calls(kind: Kind) -> Vec<(&'static str, &'static str, &'static str, bool)> {
     // The last is whether the call waits.
     match kind {
@@ -307,11 +308,11 @@ pub fn c_adapter(library: &Library) -> String {
             ));
         }
         for carried in carried {
-            // What the erased handle gives is already a `Result`.
+            // The erased handle's take method already returns a `Result`.
             let value = format!("this.{}::<{}>()", kind.take(), rust_type(library, carried));
             let (ty, result) = match carried {
-                // Nothing crosses as a flag that is always set: taking it
-                // is what says the work is done, or fails.
+                // A unit value is passed as an int that is always 1: taking
+                // it reports that the work is done, or fails.
                 Type::Void => ("i32", format!("{value}.map(|()| 1)")),
                 Type::Bool => ("i32", format!("Ok(i32::from({value}?))")),
                 Type::I32 => ("i32", value),
@@ -334,8 +335,8 @@ pub fn c_adapter(library: &Library) -> String {
     out
 }
 
-// Data a result over time carries, as what crosses: the type, and the
-// result of the call that takes it.
+// Data carried by a future, stream or signal, converted to its wire type:
+// the type, and the result of the call that takes it.
 fn c_data(data: &Data, value: &str) -> (&'static str, String) {
     match data {
         Data::Number(number) => {
@@ -369,7 +370,7 @@ pub fn hl_adapter(library: &Library) -> String {
         let own = handle_abstract(library, *kind);
         for (call, params, body, waits) in calls(*kind) {
             let letters = "i".repeat(params.matches(": i32").count());
-            // The collector may run while a call waits.
+            // The garbage collector may run while a call blocks.
             let body = if waits {
                 let (wait, cast) = match body.strip_suffix(" as i32") {
                     Some(wait) => (wait, " as i32"),
@@ -512,7 +513,7 @@ pub fn cpp_glue(library: &Library) -> String {
             let export = export(library, *kind, call);
             let invoke = format!("{export}((hxn_handle *)self, {passed}&out, &err)");
             let body = if waits {
-                // The zone ends before anything is thrown.
+                // The blocking zone ends before any exception is thrown.
                 format!(
                     "\thxn_status status;\n\t{{\n\t\thxn::Blocking zone;\n\t\tstatus = {invoke};\n\t}}\n\thxn::check(status, err);\n"
                 )
@@ -555,8 +556,8 @@ pub fn cpp_glue(library: &Library) -> String {
 
 const HEADER: &str = "// Generated by hxn-gen from the library's source. Do not edit.\n";
 
-// The Haxe expression that makes the object over a handle, given the
-// functions that watch it, wait on it and take from it.
+// The Haxe expression that creates the object wrapping a handle, given the
+// functions that watch it, wait on it and take its value.
 fn haxe_new(library: &Library, kind: Kind, parts: &str) -> String {
     let inbox = format!("{}.inbox", inbox_class(library));
     match kind {
@@ -629,13 +630,15 @@ fn hl_file(library: &Library, kind: Kind, carried: &[Type]) -> File {
                 suffix(carried),
                 data::haxe_read(data)
             ),
-            // A number Haxe has another type for, or an enum's.
+            // A value whose Haxe type differs from its wire type: a `UInt`,
+            // or an enum.
             Type::Data(data @ (Data::Enum(_) | Data::Number(crate::model::Number::U32))) => {
                 format!("({take} : {})", data::haxe_type(data))
             }
             _ => take,
         };
-        // A failure of the library's own data is thrown as that.
+        // A failure with one of the library's error types is thrown as its
+        // typed exception.
         let take = if kind == Kind::Future && !library.errors().is_empty() {
             format!(
                 "try {take} catch (error:haxe.Exception) throw {}.typed(error)",
@@ -644,7 +647,8 @@ fn hl_file(library: &Library, kind: Kind, carried: &[Type]) -> File {
         } else {
             take
         };
-        // A primitive is wrapped where a function value is needed.
+        // A primitive is wrapped in a closure where a function value is
+        // needed.
         let parts = match kind {
             Kind::Future => format!(
                 "() -> Native.future_watch(raw), () -> Native.future_state(raw), limit -> Native.future_wait(raw, limit), () -> {take}"
@@ -718,7 +722,8 @@ fn cpp_file(library: &Library, kind: Kind, carried: &[Type]) -> File {
                 haxe_type(carried)
             )),
         }
-        // A failure of the library's own data is thrown as that.
+        // A failure with one of the library's error types is thrown as its
+        // typed exception.
         let take = if kind == Kind::Future && !library.errors().is_empty() {
             format!(
                 "() -> try take{title}() catch (error:haxe.Exception) throw {}.typed(error)",
@@ -744,7 +749,7 @@ fn cpp_file(library: &Library, kind: Kind, carried: &[Type]) -> File {
 
 const INBOX_DOCS: &str = "Where everything the library produces over time reaches the app.";
 
-/// The classes HashLink needs for these: one a kind, and the inbox.
+/// The Haxe classes HashLink needs for these: one per kind, and the inbox.
 pub fn hl_files(library: &Library) -> Vec<File> {
     let used = used(library);
     if used.is_empty() {

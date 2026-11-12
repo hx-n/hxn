@@ -8,7 +8,7 @@
       "methods": [
         {
           "name": "new",
-          "docs": "A black picture. Fails unless each side is from 1 to 4096.",
+          "docs": "Creates a black picture. Returns an error unless each side is from 1\nto 4096.",
           "kind": "constructor",
           "params": [{ "name": "width", "type": "i32" }, { "name": "height", "type": "i32" }],
           "returns": "Picture",
@@ -25,7 +25,7 @@
         },
         {
           "name": "paint",
-          "docs": "Sets every pixel to what `shade` returns for its column and row,\nfrom 0 for black to 255 for white. `shade` is a Haxe function: if it\nthrows, painting stops there and the caller catches what it threw.",
+          "docs": "Sets every pixel to the value `shade` returns for its column and row,\nfrom 0 for black to 255 for white. `shade` is a Haxe callback: if it\nthrows, painting stops and the exception propagates to the caller.",
           "kind": "mutating",
           "params": [{ "name": "shade", "type": "fn(i32, i32) -> i32" }],
           "returns": "void",
@@ -34,7 +34,7 @@
         },
         {
           "name": "lighten",
-          "docs": "Keeps the brighter of each pixel and the one at its place in `other`.\nFails if the two differ in size.",
+          "docs": "Sets each pixel to the brighter of itself and the pixel at the same\nposition in `other`. Returns an error if the two differ in size.",
           "kind": "mutating",
           "params": [{ "name": "other", "type": "Picture" }],
           "returns": "void",
@@ -43,7 +43,7 @@
         },
         {
           "name": "pixels",
-          "docs": "The pixels, row after row from the top.",
+          "docs": "The pixels in row order, top row first.",
           "kind": "method",
           "params": [],
           "returns": "bytes",

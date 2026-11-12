@@ -1,15 +1,15 @@
-//! A library for a CPPIA script.
+//! Builds what a CPPIA script needs to use a library.
 //!
-//! A script cannot call C++, so it reaches a library through its host: an
-//! hxcpp program built to run scripts, which holds the library's classes and
-//! hxn's own. Under `hxn/<library>/cppia`:
+//! A script cannot call C++, so it uses a library through its host: an hxcpp
+//! executable built to run scripts, with the library's classes and hxn's
+//! support classes compiled in. Under `hxn/<library>/cppia`:
 //!
 //! | Path | What it is |
 //! |---|---|
-//! | `haxe/` | declarations of the library's classes, a class path for a script |
-//! | `host/` | the host program's one class, and what hxcpp builds from it |
-//! | `host.classes` | what the host holds, which a script's compile leaves out |
-//! | `build.hxml` | what to pass `haxe` to compile a script for the host |
+//! | `haxe/` | declarations of the library's classes (a class path for a script) |
+//! | `host/` | the host program's single class, and hxcpp's build output for it |
+//! | `host.classes` | the list of classes compiled into the host, which a script's compile excludes |
+//! | `build.hxml` | the `haxe` arguments for compiling a script for the host |
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -17,10 +17,10 @@ use std::process::Command;
 use crate::make::{self, Built, text, write};
 use crate::project::Project;
 
-// hxcpp's own zlib, which a host links, takes `fdopen` for missing on a Mac
-// unless it is already a macro. The host drops its own first argument, the
-// script's name, from what hxcpp hands out as the program's, so a script
-// reads its arguments as any program does.
+// The host links hxcpp's bundled zlib, which on macOS treats `fdopen` as
+// missing unless it is already defined as a macro. The host removes its
+// first argument, the script's file name, from the argument list hxcpp
+// exposes, so a script reads only its own arguments, as any program does.
 const HOST: &str = "// Written by hxn. Do not edit.
 @:buildXml('
 <compiler id=\"darwin\" exe=\"clang++\" if=\"macos\">
@@ -41,21 +41,23 @@ class Host {
 }
 ";
 
-/// A program that runs scripts against a library.
+/// A host program that runs CPPIA scripts that use a library.
 pub struct Host {
-    /// Where its files are, and where a compiled script goes.
+    /// The directory that holds its files, and where a compiled script is
+    /// written.
     pub dir: PathBuf,
-    /// The program, which takes a script's file and then its arguments.
+    /// The executable. Its arguments are the script file, then the script's
+    /// arguments.
     pub program: PathBuf,
-    /// Flags for `haxe` with their values, to compile a script for it.
+    /// `haxe` flags and their values for compiling a script for it.
     pub arguments: Vec<(&'static str, String)>,
-    /// The same, as a file `haxe` takes.
+    /// The same arguments as an hxml file.
     pub hxml: PathBuf,
 }
 
-/// Builds the host for a library `built` for hxcpp. It is compiled with
-/// what the program's own compile takes, a `-lib` it uses: a script can only
-/// call what its host holds.
+/// Builds the host for a library whose hxcpp binding is `built`. The host is
+/// compiled with the project's extra `haxe` arguments, such as a `-lib` the
+/// program uses, because a script can only call code compiled into its host.
 pub fn host(project: &Project, built: &Built) -> Result<Host, String> {
     let dir = built
         .declarations
@@ -71,13 +73,15 @@ pub fn host(project: &Project, built: &Built) -> Result<Host, String> {
     for (flag, value) in &built.arguments {
         haxe.arg(flag).arg(value);
     }
-    // In a string of Haxe's, where a Windows path's separators would escape.
+    // The path goes inside a Haxe string literal, where a Windows path's
+    // backslashes would be read as escapes.
     let classes = text(&built.classes).replace('\\', "/");
     haxe.arg("-cp")
         .arg(&source)
         .args(["-main", "Host", "-cpp"])
         .arg(&out)
-        // Nothing is dropped for being unused here: a script may use it.
+        // Dead code elimination is off: a script may use code the host
+        // itself does not.
         .args(["-D", "scriptable", "-dce", "no", "-D"])
         .arg(format!("dll_export={}", text(&held)))
         .args(["--macro", "include('hxn')", "--macro"])
@@ -85,7 +89,8 @@ pub fn host(project: &Project, built: &Built) -> Result<Host, String> {
         .args(&project.flags);
     make::run(&mut haxe)?;
 
-    // The support classes are the host's; a script is only typed against them.
+    // The support classes are compiled into the host. A script is only
+    // type-checked against them.
     let mut arguments: Vec<(&'static str, String)> = built
         .arguments
         .iter()

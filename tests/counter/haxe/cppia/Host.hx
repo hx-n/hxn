@@ -1,10 +1,10 @@
 /**
-	The hxcpp program a CPPIA script of the fixture runs in. It holds the
-	library's generated classes and hxn's own, and the script is passed to it
-	by name.
+	The hxcpp host program that runs the fixture's CPPIA script. It contains
+	the library's generated classes and hxn's classes, and takes the script's
+	path as its argument.
 **/
-// hxcpp's own zlib, which a host of scripts links, takes `fdopen` for missing
-// on a Mac unless it is already a macro.
+// hxcpp's bundled zlib, which a CPPIA host links, treats `fdopen` as missing
+// on macOS unless it is defined as a macro.
 @:buildXml('
 <compiler id="darwin" exe="clang++" if="macos">
 	<flag value="-Dfdopen=fdopen"/>

@@ -127,7 +127,7 @@ private class Native {
 }
 
 class Counter {
-	/** Where everything this library produces reaches the app. **/
+	/** The queue through which every result from this library is delivered to the app. **/
 	public static final inbox = new hxn.Inbox(limit -> Native.outbox_wait(limit), () -> Native.outbox_next());
 
 	final raw:Raw;
@@ -139,8 +139,9 @@ class Counter {
 		return Native.add(raw, amount);
 
 	public function apply(times:Int, f:Int->Int):Int {
-		// Native code cannot be thrown through: keep the exception, tell the
-		// library its callback failed, and let `during` throw it afterwards.
+		// An exception cannot unwind through native code: store it, report
+		// the callback as failed to the library, and let `during` rethrow it
+		// after the call returns.
 		var guarded = function(value:Int):Null<Int> {
 			try {
 				return f(value);
@@ -152,9 +153,10 @@ class Counter {
 		return hxn.Callback.during(() -> Native.apply(raw, times, guarded));
 	}
 
-	// A function used by later calls is kept here, where the collector can
-	// see it, and lent to each of them. Native code holds nothing, so one
-	// that refers back to this counter is collected with it.
+	// A callback used by later calls is stored here, where the garbage
+	// collector can see it, and borrowed for each call. Native code holds no
+	// reference, so a callback that references this counter is collected
+	// along with it.
 	var step:Null<Int->Int>;
 
 	public function setStep(f:Int->Int):Void
@@ -250,15 +252,15 @@ class Emitter {
 		return Native.emitter_end(raw);
 }
 
-/** A value the Haxe side sets, and follows as a signal. **/
+/** A value the Haxe side sets and observes as a signal. **/
 class Gauge {
 	final raw:RawGauge;
 
 	public function new(initial:Int)
 		raw = Native.gauge_new(initial);
 
-	// Kept, so a set made here reaches the signal at once and is not seen
-	// only when the library's results are next delivered.
+	// Cached, so a value set here updates the signal immediately instead of
+	// at the library's next delivery.
 	var level:Null<hxn.Signal<Int>>;
 
 	public function signal():hxn.Signal<Int> {

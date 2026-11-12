@@ -4,11 +4,11 @@
   "interfaces": [
     {
       "name": "Primes",
-      "docs": "Finds prime numbers without holding up the caller.",
+      "docs": "Finds prime numbers without blocking the caller.",
       "methods": [
         {
           "name": "count",
-          "docs": "How many primes are below `limit`, counted on another thread. Fails\nat once for a negative limit.",
+          "docs": "Counts the primes below `limit` on another thread. Returns an error\nimmediately for a negative limit.",
           "kind": "static",
           "params": [{ "name": "limit", "type": "i32" }],
           "returns": "future<i32>",
@@ -17,7 +17,7 @@
         },
         {
           "name": "below",
-          "docs": "The primes below `limit`, each sent as it is found.",
+          "docs": "Streams the primes below `limit`, sending each one as it is found.",
           "kind": "static",
           "params": [{ "name": "limit", "type": "i32" }],
           "returns": "stream<i32>",

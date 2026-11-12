@@ -1,42 +1,43 @@
 # Conventions
 
-The rules hxn's own code, its bindings and its tests follow. The reasons are
-in [design.md](design.md); this is the checklist.
+The rules that hxn's code, its bindings and its tests follow.
+[design.md](design.md) explains the reasons; this document is the checklist.
 
 ## Crates
 
 - **`hxn-abi` has no dependencies and exports no symbols.** It is linked into
-  every library, once per runtime, so anything it exported would be defined
-  once per library in the same process. What a host must call, such as
-  `release`, a library re-exports under its own name.
+  every library, once per runtime, so any symbol it exported would be defined
+  once per library in the same process. A function the host must call, such
+  as `release`, is re-exported by each library under its own name.
 - **`hxn-future` contains no `unsafe`.** It is `#![forbid(unsafe_code)]`.
 - **Only `hxn-hl` imports a runtime's symbols**, and it defines none.
 - **A library's core is plain Rust.** It depends on `hxn` for the marker
   attributes and on `hxn-future` if it has asynchronous results, and on no
   runtime. It never selects a runtime with a cargo feature.
-- **Adapter crates are thin.** They hold the generated adapter and nothing a
-  library author writes.
-- **`hxn-cli` writes nothing into a library's directory but its manifest.**
-  Everything else it makes goes under cargo's target directory, in
-  `hxn/<library>`.
-- **A Haxe class or header of hxn's own is carried by `hxn-cli`.** One added
-  to `haxe/` is added to its list, which a test checks.
+- **Adapter crates are thin.** They contain only the generated adapter, and
+  no code written by the library author.
+- **`hxn-cli` writes nothing into a library's directory except its
+  manifest.** Everything else it generates goes under cargo's target
+  directory, in `hxn/<library>`.
+- **`hxn-cli` embeds every Haxe class and header of hxn's own.** A class
+  added to `haxe/` is added to its list, which a test checks.
 
 ## The C boundary
 
 - An exported function returns an `hxn_status`. Zero is success, negative
   values are hxn's, positive values are the library's.
-- A result is written through a last `out` parameter, and a failure's message
-  through `err`. `out` is untouched on failure and `err` on success.
+- A result is written through a final `out` parameter, and an error message
+  through `err`. `out` is not written on failure, and `err` is not written on
+  success.
 - A `bool` is an `int32_t` at the boundary.
 - Text and bytes are passed as an `hxn_slice` by value and are UTF-8.
 - Returned text and bytes are an `hxn_buf`, freed by the host through the
   buffer's own `free`, exactly once.
-- A handle is an opaque `hxn_handle *`. Only the library that made one reads it.
-- A callback is `{call, env, drop}`. `call` takes `env` first, returns an
-  `hxn_status` and writes its result through a last `out`. It must return
-  normally.
-- Waits take a limit in milliseconds; negative means no limit.
+- A handle is an opaque `hxn_handle *`. Only the library that created it reads it.
+- A callback is `{call, env, drop}`. `call` takes `env` as its first
+  parameter, returns an `hxn_status` and writes its result through a final
+  `out` parameter. It must return normally.
+- Waits take a timeout in milliseconds; a negative value means no timeout.
 - Versions and ids the host sees are non-negative `int32_t`; `-1` means
   "closed" or "nothing".
 
@@ -47,103 +48,106 @@ in [design.md](design.md); this is the checklist.
 | exported function | `<library>_<interface>_<method>`, the interface in snake case |
 | HashLink primitive resolver | `hlp_<interface>_<method>` |
 | HashLink abstract | `<library>_<interface>` |
-| a shared interface's own functions | `<library>_<interface>_same`, `_weak`, `_weak_upgrade`, `_weak_close` |
+| a shared interface's built-in functions | `<library>_<interface>_same`, `_weak`, `_weak_upgrade`, `_weak_close` |
 | weak reference to a shared interface | Haxe class `<Interface>Weak`, HashLink abstract `<library>_<interface>_weak` |
-| release for any handle | `<library>_release` |
-| the library's queue of what is ready | `<library>_outbox_wait`, `<library>_outbox_next` |
-| waiting on and watching a result over time | `<library>_future_wait`, `_future_state`, `_future_watch`; the same for `stream` and `signal` |
-| taking what one carries | `<library>_future_take_<kind>`, `<library>_stream_next_<kind>`, `<library>_signal_get_<kind>`; the kind is `unit`, `bool`, `int`, `long`, `float`, `text`, `bytes`, the name of a narrower number type, or the snake-case name of an interface or data type, prefixed with `option_`, `list_` or `map_` for those wrappers. Two carried types that map to the same name are rejected |
+| release function for any handle | `<library>_release` |
+| the library's queue of ready results | `<library>_outbox_wait`, `<library>_outbox_next` |
+| waiting on and watching a future, stream or signal | `<library>_future_wait`, `_future_state`, `_future_watch`; the same for `stream` and `signal` |
+| taking the value one carries | `<library>_future_take_<kind>`, `<library>_stream_next_<kind>`, `<library>_signal_get_<kind>`; the kind is `unit`, `bool`, `int`, `long`, `float`, `text`, `bytes`, the name of a narrower number type, or the snake-case name of an interface or data type, prefixed with `option_`, `list_` or `map_` for those wrappers. Two carried types that map to the same name are rejected |
 | fetching the typed error of the last failure | `<library>_thrown_take`, generated only when a function has a `#[hxn::data]` error type |
 | exception class for a typed error | Haxe class `<Name>Exception`, with a trailing `Error` removed from the name first |
 | serializer for a tagged enum | Haxe class `<Name>Wire` |
-| bytes a library's values hold | `<library>_memory_held` |
-| whether it asked for a collection | `<library>_memory_wanted` |
+| native memory held by a library's values, in bytes | `<library>_memory_held` |
+| whether the library requested a collection | `<library>_memory_wanted` |
 | C header | `<library>_abi.h` |
 | hxcpp glue header | `<library>_glue.h`, namespace `<library>_glue` |
-| hxcpp extern class over the glue | `Hxn<Library>Native`, each function under its glue name |
+| hxcpp extern class declaring the glue | `Hxn<Library>Native`, each function under its glue name |
 | Haxe method | the Rust name in camel case |
-| a function outside an `impl` | `<library>_<class>_<function>`, as a function of that class would be |
-| Haxe class a binding needs beside the library's own | `Hxn<Library><Role>`: `HxnCounterMemory` |
+| a function outside an `impl` | `<library>_<class>_<function>`, named as a method of that class would be |
+| Haxe class a binding needs in addition to the library's own | `Hxn<Library><Role>`: `HxnCounterMemory` |
 
 An interface is not named `Atomic`, `Memory`, `Future`, `Stream`, `Signal` or
-`Outbox`: the adapters name their own exports after those. Nor is one named `<Interface>Weak` beside a shared
-`<Interface>`, and a shared interface has no function named `same` or `weak`.
+`Outbox`: the adapters use those names for their own exports. No interface is named `<Interface>Weak` when a shared
+`<Interface>` exists, and a shared interface has no function named `same` or `weak`.
 
-A C header never has the name of a Haxe class differing only by case. hxcpp
+A C header's name never differs from a Haxe class's name only by case. hxcpp
 generates `Counter.h` for a class `Counter`, and on a case-insensitive
-filesystem `#include "counter.h"` would then find the generated one.
+filesystem `#include "counter.h"` would then find the generated header.
 
 ## Rust side
 
-- An interface is named once in a library, whatever module it is in, and is
-  reachable at the crate's root: one defined in a module is re-exported
-  there. A `#[hxn::methods]` block names its interface by its bare name.
+- An interface's name is unique within a library, whatever module it is in,
+  and the interface is reachable at the crate's root: one defined in a module
+  is re-exported there. A `#[hxn::methods]` block refers to its interface by
+  its bare name.
 - A function exposed to Haxe takes `&self`, `&mut self` or `self`, or no
   receiver. `self` by value closes the Haxe object. `new` is the constructor.
   No generics.
 - A function outside an `impl` is marked `#[hxn::function]`. Haxe has no
-  function without a class, so it is a static of one: the class named after
-  the library, `audio_tools` giving `AudioTools`, or the one the attribute
-  names with `class = "Name"`. Either may be an interface's class, which
-  the function then joins, or a class that exists only to hold functions.
+  free functions, so it is a static method of a class: the class named after
+  the library (`audio_tools` becomes `AudioTools`), or the class given by
+  `class = "Name"` in the attribute. Either may be an interface's class, which
+  the function is then added to, or a class that holds only functions.
   The function is `pub`, reachable at the crate's root as an interface is,
-  not named `new`, and named once in its class.
-- Text is taken as `&str` and returned as `String`; bytes are taken as
+  not named `new`, and its name is unique within its class.
+- Text is accepted as `&str` and returned as `String`; bytes are accepted as
   `&[u8]` and returned as `Vec<u8>`.
 - A number is `i32`, `i64` or `f64`, or one the adapter converts: `i8`,
-  `i16`, `u8`, `u16`, `isize` and `usize` are a Haxe `Int`, `u32` a `UInt`
-  with the same bits, `u64` a `haxe.Int64` with the same bits, `f32` a
-  `Float`. One that does not fit, going in or coming back, fails the call.
-  Nothing wider than 64 bits crosses.
+  `i16`, `u8`, `u16`, `isize` and `usize` are passed as a Haxe `Int`, `u32` as
+  a `UInt` with the same bits, `u64` as a `haxe.Int64` with the same bits,
+  `f32` as a `Float`. A value that does not fit, as a parameter or as a return
+  value, fails the call. No type wider than 64 bits is passed.
 - **On wasm32 a size is 32 bits.** `i64` and `u64` are 64 bits there as
-  everywhere, so a quantity that can pass 4 GiB, a file's length or a
-  position in one, a count of nanoseconds, is a `u64` or an `i64` and not a
-  `usize`: as a `usize` it would be right natively and wrap in the same
-  library built for wasm.
+  everywhere, so a quantity that can exceed 4 GiB, such as a file length,
+  an offset into a file or a count of nanoseconds, is a `u64` or an `i64`,
+  not a `usize`: a `usize` would be correct natively and wrap in the wasm
+  build of the same library.
 - Plain data is a struct or an enum marked `#[hxn::data]`, `pub` and
-  reachable at the crate's root, with a name no interface has. A struct has
-  named fields, every one `pub`, each a `bool`, a number with a width,
+  reachable at the crate's root, with a name that no interface uses. A struct has
+  named fields, all `pub`, each a `bool`, a fixed-width number,
   `String`, `Vec<u8>`, other data, or an `Option`, `Vec`, `Box`, `HashMap`
   or `BTreeMap` of these. Map keys are `String` or an integer of at most 32
   bits. An enum is either C-like (no variant has fields; explicit
   discriminants are allowed) or tagged (some variants have fields, named or
-  unnamed; no explicit discriminants). Data is taken by value or by `&`, a
+  unnamed; no explicit discriminants). Data is accepted by value or by `&`, a
   list also as `&[T]`, and returned by value. `Option`, `Vec` and maps of
   data are accepted wherever data is.
 - Recursive data goes through a `Vec` or a `Box` and may nest at most
   `hxn_abi::wire::Reader::DEPTH` levels. Use a `Vec` for a long sequence,
   not a chain of boxes.
 - Data carried by a signal must be `Clone`.
-- Another interface is taken as `&T` or `&mut T` and returned as `T`, with
-  `Option` for one that may be absent. It is never taken by value and never
+- Another interface is accepted as `&T` or `&mut T` and returned as `T`, with
+  `Option` for one that may be absent. It is never accepted by value and never
   returned by reference.
-- A value held from more than one place is an interface marked
+- A value with more than one owner is an interface marked
   `#[hxn::interface(shared)]`. Its functions take `&self`, never `&mut self`
-  or `self`, and it is `Send + Sync`. It is taken as `&T` to use it and as
-  `Arc<T>` to keep a share, never as `&Arc<T>` or `&mut T`, and returned as
-  `T` or `Arc<T>`. `Arc` of an interface not marked shared does not cross.
-- A result that arrives later is returned as a `Future<T>`, a `Stream<T>` or
-  a `Signal<T>` of `hxn-future`, by a function that itself returns at once.
+  or `self`, and it is `Send + Sync`. It is accepted as `&T` to use it and as
+  `Arc<T>` to keep a reference, never as `&Arc<T>` or `&mut T`, and returned
+  as `T` or `Arc<T>`. `Arc` of an interface not marked shared is not passed
+  across the boundary.
+- An asynchronous result is returned as a `Future<T>`, a `Stream<T>` or a
+  `Signal<T>` of `hxn-future`, by a function that itself returns immediately.
   It carries `bool`, a number, `String` or data; a future or a stream may
   also carry `Vec<u8>`, an interface, a shared one as `Arc<T>`, or `()`.
-- An `async fn` crosses as a function returning a future of what it gives.
-  It takes `self` or, of a shared interface, `&self`; numbers, `bool`, `&str`
-  and `&[u8]`, which are copied; and shared interfaces. It does not take what
-  is lent for a call, and it is not `new` or `#[hxn(blocking)]`. Its future
-  has to be `Send`.
-- A Haxe function is taken as `impl Fn(..) -> Result<T, E>`, or `FnMut` or
-  `FnOnce`, with `E` a type parameter of the function: its only use for one.
+- An `async fn` is exposed as a function returning a future of its return
+  value. Its receiver is `self` or, for a shared interface, `&self`; its
+  parameters are numbers, `bool`, `&str` and `&[u8]`, which are copied, and
+  shared interfaces. It does not accept anything borrowed only for the call,
+  and it is not `new` or `#[hxn(blocking)]`. Its future must be `Send`.
+- A Haxe callback is accepted as `impl Fn(..) -> Result<T, E>`, or `FnMut` or
+  `FnOnce`, with `E` a type parameter of the function used only by that
+  callback.
   Its parameters are `bool`, `i32`, `f64`, `&str`, `&[u8]`, data (by value
   or by `&`), or an object whose ownership passes to Haxe (`T`, or `Arc<T>`
   of a shared interface). It returns `bool`, `i32`, `f64`, `String`,
-  `Vec<u8>`, data or `()`. The library returns when it fails. A function marked `#[hxn(blocking)]` is not lent one.
+  `Vec<u8>`, data or `()`. When the callback fails, the library returns. A function marked `#[hxn(blocking)]` does not accept a callback.
 - A cell shared with Haxe is an `AtomicI32` or an `hxn::AtomicFlag`, never
-  an `AtomicBool`. It is taken as a reference, lent for the call, and
-  returned as an `Arc`, kept by the library.
-- A value that holds much memory keeps an `hxn::Weight` recording how much, and
-  its interface is marked `#[hxn::interface(weighed)]`. The weight is set
-  again when the size changes. Without the mark the weight is counted but
-  making the object checks nothing.
+  an `AtomicBool`. It is accepted as a reference, borrowed for the call, and
+  returned as an `Arc`, owned by the library.
+- A value that holds a large amount of memory keeps an `hxn::Weight` recording
+  the amount, and its interface is marked `#[hxn::interface(weighed)]`. The
+  weight is updated when the size changes. Without the mark the weight is
+  counted, but creating the object does not check the meter.
 - A library that wants a collection calls `hxn::collect_soon()`. It does not
   call the runtime, and does not assume the collection has happened.
 - Errors are a `Result` whose error implements `Display`. Do not panic to
@@ -159,40 +163,42 @@ filesystem `#include "counter.h"` would then find the generated one.
   work is waiting on something. Work that waits uses `spawn` with `async`.
 - Do not start threads or block in a library that should run on wasm. Use
   `spawn` or `stepped`.
-- Inside hxn itself, none of a library's code runs while one of hxn's locks is
-  held. A value is swapped or taken under the lock and dropped after it.
-- hxn does not call a host function to report a result. It queues or sets, and
-  the host takes.
+- Inside hxn, no library code runs while one of hxn's locks is held. A value
+  is swapped or taken out under the lock and dropped after the lock is
+  released.
+- hxn does not call a host function to report a result. It queues or sets the
+  value, and the host retrieves it.
 
 ## Bindings
 
 - **One `hxn.Inbox` per library**, shared by every future, stream and signal
-  the binding makes.
+  the binding creates.
 - **Wrap a primitive in a lambda where a function value is needed.** Pass
   `raw -> Native.take(raw)`, not `Native.take`.
-- **Wrap a function lent to native code** so that it catches, calls
-  `hxn.Callback.failed` and returns the failure value, and make the native
-  call inside `hxn.Callback.during`. The failure value is null, or false from
-  a function that returns nothing.
-- **Keep a function used by later calls in a field of the Haxe object** and
-  lend it to each call. Native code does not root host functions.
-- **Write through.** When a set goes through the binding, set the followed
-  signal as well.
+- **Wrap a callback passed to native code** so that it catches exceptions,
+  calls `hxn.Callback.failed` and returns the failure value, and make the
+  native call inside `hxn.Callback.during`. The failure value is null, or
+  false for a callback that returns nothing.
+- **Store a function used by later calls in a field of the Haxe object** and
+  pass it to each call. Native code does not root host functions.
+- **Write through.** When a set is made through the binding, also set the
+  followed signal.
 - **Every class that owns a handle has `close()` and a finalizer.** The
-  finalizer frees and does nothing else: it runs inside a collection.
-- **One `hxn.Gc.Meter` per library**, held by every class of the binding so
-  that it exists whichever of them a program uses. A weighed class checks it
+  finalizer only frees: it runs during a collection.
+- **One `hxn.Gc.Meter` per library**, referenced by every class of the binding
+  so that it exists whichever classes a program uses. A weighed class checks it
   once the new object owns its value, never before and never in a finalizer.
 - **A binding collects through `hxn.Gc`**, not through a runtime's own call.
 - **Two objects are compared with `same`**, never with `==`, when their
   interface is shared.
-- **A returned value gets a new object of its interface's class**, which
-  becomes its owner only once the library has handed the value over.
+- **A return value is wrapped in a new object of its interface's class**,
+  which becomes its owner only once the library has transferred the value.
 - **A cell the library returns has no `close()`.** The object holding it
-  keeps the memory alive, so its address is good for as long as it is used.
-- **A null object is passed as a null handle**, whether or not the library
-  takes one. The library refuses it, with the same error on every runtime;
-  hxcpp does not check a null object before reading its field.
+  keeps the memory alive, so its address is valid for as long as it is used.
+- **A null object is passed to native code as a null handle**, even when the
+  parameter is not an `Option`. The adapter then rejects it with the same
+  error on every runtime. The binding must not read the object's handle
+  field itself: hxcpp does not check for null before a field access.
 - On hxcpp, a raw pointer field is `@:unreflective`, and a call that waits is
   made inside `hxn::Blocking`. Failures are thrown by `hxn::check` after the
   library has returned.
@@ -203,10 +209,10 @@ filesystem `#include "counter.h"` would then find the generated one.
 ## Threads
 
 - A library's own threads never call into a runtime or touch its heap.
-- `hxn-hl`'s functions are for the thread the runtime called in on.
+- `hxn-hl`'s functions are only for the thread the runtime called in on.
 - A reactive graph belongs to one thread.
-- A library's results are delivered on one thread: the one that first asked,
-  or the one that calls `Loop.sync()`.
+- A library's results are delivered on one thread: the one that first
+  requested delivery, or the one that calls `Loop.sync()`.
 - Waiting from Haxe is done in bounded slices with a short sleep between, so
   runtimes whose other threads run only while one sleeps still make progress.
 - Where two threads each write one atomic and then read the other's, every
@@ -218,7 +224,7 @@ filesystem `#include "counter.h"` would then find the generated one.
 - `tests/counter` is the fixture: one small library, hand-written bindings for
   both runtimes, and one Haxe test (`haxe/Main.hx`) that every runtime runs.
   `haxe/Generated.hx` checks the classes the generator writes.
-- **A change is run on every runtime before it is called done:**
+- **A change is run on every runtime before it is considered done:**
 
   ```
   tests/counter/run.sh hl <vm>      # stock HashLink, and Ash
@@ -249,33 +255,34 @@ filesystem `#include "counter.h"` would then find the generated one.
   an executable (hxcpp only builds a library on these platforms) and runs
   it. Run it after changing how an hxcpp program is compiled or linked.
 - **The readme's example is `examples/greeter`, which is what `hxn new`
-  makes.** A test fails when the readme differs from it.
-- **An example is a library as someone would write one:** a crate, a Haxe
-  program, its committed manifest, and what the program prints, which is the
-  same on every run and every runtime. It shows a few things and checks
-  nothing; what has to be checked is in the fixture.
-- **CI runs what one machine cannot.** `.github/workflows/ci.yml` runs the
+  creates.** A test fails when the readme differs from it.
+- **An example is a realistic library:** a crate, a Haxe program, its
+  committed manifest, and the program's expected output, which is the same
+  on every run and every runtime. It demonstrates a few features and is not
+  a test; anything that has to be checked belongs in the fixture.
+- **CI runs what a single machine cannot.** `.github/workflows/ci.yml` runs the
   unit tests on Linux, Windows and macOS, the lints and Miri on Linux, and
-  the fixture's native modes and the command's and the examples' tests on
-  HashLink and hxcpp on Linux and Windows, and the fixture and the command's
-  test as scripts. It also runs the generated fixture and the examples
+  the fixture's native modes and the CLI and example tests on HashLink and
+  hxcpp on Linux and Windows, and the fixture and the CLI test as CPPIA
+  scripts. It also runs the generated fixture and the examples
   through Emscripten on Linux, and the examples in an iOS simulator on macOS.
   Windows is run nowhere else. Ash, wasm under Ash, and Android are run by
   hand, as above.
-- Run a runtime test under a timeout. A wrong wait hangs; it does not fail.
+- Run a runtime test under a timeout. A wrong wait hangs instead of failing.
 - Anything concurrent is run repeatedly, on more than one machine.
-- `cargo miri test -p hxn-abi` runs the unsafe core, and
+- `cargo miri test -p hxn-abi` checks the unsafe core, and
   `cargo miri test -p hxn-future` finds interleavings a native run does not,
-  the more with `-Zmiri-many-seeds`. Under Miri the tests that count on what
-  fits in a slice of time are skipped: it runs too slowly for them.
-- A test that depends on a runtime's limits notes it beside the check it
-  skips, with the reason.
-- **What the WebIDL emitter writes is parsed in its tests**, by a parser of
-  the language that is a dependency of the tests alone. The fixture's is
-  committed, as its JSON is, and a test fails when either is not current.
+  more so with `-Zmiri-many-seeds`. Under Miri, tests that depend on how much
+  work fits in a time slice are skipped, because Miri runs too slowly for
+  them.
+- A test that depends on a runtime's limitations documents this next to the
+  check it skips, with the reason.
+- **The WebIDL emitter's output is parsed in its tests**, by a WebIDL parser
+  that is a dev-dependency only. The fixture's WebIDL is committed, like its
+  JSON manifest, and a test fails when either is out of date.
 - A test program ends with `hxn.Loop.exit`, not `Sys.exit`: a program that
   exits right after a collection crashes in hxcpp on Windows.
-- A check does not depend on when the collector runs by itself: it forces a
+- A check does not depend on when the collector runs on its own: it forces a
   collection, or asserts a bound that holds either way.
 - The pure crates have unit tests; `hxn-hl` and the adapters are tested only
   in a real runtime.
@@ -291,8 +298,8 @@ filesystem `#include "counter.h"` would then find the generated one.
 - Detail lives in a `git-bug` issue: reproducers, measurements, alternatives
   weighed, what is still open. A commit cites its issue in a `git-bug:`
   trailer with the full id.
-- No planning, backlog or status documents. These two documents describe how
-  hxn is, not what happened or what is next.
+- No planning, backlog or status documents. These two documents describe the
+  current design, not history or plans.
 - An issue has a kind (`bug`, `perf`, `debt`) and an area
   (`area:abi`, `area:hl`, `area:cpp`, `area:future`, `area:reactive`,
   `area:wasm`, `area:gen`, `area:bind`, `area:cli`).
