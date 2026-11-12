@@ -53,6 +53,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "document"
+version = "0.1.0"
+dependencies = [
+ "hxn",
+ "serde_json",
+]
+
+[[package]]
 name = "downloads"
 version = "0.1.0"
 dependencies = [

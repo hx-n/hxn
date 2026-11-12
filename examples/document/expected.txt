@@ -1,0 +1,8 @@
+fields: name, nested, stars, tags
+the first tag is rust
+the text "haxe"
+an object of 2
+null
+nothing there
+[1.5,"two",null,{"three":true}]
+line 2, column 16: expected value

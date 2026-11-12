@@ -1,0 +1,12 @@
+[package]
+name = "document"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+# In a library of your own, this comes from the repository:
+# hxn = { git = "https://github.com/hx-n/hxn" }
+hxn = { path = "../../crates/hxn" }
+# The crate this library puts a Haxe API on.
+serde_json = "1"

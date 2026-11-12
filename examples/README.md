@@ -10,7 +10,8 @@ that uses it.
 | [primes](primes) | Work done on another thread: a future to wait for or be called back by, and a stream. |
 | [downloads](downloads) | An `async fn`, a value shared between the library and Haxe, and a counter Haxe reads without a call. |
 | [thermostat](thermostat) | A value the library keeps current, followed from Haxe as a signal. |
-| [pantry](pantry) | Records and enums passed by value, an optional field, and a list of records returned. |
+| [pantry](pantry) | Records and enums passed by value, an optional field, a list of records returned, and a typed error. |
+| [document](document) | Wraps an existing crate (`serde_json`): JSON values as a recursive enum, objects as a map, and parse errors as a typed exception with line and column. |
 
 ## Running one
 

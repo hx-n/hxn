@@ -1,0 +1,65 @@
+{
+  "hxn": 1,
+  "library": "document",
+  "records": [
+    {
+      "name": "ParseError",
+      "docs": "A parse error with its position. Used as the error type of `parse`, so\nHaxe catches it as `ParseException`.",
+      "fields": [
+        { "name": "message", "type": "str" },
+        { "name": "line", "type": "u32" },
+        { "name": "column", "type": "u32" }
+      ]
+    }
+  ],
+  "tagged": [
+    {
+      "name": "Value",
+      "docs": "A JSON value. Recursive through `Items` and `Fields`; Haxe gets an enum\nwith the same cases.",
+      "cases": [
+        { "name": "Nothing", "fields": [] },
+        { "name": "Flag", "fields": [{ "name": "value", "type": "bool" }] },
+        { "name": "Number", "fields": [{ "name": "value", "type": "f64" }] },
+        { "name": "Text", "fields": [{ "name": "value", "type": "str" }] },
+        { "name": "Items", "fields": [{ "name": "value", "type": "list<Value>" }] },
+        { "name": "Fields", "fields": [{ "name": "value", "type": "map<str, Value>" }] }
+      ]
+    }
+  ],
+  "interfaces": [
+    {
+      "name": "Document",
+      "namespace": true,
+      "methods": [
+        {
+          "name": "parse",
+          "docs": "Parses `text` as JSON.",
+          "kind": "static",
+          "params": [{ "name": "text", "type": "str" }],
+          "returns": "Value",
+          "throws": "ParseError",
+          "fallible": true,
+          "blocking": false
+        },
+        {
+          "name": "write",
+          "docs": "Serializes `value` to JSON, compact or pretty-printed.",
+          "kind": "static",
+          "params": [{ "name": "value", "type": "Value" }, { "name": "pretty", "type": "bool" }],
+          "returns": "str",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "at",
+          "docs": "Looks up a JSON pointer such as `/tags/1`. Returns `None` if nothing\nis there.",
+          "kind": "static",
+          "params": [{ "name": "value", "type": "Value" }, { "name": "path", "type": "str" }],
+          "returns": "option<Value>",
+          "fallible": false,
+          "blocking": false
+        }
+      ]
+    }
+  ]
+}

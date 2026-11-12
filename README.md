@@ -130,7 +130,7 @@ to add more.
 
 ## Examples
 
-[examples/](examples) has this library and five more, each a crate and a Haxe
+[examples/](examples) has this library and six more, each a crate and a Haxe
 program that run from a checkout:
 
 | Example | What it shows |
@@ -140,7 +140,8 @@ program that run from a checkout:
 | [primes](examples/primes) | Work done on another thread: a future to wait for or be called back by, and a stream. |
 | [downloads](examples/downloads) | An `async fn`, a value shared between the library and Haxe, and a counter Haxe reads without a call. |
 | [thermostat](examples/thermostat) | A value the library keeps current, followed from Haxe as a signal. |
-| [pantry](examples/pantry) | Records and enums passed by value, an optional field, and a list of records returned. |
+| [pantry](examples/pantry) | Records and enums passed by value, an optional field, a list of records returned, and a typed error. |
+| [document](examples/document) | Wraps an existing crate (`serde_json`): JSON values as a recursive enum, objects as a map, and parse errors as a typed exception with line and column. |
 
 ```
 cargo install --path crates/hxn-cli
