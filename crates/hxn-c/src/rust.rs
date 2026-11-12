@@ -201,20 +201,14 @@ fn made(api: &Api, name: &str, raw: &str, owned: bool) -> String {
 }
 
 // What a stream of a kept callback's calls carries, for a value of `ty`,
-// and the expression that makes it from `name`, the C value.
+// and the expression that makes it from `name`, the C value. A number keeps
+// its width; hxn converts it as it does any other.
 fn kept_value(ty: &Ty, name: &str) -> (String, String) {
     let (carried, value) = match ty {
         Ty::Bool => ("bool", name.to_owned()),
-        Ty::Int(Int::I8 | Int::U8 | Int::I16 | Int::U16 | Int::I32) => {
-            ("i32", format!("i32::from({name})"))
-        }
-        Ty::Int(Int::U32 | Int::I64 | Int::Long) => ("i64", format!("i64::from({name})")),
-        Ty::Int(Int::SSize) => ("i64", format!("{name} as i64")),
-        Ty::Int(Int::U64) => ("u64", name.to_owned()),
-        Ty::Int(Int::ULong) => ("u64", format!("u64::from({name})")),
-        Ty::Int(Int::Size) => ("u64", format!("{name} as u64")),
-        Ty::F32 => ("f64", format!("f64::from({name})")),
-        Ty::F64 => ("f64", name.to_owned()),
+        Ty::Int(Int::Long | Int::SSize) => ("i64", format!("{name} as i64")),
+        Ty::Int(Int::ULong | Int::Size) => ("u64", format!("{name} as u64")),
+        Ty::Int(_) | Ty::F32 | Ty::F64 => return (rust_param(ty), name.to_owned()),
         Ty::Text => (
             "String",
             format!("unsafe {{ hxn_copy({name}) }}.unwrap_or_default()"),
@@ -230,20 +224,15 @@ fn kept_value(ty: &Ty, name: &str) -> (String, String) {
 // Whether the stream of `callback`'s calls carries one record per call,
 // named `<Callback>Event`, rather than the value it is called with.
 fn has_event(callback: &Callback) -> bool {
-    match callback.params.as_slice() {
-        [] => false,
-        [one] => kept_value(&one.ty, "").0 == "u64",
-        _ => true,
-    }
+    callback.params.len() > 1
 }
 
 // What the stream of `callback`'s calls carries.
 fn event_type(callback: &Callback) -> String {
     match callback.params.as_slice() {
         [] => String::from("()"),
-        _ if has_event(callback) => format!("{}Event", callback.name),
         [one] => kept_value(&one.ty, "").0,
-        _ => unreachable!(),
+        _ => format!("{}Event", callback.name),
     }
 }
 

@@ -747,15 +747,14 @@ directly. `hxn-c` does the work in three steps:
    not keep a host function alive or call one after the call returns. The
    function that registers it returns a `Stream` instead. Its trampoline
    copies what C passes, sends it to the stream, and returns `[HxnStop]` to
-   C on every call; the program reads the calls on its own thread. With
-   more than one value, or an unsigned 64-bit one, each call is a record,
-   `<Callback>Event`. The stream's sender is C's user data. A method's
-   object owns it and drops it after its C free function runs, when C can
-   no longer call the callback, and the stream ends. A sender given to a
-   function with no object, or to a borrowed object, is never freed, since
-   nothing reports when C stops calling it. A callback registered again
-   replaces the earlier one in C, and the earlier stream ends when the
-   object is freed.
+   C on every call; the program reads the calls on its own thread. With more
+   than one value, each call is a record, `<Callback>Event`. The stream's
+   sender is C's user data. A method's object owns it and drops it after its
+   C free function runs, when C can no longer call the callback, and the
+   stream ends. A sender given to a function with no object, or to a
+   borrowed object, is never freed, since nothing reports when C stops
+   calling it. A callback registered again replaces the earlier one in C,
+   and the earlier stream ends when the object is freed.
 
 The crate's `build.rs` compiles the C sources given to `--source` with the
 `cc` crate, or links the libraries given to `--link`. A static library does
