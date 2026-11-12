@@ -70,21 +70,33 @@ allocator, and only the one that allocated can release.
 ## Data
 
 An interface crosses as a handle: one value, held by reference, with an owner.
-Plain data crosses by value. A library marks it with `#[hxn::data]`: a struct
-of public fields, which Haxe sees as a class with the same fields, and an enum
-of names, which Haxe sees as an `enum abstract` over `Int` with the same
-numbers.
+Plain data crosses by value. A library marks it with `#[hxn::data]`:
 
-- **An enum crosses as its number.** The adapter turns a number into a
-  variant and back by matching each name, so nothing depends on how Rust lays
-  the enum out, and a number that names no variant fails the call.
-- **Anything made of parts crosses as bytes.** A record, an `Option` of data
-  and a `Vec` of data are written as their parts in order: a field after a
-  field, a flag and then the value, a count and then the items. Each side has
-  generated code that writes a value and reads one, from the same
-  declaration, and nothing in the bytes says what they are. One way across
-  serves every runtime, since each already carries bytes, and it composes: a
-  record in a list in a record needs nothing of its own.
+| Rust | Haxe |
+|---|---|
+| a struct of public fields | a class with the same fields |
+| a C-like enum (no variant has fields) | an `enum abstract` over `Int` with the same values |
+| a tagged enum (some variants have fields) | an `enum` with the same constructors |
+| `Option<T>`, `Vec<T>` | `Null<T>`, `Array<T>` |
+| `HashMap<K, V>`, `BTreeMap<K, V>` | `Map<K, V>`; keys are `String` or `Int` |
+| `Box<T>` | `T` |
+
+- **A C-like enum crosses as its integer value.** The adapter converts in
+  both directions with a `match` on the variant names, so it does not depend
+  on the enum's layout, and an integer with no matching variant fails the
+  call.
+- **Composite data crosses as bytes.** Records, tagged enums, `Option`,
+  `Vec` and maps are serialized field by field in declaration order: a
+  tagged enum as its variant index followed by that variant's fields, an
+  `Option` as a presence byte followed by the value, a list or a map as a
+  count followed by the entries. Both sides are generated from the same
+  declaration, so the encoding carries no type information. Every runtime
+  can already pass bytes, so this needs no per-runtime support, and nested
+  types need nothing extra.
+- **Data can be recursive** through a `Vec` or a `Box`, which is how a tree
+  is expressed. The generated reader for such a type is recursive, so it
+  tracks nesting depth and fails with `Status::DEPTH` beyond
+  `wire::Reader::DEPTH`.
 - **A reader takes exactly what was written.** Bytes that run out, a count
   the bytes left cannot back, text that is not UTF-8 and bytes left over all
   fail the call, with the same status as badly encoded text.
@@ -96,7 +108,14 @@ numbers.
 - **The Haxe class is plain Haxe**, the same file for HashLink, hxcpp and a
   script. It is made from its fields by name, `{label: "x", enabled: true}`,
   and a field that is an `Option` can be left out. A null where a value is
-  needed is refused in Haxe, before anything is written.
+  needed is refused in Haxe, before anything is written. A Haxe enum
+  cannot have methods, so a tagged enum's serializer is a separate
+  generated class: `EventWire` for `Event`.
+- **Data is accepted everywhere a value is:** as a parameter or a return
+  value, carried by a future, a stream or a signal, returned from an
+  `async fn`, and as a parameter or return value of a lent function. The
+  encoding is the same in every position: the adapter serializes or
+  deserializes on the Rust side and the binding on the Haxe side.
 - **The cost is a copy and a pass over the fields a call.** That suits what
   data is for: a descriptor, a result, a short list. A large buffer is bytes,
   and a thing with identity is an interface.
@@ -106,7 +125,22 @@ numbers.
 Nothing unwinds across the boundary in either direction.
 
 - A library function returns a `Result`. The adapter turns `Err` into a status
-  and a message.
+  and a message, which Haxe is thrown as a `haxe.Exception`.
+- **A `#[hxn::data]` error type is thrown as a typed exception.** If the
+  error type of the `Result` is one of the library's `#[hxn::data]` types,
+  Haxe gets an exception class named after it (`PantryException` for
+  `PantryError`) with the value in its `error` field and the error's
+  `Display` output as its message. The value is passed separately from the
+  message: the adapter attaches the serialized error to the failure, `guard`
+  and `prim` store it in a thread-local (`hxn_abi::thrown`) and throw the
+  message as usual, and the generated Haxe method catches that exception,
+  fetches the stored bytes and throws the typed exception instead. The
+  message path is therefore the same as for any other error on every
+  runtime, and native code never constructs a Haxe object. Futures work the
+  same way: the stored failure carries the bytes, and they are moved to the
+  thread-local when a Haxe thread takes the result. Each failure overwrites
+  the stored value, so the bytes the binding fetches always belong to the
+  failure it just caught.
 - The runtime's own exception is raised **after** the Rust call has returned
   and dropped everything it owned. HashLink throws by jumping past frames
   without running destructors, and a C++ exception must not cross a Rust
@@ -277,13 +311,22 @@ library sees that as an `Err` to return with. The error is a type parameter so
 the library names no type of hxn's and can be tested with any error it likes;
 the adapter calls it with its own.
 
-A lent function takes and gives numbers, bools and text, and takes bytes and
-objects. Text and bytes go to it as `&str` and `&[u8]`, borrowed: the host
-makes its own copy during the call. Text comes back as a `String`: the host
-writes a copy into a buffer that carries its own `free`, which the library
-reads and then frees, so nothing of the collector's is held after the function
-returns. A function that gives text cannot give null, which is how its wrapper
-reports that it threw.
+A lent function can take and return numbers, bools, text, bytes and data,
+and can take objects. Text and bytes are passed to it as `&str` and `&[u8]`,
+borrowed; the host copies them during the call. They are returned as `String`
+and `Vec<u8>`: the host copies the result into a buffer that has its own
+`free`, which the library reads and then frees, so nothing owned by the
+collector is referenced after the function returns. A function that returns
+text or bytes cannot return null, because its wrapper uses null to report an
+exception. On HashLink the native side receives a `haxe.io.Bytes` object and
+reads its two fields; on hxcpp it receives the underlying array.
+
+Data is passed to a lent function by value or by reference (a list also as a
+slice) and returned by value. The adapter's closure serializes each argument
+before the call and deserializes the result; the Haxe wrapper does the
+reverse. Two lent functions that differ only in which data types they use
+therefore share one trampoline, as two that pass objects of different
+interfaces do.
 
 An object goes to a lent function for good, as `T` or as `Arc<T>` of a shared
 interface, and the Haxe side owns it as it owns one a function returns. A
@@ -336,15 +379,17 @@ A function exposes one by returning it: `Future<T>`, `Stream<T>` or
 generated adapter hands each over type-erased, as a handle. So a library has
 one set of exports to wait on and watch a future, whatever it carries and
 whichever function returned it, and one more for each kind of value its
-futures carry, to take it. A future or stream can carry an `i32`, an `i64`,
-an `f64`, a bool, text, bytes or an object; bytes and an object taken from one
-are the Haxe side's from then on. It can also carry nothing, `()`, which Haxe
-sees as `hxn.Unit`: that the work is done, or that something happened. A
-signal carries a number, a bool or text, because it is read any number of
-times.
+futures carry, to take it. A future or stream can carry a number, a bool,
+text, bytes, data or an object; bytes and objects taken from one are owned by
+the Haxe side. It can also carry `()`, which Haxe sees as `hxn.Unit`, to
+signal completion or an event with no payload. A signal carries a number, a
+bool, text or data, but not a single-owner value, because it is read
+repeatedly. Data is serialized when a Haxe thread takes it, by the take call
+generated for that type; the library's future holds the library's own type.
 
 An `async fn` is exposed as the function it is to its caller: one that returns
-a future of what it gives, with the error of a `Result` failing the future.
+a future of what it gives, with the error of a `Result` failing the future,
+as a typed exception if the error type is `#[hxn::data]`.
 The adapter starts it with `spawn`. The work runs after the call that started
 it has returned, so it owns what it was passed: text and bytes are copied, a
 shared object is kept by a share of its own, and the receiver is `self` or a

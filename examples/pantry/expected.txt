@@ -4,3 +4,8 @@ flour: 2, wholemeal
 eggs note: null, salt: null
 low on flour and rice
 refused: air has nothing to stock
+eggs left: 10
+only 10 of eggs
+  there are only 10 of eggs
+no salt at all
+  nothing called salt

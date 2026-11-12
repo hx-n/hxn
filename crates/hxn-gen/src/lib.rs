@@ -34,8 +34,8 @@ pub use c::{c_header, cpp_glue};
 pub use haxe::{File, haxe_cpp, haxe_cppia, haxe_hl};
 pub use manifest::manifest;
 pub use model::{
-    Data, Enumeration, Error, Field, Interface, Library, Method, Number, Param, Receiver, Record,
-    Type, Variant,
+    Case, Data, Enumeration, Error, Field, Interface, Library, Method, Number, Param, Receiver,
+    Record, Tagged, Type, Variant,
 };
 pub use parse::{parse, parse_crate};
 pub use rust::{c_adapter, hl_adapter};

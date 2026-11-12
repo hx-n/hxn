@@ -10,8 +10,8 @@ use crate::later;
 use crate::lent;
 use crate::model::{Data, Interface, Library, Method, Number, Type};
 use crate::names::{
-    abstract_name, camel, cell_abstract, cell_class, has_receiver, local, memory_class,
-    native_class, weak_abstract, weak_class,
+    abstract_name, camel, cell_abstract, cell_class, exception_class, has_receiver, local,
+    memory_class, native_class, thrown_class, weak_abstract, weak_class,
 };
 
 /// A generated file: its path relative to a class path, and its text.
@@ -36,6 +36,7 @@ fn haxe_type(ty: &Type) -> String {
         Type::Stream(of) => format!("hxn.Stream<{}>", carried_type(of)),
         Type::Signal(of) => format!("hxn.Signal<{}>", haxe_type(of)),
         Type::Lent { params, returns } => lent::haxe_type(params, returns),
+        Type::Data(data) => data::haxe_type(data),
         Type::AtomicInt => String::from("hxn.AtomicInt"),
         Type::AtomicBool => String::from("hxn.AtomicBool"),
         Type::Handle {
@@ -198,7 +199,7 @@ fn hl_native(library: &Library, interface: &Interface, method: &Method) -> Strin
                 "{name}:{}",
                 lent::haxe_native_type(lent::Host::Hl, taken, returns)
             )),
-            Type::Void | Type::Future(_) | Type::Stream(_) | Type::Signal(_) => {
+            Type::Void | Type::Future(_) | Type::Stream(_) | Type::Signal(_) | Type::Data(_) => {
                 unreachable!("not a parameter type")
             }
         }
@@ -214,7 +215,7 @@ fn hl_native(library: &Library, interface: &Interface, method: &Method) -> Strin
         Type::I64 => (String::from("hl.I64"), "\n\t\treturn 0;"),
         Type::F64 => (String::from("Float"), "\n\t\treturn 0.;"),
         Type::Str | Type::Bytes => (String::from("hl.Bytes"), "\n\t\treturn null;"),
-        Type::Lent { .. } => unreachable!("not a result type"),
+        Type::Lent { .. } | Type::Data(_) => unreachable!("not a result type"),
         Type::Handle { interface: of, .. } => (hl_raw(of, &interface.name), "\n\t\treturn null;"),
         Type::AtomicInt | Type::AtomicBool => (String::from("CellRaw"), "\n\t\treturn null;"),
         Type::Future(_) | Type::Stream(_) | Type::Signal(_) => {
@@ -231,10 +232,37 @@ fn hl_native(library: &Library, interface: &Interface, method: &Method) -> Strin
     )
 }
 
+// The class whose `typed` makes the exception a failure of `method` is
+// thrown as, if it fails with data of the library's own. An async
+// function's failure is its future's, which makes its own.
+fn thrown(library: &Library, method: &Method) -> Option<String> {
+    (method.error.is_some() && !method.asynchronous).then(|| thrown_class(library))
+}
+
 // A method's body from its statements. One that lends functions makes its
 // native call inside `hxn.Callback.during`, which throws what a lent
-// function threw once the library has returned.
-fn body(guards: &[String], lines: &[String]) -> String {
+// function threw once the library has returned. One that fails with the
+// library's own data catches what the failure was thrown as and throws the
+// exception `thrown` makes of it.
+fn body(guards: &[String], lines: &[String], thrown: Option<&str>) -> String {
+    let returns = lines.last().is_some_and(|line| line.starts_with("return "));
+    let caught: Vec<String>;
+    let lines = match thrown {
+        Some(class) => {
+            let mut all = vec![String::from("try {")];
+            all.extend(
+                lines
+                    .iter()
+                    .map(|line| format!("\t{}", line.replace('\n', "\n\t"))),
+            );
+            all.push(String::from("} catch (error:haxe.Exception) {"));
+            all.push(format!("\tthrow {class}.typed(error);"));
+            all.push(String::from("}"));
+            caught = all;
+            &caught[..]
+        }
+        None => lines,
+    };
     let block = |lines: &[String]| {
         let mut out = String::from(" {\n");
         for line in lines {
@@ -249,7 +277,6 @@ fn body(guards: &[String], lines: &[String]) -> String {
             lines => block(lines),
         };
     }
-    let returns = lines.last().is_some_and(|line| line.starts_with("return "));
     let mut all = guards.to_vec();
     all.push(format!(
         "{}hxn.Callback.during(() -> {{",
@@ -365,7 +392,7 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
     }
     let mut out = docs(&method.docs, "\t");
     out.push_str(&signature(method));
-    out.push_str(&body(&guards, &lines));
+    out.push_str(&body(&guards, &lines, thrown(library, method).as_deref()));
     out
 }
 
@@ -601,7 +628,11 @@ fn cpp_method(library: &Library, interface: &Interface, method: &Method) -> Stri
     }
     let mut out = docs(&method.docs, "\t");
     out.push_str(&signature(method));
-    out.push_str(&self::body(&guards, &body));
+    out.push_str(&self::body(
+        &guards,
+        &body,
+        thrown(library, method).as_deref(),
+    ));
     out
 }
 
@@ -667,11 +698,55 @@ pub fn haxe_hl(library: &Library) -> Vec<File> {
     }
     files.extend(data::haxe_files(library));
     files.extend(later::hl_files(library));
+    if !library.errors().is_empty() {
+        files.push(File {
+            path: format!("{}.hx", thrown_class(library)),
+            text: hl_thrown(library),
+        });
+    }
     files.push(File {
         path: format!("{}.hx", memory_class(library)),
         text: hl_memory(library),
     });
     files
+}
+
+const THROWN_DOCS: &str = "Makes the exception a failure is thrown as, where the library failed with\n\tdata of its own: the value is asked for once the message has been caught.";
+
+// What both runtimes' classes share: which error the value is, then the
+// error.
+fn thrown_read(library: &Library) -> String {
+    let mut out = String::from(
+        "\n\tstatic function read(error:haxe.Exception, input:haxe.io.BytesInput):haxe.Exception {\n\t\tswitch (input.readInt32()) {\n",
+    );
+    for (place, error) in library.errors().into_iter().enumerate() {
+        out.push_str(&format!(
+            "\t\t\tcase {place}:\n\t\t\t\tvar value:{} = {};\n\t\t\t\treturn new {}(error.message, value, error);\n",
+            data::haxe_type(error),
+            data::haxe_read(error),
+            exception_class(&error.name())
+        ));
+    }
+    out.push_str("\t\t\tcase _:\n\t\t\t\treturn error;\n\t\t}\n\t}\n}\n");
+    out
+}
+
+fn hl_thrown(library: &Library) -> String {
+    format!(
+        "{HEADER}@:hlNative(\"{library}\")\nprivate class Native {{\n\tpublic static function thrown_take(out:hl.Ref<Int>):hl.Bytes\n\t\treturn null;\n}}\n\n/**\n\t{THROWN_DOCS}\n**/\n@:noCompletion class {name} {{\n\tpublic static function typed(error:haxe.Exception):haxe.Exception {{\n\t\tvar outLength = 0;\n\t\tvar data = Native.thrown_take(outLength);\n\t\tif (data == null)\n\t\t\treturn error;\n\t\treturn read(error, new haxe.io.BytesInput(@:privateAccess new haxe.io.Bytes(data, outLength)));\n\t}}\n{read}",
+        library = library.name,
+        name = thrown_class(library),
+        read = thrown_read(library),
+    )
+}
+
+fn cpp_thrown(library: &Library) -> String {
+    format!(
+        "{HEADER}/**\n\t{THROWN_DOCS}\n**/\n@:noCompletion class {name} {{\n\tpublic static function typed(error:haxe.Exception):haxe.Exception {{\n\t\tvar data = {native}.thrown_take();\n\t\tif (data == null)\n\t\t\treturn error;\n\t\treturn read(error, new haxe.io.BytesInput(haxe.io.Bytes.ofData(data)));\n\t}}\n{read}",
+        native = native_class(library),
+        name = thrown_class(library),
+        read = thrown_read(library),
+    )
 }
 
 const MEMORY_DOCS: &str = "What the library's values hold that the collector cannot see. A weighed\n\tobject checks it when it is made, and a delivery does.";
@@ -716,6 +791,12 @@ pub fn haxe_cpp(library: &Library) -> Vec<File> {
     }
     files.extend(data::haxe_files(library));
     files.extend(later::cpp_files(library));
+    if !library.errors().is_empty() {
+        files.push(File {
+            path: format!("{}.hx", thrown_class(library)),
+            text: cpp_thrown(library),
+        });
+    }
     files.push(File {
         path: format!("{}.hx", memory_class(library)),
         text: cpp_memory(library),
@@ -835,7 +916,7 @@ fn cpp_native(library: &Library, interface: &Interface, method: &Method) -> Stri
                 params: taken,
                 returns,
             } => lent::haxe_native_type(lent::Host::Cpp, taken, returns),
-            Type::Void | Type::Future(_) | Type::Stream(_) | Type::Signal(_) => {
+            Type::Void | Type::Future(_) | Type::Stream(_) | Type::Signal(_) | Type::Data(_) => {
                 unreachable!("not a parameter type")
             }
         };
@@ -915,6 +996,9 @@ fn cpp_natives(library: &Library) -> String {
         ));
     }
     out.push_str(&later::cpp_natives(library));
+    if !library.errors().is_empty() {
+        out.push_str(&cpp_extern(library, "thrown_take", "", "haxe.io.BytesData"));
+    }
     out.push_str("}\n");
     out
 }

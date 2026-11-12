@@ -11,6 +11,8 @@
 //! | an `Option` | one byte, 0 or 1, then the value if 1 |
 //! | a list | a count as an `i32`, then each item |
 //! | a record | its fields, in the order declared |
+//! | an enum whose variants hold values | which variant, counted from 0 as an `i32`, then its fields |
+//! | a map | a count as an `i32`, then each key and its value |
 //!
 //! Nothing says what the bytes are: both sides are generated from the same
 //! declaration, and a reader that runs out or has bytes left over fails.
@@ -20,11 +22,34 @@ use crate::Fault;
 /// Reads the parts of a value from the bytes a host sent.
 pub struct Reader<'a> {
     left: &'a [u8],
+    depth: u32,
 }
 
 impl<'a> Reader<'a> {
+    /// How deep a value may hold values of its own kind. A value that
+    /// nests is read by a function that calls itself, and the bytes decide
+    /// how often.
+    pub const DEPTH: u32 = 128;
+
     pub const fn new(bytes: &'a [u8]) -> Self {
-        Self { left: bytes }
+        Self {
+            left: bytes,
+            depth: 0,
+        }
+    }
+
+    /// Entered by the reader of a record or an enum, which may hold another.
+    pub fn enter(&mut self) -> Result<(), Fault> {
+        if self.depth == Self::DEPTH {
+            return Err(Fault::Depth);
+        }
+        self.depth += 1;
+        Ok(())
+    }
+
+    /// Left once that value is read.
+    pub fn leave(&mut self) {
+        self.depth = self.depth.saturating_sub(1);
     }
 
     fn take(&mut self, count: usize) -> Result<&'a [u8], Fault> {
@@ -156,6 +181,17 @@ mod tests {
         assert_eq!(input.items(4), Ok(2));
         assert_eq!((input.i32(), input.i32()), (Ok(10), Ok(20)));
         assert_eq!(input.end(), Ok(()));
+    }
+
+    #[test]
+    fn a_value_nests_only_so_deep() {
+        let mut input = Reader::new(&[]);
+        for _ in 0..Reader::DEPTH {
+            assert_eq!(input.enter(), Ok(()));
+        }
+        assert_eq!(input.enter(), Err(Fault::Depth));
+        input.leave();
+        assert_eq!(input.enter(), Ok(()));
     }
 
     #[test]

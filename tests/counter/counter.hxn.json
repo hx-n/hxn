@@ -3,12 +3,25 @@
   "library": "counter",
   "enums": [
     {
+      "name": "Trouble",
+      "docs": "An error that is a name.",
+      "variants": [{ "name": "Minor", "value": 1 }, { "name": "Major", "value": 5 }]
+    },
+    {
       "name": "Mode",
       "docs": "How loud. Two of its numbers are written and one follows on.",
       "variants": [{ "name": "Quiet", "value": 3 }, { "name": "Loud", "value": 9 }, { "name": "Off", "value": 10 }]
     }
   ],
   "records": [
+    {
+      "name": "Refusal",
+      "docs": "An error that is a record.",
+      "fields": [
+        { "name": "code", "type": "i32" },
+        { "name": "reason", "type": "str" }
+      ]
+    },
     {
       "name": "Point",
       "docs": "A place.",
@@ -37,6 +50,31 @@
         { "name": "tags", "type": "list<str>" },
         { "name": "payload", "type": "bytes" },
         { "name": "grid", "type": "list<list<i32>>" }
+      ]
+    }
+  ],
+  "tagged": [
+    {
+      "name": "Event",
+      "docs": "What happened, each kind with what it holds.",
+      "cases": [
+        { "name": "Started", "fields": [] },
+        { "name": "Progress", "fields": [{ "name": "done", "type": "u32" }, { "name": "total", "type": "u32" }] },
+        { "name": "Message", "fields": [{ "name": "value", "type": "str" }] },
+        { "name": "Moved", "fields": [{ "name": "value0", "type": "Point" }, { "name": "value1", "type": "Mode" }] },
+        { "name": "Batch", "fields": [{ "name": "value", "type": "list<Event>" }] },
+        { "name": "Wrapped", "fields": [{ "name": "value", "type": "Event" }] },
+        { "name": "Labelled", "fields": [{ "name": "labels", "type": "map<str, i32>" }, { "name": "order", "type": "map<i32, str>" }] },
+        { "name": "Maybe", "fields": [{ "name": "value", "type": "option<Event>" }] }
+      ]
+    },
+    {
+      "name": "CountError",
+      "docs": "Why a count was refused: an error with a case for each reason.",
+      "cases": [
+        { "name": "Empty", "fields": [] },
+        { "name": "TooMany", "fields": [{ "name": "limit", "type": "u32" }, { "name": "given", "type": "u32" }] },
+        { "name": "Unknown", "fields": [{ "name": "value", "type": "str" }] }
       ]
     }
   ],
@@ -829,6 +867,220 @@
           "params": [],
           "returns": "void",
           "fallible": false,
+          "blocking": false
+        }
+      ]
+    },
+    {
+      "name": "Events",
+      "docs": "Functions over events, with no value behind them.",
+      "methods": [
+        {
+          "name": "depth",
+          "docs": "How deep the events in `event` nest.",
+          "kind": "static",
+          "params": [{ "name": "event", "type": "Event" }],
+          "returns": "i32",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "show",
+          "docs": "The event as the library read it.",
+          "kind": "static",
+          "params": [{ "name": "event", "type": "Event" }],
+          "returns": "str",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "history",
+          "docs": "One of each case.",
+          "kind": "static",
+          "params": [],
+          "returns": "list<Event>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "wrapped",
+          "docs": "The event, inside `times` others.",
+          "kind": "static",
+          "params": [{ "name": "event", "type": "Event" }, { "name": "times", "type": "i32" }],
+          "returns": "Event",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "inverted",
+          "docs": "The names by their counts: a map in, and a sorted one out.",
+          "kind": "static",
+          "params": [{ "name": "counts", "type": "map<str, i32>" }],
+          "returns": "map<i32, str>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "checked",
+          "docs": "The count, or which of the reasons it was refused for.",
+          "kind": "static",
+          "params": [{ "name": "count", "type": "u32" }],
+          "returns": "u32",
+          "throws": "CountError",
+          "fallible": true,
+          "blocking": false
+        },
+        {
+          "name": "mode_named",
+          "docs": "The mode `name` names, or the name back in the error.",
+          "kind": "static",
+          "params": [{ "name": "name", "type": "str" }],
+          "returns": "Mode",
+          "throws": "CountError",
+          "fallible": true,
+          "blocking": false
+        },
+        {
+          "name": "refuse",
+          "docs": "Nothing, or a record of why not.",
+          "kind": "static",
+          "params": [{ "name": "code", "type": "i32" }],
+          "returns": "void",
+          "throws": "Refusal",
+          "fallible": true,
+          "blocking": false
+        },
+        {
+          "name": "trouble",
+          "docs": "The level, or the trouble it names.",
+          "kind": "static",
+          "params": [{ "name": "level", "type": "i32" }],
+          "returns": "i32",
+          "throws": "Trouble",
+          "fallible": true,
+          "blocking": false
+        },
+        {
+          "name": "checked_later",
+          "docs": "A record later, or the error of the work that would have made it.",
+          "kind": "static",
+          "params": [{ "name": "count", "type": "u32" }],
+          "returns": "future<Point>",
+          "async": true,
+          "throws": "CountError",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "mode_later",
+          "docs": "An enum a future carries.",
+          "kind": "static",
+          "params": [{ "name": "mode", "type": "Mode" }],
+          "returns": "future<Mode>",
+          "async": true,
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "small_later",
+          "docs": "A narrow number a future carries.",
+          "kind": "static",
+          "params": [{ "name": "value", "type": "i32" }],
+          "returns": "future<u8>",
+          "async": true,
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "path_later",
+          "docs": "A list of records a future carries.",
+          "kind": "static",
+          "params": [{ "name": "count", "type": "i32" }],
+          "returns": "future<list<Point>>",
+          "async": true,
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "maybe_later",
+          "docs": "A number that may be missing, later.",
+          "kind": "static",
+          "params": [{ "name": "value", "type": "i32" }],
+          "returns": "future<option<i32>>",
+          "async": true,
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "feed",
+          "docs": "The first `count` of `history`, one after another.",
+          "kind": "static",
+          "params": [{ "name": "count", "type": "i32" }],
+          "returns": "stream<Event>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "mode_now",
+          "docs": "A mode that goes from quiet to off.",
+          "kind": "static",
+          "params": [],
+          "returns": "signal<Mode>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "place_now",
+          "docs": "A place that moves right until it is at `limit`.",
+          "kind": "static",
+          "params": [{ "name": "limit", "type": "i32" }],
+          "returns": "signal<Point>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "each_point",
+          "docs": "What `f` makes of each point: a record lent to the function, and an\nenum given back.",
+          "kind": "static",
+          "params": [{ "name": "points", "type": "list<Point>" }, { "name": "f", "type": "fn(Point) -> Mode" }],
+          "returns": "list<Mode>",
+          "fallible": true,
+          "blocking": false
+        },
+        {
+          "name": "reshaped",
+          "docs": "The event `f` makes of `event`: one handed over, and one given back.",
+          "kind": "static",
+          "params": [{ "name": "event", "type": "Event" }, { "name": "f", "type": "fn(Event) -> Event" }],
+          "returns": "Event",
+          "fallible": true,
+          "blocking": false
+        },
+        {
+          "name": "picked",
+          "docs": "The point `f` picks, if it picks one: a list lent as a slice, beside\nan enum.",
+          "kind": "static",
+          "params": [{ "name": "points", "type": "list<Point>" }, { "name": "f", "type": "fn(list<Point>, Mode) -> option<Point>" }],
+          "returns": "option<Point>",
+          "fallible": true,
+          "blocking": false
+        },
+        {
+          "name": "stamped",
+          "docs": "The bytes `f` gives for 1, then for 2.",
+          "kind": "static",
+          "params": [{ "name": "f", "type": "fn(i32) -> bytes" }],
+          "returns": "bytes",
+          "fallible": true,
+          "blocking": false
+        },
+        {
+          "name": "graded",
+          "docs": "What `f` makes of quiet: an enum each way and nothing else.",
+          "kind": "static",
+          "params": [{ "name": "f", "type": "fn(Mode) -> Mode" }],
+          "returns": "Mode",
+          "fallible": true,
           "blocking": false
         }
       ]

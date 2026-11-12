@@ -1,5 +1,5 @@
 //! Plain data: values that cross by copy, where an interface is held by
-//! reference.
+//! reference. A `#[hxn::data]` error type is passed the same way.
 
 /// What a quantity is counted in. Haxe sees the same names, as numbers.
 #[hxn::data]
@@ -19,6 +19,26 @@ pub struct Item {
     pub unit: Unit,
     /// A field that may be missing can be left out in Haxe.
     pub note: Option<String>,
+}
+
+/// Why `take` failed. A tagged enum becomes a Haxe enum with the same
+/// constructors; as an error type it is thrown as `PantryException`.
+#[hxn::data]
+#[derive(Clone, Debug)]
+pub enum PantryError {
+    /// No item has that name.
+    Unknown(String),
+    /// Fewer are in stock than requested.
+    Short { name: String, left: i32 },
+}
+
+impl std::fmt::Display for PantryError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Unknown(name) => write!(f, "nothing called {name}"),
+            Self::Short { name, left } => write!(f, "there are only {left} of {name}"),
+        }
+    }
 }
 
 /// The shelves: a value Haxe holds, which data is passed to and from.
@@ -42,6 +62,21 @@ impl Pantry {
         }
         self.items.push(item);
         Ok(self.items.len() as i32)
+    }
+
+    /// Removes `amount` of an item and returns the updated item.
+    pub fn take(&mut self, name: &str, amount: i32) -> Result<Item, PantryError> {
+        let Some(item) = self.items.iter_mut().find(|item| item.name == name) else {
+            return Err(PantryError::Unknown(name.to_owned()));
+        };
+        if item.quantity < amount {
+            return Err(PantryError::Short {
+                name: name.to_owned(),
+                left: item.quantity,
+            });
+        }
+        item.quantity -= amount;
+        Ok(item.clone())
     }
 
     /// The item of that name, if there is one.

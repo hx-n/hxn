@@ -20,6 +20,16 @@
       ]
     }
   ],
+  "tagged": [
+    {
+      "name": "PantryError",
+      "docs": "Why `take` failed. A tagged enum becomes a Haxe enum with the same\nconstructors; as an error type it is thrown as `PantryException`.",
+      "cases": [
+        { "name": "Unknown", "fields": [{ "name": "value", "type": "str" }] },
+        { "name": "Short", "fields": [{ "name": "name", "type": "str" }, { "name": "left", "type": "i32" }] }
+      ]
+    }
+  ],
   "interfaces": [
     {
       "name": "Pantry",
@@ -39,6 +49,16 @@
           "kind": "mutating",
           "params": [{ "name": "item", "type": "Item" }],
           "returns": "i32",
+          "fallible": true,
+          "blocking": false
+        },
+        {
+          "name": "take",
+          "docs": "Removes `amount` of an item and returns the updated item.",
+          "kind": "mutating",
+          "params": [{ "name": "name", "type": "str" }, { "name": "amount", "type": "i32" }],
+          "returns": "Item",
+          "throws": "PantryError",
           "fallible": true,
           "blocking": false
         },

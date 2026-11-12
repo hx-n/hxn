@@ -9,6 +9,7 @@
 //! | a host closure | [`Callback`] | the library, until it drops it |
 //! | a cell both sides read and write | `AtomicI32`, [`AtomicFlag`] | whoever made it |
 //! | failure | [`Status`], with a message in a [`Buf`] | - |
+//! | a failure's typed value | bytes, kept by [`thrown`] until asked for | the thread that failed |
 //! | a value made of plain data | bytes, as [`wire`] lays them out | as bytes are |
 //!
 //! [`memory`] is how a library tells the host's collector what its values
@@ -33,6 +34,7 @@ mod handle;
 pub mod memory;
 mod slice;
 mod status;
+pub mod thrown;
 pub mod wire;
 
 pub use atomic::AtomicFlag;

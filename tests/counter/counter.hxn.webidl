@@ -2,12 +2,24 @@
 // The API of `counter`, version 1 of hxn's manifest, as WebIDL. An attribute
 // named Hxn... is hxn's: WebIDL has no word for what it marks.
 
+// An error that is a name.
+enum Trouble {
+  "Minor", // 1
+  "Major" // 5
+};
+
 // How loud. Two of its numbers are written and one follows on.
 enum Mode {
   "Quiet", // 3
   // As loud as it goes.
   "Loud", // 9
   "Off" // 10
+};
+
+// An error that is a record.
+dictionary Refusal {
+  required long code;
+  required USVString reason;
 };
 
 // A place.
@@ -36,6 +48,71 @@ dictionary Settings {
   required sequence<USVString> tags;
   required Uint8Array payload;
   required sequence<sequence<long>> grid;
+};
+
+enum EventTag { "Started", "Progress", "Message", "Moved", "Batch", "Wrapped", "Labelled", "Maybe" };
+
+// How far along.
+dictionary EventProgress {
+  required unsigned long done;
+  required unsigned long total;
+};
+
+dictionary EventMessage {
+  required USVString value;
+};
+
+dictionary EventMoved {
+  required Point value0;
+  required Mode value1;
+};
+
+// Events inside an event.
+dictionary EventBatch {
+  required sequence<Event> value;
+};
+
+dictionary EventWrapped {
+  required Event value;
+};
+
+dictionary EventLabelled {
+  required record<USVString, long> labels;
+  required record<USVString, USVString> order;
+};
+
+dictionary EventMaybe {
+  Event? value;
+};
+
+// What happened, each kind with what it holds.
+[HxnTagged] dictionary Event {
+  required EventTag tag;
+  EventProgress progress;
+  EventMessage message;
+  EventMoved moved;
+  EventBatch batch;
+  EventWrapped wrapped;
+  EventLabelled labelled;
+  EventMaybe maybe;
+};
+
+enum CountErrorTag { "Empty", "TooMany", "Unknown" };
+
+dictionary CountErrorTooMany {
+  required unsigned long limit;
+  required unsigned long given;
+};
+
+dictionary CountErrorUnknown {
+  required USVString value;
+};
+
+// Why a count was refused: an error with a case for each reason.
+[HxnTagged] dictionary CountError {
+  required CountErrorTag tag;
+  CountErrorTooMany tooMany;
+  CountErrorUnknown unknown;
 };
 
 callback CounterEachF = undefined (long a0, double a1);
@@ -325,6 +402,83 @@ interface Blob {
 
   // Asks the host to collect at its next chance.
   static undefined crowded();
+};
+
+callback EventsEachPointF = Mode (Point a0);
+callback EventsReshapedF = Event (Event a0);
+callback EventsPickedF = Point? (sequence<Point> a0, Mode a1);
+callback EventsStampedF = Uint8Array (long a0);
+callback EventsGradedF = Mode (Mode a0);
+
+// Functions over events, with no value behind them.
+interface Events {
+  // How deep the events in `event` nest.
+  static long depth(Event event);
+
+  // The event as the library read it.
+  static USVString show(Event event);
+
+  // One of each case.
+  static sequence<Event> history();
+
+  // The event, inside `times` others.
+  static Event wrapped(Event event, long times);
+
+  // The names by their counts: a map in, and a sorted one out.
+  static record<USVString, USVString> inverted(record<USVString, long> counts);
+
+  // The count, or which of the reasons it was refused for.
+  [Throws=CountError] static unsigned long checked(unsigned long count);
+
+  // The mode `name` names, or the name back in the error.
+  [Throws=CountError] static Mode mode_named(USVString name);
+
+  // Nothing, or a record of why not.
+  [Throws=Refusal] static undefined refuse(long code);
+
+  // The level, or the trouble it names.
+  [Throws=Trouble] static long trouble(long level);
+
+  // A record later, or the error of the work that would have made it.
+  [Throws=CountError, HxnAsync] static Promise<Point> checked_later(unsigned long count);
+
+  // An enum a future carries.
+  [HxnAsync] static Promise<Mode> mode_later(Mode mode);
+
+  // A narrow number a future carries.
+  [HxnAsync] static Promise<octet> small_later(long value);
+
+  // A list of records a future carries.
+  [HxnAsync] static Promise<sequence<Point>> path_later(long count);
+
+  // A number that may be missing, later.
+  [HxnAsync] static Promise<long?> maybe_later(long value);
+
+  // The first `count` of `history`, one after another.
+  [HxnStream] static Event feed(long count);
+
+  // A mode that goes from quiet to off.
+  [HxnSignal] static Mode mode_now();
+
+  // A place that moves right until it is at `limit`.
+  [HxnSignal] static Point place_now(long limit);
+
+  // What `f` makes of each point: a record lent to the function, and an
+  // enum given back.
+  [Throws] static sequence<Mode> each_point(sequence<Point> points, EventsEachPointF f);
+
+  // The event `f` makes of `event`: one handed over, and one given back.
+  [Throws] static Event reshaped(Event event, EventsReshapedF f);
+
+  // The point `f` picks, if it picks one: a list lent as a slice, beside
+  // an enum.
+  [Throws] static Point? picked(sequence<Point> points, EventsPickedF f);
+
+  // The bytes `f` gives for 1, then for 2.
+  [Throws] static Uint8Array stamped(EventsStampedF f);
+
+  // What `f` makes of quiet: an enum each way and nothing else.
+  [Throws] static Mode graded(EventsGradedF f);
 };
 
 // Numbers narrower than those that cross, the unsigned ones, and 64 bits.

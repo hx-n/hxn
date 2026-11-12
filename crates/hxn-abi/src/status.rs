@@ -26,6 +26,8 @@ impl Status {
     /// reports that one once the call returns.
     pub const CALLBACK: Self = Self(-10);
     pub const RANGE: Self = Self(-11);
+    /// Data that holds more of its own kind, deeper than is read.
+    pub const DEPTH: Self = Self(-12);
 
     pub const fn is_ok(self) -> bool {
         self.0 == 0
@@ -50,6 +52,8 @@ pub enum Fault {
     TooLarge,
     /// A number that does not fit the type it is for.
     Range,
+    /// Data that nests deeper than is read.
+    Depth,
 }
 
 impl Fault {
@@ -62,6 +66,7 @@ impl Fault {
             Self::Encoding => Status::ENCODING,
             Self::TooLarge => Status::TOO_LARGE,
             Self::Range => Status::RANGE,
+            Self::Depth => Status::DEPTH,
         }
     }
 
@@ -74,6 +79,7 @@ impl Fault {
             Self::Encoding => "invalid text encoding",
             Self::TooLarge => "length out of range",
             Self::Range => "number out of range",
+            Self::Depth => "data nests too deep",
         }
     }
 }
@@ -87,6 +93,9 @@ impl Fault {
 pub struct Failure {
     pub status: Status,
     pub message: String,
+    /// The library's own error as the bytes of plain data, for a host that
+    /// throws it as a typed value. Empty when the message is all there is.
+    pub value: Vec<u8>,
 }
 
 impl Failure {
@@ -94,7 +103,14 @@ impl Failure {
         Self {
             status,
             message: message.into(),
+            value: Vec::new(),
         }
+    }
+
+    /// The same failure, carrying `value`.
+    pub fn with_value(mut self, value: Vec<u8>) -> Self {
+        self.value = value;
+        self
     }
 }
 

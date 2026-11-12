@@ -26,6 +26,23 @@ class Main {
 		} catch (error:haxe.Exception) {
 			Sys.println('refused: ${error.message}');
 		}
+
+		// A typed error: the exception carries the enum value and the
+		// library's message.
+		Sys.println('eggs left: ${pantry.take("eggs", 2).quantity}');
+		for (wanted in ["eggs", "salt"]) {
+			try {
+				pantry.take(wanted, 50);
+			} catch (refused:PantryException) {
+				switch (refused.error) {
+					case Short(name, left):
+						Sys.println('only $left of $name');
+					case Unknown(name):
+						Sys.println('no $name at all');
+				}
+				Sys.println('  ${refused.message}');
+			}
+		}
 		pantry.close();
 	}
 }

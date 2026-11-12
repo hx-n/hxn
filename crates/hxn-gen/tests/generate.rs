@@ -184,7 +184,7 @@ fn says_where_and_why_something_cannot_cross() {
             "pub fn stamp(&self) -> Result<i128, String> { todo!() }",
             "wider than 64 bits does not cross",
         ),
-        ("pub fn later(&self) -> Future<u16> { todo!() }", "carries"),
+        ("pub fn later(&self) -> Future<u128> { todo!() }", "carries"),
         (
             "pub fn maybe(&self) -> Option<Unknown> { todo!() }",
             "a result is one of",
@@ -822,7 +822,7 @@ fn results_over_time_are_handles_the_library_answers_for() {
 fn says_what_a_result_over_time_cannot_carry() {
     let cases = [
         (
-            "pub fn done(&self) -> Future<Vec<i32>> { todo!() }",
+            "pub fn done(&self) -> Future<Vec<Unknown>> { todo!() }",
             "a future carries one of",
         ),
         (
@@ -830,7 +830,7 @@ fn says_what_a_result_over_time_cannot_carry() {
             "a signal carries one of",
         ),
         (
-            "pub fn all(&self) -> Stream<Vec<i32>> { todo!() }",
+            "pub fn all(&self) -> Stream<Option<Thing>> { todo!() }",
             "a stream carries one of",
         ),
         (
@@ -1560,7 +1560,10 @@ impl Band {
             "pub async fn band() -> Band { todo!() }",
             "given in its `Arc`: `Arc<Band>`",
         ),
-        ("pub async fn wide() -> u8 { 0 }", "a future carries one of"),
+        (
+            "pub async fn wide() -> u128 { 0 }",
+            "a future carries one of",
+        ),
     ];
     for (method, expected) in refused {
         let source = format!(
@@ -1841,9 +1844,22 @@ fn the_manifest_is_also_webidl() {
         .flat_map(|method| &method.params)
         .filter(|param| matches!(param.ty, Type::Lent { .. }))
         .count();
+    // An enum whose variants hold values is its tags, a dictionary of its
+    // own, and one for each variant that holds something.
+    let tagged: usize = library
+        .tagged
+        .iter()
+        .map(|tagged| {
+            2 + tagged
+                .cases
+                .iter()
+                .filter(|case| !case.fields.is_empty())
+                .count()
+        })
+        .sum();
     assert_eq!(
         parsed.len(),
-        library.interfaces.len() + lent + library.records.len() + library.enums.len()
+        library.interfaces.len() + lent + library.records.len() + library.enums.len() + tagged
     );
     let namespaces = parsed
         .iter()
@@ -2039,8 +2055,20 @@ impl Thing {
             "give a field of data a width",
         ),
         (
-            "#[hxn::data]\npub enum Holds { One(i32) }",
-            "a variant of data holds nothing",
+            "#[hxn::data]\npub enum Holds { One(Thing) }",
+            "a field of data is one of",
+        ),
+        (
+            "#[hxn::data]\npub enum Numbered { One(i32) = 1 }",
+            "a variant is given a number only in an enum whose variants all hold nothing",
+        ),
+        (
+            "#[hxn::data]\npub enum Keyed { One(HashMap<bool, i32>) }",
+            "a map keyed by String or a whole number",
+        ),
+        (
+            "#[hxn::data]\npub enum Event { One(i32) }\n#[hxn::data]\npub struct EventWire { pub x: i32 }",
+            "`EventWire` is the class that writes and reads `Event`",
         ),
         (
             "#[hxn::data]\npub enum Twice { One = 1, Other = 1 }",
@@ -2065,4 +2093,419 @@ impl Thing {
             error.message
         );
     }
+}
+
+fn text_of(files: &[hxn_gen::File], path: &str) -> String {
+    files
+        .iter()
+        .find(|file| file.path == path)
+        .unwrap_or_else(|| panic!("no {path}"))
+        .text
+        .clone()
+}
+
+// An enum with a variant that holds values is a Haxe enum of the same
+// cases, written as which case and then its fields. A box is its value, and
+// a map a Haxe `Map`.
+#[test]
+fn an_enum_whose_variants_hold_values_is_a_haxe_enum() {
+    let source = r#"
+use std::collections::{BTreeMap, HashMap};
+
+#[hxn::data]
+pub enum Kind { Plain, Fancy }
+
+/// What happened.
+#[hxn::data]
+pub enum Event {
+    Started,
+    /// How far.
+    Progress { done: u32, out: i32 },
+    Moved(f64, Kind),
+    Batch(Vec<Event>),
+    Wrapped(Box<Event>),
+    Counted(HashMap<String, i32>, BTreeMap<u8, Vec<Event>>),
+}
+
+#[hxn::interface]
+pub struct Thing;
+
+#[hxn::methods]
+impl Thing {
+    pub fn echo(event: Event) -> Event { todo!() }
+    pub fn counts(of: &HashMap<String, i32>) -> BTreeMap<i32, String> { todo!() }
+}
+"#;
+    let library = parse("thing", source).unwrap();
+    assert_eq!(library.enums.len(), 1);
+    let event = &library.tagged[0];
+    let names: Vec<&str> = event.cases.iter().map(|case| case.name.as_str()).collect();
+    assert_eq!(
+        names,
+        [
+            "Started", "Progress", "Moved", "Batch", "Wrapped", "Counted"
+        ]
+    );
+    assert!(event.cases[1].named && !event.cases[2].named);
+    // Fields Rust leaves unnamed are numbered when there is more than one.
+    let fields = |case: usize| -> Vec<&str> {
+        event.cases[case]
+            .fields
+            .iter()
+            .map(|field| field.name.as_str())
+            .collect()
+    };
+    assert_eq!(fields(2), ["value0", "value1"]);
+    assert_eq!(fields(3), ["value"]);
+    assert_eq!(
+        event.cases[4].fields[0].ty,
+        hxn_gen::Data::Boxed(Box::new(hxn_gen::Data::Tagged(String::from("Event"))))
+    );
+    let echo = &library.interfaces[0].methods[0];
+    assert_eq!(
+        (&echo.params[0].ty, &echo.returns),
+        (&Type::Bytes, &Type::Bytes)
+    );
+
+    for adapter in [
+        hxn_gen::c_adapter(&library, "thing"),
+        hxn_gen::hl_adapter(&library, "thing"),
+    ] {
+        assert!(adapter.contains("use thing::{Thing, Kind, Event};"));
+        // Which case, and a case past the last is refused.
+        assert!(adapter.contains("0 => Event::Started,"));
+        assert!(adapter.contains("_ => return Err(Fault::Range),"));
+        // A field is bound by its place, whatever it is called.
+        assert!(adapter.contains("Event::Progress { done: f0, out: f1 } => {"));
+        assert!(adapter.contains("Event::Moved(f0, f1) => {"));
+        // A value that may hold its own kind is entered and left.
+        assert!(adapter.contains("input.enter()?;") && adapter.contains("input.leave();"));
+        assert!(adapter.contains("4 => Event::Wrapped(Box::new(hxn_read_event(input)?)),"));
+        assert!(adapter.contains("let inner = &**f0; hxn_write_event(inner, out)?;"));
+        assert!(adapter.contains(
+            "let mut items: std::collections::HashMap<String, i32> = Default::default();"
+        ));
+        assert!(adapter.contains("std::collections::BTreeMap<u8, Vec<Event>>"));
+    }
+
+    for files in [
+        hxn_gen::haxe_hl(&library),
+        hxn_gen::haxe_cpp(&library),
+        hxn_gen::haxe_cppia(&library),
+    ] {
+        let event = text_of(&files, "Event.hx");
+        assert!(event.contains("/** What happened. **/\nenum Event {\n\tStarted;\n"));
+        assert!(event.contains("\t/** How far. **/\n\tProgress(done:UInt, out:Int);\n"));
+        assert!(event.contains("\tMoved(value0:Float, value1:Kind);\n"));
+        assert!(event.contains("\tWrapped(value:Event);\n"));
+        assert!(
+            event.contains("\tCounted(value0:Map<String, Int>, value1:Map<Int, Array<Event>>);\n")
+        );
+        // An enum has no functions, so a class beside it writes and reads.
+        let wire = text_of(&files, "EventWire.hx");
+        assert!(
+            wire.contains(
+                "public static function write(value:Event, out:haxe.io.BytesBuffer):Void {"
+            )
+        );
+        assert!(wire.contains("\t\t\tcase Progress(done, out):\n\t\t\t\tout.addInt32(1);"));
+        assert!(wire.contains("EventWire.write(value, out);"));
+        // Each field is read by a statement of its own, in order.
+        assert!(wire.contains(
+            "\t\t\t\tvar value0:Float = input.readDouble();\n\t\t\t\tvar value1:Kind = (input.readInt32() : Kind);\n\t\t\t\treturn Event.Moved(value0, value1);"
+        ));
+        assert!(wire.contains("throw new haxe.Exception(\"not a case of Event\");"));
+        assert!(wire.contains("out.addInt32(Lambda.count(value0));"));
+        assert!(wire.contains("for (key0 => item0 in value0) {"));
+    }
+
+    let manifest = hxn_gen::manifest(&library);
+    assert!(manifest.contains("\"tagged\": ["));
+    assert!(manifest.contains(
+        "{ \"name\": \"Progress\", \"fields\": [{ \"name\": \"done\", \"type\": \"u32\" }, { \"name\": \"out\", \"type\": \"i32\" }] }"
+    ));
+    assert!(manifest.contains("\"type\": \"map<u8, list<Event>>\""));
+    let idl = hxn_gen::webidl(&library);
+    assert!(idl.contains("[HxnTagged] dictionary Event {\n  required EventTag tag;\n"));
+    assert!(idl.contains("record<USVString, long>"));
+    weedle::parse(&idl).unwrap_or_else(|error| panic!("not WebIDL: {error:?}"));
+}
+
+// A function whose error is the library's own data throws an exception
+// that holds it. The value crosses beside the message: the adapter makes a
+// failure that carries it, and the binding asks for it once it has caught
+// the message.
+#[test]
+fn a_failure_that_is_data_is_thrown_as_its_exception() {
+    let source = r#"
+#[hxn::data]
+pub enum PantryError { Empty, Short { left: u32 } }
+
+#[hxn::data]
+pub enum Level { Low = 1, High }
+
+#[hxn::data]
+pub struct Refused { pub code: i32 }
+
+#[hxn::interface]
+pub struct Thing;
+
+#[hxn::methods]
+impl Thing {
+    pub fn new() -> Result<Thing, Refused> { todo!() }
+    pub fn take(&self, amount: u32) -> Result<i32, PantryError> { todo!() }
+    pub fn level(&self) -> Result<(), Level> { todo!() }
+    pub async fn later() -> Result<String, PantryError> { todo!() }
+    pub fn plain(&self) -> Result<i32, String> { todo!() }
+    pub fn each<E>(&self, f: impl Fn(i32) -> Result<i32, E>) -> Result<i32, E> { todo!() }
+}
+"#;
+    let library = parse("thing", source).unwrap();
+    let methods = &library.interfaces[0].methods;
+    let errors: Vec<Option<String>> = methods
+        .iter()
+        .map(|method| method.error.as_ref().map(hxn_gen::Data::name))
+        .collect();
+    assert_eq!(
+        errors,
+        [
+            Some(String::from("Refused")),
+            Some(String::from("PantryError")),
+            Some(String::from("Level")),
+            Some(String::from("PantryError")),
+            None,
+            None
+        ]
+    );
+
+    for adapter in [
+        hxn_gen::c_adapter(&library, "thing"),
+        hxn_gen::hl_adapter(&library, "thing"),
+    ] {
+        // The failure is the error's own message, with which error it is and
+        // then the error.
+        assert!(
+            adapter
+                .contains("fn hxn_thrown_pantry_error(error: PantryError) -> hxn_abi::Failure {")
+        );
+        assert!(adapter.contains("hxn_abi::Failure::new(Status::ERROR, error.to_string());"));
+        assert!(adapter.contains("hxn_abi::wire::i32(&mut value, 1);\n    match hxn_write_pantry_error(&error, &mut value) {"));
+        assert!(adapter.contains("hxn_abi::wire::i32(&mut value, hxn_write_level(&error));"));
+        assert!(adapter.contains("this.take(amount as u32).map_err(hxn_thrown_pantry_error)?"));
+        // An async function's future fails with it.
+        assert!(adapter.contains(
+            "hxn_future::spawn(async move { Thing::later().await.map_err(hxn_thrown_pantry_error) })"
+        ));
+        assert!(adapter.contains("this.plain()?"));
+        // What the binding asks for the value with.
+        assert!(adapter.contains("fn thing_thrown_take("));
+        assert!(adapter.contains("hxn_abi::thrown::take()"));
+    }
+    assert!(
+        hxn_gen::hl_adapter(&library, "thing")
+            .contains("define_prim!(hlp_thrown_take, thing_thrown_take, \"PRi_B\");")
+    );
+    assert!(hxn_gen::c_header(&library).contains("int32_t thing_thrown_take(hxn_buf *out);"));
+    assert!(hxn_gen::cpp_glue(&library).contains("inline Array<unsigned char> thrown_take() {"));
+
+    for files in [hxn_gen::haxe_hl(&library), hxn_gen::haxe_cpp(&library)] {
+        // The exception is named after the error, less a closing `Error`.
+        let exception = text_of(&files, "PantryException.hx");
+        assert!(exception.contains(
+            "class PantryException extends haxe.Exception {\n\tpublic final error:PantryError;"
+        ));
+        assert!(text_of(&files, "RefusedException.hx").contains("public final error:Refused;"));
+        assert!(text_of(&files, "LevelException.hx").contains("public final error:Level;"));
+        let thrown = text_of(&files, "HxnThingThrown.hx");
+        assert!(
+            thrown.contains("public static function typed(error:haxe.Exception):haxe.Exception {")
+        );
+        assert!(thrown.contains(
+            "\t\t\tcase 1:\n\t\t\t\tvar value:PantryError = PantryErrorWire.read(input);\n\t\t\t\treturn new PantryException(error.message, value, error);"
+        ));
+        assert!(thrown.contains("var value:Level = (input.readInt32() : Level);"));
+        // A function that fails with data catches what the message was
+        // thrown as; one that fails with anything else does not.
+        let thing = text_of(&files, "Thing.hx");
+        assert!(
+            thing.contains("\tpublic function take(amount:UInt):Int {\n\t\ttry {\n\t\t\treturn ")
+        );
+        assert!(thing.contains("\t\t} catch (error:haxe.Exception) {\n\t\t\tthrow HxnThingThrown.typed(error);\n\t\t}\n\t}"));
+        assert_eq!(thing.matches("HxnThingThrown.typed(error)").count(), 3);
+        // A future's failure is made typed where it is taken.
+        let future = text_of(&files, "HxnThingFuture.hx");
+        assert!(future.contains("catch (error:haxe.Exception) throw HxnThingThrown.typed(error)"));
+    }
+    // A script is given the exceptions and not what makes them.
+    let script = hxn_gen::haxe_cppia(&library);
+    assert!(script.iter().any(|file| file.path == "PantryException.hx"));
+    assert!(!script.iter().any(|file| file.path == "HxnThingThrown.hx"));
+
+    let manifest = hxn_gen::manifest(&library);
+    assert!(manifest.contains("\"throws\": \"PantryError\","));
+    assert_eq!(manifest.matches("\"throws\"").count(), 4);
+    let idl = hxn_gen::webidl(&library);
+    assert!(idl.contains("[Throws=Refused] constructor();"));
+    assert!(idl.contains("[Throws=PantryError, HxnAsync] static Promise<USVString> later();"));
+    weedle::parse(&idl).unwrap_or_else(|error| panic!("not WebIDL: {error:?}"));
+
+    // A library with no such error has none of it.
+    let plain = parse(
+        "thing",
+        "#[hxn::interface]\npub struct Thing;\n#[hxn::methods]\nimpl Thing {\n    pub fn plain(&self) -> Result<i32, String> { todo!() }\n}\n",
+    )
+    .unwrap();
+    assert!(!hxn_gen::c_adapter(&plain, "thing").contains("thrown"));
+    assert!(
+        !hxn_gen::haxe_hl(&plain)
+            .iter()
+            .any(|file| file.path.contains("Thrown"))
+    );
+
+    // The exception's name is the library's to leave free.
+    let clash = parse(
+        "thing",
+        "#[hxn::data]\npub enum PantryError { Empty }\n#[hxn::data]\npub struct PantryException { pub x: i32 }\n#[hxn::interface]\npub struct Thing;\n#[hxn::methods]\nimpl Thing {\n    pub fn take(&self) -> Result<i32, PantryError> { todo!() }\n}\n",
+    )
+    .unwrap_err();
+    assert!(
+        clash.message.contains(
+            "`PantryException` is the exception a failure with `PantryError` is thrown as"
+        ),
+        "{}",
+        clash.message
+    );
+}
+
+// A future, a stream and a signal carry data as what it crosses as, and a
+// lent function takes and gives it the same way: the adapter writes and
+// reads on the library's side, and the binding on Haxe's.
+#[test]
+fn data_is_carried_over_time_and_by_lent_functions() {
+    let source = r#"
+#[hxn::data]
+pub enum Mode { Quiet, Loud }
+
+#[hxn::data]
+pub struct Point { pub x: f64 }
+
+#[hxn::interface]
+pub struct Thing;
+
+#[hxn::methods]
+impl Thing {
+    pub fn place() -> Future<Point> { todo!() }
+    pub fn modes() -> Stream<Vec<Mode>> { todo!() }
+    pub fn mode() -> Signal<Mode> { todo!() }
+    pub fn small() -> Future<u8> { todo!() }
+    pub async fn maybe() -> Option<i32> { todo!() }
+    pub fn each<E>(points: &[Point], f: impl Fn(&Point, Mode) -> Result<Mode, E>) -> Result<(), E> { todo!() }
+    pub fn pick<E>(f: impl Fn(Vec<Point>) -> Result<Option<Point>, E>) -> Result<(), E> { todo!() }
+    pub fn bytes<E>(f: impl Fn(i32) -> Result<Vec<u8>, E>) -> Result<Vec<u8>, E> { todo!() }
+}
+"#;
+    let library = parse("thing", source).unwrap();
+    let methods = &library.interfaces[0].methods;
+    let point = hxn_gen::Data::Record(String::from("Point"));
+    let mode = hxn_gen::Data::Enum(String::from("Mode"));
+    assert_eq!(
+        methods[0].returns,
+        Type::Future(Box::new(Type::Data(point.clone())))
+    );
+    assert_eq!(
+        methods[4].returns,
+        Type::Future(Box::new(Type::Data(hxn_gen::Data::Option(Box::new(
+            hxn_gen::Data::I32
+        )))))
+    );
+    assert_eq!(
+        methods[5].params[1].ty,
+        Type::Lent {
+            params: vec![Type::Data(point.clone()), Type::Data(mode.clone())],
+            returns: Box::new(Type::Data(mode)),
+        }
+    );
+
+    let c = hxn_gen::c_adapter(&library, "thing");
+    let hl = hxn_gen::hl_adapter(&library, "thing");
+    for adapter in [&c, &hl] {
+        // What is taken is the library's type, written as what crosses.
+        assert!(adapter.contains("this.take::<Point>()?"));
+        assert!(adapter.contains("this.next::<Vec<Mode>>()?"));
+        assert!(adapter.contains("hxn_write_mode(&this.get::<Mode>()?)"));
+        assert!(adapter.contains("i32::from(this.take::<u8>()?)"));
+        assert!(adapter.contains("this.take::<Option<i32>>()?"));
+        // A lent function's data is written before the call, whether the
+        // library hands it over or lends it, and its result read after.
+        assert!(adapter.contains("std::borrow::Borrow::<Point>::borrow(&a0)"));
+        assert!(
+            adapter.contains("let a1 = hxn_write_mode(std::borrow::Borrow::<Mode>::borrow(&a1));")
+        );
+        assert!(adapter.contains(
+            "call_yi_to_i(&f, &a0, a1)?; Ok::<_, hxn_abi::Failure>(hxn_read_mode(out)?)"
+        ));
+        assert!(adapter.contains("std::borrow::Borrow::<[Point]>::borrow(&a0)"));
+        assert!(adapter.contains("unsafe fn call_i_to_y("));
+    }
+    assert!(c.contains("pub unsafe extern \"C\" fn thing_future_take_point(this: RawHandle, out: *mut Buf, err: *mut Buf)"));
+    assert!(c.contains("pub unsafe extern \"C\" fn thing_signal_get_mode(this: RawHandle, out: *mut i32, err: *mut Buf)"));
+    assert!(hl.contains(
+        "define_prim!(hlp_future_take_point, thing_future_take_point, \"PXthing_future_Ri_B\");"
+    ));
+    assert!(hl.contains("define_prim!(hlp_stream_next_list_mode, thing_stream_next_list_mode, \"PXthing_stream_Ri_B\");"));
+    // Bytes a lent function gives are a `haxe.io.Bytes`, read as it is.
+    assert!(hl.contains("\"PPi_OiB_Ri_B\""));
+    assert!(hl.contains("buffer(call(env.cast(), &mut args).cast())"));
+    assert!(
+        hxn_gen::cpp_glue(&library).contains("hxn::give_bytes((Array<unsigned char>)result, out)")
+    );
+
+    let hl_files = hxn_gen::haxe_hl(&library);
+    let future = text_of(&hl_files, "HxnThingFuture.hx");
+    assert!(
+        future.contains("public static function ofPoint(raw:HxnThingFutureRaw):hxn.Future<Point>")
+    );
+    assert!(future.contains("Point.hxnRead(input);"));
+    assert!(future.contains("public static function ofU8(raw:HxnThingFutureRaw):hxn.Future<Int>"));
+    assert!(future.contains(
+        "public static function ofOptionInt(raw:HxnThingFutureRaw):hxn.Future<Null<Int>>"
+    ));
+    let signal = text_of(&hl_files, "HxnThingSignal.hx");
+    assert!(signal.contains("(Native.signal_get_mode(raw) : Mode)"));
+    let thing = text_of(&hl_files, "Thing.hx");
+    assert!(thing.contains(
+        "public static function each(points:Array<Point>, f:(Point, Mode) -> Mode):Void"
+    ));
+    assert!(
+        thing.contains("var fGuarded = function(a0:hl.Bytes, a0Length:Int, a1:Int):Null<Int> {")
+    );
+    assert!(thing.contains("var d0:Point = {"));
+    assert!(thing.contains("public static function bytes(f:(Int) -> haxe.io.Bytes):haxe.io.Bytes"));
+    let cpp_files = hxn_gen::haxe_cpp(&library);
+    let future = text_of(&cpp_files, "HxnThingFuture.hx");
+    assert!(future.contains(
+        "function takePoint():Point {\n\t\tvar input = new haxe.io.BytesInput(haxe.io.Bytes.ofData("
+    ));
+    assert!(text_of(&cpp_files, "Thing.hx").contains("return out.getBytes().getData();"));
+
+    let manifest = hxn_gen::manifest(&library);
+    assert!(manifest.contains("\"returns\": \"future<Point>\""));
+    assert!(manifest.contains("\"returns\": \"stream<list<Mode>>\""));
+    assert!(manifest.contains("\"type\": \"fn(Point, Mode) -> Mode\""));
+    weedle::parse(&hxn_gen::webidl(&library))
+        .unwrap_or_else(|error| panic!("not WebIDL: {error:?}"));
+
+    // Two types a kind's calls would name alike are refused.
+    let clash = parse(
+        "thing",
+        "#[hxn::data]\npub struct Point { pub x: f64 }\n#[hxn::data]\npub struct ListPoint { pub x: f64 }\n#[hxn::interface]\npub struct Thing;\n#[hxn::methods]\nimpl Thing {\n    pub fn one() -> Future<Vec<Point>> { todo!() }\n    pub fn other() -> Future<ListPoint> { todo!() }\n}\n",
+    )
+    .unwrap_err();
+    assert!(
+        clash
+            .message
+            .contains("would be taken by calls of one name"),
+        "{}",
+        clash.message
+    );
 }

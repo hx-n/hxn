@@ -11,8 +11,11 @@ pub struct Library {
     pub interfaces: Vec<Interface>,
     /// The `#[hxn::data]` structs: values that cross whole, by copy.
     pub records: Vec<Record>,
-    /// The `#[hxn::data]` enums: names for numbers.
+    /// The `#[hxn::data]` enums whose variants hold nothing: names for
+    /// numbers.
     pub enums: Vec<Enumeration>,
+    /// The `#[hxn::data]` enums with a variant that holds values.
+    pub tagged: Vec<Tagged>,
 }
 
 /// A struct of public fields, each plain data: a Haxe class of the same.
@@ -46,10 +49,31 @@ pub struct Variant {
     pub value: i32,
 }
 
+/// An enum with a variant that holds values: a Haxe `enum` of the same
+/// cases.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Tagged {
+    pub name: String,
+    pub docs: Vec<String>,
+    pub cases: Vec<Case>,
+}
+
+/// One variant of a [`Tagged`]. On the wire it is its place among them,
+/// counted from 0.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Case {
+    pub name: String,
+    pub docs: Vec<String>,
+    /// What it holds, in order. Fields Rust leaves unnamed are `value`, or
+    /// `value0`, `value1` when there is more than one.
+    pub fields: Vec<Field>,
+    /// Written `Name { field: T }` in Rust, and not `Name(T)`.
+    pub named: bool,
+}
+
 /// Plain data: what a record's field holds, and what crosses by value. An
-/// enum crosses as its number. Anything made of parts, a record, an
-/// `Option` or a list, crosses as bytes that hold the parts in order, which
-/// `hxn_abi::wire` lays out.
+/// enum of names crosses as its number. Anything made of parts crosses as
+/// bytes that hold the parts in order, which `hxn_abi::wire` lays out.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Data {
     Bool,
@@ -62,8 +86,20 @@ pub enum Data {
     Bytes,
     Enum(String),
     Record(String),
+    /// An enum whose variants hold values.
+    Tagged(String),
     Option(Box<Data>),
     List(Box<Data>),
+    /// `Box<T>`, which is its `T` everywhere but in Rust: how data holds
+    /// more of its own kind.
+    Boxed(Box<Data>),
+    /// A `HashMap`, or with `sorted` a `BTreeMap`: a Haxe `Map`. A key is
+    /// text or a whole number of at most 32 bits.
+    Map {
+        key: Box<Data>,
+        value: Box<Data>,
+        sorted: bool,
+    },
 }
 
 impl Data {
@@ -72,7 +108,11 @@ impl Data {
     pub fn wire(&self) -> Option<Type> {
         match self {
             Self::Enum(_) => Some(Type::I32),
-            Self::Record(_) | Self::Option(_) | Self::List(_) => Some(Type::Bytes),
+            Self::Record(_)
+            | Self::Tagged(_)
+            | Self::Option(_)
+            | Self::List(_)
+            | Self::Map { .. } => Some(Type::Bytes),
             _ => None,
         }
     }
@@ -87,9 +127,38 @@ impl Data {
             Self::Number(number) => number.name().to_owned(),
             Self::Text => String::from("str"),
             Self::Bytes => String::from("bytes"),
-            Self::Enum(name) | Self::Record(name) => name.clone(),
+            Self::Enum(name) | Self::Record(name) | Self::Tagged(name) => name.clone(),
             Self::Option(of) => format!("option<{}>", of.name()),
             Self::List(of) => format!("list<{}>", of.name()),
+            Self::Boxed(of) => of.name(),
+            Self::Map { key, value, .. } => format!("map<{}, {}>", key.name(), value.name()),
+        }
+    }
+
+    /// What it is called in a symbol, where it is carried by a result over
+    /// time: `point`, `list_point`.
+    pub fn symbol(&self) -> String {
+        match self {
+            Self::Bool => String::from("bool"),
+            Self::I32 => String::from("int"),
+            Self::I64 => String::from("long"),
+            Self::F64 => String::from("float"),
+            Self::Number(number) => number.name().to_owned(),
+            Self::Text => String::from("text"),
+            Self::Bytes => String::from("bytes"),
+            Self::Enum(name) | Self::Record(name) | Self::Tagged(name) => crate::names::snake(name),
+            Self::Option(of) => format!("option_{}", of.symbol()),
+            Self::List(of) => format!("list_{}", of.symbol()),
+            Self::Boxed(of) => format!("box_{}", of.symbol()),
+            Self::Map { key, value, .. } => format!("map_{}_{}", key.symbol(), value.symbol()),
+        }
+    }
+
+    /// What a value of its own crosses as, a number among them.
+    pub fn crosses(&self) -> Option<Type> {
+        match self {
+            Self::Number(number) => Some(number.wire()),
+            other => other.wire(),
         }
     }
 }
@@ -136,6 +205,10 @@ pub struct Method {
     pub returns_number: Option<Number>,
     /// The data the function returns, when `returns` is what it crosses as.
     pub returns_data: Option<Data>,
+    /// The data the function fails with, when its `Result`'s error is the
+    /// library's own `#[hxn::data]`: Haxe is thrown an exception that holds
+    /// the value.
+    pub error: Option<Data>,
     /// A function outside an `impl`, marked `#[hxn::function]`: found at the
     /// crate's root and not on the interface.
     pub free: bool,
@@ -297,6 +370,10 @@ pub enum Type {
         params: Vec<Type>,
         returns: Box<Type>,
     },
+    /// Plain data, where a result over time carries it or a lent function
+    /// takes or gives it. A parameter or a result of data is what it
+    /// crosses as, with the data noted beside it.
+    Data(Data),
 }
 
 impl Library {
@@ -312,6 +389,21 @@ impl Library {
                     Type::Future(_) | Type::Stream(_) | Type::Signal(_)
                 )
             })
+    }
+
+    /// The data the library's functions fail with, in the order met. Each
+    /// is thrown to Haxe as an exception of its own class, and is told from
+    /// the others on the way by its place here.
+    pub fn errors(&self) -> Vec<&Data> {
+        let mut out: Vec<&Data> = Vec::new();
+        for method in self.interfaces.iter().flat_map(|i| &i.methods) {
+            if let Some(error) = &method.error
+                && !out.contains(&error)
+            {
+                out.push(error);
+            }
+        }
+        out
     }
 
     /// Whether `interface` is one of the shared ones.
@@ -351,6 +443,7 @@ impl Type {
                 let taken: Vec<String> = params.iter().map(Self::name).collect();
                 format!("fn({}) -> {}", taken.join(", "), returns.name())
             }
+            Self::Data(data) => data.name(),
             Self::Handle {
                 interface,
                 nullable,

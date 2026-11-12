@@ -52,7 +52,10 @@ in [design.md](design.md); this is the checklist.
 | release for any handle | `<library>_release` |
 | the library's queue of what is ready | `<library>_outbox_wait`, `<library>_outbox_next` |
 | waiting on and watching a result over time | `<library>_future_wait`, `_future_state`, `_future_watch`; the same for `stream` and `signal` |
-| taking what one carries | `<library>_future_take_<kind>`, `<library>_stream_next_<kind>`, `<library>_signal_get_<kind>`; the kind is `bool`, `int`, `float`, `text` or an interface in snake case |
+| taking what one carries | `<library>_future_take_<kind>`, `<library>_stream_next_<kind>`, `<library>_signal_get_<kind>`; the kind is `unit`, `bool`, `int`, `long`, `float`, `text`, `bytes`, the name of a narrower number type, or the snake-case name of an interface or data type, prefixed with `option_`, `list_` or `map_` for those wrappers. Two carried types that map to the same name are rejected |
+| fetching the typed error of the last failure | `<library>_thrown_take`, generated only when a function has a `#[hxn::data]` error type |
+| exception class for a typed error | Haxe class `<Name>Exception`, with a trailing `Error` removed from the name first |
+| serializer for a tagged enum | Haxe class `<Name>Wire` |
 | bytes a library's values hold | `<library>_memory_held` |
 | whether it asked for a collection | `<library>_memory_wanted` |
 | C header | `<library>_abi.h` |
@@ -100,12 +103,17 @@ filesystem `#include "counter.h"` would then find the generated one.
 - Plain data is a struct or an enum marked `#[hxn::data]`, `pub` and
   reachable at the crate's root, with a name no interface has. A struct has
   named fields, every one `pub`, each a `bool`, a number with a width,
-  `String`, `Vec<u8>`, other data, or an `Option` or a `Vec` of these. An
-  enum's variants hold nothing, and a number written for one is a whole
-  number. Data is taken by value or by `&`, a list also as `&[T]`, and
-  returned by value; an `Option` or a `Vec` of data crosses the same way,
-  as a parameter or a result. It is not carried by a future, a stream or a
-  signal, nor passed to a lent function.
+  `String`, `Vec<u8>`, other data, or an `Option`, `Vec`, `Box`, `HashMap`
+  or `BTreeMap` of these. Map keys are `String` or an integer of at most 32
+  bits. An enum is either C-like (no variant has fields; explicit
+  discriminants are allowed) or tagged (some variants have fields, named or
+  unnamed; no explicit discriminants). Data is taken by value or by `&`, a
+  list also as `&[T]`, and returned by value. `Option`, `Vec` and maps of
+  data are accepted wherever data is.
+- Recursive data goes through a `Vec` or a `Box` and may nest at most
+  `hxn_abi::wire::Reader::DEPTH` levels. Use a `Vec` for a long sequence,
+  not a chain of boxes.
+- Data carried by a signal must be `Clone`.
 - Another interface is taken as `&T` or `&mut T` and returned as `T`, with
   `Option` for one that may be absent. It is never taken by value and never
   returned by reference.
@@ -116,8 +124,8 @@ filesystem `#include "counter.h"` would then find the generated one.
   `T` or `Arc<T>`. `Arc` of an interface not marked shared does not cross.
 - A result that arrives later is returned as a `Future<T>`, a `Stream<T>` or
   a `Signal<T>` of `hxn-future`, by a function that itself returns at once.
-  It carries `bool`, `i32`, `i64`, `f64` or `String`; a future or a stream
-  may carry `Vec<u8>`, an interface, a shared one as `Arc<T>`, or `()`.
+  It carries `bool`, a number, `String` or data; a future or a stream may
+  also carry `Vec<u8>`, an interface, a shared one as `Arc<T>`, or `()`.
 - An `async fn` crosses as a function returning a future of what it gives.
   It takes `self` or, of a shared interface, `&self`; numbers, `bool`, `&str`
   and `&[u8]`, which are copied; and shared interfaces. It does not take what
@@ -125,9 +133,10 @@ filesystem `#include "counter.h"` would then find the generated one.
   has to be `Send`.
 - A Haxe function is taken as `impl Fn(..) -> Result<T, E>`, or `FnMut` or
   `FnOnce`, with `E` a type parameter of the function: its only use for one.
-  It takes `bool`, `i32`, `f64`, `&str`, `&[u8]` or an object it then owns
-  (`T`, or `Arc<T>` of a shared interface) and gives `bool`, `i32`, `f64`,
-  `String` or `()`. The library returns when it fails. A function marked `#[hxn(blocking)]` is not lent one.
+  Its parameters are `bool`, `i32`, `f64`, `&str`, `&[u8]`, data (by value
+  or by `&`), or an object whose ownership passes to Haxe (`T`, or `Arc<T>`
+  of a shared interface). It returns `bool`, `i32`, `f64`, `String`,
+  `Vec<u8>`, data or `()`. The library returns when it fails. A function marked `#[hxn(blocking)]` is not lent one.
 - A cell shared with Haxe is an `AtomicI32` or an `hxn::AtomicFlag`, never
   an `AtomicBool`. It is taken as a reference, lent for the call, and
   returned as an `Arc`, kept by the library.
@@ -139,6 +148,12 @@ filesystem `#include "counter.h"` would then find the generated one.
   call the runtime, and does not assume the collection has happened.
 - Errors are a `Result` whose error implements `Display`. Do not panic to
   report a failure: a wasm build cannot catch it.
+- For errors that Haxe code needs to distinguish, use a `#[hxn::data]` type
+  as the error: an enum with one variant per cause, or a record. Name it
+  directly in the `Result`, not through a type alias. Haxe catches it as
+  `<Name>Exception`; a trailing `Error` is dropped first, so `PantryError`
+  gives `PantryException`. Do not use that class name, or `<Name>Wire` for
+  a tagged enum, for anything else.
 - Mark a function that waits with `#[hxn(blocking)]`.
 - In `stepped`, `Poll::Pending` means there is more to do now, not that the
   work is waiting on something. Work that waits uses `spawn` with `async`.

@@ -101,6 +101,31 @@ pub fn memory_class(library: &Library) -> String {
     helper_class(library, "Memory")
 }
 
+/// The Haxe class that makes a failure's typed exception: `HxnCounterThrown`.
+pub fn thrown_class(library: &Library) -> String {
+    helper_class(library, "Thrown")
+}
+
+/// The symbol that hands over the last failure's value.
+pub fn thrown_export(library: &Library) -> String {
+    format!("{}_thrown_take", library.name)
+}
+
+/// The Haxe exception that holds a failure of the data `name`:
+/// `PantryException` for `PantryError`, `RefusedException` for `Refused`.
+pub fn exception_class(name: &str) -> String {
+    match name.strip_suffix("Error") {
+        Some(stem) if !stem.is_empty() => format!("{stem}Exception"),
+        _ => format!("{name}Exception"),
+    }
+}
+
+/// The Haxe class that writes and reads an enum whose variants hold
+/// values, which cannot have functions of its own: `EventWire`.
+pub fn wire_class(name: &str) -> String {
+    format!("{name}Wire")
+}
+
 /// `audio_tools` as a class is named: `AudioTools`.
 pub fn pascal(name: &str) -> String {
     let mut out = String::new();

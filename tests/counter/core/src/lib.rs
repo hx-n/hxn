@@ -18,9 +18,11 @@ use hxn_future::{
 
 // An interface in a module is named at the root, where the adapters look.
 mod blob;
+mod events;
 mod numbers;
 mod shapes;
 pub use blob::Blob;
+pub use events::{CountError, Event, Events, Refusal, Trouble};
 // A function in a module is named at the root too.
 pub use numbers::{Numbers, halve};
 pub use shapes::{Mode, Point, Settings, Shapes};

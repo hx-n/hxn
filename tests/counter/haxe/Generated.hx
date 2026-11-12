@@ -442,6 +442,133 @@ class Generated {
 		hxn.Loop.manual = false;
 	}
 
+	// Enums that hold values, maps, failures that are data, and data where a
+	// result over time or a lent function carries it.
+	static function events() {
+		var history = Events.history();
+		check("an enum that holds values, one of each case", history.length == 9 && history[0].match(Started));
+		check("named fields", switch (history[1]) {
+			case Progress(done, total): done == 3 && total == 8;
+			case _: false;
+		});
+		check("text", history[2].match(Message("naïve ☃")));
+		check("a record and an enum", switch (history[3]) {
+			case Moved(point, mode): point.x == 1.5 && point.y == -2 && mode == Mode.Loud;
+			case _: false;
+		});
+		check("a list of its own kind", history[4].match(Batch([Started, Message("in")])));
+		check("a box", history[5].match(Wrapped(Progress(1, 1))));
+		check("maps", switch (history[6]) {
+			case Labelled(labels, order): labels.get("a") == 1 && Lambda.count(labels) == 1 && order.get(1) == "one" && order.get(2) == "two";
+			case _: false;
+		});
+		check("a box that may be missing", history[7].match(Maybe(null)) && history[8].match(Maybe(Started)));
+		var depths = [for (event in history) Events.depth(event)].join(",");
+		check('each goes back as it came: $depths', depths == "0,0,0,0,1,1,0,0,1");
+		var shown = Events.show(Labelled(["x" => 7], [3 => "three"]));
+		check('and is read as it was written: $shown', shown == 'Labelled { labels: {"x": 7}, order: {3: "three"} }');
+		var deep = Events.wrapped(Message("in"), 3);
+		check("an enum taken and given back", deep.match(Wrapped(Wrapped(Wrapped(Message("in"))))) && Events.depth(deep) == 3);
+		#if !emscripten
+		// An Emscripten build's stack is too small to write a value that deep.
+		throws("one that nests too deep is refused", () -> Events.depth(Events.wrapped(Started, 200)), "nests too deep");
+		#end
+		throws("and one that is missing", () -> Events.depth(null), "null where a Event is needed");
+		var inverted = Events.inverted(["b" => 2, "a" => 1]);
+		check("a map in and a map out", inverted.get(1) == "a" && inverted.get(2) == "b" && Lambda.count(inverted) == 2);
+		var none:Map<String, Int> = [];
+		check("an empty map", Lambda.count(Events.inverted(none)) == 0);
+
+		check("a function that fails with data returns as any other", Events.checked(2) == 2 && Events.modeNamed("loud") == Mode.Loud);
+		var caught:CountException = null;
+		try {
+			Events.checked(9);
+		} catch (error:CountException) {
+			caught = error;
+		}
+		check("a failure with data is an exception that holds it", caught != null && caught.message == "9 is more than 3" && switch (caught.error) {
+			case TooMany(limit, given): limit == 3 && given == 9;
+			case _: false;
+		});
+		caught = null;
+		try {
+			Events.checked(0);
+		} catch (error:CountException) {
+			caught = error;
+		}
+		check("each case of it", caught != null && caught.error.match(Empty) && caught.message == "nothing to count");
+		caught = null;
+		try {
+			Events.modeNamed("shrill");
+		} catch (error:CountException) {
+			caught = error;
+		}
+		check("with what the case holds", caught != null && caught.error.match(Unknown("shrill")));
+		throws("and is still an exception with the library's message", () -> Events.checked(0), "nothing to count");
+		Events.refuse(0);
+		var refusal:RefusalException = null;
+		try {
+			Events.refuse(7);
+		} catch (error:RefusalException) {
+			refusal = error;
+		}
+		check("an error that is a record",
+			refusal != null && refusal.error.code == 7 && refusal.error.reason == "not today ☃" && refusal.message == "refused (7): not today ☃");
+		var trouble:TroubleException = null;
+		try {
+			Events.trouble(5);
+		} catch (error:TroubleException) {
+			trouble = error;
+		}
+		check("and one that is a name", trouble != null && trouble.error == Trouble.Major && trouble.message == "major trouble" && Events.trouble(2) == 2);
+		throws("a failure of another kind is thrown as it always was", () -> Shapes.preset(Mode.Off), "nothing is preset for off");
+
+		var place = Events.checkedLater(2).await();
+		check("a future carries a record", place.x == 2 && place.y == -2);
+		var later:CountException = null;
+		try {
+			Events.checkedLater(5).await();
+		} catch (error:CountException) {
+			later = error;
+		}
+		check("and fails with the library's own error", later != null && later.error.match(TooMany(3, 5)) && later.message == "5 is more than 3");
+		check("an enum", Events.modeLater(Mode.Off).await() == Mode.Quiet);
+		check("a narrow number", Events.smallLater(200).await() == 200);
+		var path = Events.pathLater(3).await();
+		check("a list of records", path.length == 3 && path[2].x == 2 && Events.pathLater(0).await().length == 0);
+		check("a number that may be missing", Events.maybeLater(4).await() == 4 && Events.maybeLater(-1).await() == null);
+		var fed = [for (event in Events.feed(5)) Events.depth(event)].join(",");
+		check('a stream carries enums that hold values: $fed', fed == "0,0,0,0,1");
+
+		hxn.Loop.manual = true;
+		var mode = Events.modeNow();
+		var moving = Events.placeNow(4);
+		var failed:CountException = null;
+		Events.checkedLater(0).then(_ -> {}, error -> failed = Std.downcast(error, CountException));
+		var waited = 0;
+		while ((mode.peek() != Mode.Off || moving.peek().x != 4 || failed == null) && waited++ < 5000) {
+			hxn.Loop.sync();
+			Sys.sleep(0.001);
+		}
+		check("a signal carries an enum", mode.peek() == Mode.Off);
+		check("and a record", moving.peek().x == 4 && moving.peek().y == 1);
+		check("a continuation is given the library's own error", failed != null && failed.error.match(Empty));
+		hxn.Loop.manual = false;
+
+		var modes = Events.eachPoint([{x: 1, y: 0}, {x: -1, y: 0}], point -> point.x > 0 ? Mode.Loud : Mode.Quiet);
+		check("a lent function takes a record and gives an enum", modes.length == 2 && modes[0] == Mode.Loud && modes[1] == Mode.Quiet);
+		var reshaped = Events.reshaped(Progress(1, 2), event -> Batch([event, Started]));
+		check("takes and gives an enum that holds values", reshaped.match(Batch([Progress(1, 2), Started])));
+		var picked = Events.picked([{x: 1, y: 1}, {x: 2, y: 2}], (points, mode) -> mode == Mode.Loud ? points[points.length - 1] : null);
+		check("takes a list and gives what may be missing",
+			picked.x == 2 && Events.picked([], (points, _) -> points.length == 0 ? null : points[0]) == null);
+		check("gives bytes", Events.stamped(n -> haxe.io.Bytes.ofHex(n == 1 ? "0a0b" : "")).toHex() == "0a0b");
+		check("an enum each way", Events.graded(mode -> mode == Mode.Quiet ? Mode.Off : Mode.Loud) == Mode.Off);
+		throws("what one throws reaches the caller", () -> Events.reshaped(Started, _ -> throw new haxe.Exception("no shape")), "no shape");
+		throws("and so does a null where it gives data", () -> Events.reshaped(Started, _ -> null), "null where a Event is needed");
+		throws("or bytes", () -> Events.stamped(_ -> null), "returned null");
+	}
+
 	// Out of line, as `churn` is. Returns the most that was held at once.
 	static function pile(count:Int, size:Int):Float {
 		var peak = 0.;
@@ -534,6 +661,7 @@ class Generated {
 		shared();
 		callbacks();
 		later();
+		events();
 		var held = memory();
 
 		#if emscripten

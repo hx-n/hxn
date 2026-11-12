@@ -183,6 +183,31 @@ pub unsafe fn string(value: *const vstring) -> Result<Option<String>, Fault> {
         .map_err(|_| Fault::Encoding)
 }
 
+/// A `haxe.io.Bytes` as the VM lays it out: its fields in the order the
+/// class declares them. A primitive that takes one writes it `OiB_`.
+#[repr(C)]
+#[allow(non_camel_case_types)]
+pub struct vbuffer {
+    t: *mut hl_type,
+    length: c_int,
+    bytes: *mut vbyte,
+}
+
+/// A copy of what a `haxe.io.Bytes` holds. `None` for null.
+///
+/// # Safety
+/// `value` is null or a live `haxe.io.Bytes`.
+pub unsafe fn buffer(value: *const vbuffer) -> Option<Vec<u8>> {
+    if value.is_null() {
+        return None;
+    }
+    let (data, length) = unsafe { ((*value).bytes, (*value).length) };
+    if length <= 0 || data.is_null() {
+        return Some(Vec::new());
+    }
+    Some(unsafe { std::slice::from_raw_parts(data, length as usize) }.to_vec())
+}
+
 /// `hl.Bytes` and a length, borrowed for the call.
 ///
 /// # Safety
@@ -218,7 +243,8 @@ unsafe fn copy(data: *const u8, size: usize) -> *mut vbyte {
 }
 
 /// The body of a primitive: returns what `body` returns, or throws its
-/// failure or panic to Haxe as the message.
+/// failure or panic to Haxe as the message. A failure's value is kept for
+/// the binding to ask for: see `hxn_abi::thrown`.
 ///
 /// The VM throws by jumping to its handler, past every Rust frame on the way
 /// without running a destructor. `body` and the failure are finished before
@@ -230,7 +256,11 @@ unsafe fn copy(data: *const u8, size: usize) -> *mut vbyte {
 pub unsafe fn prim<T>(body: impl FnOnce() -> Result<T, Failure>) -> T {
     let thrown = match catch(body) {
         Ok(value) => return value,
-        Err(failure) => exception(&failure.message),
+        Err(failure) => {
+            let thrown = exception(&failure.message);
+            hxn_abi::thrown::keep(failure.value);
+            thrown
+        }
     };
     unsafe { hl_throw(thrown) }
 }

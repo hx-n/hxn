@@ -8,10 +8,11 @@
 //! Haxe side a class a kind turns such a handle into an `hxn.Future`,
 //! `hxn.Stream` or `hxn.Signal`.
 
+use crate::data;
 use crate::haxe::{File, cpp_extern};
-use crate::model::{Library, Type};
-use crate::names::{abstract_name, native_class, snake};
-use crate::rust::held;
+use crate::model::{Data, Library, Type};
+use crate::names::{abstract_name, native_class, pascal, snake, thrown_class};
+use crate::rust::{held, widened};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Kind {
@@ -99,7 +100,37 @@ fn suffix(carried: &Type) -> String {
         Type::Str => String::from("text"),
         Type::Bytes => String::from("bytes"),
         Type::Handle { interface, .. } => snake(interface),
+        Type::Data(data) => data.symbol(),
         _ => unreachable!("not carried by a result over time"),
+    }
+}
+
+/// Why two types the library carries cannot both be, if there are two a
+/// kind's calls would name alike.
+pub fn clash(library: &Library) -> Option<String> {
+    for (kind, carried) in used(library) {
+        for (index, one) in carried.iter().enumerate() {
+            if let Some(other) = carried[..index]
+                .iter()
+                .find(|other| suffix(other) == suffix(one))
+            {
+                return Some(format!(
+                    "a {kind} of `{}` and a {kind} of `{}` would be taken by calls of one name: call one of the two types something else",
+                    other.name(),
+                    one.name(),
+                    kind = kind.name(),
+                ));
+            }
+        }
+    }
+    None
+}
+
+// What a carried value crosses as: itself, or what data does.
+fn crossed(carried: &Type) -> Type {
+    match carried {
+        Type::Data(data) => data.crosses().unwrap_or(Type::Bytes),
+        other => other.clone(),
     }
 }
 
@@ -114,6 +145,7 @@ fn title(carried: &Type) -> String {
         Type::Str => String::from("Text"),
         Type::Bytes => String::from("Bytes"),
         Type::Handle { interface, .. } => interface.clone(),
+        Type::Data(data) => pascal(&data.symbol()),
         _ => unreachable!("not carried by a result over time"),
     }
 }
@@ -128,6 +160,7 @@ fn haxe_type(carried: &Type) -> String {
         Type::Str => String::from("String"),
         Type::Bytes => String::from("haxe.io.Bytes"),
         Type::Handle { interface, .. } => interface.clone(),
+        Type::Data(data) => data::haxe_type(data),
         _ => unreachable!("not carried by a result over time"),
     }
 }
@@ -143,6 +176,7 @@ fn rust_type(library: &Library, carried: &Type) -> String {
         Type::Str => String::from("String"),
         Type::Bytes => String::from("Vec<u8>"),
         Type::Handle { interface, .. } => held(library, interface),
+        Type::Data(data) => data::rust_type(data),
         _ => unreachable!("not carried by a result over time"),
     }
 }
@@ -284,6 +318,7 @@ pub fn c_adapter(library: &Library) -> String {
                 Type::I64 => ("i64", value),
                 Type::F64 => ("f64", value),
                 Type::Str | Type::Bytes => ("Buf", format!("Ok(Buf::from({value}?))")),
+                Type::Data(data) => c_data(data, &format!("{value}?")),
                 _ => ("RawHandle", format!("Ok(Handle::into_raw({value}?))")),
             };
             out.push_str(&format!(
@@ -297,6 +332,26 @@ pub fn c_adapter(library: &Library) -> String {
         }
     }
     out
+}
+
+// Data a result over time carries, as what crosses: the type, and the
+// result of the call that takes it.
+fn c_data(data: &Data, value: &str) -> (&'static str, String) {
+    match data {
+        Data::Number(number) => {
+            let ty = match number.wire() {
+                Type::I64 => "i64",
+                Type::F64 => "f64",
+                _ => "i32",
+            };
+            (ty, format!("Ok({})", widened(Some(*number), value)))
+        }
+        Data::Enum(known) => ("i32", format!("Ok({}(&{value}))", data::writer(known))),
+        other => (
+            "Buf",
+            format!("Ok(Buf::from({}))", data::rust_encoded(other, value)),
+        ),
+    }
 }
 
 /// The same as HashLink primitives.
@@ -355,6 +410,19 @@ pub fn hl_adapter(library: &Library) -> String {
                         "let data = {value}?;\n            if out.is_null() {{\n                return Err(Fault::Null.into());\n            }}\n            *out = i32::try_from(data.len()).map_err(|_| Fault::TooLarge)?;\n            Ok(bytes(&data))"
                     ),
                 ),
+                Type::Data(data) => match c_data(data, &format!("{value}?")) {
+                    ("Buf", _) => (
+                        "*mut vbyte",
+                        String::from("B"),
+                        format!(
+                            "let data = {};\n            if out.is_null() {{\n                return Err(Fault::Null.into());\n            }}\n            *out = i32::try_from(data.len()).map_err(|_| Fault::TooLarge)?;\n            Ok(bytes(&data))",
+                            data::rust_encoded(data, &format!("{value}?"))
+                        ),
+                    ),
+                    ("i64", result) => ("i64", String::from("l"), result),
+                    ("f64", result) => ("f64", String::from("d"), result),
+                    (_, result) => ("i32", String::from("i"), result),
+                },
                 _ => (
                     "*mut Managed",
                     format!(
@@ -366,7 +434,7 @@ pub fn hl_adapter(library: &Library) -> String {
             };
             let call = format!("{}_{}", kind.take(), suffix(carried));
             let export = export(library, *kind, &call);
-            let (length, taken) = if *carried == Type::Bytes {
+            let (length, taken) = if crossed(carried) == Type::Bytes {
                 (", out: *mut i32", "Ri")
             } else {
                 ("", "")
@@ -406,7 +474,7 @@ pub fn c_header(library: &Library) -> String {
             ));
         }
         for carried in carried {
-            let ty = match carried {
+            let ty = match &crossed(carried) {
                 Type::Void | Type::Bool | Type::I32 => "int32_t *",
                 Type::I64 => "int64_t *",
                 Type::F64 => "double *",
@@ -457,7 +525,7 @@ pub fn cpp_glue(library: &Library) -> String {
             ));
         }
         for carried in carried {
-            let (returns, local, result) = match carried {
+            let (returns, local, result) = match &crossed(carried) {
                 Type::Void | Type::Bool => ("bool ", "int out = 0;", "out != 0"),
                 Type::I32 => ("int ", "int out = 0;", "out"),
                 Type::I64 => ("cpp::Int64 ", "int64_t out = 0;", "out"),
@@ -517,7 +585,7 @@ fn hl_file(library: &Library, kind: Kind, carried: &[Type]) -> File {
         ));
     }
     for carried in carried {
-        let (ty, nothing) = match carried {
+        let (ty, nothing) = match &crossed(carried) {
             Type::Void | Type::Bool => (String::from("Bool"), "false"),
             Type::I32 => (String::from("Int"), "0"),
             Type::I64 => (String::from("hl.I64"), "0"),
@@ -528,7 +596,7 @@ fn hl_file(library: &Library, kind: Kind, carried: &[Type]) -> File {
                 (format!("{interface}.{interface}Raw"), "null")
             }
         };
-        let length = if *carried == Type::Bytes {
+        let length = if crossed(carried) == Type::Bytes {
             ", out:hl.Ref<Int>"
         } else {
             ""
@@ -555,7 +623,26 @@ fn hl_file(library: &Library, kind: Kind, carried: &[Type]) -> File {
             ),
             Type::Str => format!("@:privateAccess String.fromUCS2({take})"),
             Type::Handle { interface, .. } => format!("{interface}.adopt({take})"),
+            Type::Data(data) if crossed(carried) == Type::Bytes => format!(
+                "{{\n\t\t\tvar outLength = 0;\n\t\t\tvar data = Native.{local}_{}_{}(raw, outLength);\n\t\t\tvar input = new haxe.io.BytesInput(@:privateAccess new haxe.io.Bytes(data, outLength));\n\t\t\t{};\n\t\t}}",
+                kind.take(),
+                suffix(carried),
+                data::haxe_read(data)
+            ),
+            // A number Haxe has another type for, or an enum's.
+            Type::Data(data @ (Data::Enum(_) | Data::Number(crate::model::Number::U32))) => {
+                format!("({take} : {})", data::haxe_type(data))
+            }
             _ => take,
+        };
+        // A failure of the library's own data is thrown as that.
+        let take = if kind == Kind::Future && !library.errors().is_empty() {
+            format!(
+                "try {take} catch (error:haxe.Exception) throw {}.typed(error)",
+                thrown_class(library)
+            )
+        } else {
+            take
         };
         // A primitive is wrapped where a function value is needed.
         let parts = match kind {
@@ -621,17 +708,31 @@ fn cpp_file(library: &Library, kind: Kind, carried: &[Type]) -> File {
             Type::Bytes => out.push_str(&format!(
                 "\n\tfunction take{title}():haxe.io.Bytes\n\t\treturn haxe.io.Bytes.ofData({call});\n"
             )),
+            Type::Data(data) if crossed(carried) == Type::Bytes => out.push_str(&format!(
+                "\n\tfunction take{title}():{} {{\n\t\tvar input = new haxe.io.BytesInput(haxe.io.Bytes.ofData({call}));\n\t\treturn {};\n\t}}\n",
+                haxe_type(carried),
+                data::haxe_read(data)
+            )),
             _ => out.push_str(&format!(
                 "\n\tfunction take{title}():{}\n\t\treturn {call};\n",
                 haxe_type(carried)
             )),
         }
+        // A failure of the library's own data is thrown as that.
+        let take = if kind == Kind::Future && !library.errors().is_empty() {
+            format!(
+                "() -> try take{title}() catch (error:haxe.Exception) throw {}.typed(error)",
+                thrown_class(library)
+            )
+        } else {
+            format!("take{title}")
+        };
         out.push_str(&format!(
             "\n\tpublic function {}():hxn.{}<{}>\n\t\treturn {};\n",
             maker(carried),
             kind.title(),
             haxe_type(carried),
-            haxe_new(library, kind, &format!("{parts}, take{title}"))
+            haxe_new(library, kind, &format!("{parts}, {take}"))
         ));
     }
     out.push_str("}\n");
@@ -706,7 +807,7 @@ pub fn cpp_natives(library: &Library) -> String {
             ));
         }
         for carried in carried {
-            let returns = match carried {
+            let returns = match &crossed(carried) {
                 Type::Handle { .. } => String::from("Handle"),
                 Type::Void => String::from("Bool"),
                 Type::I64 => String::from("cpp.Int64"),

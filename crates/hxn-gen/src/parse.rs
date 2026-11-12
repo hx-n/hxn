@@ -8,10 +8,10 @@ use syn::spanned::Spanned;
 use syn::{Attribute, FnArg, ImplItem, Item, Meta, ReturnType, Visibility};
 
 use crate::model::{
-    Data, Enumeration, Error, Field, Interface, Library, Method, Number, Param, Receiver, Record,
-    Type, Variant,
+    Case, Data, Enumeration, Error, Field, Interface, Library, Method, Number, Param, Receiver,
+    Record, Tagged, Type, Variant,
 };
-use crate::names::pascal;
+use crate::names::{exception_class, pascal, wire_class};
 
 fn error<T>(span: Span, message: impl Into<String>) -> Result<T, Error> {
     Err(Error {
@@ -178,32 +178,76 @@ struct Scope<'a> {
     shared: &'a [String],
     own: &'a str,
     // The names of the library's `#[hxn::data]` structs and enums.
-    records: &'a [String],
-    enums: &'a [String],
+    known: Known<'a>,
 }
 
-// Plain data, given the names of the library's records and enums. `None`
-// for a type that is not data.
-fn data_of(ty: &syn::Type, records: &[String], enums: &[String]) -> Option<Data> {
+// `HashMap<K, V>` or `BTreeMap<K, V>` gives `K`, `V` and whether it is the
+// sorted one.
+fn mapped(ty: &syn::Type) -> Option<(&syn::Type, &syn::Type, bool)> {
+    let syn::Type::Path(path) = ty else {
+        return None;
+    };
+    let segment = path.path.segments.last()?;
+    let sorted = match segment.ident.to_string().as_str() {
+        "HashMap" => false,
+        "BTreeMap" => true,
+        _ => return None,
+    };
+    let syn::PathArguments::AngleBracketed(arguments) = &segment.arguments else {
+        return None;
+    };
+    let mut types = arguments.args.iter();
+    match (types.next(), types.next(), types.next()) {
+        (Some(syn::GenericArgument::Type(key)), Some(syn::GenericArgument::Type(value)), None) => {
+            Some((key, value, sorted))
+        }
+        _ => None,
+    }
+}
+
+// Plain data, given the names of the library's own. `None` for a type that
+// is not data.
+fn data_of(ty: &syn::Type, known: Known) -> Option<Data> {
     if let Some(inner) = optional(ty) {
-        return Some(Data::Option(Box::new(data_of(inner, records, enums)?)));
+        return Some(Data::Option(Box::new(data_of(inner, known)?)));
     }
     if let Some(inner) = wrapped(ty, "Vec") {
         if path_name(inner).as_deref() == Some("u8") {
             return Some(Data::Bytes);
         }
-        return Some(Data::List(Box::new(data_of(inner, records, enums)?)));
+        return Some(Data::List(Box::new(data_of(inner, known)?)));
+    }
+    if let Some(inner) = wrapped(ty, "Box") {
+        return Some(Data::Boxed(Box::new(data_of(inner, known)?)));
+    }
+    if let Some((key, value, sorted)) = mapped(ty) {
+        // What a Haxe `Map` is keyed by.
+        let key = data_of(key, known).filter(|key| {
+            matches!(
+                key,
+                Data::Text
+                    | Data::I32
+                    | Data::Number(Number::I8 | Number::I16 | Number::U8 | Number::U16)
+            )
+        })?;
+        return Some(Data::Map {
+            key: Box::new(key),
+            value: Box::new(data_of(value, known)?),
+            sorted,
+        });
     }
     let name = path_name(ty)?;
+    let named = |names: &[String]| names.contains(&name);
     Some(match name.as_str() {
         "bool" => Data::Bool,
         "i32" => Data::I32,
         "i64" => Data::I64,
         "f64" => Data::F64,
         "String" => Data::Text,
-        name if Number::parse(name).is_some() => Data::Number(Number::parse(name)?),
-        name if records.iter().any(|record| record == name) => Data::Record(name.to_owned()),
-        name if enums.iter().any(|known| known == name) => Data::Enum(name.to_owned()),
+        number if Number::parse(number).is_some() => Data::Number(Number::parse(number)?),
+        _ if named(known.records) => Data::Record(name),
+        _ if named(known.enums) => Data::Enum(name),
+        _ if named(known.tagged) => Data::Tagged(name),
         _ => return None,
     })
 }
@@ -243,12 +287,22 @@ impl Scope<'_> {
     // an `Option` or a list of data. What has a way across already, a bare
     // number or text, is `None` here.
     fn shape(&self, ty: &syn::Type) -> Option<Data> {
-        data_of(ty, self.records, self.enums).filter(|data| data.wire().is_some())
+        data_of(ty, self.known).filter(|data| data.wire().is_some())
+    }
+
+    // The same behind a `&`, where a list is also a slice.
+    fn lent_shape(&self, ty: &syn::Type) -> Option<Data> {
+        match ty {
+            syn::Type::Slice(slice) => {
+                data_of(&slice.elem, self.known).map(|of| Data::List(Box::new(of)))
+            }
+            other => self.shape(other),
+        }
     }
 
     // `impl Fn(i32, f64) -> Result<bool, E>`, or `FnMut` or `FnOnce`.
     fn lent(&self, ty: &syn::TypeImplTrait) -> Result<Type, Error> {
-        const SHAPE: &str = "a function is lent as `impl Fn(..) -> Result<T, E>`, taking bool, i32, f64, &str, &[u8] or an object to keep, and giving bool, i32, f64, String or `()`: it can fail, because the Haxe function can throw";
+        const SHAPE: &str = "a function is lent as `impl Fn(..) -> Result<T, E>`, taking bool, i32, f64, &str, &[u8], data marked `#[hxn::data]` or an object to keep, and giving bool, i32, f64, String, Vec<u8>, data or `()`: it can fail, because the Haxe function can throw";
         let scalar = |ty: &syn::Type| match path_name(ty).as_deref() {
             Some("bool") => Some(Type::Bool),
             Some("i32") => Some(Type::I32),
@@ -267,6 +321,10 @@ impl Scope<'_> {
                         && path_name(&slice.elem).as_deref() == Some("u8")
                     {
                         return Ok(Some(Type::Bytes));
+                    }
+                    // Data is copied for the function either way.
+                    if let Some(data) = self.lent_shape(&reference.elem) {
+                        return Ok(Some(Type::Data(data)));
                     }
                 }
                 if self.interface(&reference.elem).is_some() {
@@ -303,6 +361,9 @@ impl Scope<'_> {
                     nullable: false,
                 }));
             }
+            if let Some(data) = self.shape(ty) {
+                return Ok(Some(Type::Data(data)));
+            }
             Ok(scalar(ty))
         };
         let mut bounds = ty.bounds.iter();
@@ -336,9 +397,13 @@ impl Scope<'_> {
         let returns = match given {
             syn::Type::Tuple(tuple) if tuple.elems.is_empty() => Type::Void,
             other if path_name(other).as_deref() == Some("String") => Type::Str,
-            other => match scalar(other) {
-                Some(given) => given,
-                None => return error(other.span(), SHAPE),
+            other if wrapped(other, "Vec").and_then(path_name).as_deref() == Some("u8") => {
+                Type::Bytes
+            }
+            other => match (self.shape(other), scalar(other)) {
+                (Some(data), _) => Type::Data(data),
+                (None, Some(given)) => given,
+                (None, None) => return error(other.span(), SHAPE),
             },
         };
         Ok(Type::Lent {
@@ -449,11 +514,10 @@ impl Scope<'_> {
             }
             other => (other, false),
         };
-        let shape = match target {
-            syn::Type::Slice(slice) if borrowed => {
-                data_of(&slice.elem, self.records, self.enums).map(|of| Data::List(Box::new(of)))
-            }
-            other => self.shape(other),
+        let shape = if borrowed {
+            self.lent_shape(target)
+        } else {
+            self.shape(target)
         };
         if let Some(data) = shape {
             return Ok(Param {
@@ -524,6 +588,10 @@ impl Scope<'_> {
         {
             return Ok(Type::Void);
         }
+        // Data, and a number Haxe has no type of its own for.
+        if let Some(data) = data_of(carried, self.known).filter(|data| data.crosses().is_some()) {
+            return Ok(Type::Data(data));
+        }
         // A signal is read any number of times, which a value held
         // by one owner cannot be.
         let interface = if name == "Signal" {
@@ -558,12 +626,12 @@ impl Scope<'_> {
             }),
             None if name == "Signal" => error(
                 ty.span(),
-                "a signal carries one of bool, i32, i64, f64 or String",
+                "a signal carries one of bool, a number, String, data marked `#[hxn::data]` or an Option or Vec of data",
             ),
             None => error(
                 ty.span(),
                 format!(
-                    "a {} carries one of (), bool, i32, i64, f64, String, Vec<u8> or an interface",
+                    "a {} carries one of (), bool, a number, String, Vec<u8>, data marked `#[hxn::data]` or an Option or Vec of data, or an interface",
                     name.to_lowercase()
                 ),
             ),
@@ -858,6 +926,9 @@ impl Scope<'_> {
             returns_data: given(&signature.output)
                 .filter(|_| !asynchronous)
                 .and_then(|(ty, _)| self.shape(ty)),
+            error: failing(&signature.output)
+                .and_then(|ty| data_of(ty, self.known))
+                .filter(|data| matches!(data, Data::Enum(_) | Data::Record(_) | Data::Tagged(_))),
             free: false,
         })
     }
@@ -879,6 +950,27 @@ fn given(output: &ReturnType) -> Option<(&syn::Type, bool)> {
         return Some((ok, true));
     }
     Some((ty, false))
+}
+
+// The error of a function's `Result`, where it names one.
+fn failing(output: &ReturnType) -> Option<&syn::Type> {
+    let ReturnType::Type(_, ty) = output else {
+        return None;
+    };
+    let syn::Type::Path(path) = &**ty else {
+        return None;
+    };
+    let segment = path.path.segments.last()?;
+    if segment.ident != "Result" {
+        return None;
+    }
+    let syn::PathArguments::AngleBracketed(arguments) = &segment.arguments else {
+        return None;
+    };
+    match arguments.args.iter().nth(1) {
+        Some(syn::GenericArgument::Type(error)) => Some(error),
+        _ => None,
+    }
 }
 
 /// One file's items, those of its inline modules among them, and where it
@@ -1017,7 +1109,17 @@ const RESERVED: [&str; 6] = ["Atomic", "Memory", "Future", "Stream", "Signal", "
 #[derive(Clone, Copy)]
 struct Known<'a> {
     records: &'a [String],
+    // The enums whose variants hold nothing, and those with one that does.
     enums: &'a [String],
+    tagged: &'a [String],
+}
+
+// The names of a library's data as they are gathered.
+#[derive(Default)]
+struct Names {
+    records: Vec<String>,
+    enums: Vec<String>,
+    tagged: Vec<String>,
 }
 
 // A `#[hxn::data]` item's name, checked as an interface's is.
@@ -1048,28 +1150,85 @@ fn data_name(
 
 // The names of every `#[hxn::data]` struct and enum, before any field is
 // read: a field of one may be another, declared later or in another file.
-fn data_names(
-    items: &[Item],
-    taken: &mut Vec<String>,
-    records: &mut Vec<String>,
-    enums: &mut Vec<String>,
-) -> Result<(), Error> {
+fn data_names(items: &[Item], taken: &mut Vec<String>, names: &mut Names) -> Result<(), Error> {
     for item in items {
         match item {
             Item::Struct(item) if item.attrs.iter().any(|a| is_marker(a, "data")) => {
                 let name = data_name(&item.ident, &item.vis, &item.generics, taken)?;
                 taken.push(name.clone());
-                records.push(name);
+                names.records.push(name);
             }
             Item::Enum(item) if item.attrs.iter().any(|a| is_marker(a, "data")) => {
                 let name = data_name(&item.ident, &item.vis, &item.generics, taken)?;
                 taken.push(name.clone());
-                enums.push(name);
+                if holds_values(item) {
+                    names.tagged.push(name);
+                } else {
+                    names.enums.push(name);
+                }
             }
             _ => {}
         }
     }
     Ok(())
+}
+
+fn holds_values(item: &syn::ItemEnum) -> bool {
+    item.variants
+        .iter()
+        .any(|variant| !matches!(variant.fields, syn::Fields::Unit))
+}
+
+// What a field of data holds.
+fn field_data(ty: &syn::Type, known: Known) -> Result<Data, Error> {
+    let Some(data) = data_of(ty, known) else {
+        return error(
+            ty.span(),
+            "a field of data is one of bool, a number, String, Vec<u8>, other data, or an Option, Vec, Box, HashMap or BTreeMap of these, a map keyed by String or a whole number of at most 32 bits",
+        );
+    };
+    if matches!(data, Data::Number(Number::Isize | Number::Usize)) {
+        return error(
+            ty.span(),
+            "a size is as wide as the machine: give a field of data a width, such as `u32`",
+        );
+    }
+    Ok(data)
+}
+
+// The cases of an enum with a variant that holds values.
+fn cases(item: &syn::ItemEnum, known: Known) -> Result<Vec<Case>, Error> {
+    let mut cases = Vec::new();
+    for variant in &item.variants {
+        if let Some((_, number)) = &variant.discriminant {
+            return error(
+                number.span(),
+                "a variant is given a number only in an enum whose variants all hold nothing",
+            );
+        }
+        let named = matches!(variant.fields, syn::Fields::Named(_));
+        let count = variant.fields.len();
+        let mut fields = Vec::new();
+        for (index, field) in variant.fields.iter().enumerate() {
+            let name = match &field.ident {
+                Some(name) => name.to_string(),
+                None if count == 1 => String::from("value"),
+                None => format!("value{index}"),
+            };
+            fields.push(Field {
+                name,
+                docs: docs(&field.attrs),
+                ty: field_data(&field.ty, known)?,
+            });
+        }
+        cases.push(Case {
+            name: variant.ident.to_string(),
+            docs: docs(&variant.attrs),
+            fields,
+            named,
+        });
+    }
+    Ok(cases)
 }
 
 // A variant's number: the one written, or one more than the last.
@@ -1102,6 +1261,7 @@ fn data_items(
     known: Known,
     records: &mut Vec<Record>,
     enums: &mut Vec<Enumeration>,
+    tagged: &mut Vec<Tagged>,
 ) -> Result<(), Error> {
     for item in items {
         match item {
@@ -1109,7 +1269,7 @@ fn data_items(
                 let syn::Fields::Named(named) = &item.fields else {
                     return error(
                         item.ident.span(),
-                        "data is a struct of named fields, or an enum of names",
+                        "data is a struct of named fields, or an enum",
                     );
                 };
                 let mut fields = Vec::new();
@@ -1128,18 +1288,7 @@ fn data_items(
                             ),
                         );
                     }
-                    let Some(ty) = data_of(&field.ty, known.records, known.enums) else {
-                        return error(
-                            field.ty.span(),
-                            "a field of data is one of bool, a number, String, Vec<u8>, other data, or an Option or Vec of these",
-                        );
-                    };
-                    if matches!(ty, Data::Number(Number::Isize | Number::Usize)) {
-                        return error(
-                            field.ty.span(),
-                            "a size is as wide as the machine: give a field of data a width, such as `u32`",
-                        );
-                    }
+                    let ty = field_data(&field.ty, known)?;
                     fields.push(Field {
                         name,
                         docs: docs(&field.attrs),
@@ -1159,15 +1308,17 @@ fn data_items(
                         "an enum with no variants has no value to cross",
                     );
                 }
+                if holds_values(item) {
+                    tagged.push(Tagged {
+                        name: item.ident.to_string(),
+                        docs: docs(&item.attrs),
+                        cases: cases(item, known)?,
+                    });
+                    continue;
+                }
                 let mut variants: Vec<Variant> = Vec::new();
                 let mut next = 0;
                 for variant in &item.variants {
-                    if !matches!(variant.fields, syn::Fields::Unit) {
-                        return error(
-                            variant.span(),
-                            "a variant of data holds nothing: it is a name for a number",
-                        );
-                    }
                     let value = discriminant(variant, next)?;
                     if variants.iter().any(|known| known.value == value) {
                         return error(variant.span(), format!("two variants are {value}"));
@@ -1280,8 +1431,7 @@ fn methods_of(
             interfaces: names,
             shared,
             own: &target,
-            records: known.records,
-            enums: known.enums,
+            known,
         };
         for item in &block.items {
             let ImplItem::Fn(function) = item else {
@@ -1380,8 +1530,7 @@ fn functions_of(
             interfaces: names,
             shared,
             own: &class,
-            records: known.records,
-            enums: known.enums,
+            known,
         };
         let mut method = scope.method(&function.sig, &function.attrs)?;
         method.free = true;
@@ -1434,26 +1583,33 @@ fn build(name: &str, sources: &[Source]) -> Result<Library, Error> {
     // Data shares its names with the interfaces and their weak classes.
     let mut taken = names.clone();
     taken.extend(shared.iter().map(|name| crate::names::weak_class(name)));
-    let (mut record_names, mut enum_names) = (Vec::new(), Vec::new());
+    let mut data = Names::default();
     for source in sources {
-        located(
-            data_names(
-                &source.items,
-                &mut taken,
-                &mut record_names,
-                &mut enum_names,
-            ),
-            source,
-        )?;
+        located(data_names(&source.items, &mut taken, &mut data), source)?;
+    }
+    // An enum whose variants hold values is written and read by a class
+    // named after it.
+    for name in &data.tagged {
+        let wire = wire_class(name);
+        if taken.contains(&wire) {
+            return Err(Error {
+                file: None,
+                line: 0,
+                message: format!(
+                    "`{wire}` is the class that writes and reads `{name}`; call the other something else"
+                ),
+            });
+        }
     }
     let known = Known {
-        records: &record_names,
-        enums: &enum_names,
+        records: &data.records,
+        enums: &data.enums,
+        tagged: &data.tagged,
     };
-    let (mut records, mut enums) = (Vec::new(), Vec::new());
+    let (mut records, mut enums, mut tagged) = (Vec::new(), Vec::new(), Vec::new());
     for source in sources {
         located(
-            data_items(&source.items, known, &mut records, &mut enums),
+            data_items(&source.items, known, &mut records, &mut enums, &mut tagged),
             source,
         )?;
     }
@@ -1470,12 +1626,35 @@ fn build(name: &str, sources: &[Source]) -> Result<Library, Error> {
             source,
         )?;
     }
-    Ok(Library {
+    let library = Library {
         name: name.to_owned(),
         interfaces,
         records,
         enums,
-    })
+        tagged,
+    };
+    // An error's exception is a class named after it.
+    for error in library.errors() {
+        let exception = exception_class(&error.name());
+        if taken.contains(&exception) {
+            return Err(Error {
+                file: None,
+                line: 0,
+                message: format!(
+                    "`{exception}` is the exception a failure with `{}` is thrown as; call the other something else",
+                    error.name()
+                ),
+            });
+        }
+    }
+    if let Some(message) = crate::later::clash(&library) {
+        return Err(Error {
+            file: None,
+            line: 0,
+            message,
+        });
+    }
+    Ok(library)
 }
 
 /// Reads the marked items of `source`, the text of one Rust file, as the

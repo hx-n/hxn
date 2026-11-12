@@ -35,7 +35,8 @@ fn message_of(payload: &(dyn Any + Send)) -> String {
 /// failure's status. Nothing unwinds out of it.
 ///
 /// `out` is left untouched on failure and `err` on success. A function with
-/// nothing to return passes a null `out` and returns `()`.
+/// nothing to return passes a null `out` and returns `()`. A failure's value
+/// is kept for the host to ask for: see [`thrown`](crate::thrown).
 ///
 /// # Safety
 /// `out` is writable for a `T`, or `T` is zero-sized. `err` is null or
@@ -58,6 +59,7 @@ pub unsafe fn guard<T>(
             Status::OK
         }
         Err(failure) => {
+            crate::thrown::keep(failure.value);
             if !err.is_null() {
                 unsafe { err.write(Buf::from(failure.message)) };
             }
@@ -109,6 +111,20 @@ mod tests {
         assert_eq!((status, message.as_str()), (Status::PANIC, "went wrong"));
         let (status, message) = run(&mut out, || std::panic::panic_any(3u8));
         assert_eq!((status, message.as_str()), (Status::PANIC, "panic"));
+    }
+
+    #[test]
+    fn a_failure_leaves_its_value_to_be_asked_for() {
+        let mut out = 0;
+        let failed = || Err(Failure::new(Status::ERROR, "no").with_value(vec![1, 2]));
+        assert_eq!(run(&mut out, failed).0, Status::ERROR);
+        assert_eq!(crate::thrown::take(), [1, 2]);
+        assert!(crate::thrown::take().is_empty());
+
+        // The next failure replaces it, with a value or without.
+        run(&mut out, failed);
+        run(&mut out, || Err(Fault::Closed.into()));
+        assert!(crate::thrown::take().is_empty());
     }
 
     #[test]

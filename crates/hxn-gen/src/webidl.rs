@@ -12,14 +12,18 @@
 //! | a function returning `Stream<T>` or `Signal<T>` | `[HxnStream]` or `[HxnSignal]` on one returning `T` |
 //! | a cell | `[HxnAtomic]` on a `long` or a `boolean` |
 //! | a lent function | a `callback` named after where it is passed |
-//! | a `#[hxn::data]` struct, enum | a `dictionary`, an `enum` of the names |
-//! | an `Option` or a `Vec` of data | `T?`, `sequence<T>` |
-//! | a `Result` | `[Throws]` |
+//! | a `#[hxn::data]` struct, enum of names | a `dictionary`, an `enum` of the names |
+//! | a `#[hxn::data]` enum whose variants hold values | a `dictionary` with a `tag` and a member a variant, each a `dictionary` of its own |
+//! | an `Option`, a `Vec` or a map of data | `T?`, `sequence<T>`, `record<USVString, T>` |
+//! | a `Result` | `[Throws]`, or `[Throws=E]` where the error is data |
+//!
+//! A map keyed by a number is a `record` too, which WebIDL keys by text
+//! alone; the JSON form names the key's type.
 
 use crate::model::{
-    Data, Enumeration, Interface, Library, Method, Number, Param, Receiver, Record, Type,
+    Data, Enumeration, Interface, Library, Method, Number, Param, Receiver, Record, Tagged, Type,
 };
-use crate::names::pascal;
+use crate::names::{camel, pascal};
 
 // The words WebIDL keeps for itself, which a name is told apart from by a
 // leading underscore.
@@ -95,16 +99,18 @@ fn data(data: &Data) -> String {
         Data::Number(narrow) => number(*narrow).to_owned(),
         Data::Text => String::from("USVString"),
         Data::Bytes => String::from("Uint8Array"),
-        Data::Enum(name) | Data::Record(name) => name.clone(),
+        Data::Enum(name) | Data::Record(name) | Data::Tagged(name) => name.clone(),
         Data::Option(of) => format!("{}?", self::data(of).trim_end_matches('?')),
         Data::List(of) => format!("sequence<{}>", self::data(of)),
+        Data::Boxed(of) => self::data(of),
+        Data::Map { value, .. } => format!("record<USVString, {}>", self::data(value)),
     }
 }
 
-fn dictionary(record: &Record) -> String {
-    let mut out = comment(&record.docs, "");
-    out.push_str(&format!("dictionary {} {{\n", record.name));
-    for field in &record.fields {
+// The members of a dictionary, one a field.
+fn members(fields: &[crate::model::Field]) -> String {
+    let mut out = String::new();
+    for field in fields {
         out.push_str(&comment(&field.docs, "  "));
         // What may be missing is a member that may be left out.
         let required = if matches!(field.ty, Data::Option(_)) {
@@ -118,6 +124,47 @@ fn dictionary(record: &Record) -> String {
             name(&field.name)
         ));
     }
+    out
+}
+
+// WebIDL has no type that is one of several shapes, so an enum whose
+// variants hold values is a dictionary: `tag` names the variant, and the
+// member of that name holds its fields.
+fn tagged(tagged: &Tagged) -> String {
+    let own = &tagged.name;
+    let tags: Vec<String> = tagged
+        .cases
+        .iter()
+        .map(|case| format!("\"{}\"", case.name))
+        .collect();
+    let mut out = format!("enum {own}Tag {{ {} }};\n", tags.join(", "));
+    for case in tagged.cases.iter().filter(|case| !case.fields.is_empty()) {
+        out.push_str(&format!(
+            "\n{}dictionary {own}{} {{\n{}}};\n",
+            comment(&case.docs, ""),
+            case.name,
+            members(&case.fields)
+        ));
+    }
+    out.push_str(&format!(
+        "\n{}[HxnTagged] dictionary {own} {{\n  required {own}Tag tag;\n",
+        comment(&tagged.docs, "")
+    ));
+    for case in tagged.cases.iter().filter(|case| !case.fields.is_empty()) {
+        out.push_str(&format!(
+            "  {own}{} {};\n",
+            case.name,
+            name(&camel(&crate::names::snake(&case.name)))
+        ));
+    }
+    out.push_str("};\n");
+    out
+}
+
+fn dictionary(record: &Record) -> String {
+    let mut out = comment(&record.docs, "");
+    out.push_str(&format!("dictionary {} {{\n", record.name));
+    out.push_str(&members(&record.fields));
     out.push_str("};\n");
     out
 }
@@ -156,6 +203,7 @@ fn ty(ty: &Type, lent: &str) -> String {
         Type::Future(of) => format!("Promise<{}>", self::ty(of, lent)),
         Type::Stream(of) | Type::Signal(of) => self::ty(of, lent),
         Type::Lent { .. } => lent.to_owned(),
+        Type::Data(data) => self::data(data),
         Type::Handle {
             interface,
             nullable,
@@ -223,16 +271,25 @@ fn operation(interface: &Interface, method: &Method) -> String {
         .map(|param| self::param(interface, method, param))
         .collect();
     let mut out = comment(&method.docs, "  ");
+    // An error that is data is named, whether the call fails with it or the
+    // future an async function gives does.
+    let thrown = method
+        .error
+        .as_ref()
+        .map(|error| format!("Throws={}", error.name()));
+    let throws = match &thrown {
+        Some(thrown) => Some(thrown.as_str()),
+        None if method.fallible && !method.asynchronous => Some("Throws"),
+        None => None,
+    };
     if method.constructor {
-        // A constructor that can fail has nowhere else to say so.
-        let throws = if method.fallible { "[Throws] " } else { "" };
+        // A constructor that can fail has nowhere else to record it.
+        let throws = throws.map_or_else(String::new, |throws| format!("[{throws}] "));
         out.push_str(&format!("  {throws}constructor({});\n", params.join(", ")));
         return out;
     }
     let mut notes = Vec::new();
-    if method.fallible && !method.asynchronous {
-        notes.push("Throws");
-    }
+    notes.extend(throws);
     if method.asynchronous {
         notes.push("HxnAsync");
     }
@@ -341,6 +398,7 @@ fn interface(interface: &Interface) -> String {
 pub fn webidl(library: &Library) -> String {
     let mut interfaces: Vec<String> = library.enums.iter().map(enumeration).collect();
     interfaces.extend(library.records.iter().map(dictionary));
+    interfaces.extend(library.tagged.iter().map(tagged));
     interfaces.extend(library.interfaces.iter().map(interface));
     format!(
         "// Generated by hxn-gen from the library's source. Do not edit.\n// The API of `{}`, version 1 of hxn's manifest, as WebIDL. An attribute\n// named Hxn... is hxn's: WebIDL has no word for what it marks.\n\n{}",

@@ -1,7 +1,7 @@
 //! The manifest: what a library exposes, in a form that is committed and
 //! reviewed. A change to it is a change to the library's ABI.
 
-use crate::model::{Enumeration, Interface, Library, Method, Receiver, Record};
+use crate::model::{Enumeration, Interface, Library, Method, Receiver, Record, Tagged};
 
 fn quoted(text: &str) -> String {
     let mut out = String::from("\"");
@@ -65,6 +65,13 @@ fn method(method: &Method) -> String {
     // An async function's failure is its future's, not the call's.
     if method.asynchronous {
         out.push_str("          \"async\": true,\n");
+    }
+    // Written only where the failure is data of the library's own.
+    if let Some(error) = &method.error {
+        out.push_str(&format!(
+            "          \"throws\": {},\n",
+            quoted(&error.name())
+        ));
     }
     out.push_str(&format!(
         "          \"fallible\": {},\n",
@@ -146,6 +153,39 @@ fn record(record: &Record) -> String {
     out
 }
 
+fn tagged(tagged: &Tagged) -> String {
+    let cases: Vec<String> = tagged
+        .cases
+        .iter()
+        .map(|case| {
+            let fields: Vec<String> = case
+                .fields
+                .iter()
+                .map(|field| {
+                    format!(
+                        "{{ \"name\": {}, \"type\": {} }}",
+                        quoted(&field.name),
+                        quoted(&field.ty.name())
+                    )
+                })
+                .collect();
+            format!(
+                "        {{ \"name\": {}, \"fields\": [{}] }}",
+                quoted(&case.name),
+                fields.join(", ")
+            )
+        })
+        .collect();
+    let mut out = String::from("    {\n");
+    out.push_str(&format!("      \"name\": {},\n", quoted(&tagged.name)));
+    out.push_str(&docs(&tagged.docs, "      "));
+    out.push_str(&format!(
+        "      \"cases\": [\n{}\n      ]\n    }}",
+        cases.join(",\n")
+    ));
+    out
+}
+
 /// The manifest of `library`, as JSON. The same input gives the same text.
 pub fn manifest(library: &Library) -> String {
     let interfaces: Vec<String> = library.interfaces.iter().map(interface).collect();
@@ -163,6 +203,10 @@ pub fn manifest(library: &Library) -> String {
             "  \"records\": [\n{}\n  ],\n",
             records.join(",\n")
         ));
+    }
+    if !library.tagged.is_empty() {
+        let tagged: Vec<String> = library.tagged.iter().map(tagged).collect();
+        out.push_str(&format!("  \"tagged\": [\n{}\n  ],\n", tagged.join(",\n")));
     }
     if interfaces.is_empty() {
         out.push_str("  \"interfaces\": []\n");

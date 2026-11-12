@@ -22,6 +22,7 @@ typedef int32_t hxn_status;
 #define HXN_CANCELLED (-9)
 #define HXN_CALLBACK (-10)
 #define HXN_RANGE (-11)
+#define HXN_DEPTH (-12)
 
 /* Bytes or UTF-8 text the caller keeps alive for the call. */
 typedef struct hxn_slice {
@@ -124,6 +125,23 @@ inline bool give_text(const ::String &text, hxn_buf *out) {
 	if (!out->ptr)
 		return false;
 	memcpy(out->ptr, utf8, (size_t)length);
+	out->len = (size_t)length;
+	out->cap = (size_t)length;
+	out->free = free_text;
+	return true;
+}
+
+/* The same for bytes. */
+inline bool give_bytes(const Array<unsigned char> &data, hxn_buf *out) {
+	hxn_buf empty = HXN_BUF_EMPTY;
+	*out = empty;
+	int length = data.mPtr ? data->length : 0;
+	if (length <= 0)
+		return true;
+	out->ptr = (uint8_t *)malloc((size_t)length);
+	if (!out->ptr)
+		return false;
+	memcpy(out->ptr, data->getBase(), (size_t)length);
 	out->len = (size_t)length;
 	out->cap = (size_t)length;
 	out->free = free_text;
