@@ -132,6 +132,39 @@ impl Param {
     }
 }
 
+impl Api {
+    /// Leaves out every function whose C function `exported` reports the
+    /// library does not define, and an object's free function likewise.
+    /// Each is added to `skipped` with `why`.
+    pub fn retain(&mut self, exported: impl Fn(&str) -> bool, why: &str) {
+        let mut skipped = Vec::new();
+        let mut keep = |function: &Function| {
+            let kept = exported(&function.c);
+            if !kept {
+                skipped.push(format!("{}: {why}", function.c));
+            }
+            kept
+        };
+        self.functions.retain(&mut keep);
+        for object in &mut self.objects {
+            object.methods.retain(&mut keep);
+            object.statics.retain(&mut keep);
+            if object.constructor.as_ref().is_some_and(|made| !keep(made)) {
+                object.constructor = None;
+            }
+        }
+        for object in &mut self.objects {
+            if let Some(free) = &object.free
+                && !exported(free)
+            {
+                skipped.push(format!("{free}: {why}; `{}` is not freed", object.name));
+                object.free = None;
+            }
+        }
+        self.skipped.extend(skipped);
+    }
+}
+
 impl Ty {
     /// The object it is, or may be.
     pub fn inner_object(&self) -> Option<&str> {

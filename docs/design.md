@@ -679,6 +679,11 @@ directly. `hxn-c` does the work in three steps:
      imported: a Haxe function is lent for one call only.
    - Each of these guesses is listed under "Check:" at the end of the
      WebIDL, and anything that cannot be mapped is listed as not imported.
+   - A header may declare functions the installed library leaves out, as
+     sqlite3's does for its optional features, and a binding that refers to
+     one does not load. For each library given to `--link` that the C
+     compiler finds as a file, `nm` lists what it defines, and a function it
+     does not define is listed as not imported.
 2. **The WebIDL is reviewed and edited.** A header cannot record which
    `int` is a status code, who frees a returned pointer, or which pointer
    may be null. That is added as extended attributes: `[HxnStatus]` makes a

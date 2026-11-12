@@ -95,3 +95,27 @@ fn a_mistake_in_the_webidl_is_reported_with_its_line() {
         assert!(error.contains(expected), "{text}: {error}");
     }
 }
+
+#[test]
+fn what_the_library_does_not_define_is_left_out() {
+    let text = std::fs::read_to_string(Path::new(ROOT).join("tally.webidl")).unwrap();
+    let mut api = hxn_c::parse("tally", &text).unwrap();
+    let missing = ["tally_describe", "tally_version", "tally_free"];
+    api.retain(
+        |function| !missing.contains(&function),
+        "not defined by libtally.so",
+    );
+    let tally = &api.objects[0];
+    assert!(!tally.methods.iter().any(|m| m.c == "tally_describe"));
+    assert!(!api.functions.iter().any(|f| f.c == "tally_version"));
+    assert_eq!(tally.free, None);
+    assert!(
+        api.skipped
+            .contains(&String::from("tally_version: not defined by libtally.so"))
+    );
+    assert!(
+        api.skipped
+            .iter()
+            .any(|s| s.starts_with("tally_free: not defined by libtally.so; `Tally` is not freed"))
+    );
+}

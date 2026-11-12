@@ -103,7 +103,19 @@ pub fn import(request: &Request) -> Result<Vec<String>, String> {
     }
     let mut clang = vec![format!("-I{}", c.display())];
     clang.extend(request.clang.iter().cloned());
-    let api = hxn_c::import(&c.join(&header), name, &clang)?;
+    let mut api = hxn_c::import(&c.join(&header), name, &clang)?;
+    // A header may declare what the installed library leaves out, such as
+    // sqlite3's optional features, and a binding that refers to a function
+    // the library lacks does not load.
+    for link in request.links {
+        if let Some((path, exported)) = exports(link) {
+            let why = format!("not defined by {}", path.display());
+            api.retain(
+                |function| exported.iter().any(|known| known == function),
+                &why,
+            );
+        }
+    }
     let webidl = format!("{name}.webidl");
     let files = [
         ("Cargo.toml", manifest(name, &hxn, !sources.is_empty())),
@@ -122,6 +134,50 @@ pub fn import(request: &Request) -> Result<Vec<String>, String> {
         std::fs::write(&path, text).map_err(|error| format!("{}: {error}", path.display()))?;
     }
     Ok(api.skipped)
+}
+
+// The library `name` the C compiler links for `-l<name>`, and the functions
+// it defines, where both can be found: the compiler prints the path of a
+// library it has, and `nm` reads it. `None` otherwise, as for a library in
+// the macOS shared cache, which is not a file.
+fn exports(name: &str) -> Option<(PathBuf, Vec<String>)> {
+    for file in [
+        format!("lib{name}.so"),
+        format!("lib{name}.dylib"),
+        format!("lib{name}.a"),
+    ] {
+        let output = std::process::Command::new("clang")
+            .arg(format!("-print-file-name={file}"))
+            .output()
+            .ok()?;
+        let path = PathBuf::from(String::from_utf8_lossy(&output.stdout).trim());
+        if !path.is_absolute() || !path.is_file() {
+            continue;
+        }
+        let dynamic = !file.ends_with(".a");
+        let mut nm = std::process::Command::new("nm");
+        if dynamic && cfg!(target_os = "linux") {
+            nm.arg("-D");
+        }
+        let listed = nm.args(["--defined-only", "-g"]).arg(&path).output().ok()?;
+        if !listed.status.success() {
+            return None;
+        }
+        let symbols: Vec<String> = String::from_utf8_lossy(&listed.stdout)
+            .lines()
+            .filter_map(|line| line.split_whitespace().last())
+            // Apple's symbols start with an underscore C does not write.
+            .map(|symbol| {
+                if cfg!(target_os = "macos") {
+                    symbol.strip_prefix('_').unwrap_or(symbol).to_owned()
+                } else {
+                    symbol.split('@').next().unwrap_or(symbol).to_owned()
+                }
+            })
+            .collect();
+        return Some((path, symbols));
+    }
+    None
 }
 
 /// Generates `bindings` from the WebIDL file `webidl` again, if it changed.
