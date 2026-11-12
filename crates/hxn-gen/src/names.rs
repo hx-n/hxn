@@ -41,14 +41,21 @@ pub fn local(interface: &str, method: &str) -> String {
     format!("{}_{}", snake(interface), method)
 }
 
-/// The symbol a method is exported as: `counter_counter_add`.
+/// What every symbol the library exports starts with: `hxn_counter`. The
+/// `hxn_` keeps an export from taking the name of a C function the library
+/// links, which `<library>_<interface>_<method>` alone could: `sqlite3_value_subtype`.
+pub fn symbols(library: &Library) -> String {
+    format!("hxn_{}", library.name)
+}
+
+/// The symbol a method is exported as: `hxn_counter_counter_add`.
 pub fn export(library: &Library, interface: &str, method: &str) -> String {
-    format!("{}_{}", library.name, local(interface, method))
+    format!("{}_{}", symbols(library), local(interface, method))
 }
 
 /// The symbol that frees any of the library's handles.
 pub fn release(library: &Library) -> String {
-    format!("{}_release", library.name)
+    format!("{}_release", symbols(library))
 }
 
 /// The HashLink abstract type name for an interface's values.
@@ -75,17 +82,17 @@ pub fn cell_abstract(library: &Library) -> String {
 /// The symbol that returns the address of an atomic cell the library
 /// returned.
 pub fn cell_export(library: &Library) -> String {
-    format!("{}_atomic_cell", library.name)
+    format!("{}_atomic_cell", symbols(library))
 }
 
 /// The symbol that returns the total bytes the library's values declare.
 pub fn held_export(library: &Library) -> String {
-    format!("{}_memory_held", library.name)
+    format!("{}_memory_held", symbols(library))
 }
 
 /// The symbol that reports whether the library asked for a collection.
 pub fn wanted_export(library: &Library) -> String {
-    format!("{}_memory_wanted", library.name)
+    format!("{}_memory_wanted", symbols(library))
 }
 
 /// The hxcpp class that owns a returned atomic cell: `HxnCounterCell`.
@@ -111,7 +118,7 @@ pub fn thrown_class(library: &Library) -> String {
 
 /// The symbol that returns the value of the last failure.
 pub fn thrown_export(library: &Library) -> String {
-    format!("{}_thrown_take", library.name)
+    format!("{}_thrown_take", symbols(library))
 }
 
 /// The Haxe exception class for the error type `name`:

@@ -45,20 +45,20 @@ The rules that hxn's code, its bindings and its tests follow.
 
 | Thing | Name |
 |---|---|
-| exported function | `<library>_<interface>_<method>`, the interface in snake case |
+| exported function | `hxn_<library>_<interface>_<method>`, the interface in snake case. The `hxn_` prefix keeps an export from taking the name of a C function the library links: a library `sqlite3` with an interface `Value` would otherwise export `sqlite3_value_subtype`, which is sqlite3's own |
 | HashLink primitive resolver | `hlp_<interface>_<method>` |
 | HashLink abstract | `<library>_<interface>` |
-| a shared interface's built-in functions | `<library>_<interface>_same`, `_weak`, `_weak_upgrade`, `_weak_close` |
+| a shared interface's built-in functions | `hxn_<library>_<interface>_same`, `_weak`, `_weak_upgrade`, `_weak_close` |
 | weak reference to a shared interface | Haxe class `<Interface>Weak`, HashLink abstract `<library>_<interface>_weak` |
-| release function for any handle | `<library>_release` |
-| the library's queue of ready results | `<library>_outbox_wait`, `<library>_outbox_next` |
-| waiting on and watching a future, stream or signal | `<library>_future_wait`, `_future_state`, `_future_watch`; the same for `stream` and `signal` |
-| taking the value one carries | `<library>_future_take_<kind>`, `<library>_stream_next_<kind>`, `<library>_signal_get_<kind>`; the kind is `unit`, `bool`, `int`, `long`, `float`, `text`, `bytes`, the name of a narrower number type, or the snake-case name of an interface or data type, prefixed with `option_`, `list_` or `map_` for those wrappers. Two carried types that map to the same name are rejected |
-| fetching the typed error of the last failure | `<library>_thrown_take`, generated only when a function has a `#[hxn::data]` error type |
+| release function for any handle | `hxn_<library>_release` |
+| the library's queue of ready results | `hxn_<library>_outbox_wait`, `hxn_<library>_outbox_next` |
+| waiting on and watching a future, stream or signal | `hxn_<library>_future_wait`, `_future_state`, `_future_watch`; the same for `stream` and `signal` |
+| taking the value one carries | `hxn_<library>_future_take_<kind>`, `hxn_<library>_stream_next_<kind>`, `hxn_<library>_signal_get_<kind>`; the kind is `unit`, `bool`, `int`, `long`, `float`, `text`, `bytes`, the name of a narrower number type, or the snake-case name of an interface or data type, prefixed with `option_`, `list_` or `map_` for those wrappers. Two carried types that map to the same name are rejected |
+| fetching the typed error of the last failure | `hxn_<library>_thrown_take`, generated only when a function has a `#[hxn::data]` error type |
 | exception class for a typed error | Haxe class `<Name>Exception`, with a trailing `Error` removed from the name first |
 | serializer for a tagged enum | Haxe class `<Name>Wire` |
-| native memory held by a library's values, in bytes | `<library>_memory_held` |
-| whether the library requested a collection | `<library>_memory_wanted` |
+| native memory held by a library's values, in bytes | `hxn_<library>_memory_held` |
+| whether the library requested a collection | `hxn_<library>_memory_wanted` |
 | C header | `<library>_abi.h` |
 | hxcpp glue header | `<library>_glue.h`, namespace `<library>_glue` |
 | hxcpp extern class declaring the glue | `Hxn<Library>Native`, each function under its glue name |

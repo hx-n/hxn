@@ -275,15 +275,15 @@ fn names_follow_each_language() {
     let library = parse("audio", SOURCE).unwrap();
     let adapter = hxn_gen::hl_adapter(&library, "audio_core");
     assert!(
-        adapter.contains("pub unsafe extern \"C\" fn audio_audio_device_default_gain() -> f64")
+        adapter.contains("pub unsafe extern \"C\" fn hxn_audio_audio_device_default_gain() -> f64")
     );
-    assert!(adapter.contains("define_prim!(hlp_audio_device_write, audio_audio_device_write, \"PXaudio_audio_device_Bi_i\");"));
+    assert!(adapter.contains("define_prim!(hlp_audio_device_write, hxn_audio_audio_device_write, \"PXaudio_audio_device_Bi_i\");"));
     assert!(adapter.contains("blocking(|| this.drain())"));
     assert!(adapter.contains("use audio_core::{AudioDevice, Mixer};"));
 
     let header = hxn_gen::c_header(&library);
-    assert!(header.contains("hxn_status audio_audio_device_new(hxn_slice path, int32_t sample_rate, hxn_handle **out, hxn_buf *err);"));
-    assert!(header.contains("void audio_release(hxn_handle *self);"));
+    assert!(header.contains("hxn_status hxn_audio_audio_device_new(hxn_slice path, int32_t sample_rate, hxn_handle **out, hxn_buf *err);"));
+    assert!(header.contains("void hxn_audio_release(hxn_handle *self);"));
 
     let glue = hxn_gen::cpp_glue(&library);
     assert!(glue.contains("namespace audio_glue {"));
@@ -363,7 +363,7 @@ fn objects_are_borrowed_going_in_and_owned_coming_out() {
     assert!(hl.contains("let this = handle::<AudioDevice>(this)?.take()?.ok_or(Fault::Closed)?;"));
 
     let header = hxn_gen::c_header(&library);
-    assert!(header.contains("hxn_status audio_audio_device_route(hxn_handle *self, hxn_handle *mixer, hxn_handle *fallback, hxn_handle **out, hxn_buf *err);"));
+    assert!(header.contains("hxn_status hxn_audio_audio_device_route(hxn_handle *self, hxn_handle *mixer, hxn_handle *fallback, hxn_handle **out, hxn_buf *err);"));
 
     let device = &hxn_gen::haxe_hl(&library)[0].text;
     assert!(
@@ -402,21 +402,21 @@ fn cells_are_lent_going_in_and_kept_by_the_library_coming_out() {
     assert!(c.contains("position: *mut i32, cancel: *mut i32"));
     assert!(c.contains("AtomicFlag::from_ptr(cancel)"));
     assert!(c.contains("Ok(Handle::into_raw(AtomicFlag::into_int(this.muted())))"));
-    assert!(c.contains("pub unsafe extern \"C\" fn audio_atomic_cell(this: RawHandle, out: *mut *mut i32, err: *mut Buf) -> Status"));
+    assert!(c.contains("pub unsafe extern \"C\" fn hxn_audio_atomic_cell(this: RawHandle, out: *mut *mut i32, err: *mut Buf) -> Status"));
 
     let hl = hxn_gen::hl_adapter(&library, "audio_core");
     assert!(hl.contains("\"PXaudio_audio_device_RiRi_v\""));
     assert!(
-        hl.contains("define_prim!(hlp_atomic_cell, audio_atomic_cell, \"PXaudio_atomic__Ri\");")
+        hl.contains(
+            "define_prim!(hlp_atomic_cell, hxn_audio_atomic_cell, \"PXaudio_atomic__Ri\");"
+        )
     );
 
     let header = hxn_gen::c_header(&library);
-    assert!(header.contains("hxn_status audio_audio_device_play(hxn_handle *self, int32_t *position, int32_t *cancel, hxn_buf *err);"));
-    assert!(
-        header.contains(
-            "hxn_status audio_atomic_cell(hxn_handle *self, int32_t **out, hxn_buf *err);"
-        )
-    );
+    assert!(header.contains("hxn_status hxn_audio_audio_device_play(hxn_handle *self, int32_t *position, int32_t *cancel, hxn_buf *err);"));
+    assert!(header.contains(
+        "hxn_status hxn_audio_atomic_cell(hxn_handle *self, int32_t **out, hxn_buf *err);"
+    ));
 
     let haxe = &hxn_gen::haxe_hl(&library)[0].text;
     assert!(
@@ -441,14 +441,14 @@ fn what_a_library_holds_is_read_and_a_weighed_object_checks_it() {
 
     // Every library has these exports, whatever it marked.
     let c = hxn_gen::c_adapter(&library, "audio_core");
-    assert!(c.contains("pub extern \"C\" fn audio_memory_held() -> f64"));
-    assert!(c.contains("pub extern \"C\" fn audio_memory_wanted() -> i32"));
+    assert!(c.contains("pub extern \"C\" fn hxn_audio_memory_held() -> f64"));
+    assert!(c.contains("pub extern \"C\" fn hxn_audio_memory_wanted() -> i32"));
     let hl = hxn_gen::hl_adapter(&library, "audio_core");
-    assert!(hl.contains("define_prim!(hlp_memory_held, audio_memory_held, \"P_d\");"));
-    assert!(hl.contains("define_prim!(hlp_memory_wanted, audio_memory_wanted, \"P_b\");"));
+    assert!(hl.contains("define_prim!(hlp_memory_held, hxn_audio_memory_held, \"P_d\");"));
+    assert!(hl.contains("define_prim!(hlp_memory_wanted, hxn_audio_memory_wanted, \"P_b\");"));
     let header = hxn_gen::c_header(&library);
-    assert!(header.contains("double audio_memory_held(void);"));
-    assert!(header.contains("int32_t audio_memory_wanted(void);"));
+    assert!(header.contains("double hxn_audio_memory_held(void);"));
+    assert!(header.contains("int32_t hxn_audio_memory_wanted(void);"));
 
     for files in [hxn_gen::haxe_hl(&library), cpp_classes(&library)] {
         let memory = files.last().unwrap();
@@ -545,29 +545,29 @@ fn a_shared_value_is_held_through_an_arc() {
     assert!(c.contains("Ok(i32::from(Arc::ptr_eq(&this, &other)))"));
     assert!(c.contains("Ok(Handle::into_raw(Arc::downgrade(&this)))"));
     assert!(c.contains("let this = Handle::<Weak<Bus>>::from_raw(this)?.borrow()?;"));
-    assert!(c.contains("pub unsafe extern \"C\" fn audio_bus_weak_close("));
+    assert!(c.contains("pub unsafe extern \"C\" fn hxn_audio_bus_weak_close("));
 
     let hl = hxn_gen::hl_adapter(&library, "audio_core");
     assert!(hl.contains("Ok(manage(Arc::new(Bus::new())))"));
-    assert!(
-        hl.contains("define_prim!(hlp_bus_same, audio_bus_same, \"PXaudio_bus_Xaudio_bus__b\");")
-    );
     assert!(hl.contains(
-        "define_prim!(hlp_bus_weak, audio_bus_weak, \"PXaudio_bus__Xaudio_bus_weak_\");"
+        "define_prim!(hlp_bus_same, hxn_audio_bus_same, \"PXaudio_bus_Xaudio_bus__b\");"
     ));
     assert!(hl.contains(
-        "define_prim!(hlp_bus_weak_upgrade, audio_bus_weak_upgrade, \"PXaudio_bus_weak__Xaudio_bus_\");"
+        "define_prim!(hlp_bus_weak, hxn_audio_bus_weak, \"PXaudio_bus__Xaudio_bus_weak_\");"
     ));
     assert!(hl.contains(
-        "define_prim!(hlp_bus_weak_close, audio_bus_weak_close, \"PXaudio_bus_weak__v\");"
+        "define_prim!(hlp_bus_weak_upgrade, hxn_audio_bus_weak_upgrade, \"PXaudio_bus_weak__Xaudio_bus_\");"
+    ));
+    assert!(hl.contains(
+        "define_prim!(hlp_bus_weak_close, hxn_audio_bus_weak_close, \"PXaudio_bus_weak__v\");"
     ));
 
     let header = hxn_gen::c_header(&library);
     assert!(header.contains(
-        "hxn_status audio_bus_same(hxn_handle *self, hxn_handle *other, int32_t *out, hxn_buf *err);"
+        "hxn_status hxn_audio_bus_same(hxn_handle *self, hxn_handle *other, int32_t *out, hxn_buf *err);"
     ));
     assert!(header.contains(
-        "hxn_status audio_bus_weak_upgrade(hxn_handle *self, hxn_handle **out, hxn_buf *err);"
+        "hxn_status hxn_audio_bus_weak_upgrade(hxn_handle *self, hxn_handle **out, hxn_buf *err);"
     ));
     let glue = hxn_gen::cpp_glue(&library);
     assert!(glue.contains("inline bool bus_same(void *self, void *other)"));
@@ -736,34 +736,36 @@ fn results_over_time_are_handles_the_library_answers_for() {
     assert!(c.contains("use hxn_future::{AnyFuture, AnySignal, AnyStream, outbox};"));
     assert!(c.contains("Ok(Handle::into_raw(AnyFuture::from(this.tune(station.as_str()?))))"));
     assert!(c.contains("Ok(Handle::into_raw(AnyFuture::from(Radio::open(path.as_str()?)?)))"));
-    assert!(c.contains("pub extern \"C\" fn fm_outbox_next() -> i32"));
-    assert!(c.contains("pub unsafe extern \"C\" fn fm_future_wait(this: RawHandle, milliseconds: i32, out: *mut i32, err: *mut Buf) -> Status"));
+    assert!(c.contains("pub extern \"C\" fn hxn_fm_outbox_next() -> i32"));
+    assert!(c.contains("pub unsafe extern \"C\" fn hxn_fm_future_wait(this: RawHandle, milliseconds: i32, out: *mut i32, err: *mut Buf) -> Status"));
     assert!(c.contains("this.take::<i32>()"));
     assert!(c.contains("Ok(Handle::into_raw(this.take::<Radio>()?))"));
     assert!(c.contains("Ok(Handle::into_raw(this.take::<Arc<Band>>()?))"));
     assert!(c.contains("Ok(Buf::from(this.next::<String>()?))"));
-    assert!(c.contains("pub unsafe extern \"C\" fn fm_signal_wait(this: RawHandle, seen: i32, milliseconds: i32, out: *mut i32, err: *mut Buf) -> Status"));
-    assert_eq!(c.matches("fn fm_signal_get_float(").count(), 1);
+    assert!(c.contains("pub unsafe extern \"C\" fn hxn_fm_signal_wait(this: RawHandle, seen: i32, milliseconds: i32, out: *mut i32, err: *mut Buf) -> Status"));
+    assert_eq!(c.matches("fn hxn_fm_signal_get_float(").count(), 1);
 
     let hl = hxn_gen::hl_adapter(&library, "fm_core");
     assert!(hl.contains("Ok(manage(AnyStream::from(this.titles())))"));
     assert!(hl.contains("\"PXfm_radio_OBi__Xfm_future_\""));
-    assert!(hl.contains("define_prim!(hlp_outbox_wait, fm_outbox_wait, \"Pi_b\");"));
-    assert!(hl.contains("define_prim!(hlp_future_wait, fm_future_wait, \"PXfm_future_i_i\");"));
+    assert!(hl.contains("define_prim!(hlp_outbox_wait, hxn_fm_outbox_wait, \"Pi_b\");"));
+    assert!(hl.contains("define_prim!(hlp_future_wait, hxn_fm_future_wait, \"PXfm_future_i_i\");"));
     assert!(hl.contains("Ok(blocking(|| this.wait_millis(milliseconds)) as i32)"));
-    assert!(hl.contains("define_prim!(hlp_signal_wait, fm_signal_wait, \"PXfm_signal_ii_i\");"));
-    assert!(hl.contains(
-        "define_prim!(hlp_future_take_radio, fm_future_take_radio, \"PXfm_future__Xfm_radio_\");"
-    ));
     assert!(
-        hl.contains("define_prim!(hlp_stream_next_text, fm_stream_next_text, \"PXfm_stream__B\");")
+        hl.contains("define_prim!(hlp_signal_wait, hxn_fm_signal_wait, \"PXfm_signal_ii_i\");")
     );
+    assert!(hl.contains(
+        "define_prim!(hlp_future_take_radio, hxn_fm_future_take_radio, \"PXfm_future__Xfm_radio_\");"
+    ));
+    assert!(hl.contains(
+        "define_prim!(hlp_stream_next_text, hxn_fm_stream_next_text, \"PXfm_stream__B\");"
+    ));
 
     let header = hxn_gen::c_header(&library);
-    assert!(header.contains("int32_t fm_outbox_wait(int32_t milliseconds);"));
-    assert!(header.contains("hxn_status fm_signal_wait(hxn_handle *self, int32_t seen, int32_t milliseconds, int32_t *out, hxn_buf *err);"));
+    assert!(header.contains("int32_t hxn_fm_outbox_wait(int32_t milliseconds);"));
+    assert!(header.contains("hxn_status hxn_fm_signal_wait(hxn_handle *self, int32_t seen, int32_t milliseconds, int32_t *out, hxn_buf *err);"));
     assert!(header.contains(
-        "hxn_status fm_future_take_band(hxn_handle *self, hxn_handle **out, hxn_buf *err);"
+        "hxn_status hxn_fm_future_take_band(hxn_handle *self, hxn_handle **out, hxn_buf *err);"
     ));
     let glue = hxn_gen::cpp_glue(&library);
     assert!(glue.contains("inline int signal_wait(void *self, int seen, int milliseconds)"));
@@ -930,7 +932,7 @@ impl Mesh {
     assert_eq!(hl.matches("fn lent_to_v(").count(), 1);
 
     let header = hxn_gen::c_header(&library);
-    assert!(header.contains("hxn_status geo_mesh_each(hxn_handle *self, double scale, hxn_callback f, int32_t *out, hxn_buf *err);"));
+    assert!(header.contains("hxn_status hxn_geo_mesh_each(hxn_handle *self, double scale, hxn_callback f, int32_t *out, hxn_buf *err);"));
     let glue = hxn_gen::cpp_glue(&library);
     assert!(
         glue.contains("inline hxn_status lent_id_to_b(void *env, int a0, double a1, int *out)")
@@ -1275,14 +1277,16 @@ fn a_function_outside_an_impl_is_a_static_of_a_class() {
         assert!(adapter.contains("Ok(hxn_library::limit())"));
         assert!(adapter.contains("hxn_library::merged(&first, &second)"));
         assert!(adapter.contains("hxn_library::join("));
-        assert!(adapter.contains("fn book_store_paths_join("));
+        assert!(adapter.contains("fn hxn_book_store_paths_join("));
         // Such a class is never instantiated, so it has no close function.
-        assert!(adapter.contains("fn book_store_shelf_close("));
+        assert!(adapter.contains("fn hxn_book_store_shelf_close("));
         assert!(!adapter.contains("book_store_paths_close"));
         assert!(!adapter.contains("book_store_book_store_close"));
     }
     let header = hxn_gen::c_header(&library);
-    assert!(header.contains("hxn_status book_store_book_store_limit(int32_t *out, hxn_buf *err);"));
+    assert!(
+        header.contains("hxn_status hxn_book_store_book_store_limit(int32_t *out, hxn_buf *err);")
+    );
     assert!(!header.contains("book_store_paths_close"));
     let glue = hxn_gen::cpp_glue(&library);
     assert!(glue.contains("inline int book_store_limit()"));
@@ -1606,9 +1610,11 @@ impl Thing {
     assert_eq!(methods[2].returns, Type::Signal(Box::new(Type::I64)));
 
     let c = hxn_gen::c_adapter(&library, "thing");
-    assert!(c.contains("fn thing_future_take_long(this: RawHandle, out: *mut i64, err: *mut Buf)"));
     assert!(
-        c.contains("fn thing_stream_next_bytes(this: RawHandle, out: *mut Buf, err: *mut Buf)")
+        c.contains("fn hxn_thing_future_take_long(this: RawHandle, out: *mut i64, err: *mut Buf)")
+    );
+    assert!(
+        c.contains("fn hxn_thing_stream_next_bytes(this: RawHandle, out: *mut Buf, err: *mut Buf)")
     );
     let header = hxn_gen::c_header(&library);
     assert!(
@@ -1619,9 +1625,9 @@ impl Thing {
     );
     // HashLink's bytes come with their length through a last parameter.
     let hl = hxn_gen::hl_adapter(&library, "thing");
-    assert!(
-        hl.contains("fn thing_stream_next_bytes(this: *mut Managed, out: *mut i32) -> *mut vbyte")
-    );
+    assert!(hl.contains(
+        "fn hxn_thing_stream_next_bytes(this: *mut Managed, out: *mut i32) -> *mut vbyte"
+    ));
     assert!(hl.contains("\"PXthing_stream_Ri_B\""), "{hl}");
     assert!(hl.contains("\"PXthing_future__l\""));
     let class = &hxn_gen::haxe_hl(&library)[0];
@@ -1741,9 +1747,9 @@ impl Thing {
     assert!(hl.contains("PBiB_b"), "{hl}");
     // The primitive that restores the type of a pointer to an object passed
     // to a callback.
-    assert!(
-        hl.contains("pub extern \"C\" fn thing_thing_adopt_lent(raw: *mut vbyte) -> *mut Managed")
-    );
+    assert!(hl.contains(
+        "pub extern \"C\" fn hxn_thing_thing_adopt_lent(raw: *mut vbyte) -> *mut Managed"
+    ));
     assert!(hl.contains("\"PB_Xthing_thing_\""));
     assert!(hl.contains("thing_band_adopt_lent"));
     let glue = hxn_gen::cpp_glue(&library);
@@ -1876,10 +1882,10 @@ impl Thing {
     }
     let c = hxn_gen::c_adapter(&library, "thing");
     assert!(c.contains(
-        "fn thing_thing_open(options: Slice<'_>, mode: i32, out: *mut Buf, err: *mut Buf)"
+        "fn hxn_thing_thing_open(options: Slice<'_>, mode: i32, out: *mut Buf, err: *mut Buf)"
     ));
     let hl = hxn_gen::hl_adapter(&library, "thing");
-    assert!(hl.contains("fn thing_thing_open(options: *mut vbyte, options_length: i32, mode: i32, out: *mut i32) -> *mut vbyte"));
+    assert!(hl.contains("fn hxn_thing_thing_open(options: *mut vbyte, options_length: i32, mode: i32, out: *mut i32) -> *mut vbyte"));
 
     // The Haxe classes of data are plain Haxe, the same for every runtime.
     let hl_files = hxn_gen::haxe_hl(&library);
@@ -2192,14 +2198,14 @@ impl Thing {
         ));
         assert!(adapter.contains("this.plain()?"));
         // The export the binding fetches the value with.
-        assert!(adapter.contains("fn thing_thrown_take("));
+        assert!(adapter.contains("fn hxn_thing_thrown_take("));
         assert!(adapter.contains("hxn_abi::thrown::take()"));
     }
     assert!(
         hxn_gen::hl_adapter(&library, "thing")
-            .contains("define_prim!(hlp_thrown_take, thing_thrown_take, \"PRi_B\");")
+            .contains("define_prim!(hlp_thrown_take, hxn_thing_thrown_take, \"PRi_B\");")
     );
-    assert!(hxn_gen::c_header(&library).contains("int32_t thing_thrown_take(hxn_buf *out);"));
+    assert!(hxn_gen::c_header(&library).contains("int32_t hxn_thing_thrown_take(hxn_buf *out);"));
     assert!(hxn_gen::cpp_glue(&library).contains("inline Array<unsigned char> thrown_take() {"));
 
     for files in [hxn_gen::haxe_hl(&library), hxn_gen::haxe_cpp(&library)] {
@@ -2341,12 +2347,12 @@ impl Thing {
         assert!(adapter.contains("std::borrow::Borrow::<[Point]>::borrow(&a0)"));
         assert!(adapter.contains("unsafe fn call_i_to_y("));
     }
-    assert!(c.contains("pub unsafe extern \"C\" fn thing_future_take_point(this: RawHandle, out: *mut Buf, err: *mut Buf)"));
-    assert!(c.contains("pub unsafe extern \"C\" fn thing_signal_get_mode(this: RawHandle, out: *mut i32, err: *mut Buf)"));
+    assert!(c.contains("pub unsafe extern \"C\" fn hxn_thing_future_take_point(this: RawHandle, out: *mut Buf, err: *mut Buf)"));
+    assert!(c.contains("pub unsafe extern \"C\" fn hxn_thing_signal_get_mode(this: RawHandle, out: *mut i32, err: *mut Buf)"));
     assert!(hl.contains(
-        "define_prim!(hlp_future_take_point, thing_future_take_point, \"PXthing_future_Ri_B\");"
+        "define_prim!(hlp_future_take_point, hxn_thing_future_take_point, \"PXthing_future_Ri_B\");"
     ));
-    assert!(hl.contains("define_prim!(hlp_stream_next_list_mode, thing_stream_next_list_mode, \"PXthing_stream_Ri_B\");"));
+    assert!(hl.contains("define_prim!(hlp_stream_next_list_mode, hxn_thing_stream_next_list_mode, \"PXthing_stream_Ri_B\");"));
     // Bytes a callback returns are a `haxe.io.Bytes`, read directly.
     assert!(hl.contains("\"PPi_OiB_Ri_B\""));
     assert!(hl.contains("buffer(call(env.cast(), &mut args).cast())"));

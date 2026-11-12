@@ -220,7 +220,7 @@ pub fn maker(carried: &Type) -> String {
 }
 
 fn export(library: &Library, kind: Kind, call: &str) -> String {
-    format!("{}_{}_{call}", library.name, kind.name())
+    format!("{}_{}_{call}", crate::names::symbols(library), kind.name())
 }
 
 /// The adapter's imports for these. Empty for a library that uses none, so
@@ -295,7 +295,7 @@ pub fn c_adapter(library: &Library) -> String {
     if used.is_empty() {
         return String::new();
     }
-    let name = &library.name;
+    let name = &crate::names::symbols(library);
     let mut out = format!(
         "\n// The library's one queue of what it has for the host.\n#[unsafe(no_mangle)]\npub extern \"C\" fn {name}_outbox_wait(milliseconds: i32) -> i32 {{\n    i32::from(outbox::wait_millis(milliseconds))\n}}\n\n#[unsafe(no_mangle)]\npub extern \"C\" fn {name}_outbox_next() -> i32 {{\n    outbox::next()\n}}\n"
     );
@@ -361,7 +361,7 @@ pub fn hl_adapter(library: &Library) -> String {
     if used.is_empty() {
         return String::new();
     }
-    let name = &library.name;
+    let name = &crate::names::symbols(library);
     let mut out = format!(
         "\n// The library's one queue of what it has for the host.\n#[unsafe(no_mangle)]\npub unsafe extern \"C\" fn {name}_outbox_wait(milliseconds: i32) -> bool {{\n    unsafe {{ blocking(|| outbox::wait_millis(milliseconds)) }}\n}}\ndefine_prim!(hlp_outbox_wait, {name}_outbox_wait, \"Pi_b\");\n\n#[unsafe(no_mangle)]\npub extern \"C\" fn {name}_outbox_next() -> i32 {{\n    outbox::next()\n}}\ndefine_prim!(hlp_outbox_next, {name}_outbox_next, \"P_i\");\n"
     );
@@ -455,7 +455,7 @@ pub fn c_header(library: &Library) -> String {
     if used.is_empty() {
         return String::new();
     }
-    let name = &library.name;
+    let name = &crate::names::symbols(library);
     let mut out = format!(
         "\n/* What the library has for the host. `wait` gives 1 once something is queued\n * or 0 when the limit passes; `next` gives the id of a future, stream or\n * signal that has something new, or -1. */\nint32_t {name}_outbox_wait(int32_t milliseconds);\nint32_t {name}_outbox_next(void);\n"
     );
@@ -501,7 +501,7 @@ pub fn cpp_glue(library: &Library) -> String {
     if used.is_empty() {
         return String::new();
     }
-    let name = &library.name;
+    let name = &crate::names::symbols(library);
     let mut out = format!(
         "\ninline bool outbox_wait(int milliseconds) {{\n\t// The collector may run while this thread waits.\n\thxn::Blocking zone;\n\treturn {name}_outbox_wait(milliseconds) != 0;\n}}\n\ninline int outbox_next() {{\n\treturn {name}_outbox_next();\n}}\n"
     );
