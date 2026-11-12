@@ -108,8 +108,12 @@ filesystem `#include "counter.h"` would then find the generated one.
 - A result that arrives later is returned as a `Future<T>`, a `Stream<T>` or
   a `Signal<T>` of `hxn-future`, by a function that itself returns at once.
   It carries `bool`, `i32`, `f64` or `String`; a future or a stream may carry
-  an interface, a shared one as `Arc<T>`. There is no `async fn` across the
-  boundary: the function starts the work with `spawn` and returns its future.
+  an interface, a shared one as `Arc<T>`, or `()`.
+- An `async fn` crosses as a function returning a future of what it gives.
+  It takes `self` or, of a shared interface, `&self`; numbers, `bool`, `&str`
+  and `&[u8]`, which are copied; and shared interfaces. It does not take what
+  is lent for a call, and it is not `new` or `#[hxn(blocking)]`. Its future
+  has to be `Send`.
 - A Haxe function is taken as `impl Fn(..) -> Result<T, E>`, or `FnMut` or
   `FnOnce`, with `E` a type parameter of the function: its only use for one.
   It takes `bool`, `i32` or `f64` and gives one of those or `()`. The library

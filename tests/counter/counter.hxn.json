@@ -146,6 +146,16 @@
           "blocking": false
         },
         {
+          "name": "into_value_later",
+          "docs": "Gives the counter up to work that reports its value later.",
+          "kind": "consuming",
+          "params": [{ "name": "milliseconds", "type": "i32" }],
+          "returns": "future<i32>",
+          "async": true,
+          "fallible": false,
+          "blocking": false
+        },
+        {
           "name": "live",
           "docs": "How many counters exist.",
           "kind": "static",
@@ -427,6 +437,65 @@
           "blocking": false
         },
         {
+          "name": "squared",
+          "docs": "`square` as an async function, whose body is the work.",
+          "kind": "static",
+          "params": [{ "name": "value", "type": "i32" }, { "name": "milliseconds", "type": "i32" }],
+          "returns": "future<i32>",
+          "async": true,
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "shout",
+          "docs": "Text and bytes an async function takes are its own by the time it\nruns, long after the call that passed them returned.",
+          "kind": "static",
+          "params": [{ "name": "name", "type": "str" }, { "name": "data", "type": "bytes" }],
+          "returns": "future<str>",
+          "async": true,
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "settle",
+          "docs": "Gives nothing but that it is done.",
+          "kind": "static",
+          "params": [{ "name": "milliseconds", "type": "i32" }],
+          "returns": "future<void>",
+          "async": true,
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "agree",
+          "docs": "Nothing, or a failure.",
+          "kind": "static",
+          "params": [{ "name": "really", "type": "bool" }],
+          "returns": "future<void>",
+          "async": true,
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "counted",
+          "docs": "A counter made by async work.",
+          "kind": "static",
+          "params": [{ "name": "start", "type": "i32" }],
+          "returns": "future<Counter>",
+          "async": true,
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "ticks",
+          "docs": "`count` items of nothing: each is only that something happened.",
+          "kind": "static",
+          "params": [{ "name": "count", "type": "i32" }],
+          "returns": "stream<void>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
           "name": "ramp",
           "docs": "A value that climbs from 0 to `limit`.",
           "kind": "static",
@@ -473,6 +542,26 @@
           "kind": "method",
           "params": [],
           "returns": "i32",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "add_later",
+          "docs": "Adds after a wait. An async function of a shared value holds a share\nof it while it runs, whatever becomes of the object that called it.",
+          "kind": "method",
+          "params": [{ "name": "amount", "type": "i32" }, { "name": "milliseconds", "type": "i32" }],
+          "returns": "future<i32>",
+          "async": true,
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "pour",
+          "docs": "Adds what another pot holds, and what a third does if there is one.",
+          "kind": "method",
+          "params": [{ "name": "from", "type": "Pot" }, { "name": "also", "type": "Pot?" }],
+          "returns": "future<Pot>",
+          "async": true,
           "fallible": false,
           "blocking": false
         },

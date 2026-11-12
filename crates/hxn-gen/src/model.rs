@@ -38,6 +38,10 @@ pub struct Method {
     pub returns: Type,
     /// Returns a `Result`, whose error is thrown to Haxe.
     pub fallible: bool,
+    /// An `async fn`. The adapter starts it and hands back a future of what
+    /// it gives, which is what `returns` is; `fallible` is then whether it
+    /// gives a `Result`, whose error fails the future and not the call.
+    pub asynchronous: bool,
     /// Marked `#[hxn(blocking)]`: the collector may run while it waits.
     pub blocking: bool,
     /// `new`, which makes the value a Haxe `new` wraps.

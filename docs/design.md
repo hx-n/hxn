@@ -280,8 +280,17 @@ one set of exports to wait on and watch a future, whatever it carries and
 whichever function returned it, and one more for each kind of value its
 futures carry, to take it. A future or stream can carry a number, a bool, text
 or an object; an object taken from one is owned by the Haxe side from then on.
-A signal carries a number, a bool or text, because it is read any number of
-times.
+It can also carry nothing, `()`, which Haxe sees as `hxn.Unit`: that the work
+is done, or that something happened. A signal carries a number, a bool or
+text, because it is read any number of times.
+
+An `async fn` is exposed as the function it is to its caller: one that returns
+a future of what it gives, with the error of a `Result` failing the future.
+The adapter starts it with `spawn`. The work runs after the call that started
+it has returned, so it owns what it was passed: text and bytes are copied, a
+shared object is kept by a share of its own, and the receiver is `self` or a
+shared `&self`. What is only lent for a call is refused: a borrowed object
+that is not shared, a cell, a Haxe function.
 
 ## Running work
 

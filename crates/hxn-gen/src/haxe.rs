@@ -31,8 +31,8 @@ fn haxe_type(ty: &Type) -> String {
         Type::F64 => String::from("Float"),
         Type::Str => String::from("String"),
         Type::Bytes => String::from("haxe.io.Bytes"),
-        Type::Future(of) => format!("hxn.Future<{}>", haxe_type(of)),
-        Type::Stream(of) => format!("hxn.Stream<{}>", haxe_type(of)),
+        Type::Future(of) => format!("hxn.Future<{}>", carried_type(of)),
+        Type::Stream(of) => format!("hxn.Stream<{}>", carried_type(of)),
         Type::Signal(of) => format!("hxn.Signal<{}>", haxe_type(of)),
         Type::Lent { params, returns } => lent::haxe_type(params, returns),
         Type::AtomicInt => String::from("hxn.AtomicInt"),
@@ -45,6 +45,14 @@ fn haxe_type(ty: &Type) -> String {
             interface,
             nullable: true,
         } => format!("Null<{interface}>"),
+    }
+}
+
+// What a future or a stream carries: a type, or `hxn.Unit` for nothing.
+fn carried_type(carried: &Type) -> String {
+    match carried {
+        Type::Void => String::from("hxn.Unit"),
+        other => haxe_type(other),
     }
 }
 

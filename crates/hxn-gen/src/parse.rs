@@ -377,62 +377,74 @@ impl Scope<'_> {
             let Some(carried) = wrapped(ty, name) else {
                 continue;
             };
-            let plain = match path_name(carried).as_deref() {
-                Some("bool") => Some(Type::Bool),
-                Some("i32") => Some(Type::I32),
-                Some("f64") => Some(Type::F64),
-                Some("String") => Some(Type::Str),
-                _ => None,
-            };
-            if let Some(plain) = plain {
-                return Ok(Some(make(Box::new(plain))));
-            }
-            // A signal is read any number of times, which a value held
-            // by one owner cannot be.
-            let interface = if name == "Signal" {
-                None
-            } else if let Some(interface) = self.interface(carried) {
-                if self.is_shared(&interface) {
-                    return error(
-                        ty.span(),
-                        format!(
-                            "a shared interface is carried in its `Arc`: `{name}<Arc<{interface}>>`"
-                        ),
-                    );
-                }
-                Some(interface)
-            } else if let Some(interface) = self.pointer(carried) {
-                if !self.is_shared(&interface) {
-                    return error(
-                        ty.span(),
-                        format!(
-                            "`Arc<{interface}>` needs `{interface}` marked `#[hxn::interface(shared)]`"
-                        ),
-                    );
-                }
-                Some(interface)
-            } else {
-                None
-            };
-            return match interface {
-                Some(interface) => Ok(Some(make(Box::new(Type::Handle {
-                    interface,
-                    nullable: false,
-                })))),
-                None if name == "Signal" => error(
-                    ty.span(),
-                    "a signal carries one of bool, i32, f64 or String",
-                ),
-                None => error(
-                    ty.span(),
-                    format!(
-                        "a {} carries one of bool, i32, f64, String or an interface",
-                        name.to_lowercase()
-                    ),
-                ),
-            };
+            return Ok(Some(make(Box::new(self.carried(name, carried)?))));
         }
         Ok(None)
+    }
+
+    // What a `Future`, `Stream` or `Signal`, as `name` has it, carries.
+    fn carried(&self, name: &str, carried: &syn::Type) -> Result<Type, Error> {
+        let ty = carried;
+        let plain = match path_name(carried).as_deref() {
+            Some("bool") => Some(Type::Bool),
+            Some("i32") => Some(Type::I32),
+            Some("f64") => Some(Type::F64),
+            Some("String") => Some(Type::Str),
+            _ => None,
+        };
+        if let Some(plain) = plain {
+            return Ok(plain);
+        }
+        // Nothing, which is still news: the work is done, or something
+        // happened. A signal always has a value.
+        if name != "Signal" && matches!(carried, syn::Type::Tuple(tuple) if tuple.elems.is_empty())
+        {
+            return Ok(Type::Void);
+        }
+        // A signal is read any number of times, which a value held
+        // by one owner cannot be.
+        let interface = if name == "Signal" {
+            None
+        } else if let Some(interface) = self.interface(carried) {
+            if self.is_shared(&interface) {
+                return error(
+                    ty.span(),
+                    format!(
+                        "a shared interface is carried in its `Arc`: `{name}<Arc<{interface}>>`"
+                    ),
+                );
+            }
+            Some(interface)
+        } else if let Some(interface) = self.pointer(carried) {
+            if !self.is_shared(&interface) {
+                return error(
+                    ty.span(),
+                    format!(
+                        "`Arc<{interface}>` needs `{interface}` marked `#[hxn::interface(shared)]`"
+                    ),
+                );
+            }
+            Some(interface)
+        } else {
+            None
+        };
+        match interface {
+            Some(interface) => Ok(Type::Handle {
+                interface,
+                nullable: false,
+            }),
+            None if name == "Signal" => error(
+                ty.span(),
+                "a signal carries one of bool, i32, f64 or String",
+            ),
+            None => error(
+                ty.span(),
+                format!(
+                    "a {} carries one of (), bool, i32, f64, String or an interface",
+                    name.to_lowercase()
+                ),
+            ),
+        }
     }
 
     // The type, and whether it is a shared interface already in its `Arc`.
@@ -522,6 +534,79 @@ impl Scope<'_> {
         }
     }
 
+    // An `async fn` as the function it is to the host: one that returns a
+    // future of what it gives. It runs after the call that starts it has
+    // returned, so everything it takes is its own by then.
+    fn started(
+        &self,
+        signature: &syn::Signature,
+        receiver: Receiver,
+        params: &[Param],
+        constructor: bool,
+    ) -> Result<((Type, bool), bool), Error> {
+        const LATER: &str = "an async function runs after the call that starts it has returned";
+        let name = &signature.ident;
+        if constructor {
+            return error(
+                name.span(),
+                "`new` is not async: a Haxe `new` gives its object at once",
+            );
+        }
+        let borrows = match receiver {
+            Receiver::None | Receiver::Owned => false,
+            Receiver::Shared => !self.is_shared(self.own),
+            Receiver::Exclusive => true,
+        };
+        if borrows {
+            return error(
+                name.span(),
+                format!(
+                    "{LATER}, so it cannot borrow the object: take `self`, or mark the interface `shared`"
+                ),
+            );
+        }
+        for param in params {
+            let lent = match &param.ty {
+                Type::Lent { .. } => Some("a function"),
+                Type::AtomicInt | Type::AtomicBool => Some("a cell"),
+                Type::Handle { interface, .. } if param.exclusive || !self.is_shared(interface) => {
+                    Some("an object")
+                }
+                _ => None,
+            };
+            if let Some(lent) = lent {
+                return error(
+                    name.span(),
+                    format!(
+                        "{LATER}, so it cannot take {lent}, which is lent for the call: `{}`",
+                        param.name
+                    ),
+                );
+            }
+        }
+        let (carried, fallible) = match given(&signature.output) {
+            None => (Type::Void, false),
+            Some((ty, fallible)) => {
+                if self.later(ty)?.is_some() {
+                    return error(
+                        ty.span(),
+                        "an async function gives its value when it is done: return the value, not a Future of it",
+                    );
+                }
+                if let Some(interface) = self.interface(ty)
+                    && self.is_shared(&interface)
+                {
+                    return error(
+                        ty.span(),
+                        format!("a shared interface is given in its `Arc`: `Arc<{interface}>`"),
+                    );
+                }
+                (self.carried("Future", ty)?, fallible)
+            }
+        };
+        Ok(((Type::Future(Box::new(carried)), false), fallible))
+    }
+
     fn method(
         &self,
         signature: &syn::Signature,
@@ -544,9 +629,7 @@ impl Scope<'_> {
         {
             return error(signature.generics.span(), "a generic function cannot cross");
         }
-        if let Some(token) = &signature.asyncness {
-            return error(token.span(), "an async function cannot cross yet");
-        }
+        let asynchronous = signature.asyncness.is_some();
         if let Some(token) = &signature.unsafety {
             return error(token.span(), "an unsafe function cannot cross");
         }
@@ -597,12 +680,16 @@ impl Scope<'_> {
                 format!("every shared interface has a `{name}` of hxn's"),
             );
         }
-        let ((returns, returns_arc), fallible) = self.returns(&signature.output)?;
+        let constructor = name == "new";
+        let ((returns, returns_arc), fallible) = if asynchronous {
+            self.started(signature, receiver, &params, constructor)?
+        } else {
+            self.returns(&signature.output)?
+        };
         let own = Type::Handle {
             interface: self.own.to_owned(),
             nullable: false,
         };
-        let constructor = name == "new";
         if constructor && (receiver != Receiver::None || returns != own) {
             return error(
                 signature.ident.span(),
@@ -610,6 +697,12 @@ impl Scope<'_> {
             );
         }
         let blocking = is_blocking(attributes)?;
+        if blocking && asynchronous {
+            return error(
+                signature.ident.span(),
+                "an async function does not wait: the future it gives is what is waited on",
+            );
+        }
         if blocking
             && params
                 .iter()
@@ -627,10 +720,12 @@ impl Scope<'_> {
             params,
             returns,
             fallible,
+            asynchronous,
             blocking,
             constructor,
             returns_arc,
             returns_number: given(&signature.output)
+                .filter(|_| !asynchronous)
                 .and_then(|(ty, _)| path_name(ty))
                 .and_then(|name| Number::parse(&name)),
             free: false,

@@ -176,6 +176,12 @@ impl Counter {
         self.value
     }
 
+    /// Gives the counter up to work that reports its value later.
+    pub async fn into_value_later(self, milliseconds: i32) -> i32 {
+        let _ = square_later(1, millis(milliseconds)).await;
+        self.value
+    }
+
     /// How many counters exist.
     pub fn live() -> i32 {
         live()
@@ -404,6 +410,50 @@ impl Later {
         stream
     }
 
+    /// `square` as an async function, whose body is the work.
+    pub async fn squared(value: i32, milliseconds: i32) -> Result<i32, Failure> {
+        square_later(value, millis(milliseconds)).await
+    }
+
+    /// Text and bytes an async function takes are its own by the time it
+    /// runs, long after the call that passed them returned.
+    pub async fn shout(name: &str, data: &[u8]) -> String {
+        let greeting = greet_later(name.to_owned(), millis(1))
+            .await
+            .unwrap_or_default();
+        format!("{greeting}! {}", data.len())
+    }
+
+    /// Gives nothing but that it is done.
+    pub async fn settle(milliseconds: i32) {
+        let _ = square_later(1, millis(milliseconds)).await;
+    }
+
+    /// Nothing, or a failure.
+    pub async fn agree(really: bool) -> Result<(), &'static str> {
+        if really { Ok(()) } else { Err("refused later") }
+    }
+
+    /// A counter made by async work.
+    pub async fn counted(start: i32) -> Counter {
+        let _ = square_later(1, millis(1)).await;
+        Counter::new(start)
+    }
+
+    /// `count` items of nothing: each is only that something happened.
+    pub fn ticks(count: i32) -> Stream<()> {
+        let (sender, stream) = channel();
+        let mut sent = 0;
+        drop(stepped(move || {
+            if sent >= count || !sender.send(()) {
+                return Poll::Ready(Ok::<_, Failure>(()));
+            }
+            sent += 1;
+            Poll::Pending
+        }));
+        stream
+    }
+
     /// A value that climbs from 0 to `limit`.
     pub fn ramp(limit: i32) -> Signal<i32> {
         ramp(limit)
@@ -449,6 +499,23 @@ impl Pot {
 
     pub fn total(&self) -> i32 {
         self.total.load(Ordering::SeqCst)
+    }
+
+    /// Adds after a wait. An async function of a shared value holds a share
+    /// of it while it runs, whatever becomes of the object that called it.
+    pub async fn add_later(&self, amount: i32, milliseconds: i32) -> i32 {
+        let _ = square_later(1, millis(milliseconds)).await;
+        self.add(amount)
+    }
+
+    /// Adds what another pot holds, and what a third does if there is one.
+    pub async fn pour(&self, from: &Pot, also: Option<Arc<Pot>>) -> Arc<Pot> {
+        let _ = square_later(1, millis(1)).await;
+        self.add(from.total());
+        if let Some(also) = also {
+            self.add(also.total());
+        }
+        Arc::new(Pot::new(self.total()))
     }
 
     /// A pot of its own starting at this one's total, made already shared.

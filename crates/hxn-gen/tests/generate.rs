@@ -822,8 +822,12 @@ fn results_over_time_are_handles_the_library_answers_for() {
 fn says_what_a_result_over_time_cannot_carry() {
     let cases = [
         (
-            "pub fn done(&self) -> Future<()> { todo!() }",
+            "pub fn done(&self) -> Future<Vec<u8>> { todo!() }",
             "a future carries one of",
+        ),
+        (
+            "pub fn nothing(&self) -> Signal<()> { todo!() }",
+            "a signal carries one of",
         ),
         (
             "pub fn all(&self) -> Stream<Vec<u8>> { todo!() }",
@@ -1417,4 +1421,148 @@ fn a_script_is_told_what_each_class_is_called_with() {
             .text
             .contains("public static var meter(default, never):hxn.Gc.Meter;")
     );
+}
+
+// An async function runs after the call that starts it has returned: the
+// host gets a future, and the work owns everything it was passed.
+#[test]
+fn an_async_function_is_a_future_of_what_it_gives() {
+    let source = r#"
+#[hxn::interface]
+pub struct Thing;
+
+#[hxn::interface(shared)]
+pub struct Band;
+
+#[hxn::methods]
+impl Thing {
+    pub async fn count(limit: u8, name: &str, data: &[u8]) -> Result<i32, String> { todo!() }
+    pub async fn rest() {}
+    pub async fn spend(self) -> String { todo!() }
+}
+
+#[hxn::methods]
+impl Band {
+    pub async fn play(&self, with: &Band, after: Option<Arc<Band>>) -> Arc<Band> { todo!() }
+}
+"#;
+    let library = parse("thing", source).unwrap();
+    let thing = &library.interfaces[0];
+    let count = &thing.methods[0];
+    assert!(count.asynchronous && count.fallible);
+    assert_eq!(count.returns, Type::Future(Box::new(Type::I32)));
+    assert_eq!(count.returns_number, None);
+    let rest = &thing.methods[1];
+    assert!(rest.asynchronous && !rest.fallible);
+    assert_eq!(rest.returns, Type::Future(Box::new(Type::Void)));
+
+    let manifest = hxn_gen::manifest(&library);
+    assert_eq!(manifest.matches("\"async\": true").count(), 4);
+    assert!(!manifest.contains("\"fallible\": true"), "{manifest}");
+    assert!(manifest.contains("\"returns\": \"future<void>\""));
+
+    for adapter in [
+        hxn_gen::c_adapter(&library, "thing"),
+        hxn_gen::hl_adapter(&library, "thing"),
+    ] {
+        // Converted, and refused if it does not fit, before the work starts.
+        assert!(
+            adapter.contains("let limit = u8::try_from(limit)"),
+            "{adapter}"
+        );
+        assert!(adapter.contains("let name = String::from("));
+        assert!(adapter.contains("let data = <[u8]>::to_vec("));
+        assert!(
+            adapter.contains(
+                "hxn_future::spawn(async move { Thing::count(limit, &name, &data).await })"
+            )
+        );
+        assert!(adapter.contains(
+            "hxn_future::spawn(async move { Thing::rest().await; Ok::<_, hxn_future::Failure>(()) })"
+        ));
+        assert!(adapter.contains("Ok::<_, hxn_future::Failure>(this.spend().await)"));
+        // The object is taken out, so it is closed whatever the work does.
+        assert!(adapter.contains(".take()?.ok_or(Fault::Closed)?;"));
+        assert!(adapter.contains("this.spend().await"));
+        // A share each, and none where there was no object.
+        assert!(adapter.contains("let this = Arc::clone(&this);"));
+        assert!(adapter.contains("let with = Arc::clone(&with);"));
+        assert!(adapter.contains("let after = after.as_deref().cloned();"));
+        assert!(adapter.contains("this.play(&with, after).await"));
+    }
+    for class in [
+        &hxn_gen::haxe_hl(&library)[0],
+        &cpp_classes(&library)[0],
+        &hxn_gen::haxe_cppia(&library)[0],
+    ] {
+        assert!(
+            class
+                .text
+                .contains("public static function count(limit:Int, name:String, data:haxe.io.Bytes):hxn.Future<Int>"),
+            "{}",
+            class.text
+        );
+        assert!(
+            class
+                .text
+                .contains("public static function rest():hxn.Future<hxn.Unit>")
+        );
+        assert!(
+            class
+                .text
+                .contains("public function spend():hxn.Future<String>")
+        );
+    }
+
+    let refused = [
+        ("pub async fn new() -> Self { Self }", "`new` is not async"),
+        (
+            "pub async fn read(&self) {}",
+            "cannot borrow the object: take `self`, or mark the interface `shared`",
+        ),
+        (
+            "pub async fn write(&mut self) {}",
+            "cannot borrow the object",
+        ),
+        (
+            "pub async fn with(other: &Thing) {}",
+            "cannot take an object, which is lent for the call: `other`",
+        ),
+        (
+            "pub async fn tune(other: &mut Thing) {}",
+            "cannot take an object",
+        ),
+        (
+            "pub async fn watch(cell: &AtomicI32) {}",
+            "cannot take a cell",
+        ),
+        (
+            "pub async fn each<E>(f: impl Fn(i32) -> Result<i32, E>) {}",
+            "cannot take a function",
+        ),
+        (
+            "#[hxn(blocking)]\n    pub async fn wait() {}",
+            "an async function does not wait",
+        ),
+        (
+            "pub async fn twice() -> Future<i32> { todo!() }",
+            "return the value, not a Future of it",
+        ),
+        (
+            "pub async fn band() -> Band { todo!() }",
+            "given in its `Arc`: `Arc<Band>`",
+        ),
+        ("pub async fn wide() -> u8 { 0 }", "a future carries one of"),
+    ];
+    for (method, expected) in refused {
+        let source = format!(
+            "#[hxn::interface]\npub struct Thing;\n\n#[hxn::interface(shared)]\npub struct Band;\n\n#[hxn::methods]\nimpl Thing {{\n    {method}\n}}\n"
+        );
+        let error = parse("thing", &source).unwrap_err();
+        assert!(
+            error.message.contains(expected),
+            "{method}: {}",
+            error.message
+        );
+    }
 }

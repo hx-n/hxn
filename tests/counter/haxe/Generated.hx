@@ -253,6 +253,29 @@ class Generated {
 		pot.close();
 		check("and both are released", Counter.live() == before && Pot.live() == 0);
 
+		check("an async function is a future of what it gives", Later.squared(7, 20).await() == 49);
+		throws("and of how it fails", () -> Later.squared(100000, 1).await(), "counter overflow");
+		check("what it was passed is its own by then", Later.shout("wörld ☃", haxe.io.Bytes.ofHex("010203")).await() == "hello wörld ☃! 3");
+		check("one that gives nothing is still waited for", Later.settle(5).await() == hxn.Unit.Nothing && Later.agree(true).await() == hxn.Unit.Nothing);
+		throws("or fails", () -> Later.agree(false).await(), "refused later");
+		var counted = Later.counted(8).await();
+		check("an object made by async work", counted.add(1) == 9);
+		var gone = counted.intoValueLater(5);
+		throws("an async function that takes the object closes it at once", () -> counted.add(1), "closed");
+		check("and the work has it", gone.await() == 9 && Counter.live() == before);
+		var kept = new Pot(1);
+		var adding = kept.addLater(2, 20);
+		kept.close();
+		check("an async function of a shared value keeps it alive", adding.await() == 3 && Pot.live() == 0);
+		var first = new Pot(1);
+		var second = new Pot(10);
+		var third = new Pot(100);
+		var poured = first.pour(second, null).await();
+		check("shared objects passed to async work", poured.total() == 11 && first.pour(second, third).await().total() == 121);
+		for (pot in [first, second, third])
+			pot.close();
+		check("a stream of nothing counts what happened", [for (_ in Later.ticks(4)) 1].length == 4);
+
 		check("a stream is read item by item", [for (item in Later.countUp(5, false)) item].join(",") == "1,2,3,4,5");
 		check("one with nothing in it just ends", [for (item in Later.countUp(0, false)) item].length == 0);
 		var got = [];

@@ -91,6 +91,7 @@ fn interface(carried: &Type) -> Option<&str> {
 // What a carried type is called in a symbol: `int`, `text`, `counter`.
 fn suffix(carried: &Type) -> String {
     match carried {
+        Type::Void => String::from("unit"),
         Type::Bool => String::from("bool"),
         Type::I32 => String::from("int"),
         Type::F64 => String::from("float"),
@@ -103,6 +104,7 @@ fn suffix(carried: &Type) -> String {
 // The same in a Haxe name: `Int`, `Text`, `Counter`.
 fn title(carried: &Type) -> String {
     match carried {
+        Type::Void => String::from("Unit"),
         Type::Bool => String::from("Bool"),
         Type::I32 => String::from("Int"),
         Type::F64 => String::from("Float"),
@@ -114,6 +116,7 @@ fn title(carried: &Type) -> String {
 
 fn haxe_type(carried: &Type) -> String {
     match carried {
+        Type::Void => String::from("hxn.Unit"),
         Type::Bool => String::from("Bool"),
         Type::I32 => String::from("Int"),
         Type::F64 => String::from("Float"),
@@ -126,6 +129,7 @@ fn haxe_type(carried: &Type) -> String {
 // The Rust type a library's own future, stream or signal carries.
 fn rust_type(library: &Library, carried: &Type) -> String {
     match carried {
+        Type::Void => String::from("()"),
         Type::Bool => String::from("bool"),
         Type::I32 => String::from("i32"),
         Type::F64 => String::from("f64"),
@@ -264,6 +268,9 @@ pub fn c_adapter(library: &Library) -> String {
             // What the erased handle gives is already a `Result`.
             let value = format!("this.{}::<{}>()", kind.take(), rust_type(library, carried));
             let (ty, result) = match carried {
+                // Nothing crosses as a flag that is always set: taking it
+                // is what says the work is done, or fails.
+                Type::Void => ("i32", format!("{value}.map(|()| 1)")),
                 Type::Bool => ("i32", format!("Ok(i32::from({value}?))")),
                 Type::I32 => ("i32", value),
                 Type::F64 => ("f64", value),
@@ -321,6 +328,7 @@ pub fn hl_adapter(library: &Library) -> String {
         for carried in carried {
             let value = format!("this.{}::<{}>()", kind.take(), rust_type(library, carried));
             let (ty, letter, result) = match carried {
+                Type::Void => ("bool", String::from("b"), format!("{value}.map(|()| true)")),
                 Type::Bool => ("bool", String::from("b"), value),
                 Type::I32 => ("i32", String::from("i"), value),
                 Type::F64 => ("f64", String::from("d"), value),
@@ -376,7 +384,7 @@ pub fn c_header(library: &Library) -> String {
         }
         for carried in carried {
             let ty = match carried {
-                Type::Bool | Type::I32 => "int32_t *",
+                Type::Void | Type::Bool | Type::I32 => "int32_t *",
                 Type::F64 => "double *",
                 Type::Str => "hxn_buf *",
                 _ => "hxn_handle **",
@@ -426,7 +434,7 @@ pub fn cpp_glue(library: &Library) -> String {
         }
         for carried in carried {
             let (returns, local, result) = match carried {
-                Type::Bool => ("bool ", "int out = 0;", "out != 0"),
+                Type::Void | Type::Bool => ("bool ", "int out = 0;", "out != 0"),
                 Type::I32 => ("int ", "int out = 0;", "out"),
                 Type::F64 => ("double ", "double out = 0;", "out"),
                 Type::Str => (
@@ -480,7 +488,7 @@ fn hl_file(library: &Library, kind: Kind, carried: &[Type]) -> File {
     }
     for carried in carried {
         let (ty, nothing) = match carried {
-            Type::Bool => (String::from("Bool"), "false"),
+            Type::Void | Type::Bool => (String::from("Bool"), "false"),
             Type::I32 => (String::from("Int"), "0"),
             Type::F64 => (String::from("Float"), "0."),
             Type::Str => (String::from("hl.Bytes"), "null"),
@@ -503,6 +511,7 @@ fn hl_file(library: &Library, kind: Kind, carried: &[Type]) -> File {
     for (index, carried) in carried.iter().enumerate() {
         let take = format!("Native.{local}_{}_{}(raw)", kind.take(), suffix(carried));
         let take = match carried {
+            Type::Void => format!("{{\n\t\t\t{take};\n\t\t\thxn.Unit.Nothing;\n\t\t}}"),
             Type::Str => format!("@:privateAccess String.fromUCS2({take})"),
             Type::Handle { interface, .. } => format!("{interface}.adopt({take})"),
             _ => take,
@@ -564,6 +573,9 @@ fn cpp_file(library: &Library, kind: Kind, carried: &[Type]) -> File {
         match carried {
             Type::Handle { interface, .. } => out.push_str(&format!(
                 "\n\tfunction take{title}():{interface} {{\n\t\tvar made = {interface}.adopt();\n\t\tmade.raw = {call};\n\t\tmade.own();\n\t\treturn made;\n\t}}\n"
+            )),
+            Type::Void => out.push_str(&format!(
+                "\n\tfunction take{title}():hxn.Unit {{\n\t\t{call};\n\t\treturn hxn.Unit.Nothing;\n\t}}\n"
             )),
             _ => out.push_str(&format!(
                 "\n\tfunction take{title}():{}\n\t\treturn {call};\n",
@@ -652,6 +664,7 @@ pub fn cpp_natives(library: &Library) -> String {
         for carried in carried {
             let returns = match carried {
                 Type::Handle { .. } => String::from("Handle"),
+                Type::Void => String::from("Bool"),
                 other => haxe_type(other),
             };
             out.push_str(&cpp_extern(

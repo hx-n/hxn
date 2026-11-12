@@ -62,7 +62,14 @@ fn method(method: &Method) -> String {
         "          \"returns\": {},\n",
         quoted(&method.returns_name())
     ));
-    out.push_str(&format!("          \"fallible\": {},\n", method.fallible));
+    // An async function's failure is its future's, not the call's.
+    if method.asynchronous {
+        out.push_str("          \"async\": true,\n");
+    }
+    out.push_str(&format!(
+        "          \"fallible\": {},\n",
+        method.fallible && !method.asynchronous
+    ));
     out.push_str(&format!("          \"blocking\": {}\n", method.blocking));
     out.push_str("        }");
     out
