@@ -237,6 +237,24 @@
           "blocking": false
         },
         {
+          "name": "chunks",
+          "docs": "Calls `f` with the value's bytes, a few at a time, and returns how\nmany it was shown.",
+          "kind": "method",
+          "params": [{ "name": "size", "type": "i32" }, { "name": "f", "type": "fn(bytes, i32) -> void" }],
+          "returns": "i32",
+          "fallible": true,
+          "blocking": false
+        },
+        {
+          "name": "spawn_each",
+          "docs": "Makes `count` counters, 1, 2 and so on, and gives each to `f` to\nkeep. Returns what `f` said of them, added up.",
+          "kind": "static",
+          "params": [{ "name": "count", "type": "i32" }, { "name": "f", "type": "fn(Counter, str) -> i32" }],
+          "returns": "i32",
+          "fallible": true,
+          "blocking": false
+        },
+        {
           "name": "ask",
           "docs": "What `f` gives.",
           "kind": "static",
@@ -628,6 +646,15 @@
           "returns": "future<Pot>",
           "async": true,
           "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "offer",
+          "docs": "Gives `f` a share of `pot` and a new pot of half of it, and adds\nwhat `f` says to the total.",
+          "kind": "static",
+          "params": [{ "name": "pot", "type": "Pot" }, { "name": "f", "type": "fn(Pot, Pot) -> i32" }],
+          "returns": "i32",
+          "fallible": true,
           "blocking": false
         },
         {

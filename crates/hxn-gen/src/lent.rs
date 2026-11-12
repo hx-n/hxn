@@ -11,8 +11,10 @@
 //! Over the C ABI a lent function is an `hxn_callback`; to HashLink it is a
 //! closure, called through a trampoline that boxes its arguments.
 //!
-//! Text goes to one borrowed, as a slice the host reads during the call, and
-//! comes back owned: a buffer the host fills and the library frees.
+//! Text and bytes go to one borrowed, as a slice the host copies during the
+//! call, and text comes back owned: a buffer the host fills and the library
+//! frees. An object goes to one for good: the host owns it from then on, as
+//! it owns one a function returns.
 
 use crate::model::{Library, Type};
 
@@ -25,12 +27,40 @@ pub fn of(ty: &Type) -> Option<(&[Type], &Type)> {
 }
 
 /// Each shape of function the library is lent somewhere, in the order met.
+/// Two that differ only in which interface an object is of are one shape:
+/// at the boundary an object is a pointer whatever it is.
 pub fn used(library: &Library) -> Vec<&Type> {
     let mut out: Vec<&Type> = Vec::new();
+    let mut seen: Vec<String> = Vec::new();
     for method in library.interfaces.iter().flat_map(|i| &i.methods) {
         for param in &method.params {
-            if of(&param.ty).is_some() && !out.contains(&&param.ty) {
+            let Some((params, returns)) = of(&param.ty) else {
+                continue;
+            };
+            let key = key(params, returns);
+            if !seen.contains(&key) {
+                seen.push(key);
                 out.push(&param.ty);
+            }
+        }
+    }
+    out
+}
+
+/// The interfaces a lent function is given an object of, in the order met.
+pub fn given(library: &Library) -> Vec<&str> {
+    let mut out: Vec<&str> = Vec::new();
+    for method in library.interfaces.iter().flat_map(|i| &i.methods) {
+        for param in &method.params {
+            let Some((params, _)) = of(&param.ty) else {
+                continue;
+            };
+            for taken in params {
+                if let Type::Handle { interface, .. } = taken
+                    && !out.contains(&interface.as_str())
+                {
+                    out.push(interface);
+                }
             }
         }
     }
@@ -44,6 +74,8 @@ fn letter(ty: &Type) -> char {
         Type::I32 => 'i',
         Type::F64 => 'd',
         Type::Str => 's',
+        Type::Bytes => 'y',
+        Type::Handle { .. } => 'o',
         _ => unreachable!("not passed to or from a lent function"),
     }
 }
@@ -56,14 +88,17 @@ pub enum Host {
     Cpp,
 }
 
-// A shape that passes text is called through a function of its own: the
-// conventional `invoke` has no place for a borrowed argument or a result
-// that is converted.
+// A shape that passes more than numbers is called through a function of its
+// own: the conventional `invoke` has no place for a borrowed argument or a
+// result that is converted.
 fn texts(params: &[Type], returns: &Type) -> bool {
-    params.contains(&Type::Str) || *returns == Type::Str
+    params
+        .iter()
+        .any(|ty| matches!(ty, Type::Str | Type::Bytes | Type::Handle { .. }))
+        || *returns == Type::Str
 }
 
-// The function a shape with text is called through: `call_si_to_s`.
+// The function such a shape is called through: `call_si_to_s`.
 fn caller(params: &[Type], returns: &Type) -> String {
     format!("call_{}", key(params, returns))
 }
@@ -92,12 +127,13 @@ pub fn alias(params: &[Type], returns: &Type) -> String {
     format!("Lent{taken}To{}", letter(returns).to_ascii_uppercase())
 }
 
-// What an argument is at the boundary: a bool is an int, and text is
-// borrowed for the call.
+// What an argument is at the boundary: a bool is an int, text and bytes are
+// borrowed for the call, and an object is the pointer the host will own.
 fn c_type(ty: &Type) -> &'static str {
     match ty {
         Type::F64 => "f64",
-        Type::Str => "hxn_abi::Slice<'_>",
+        Type::Str | Type::Bytes => "hxn_abi::Slice<'_>",
+        Type::Handle { .. } => "*mut c_void",
         _ => "i32",
     }
 }
@@ -151,6 +187,9 @@ fn call(params: &[Type], returns: &Type) -> String {
         .enumerate()
         .map(|(n, ty)| match ty {
             Type::Str => format!(", a{n}: &str"),
+            Type::Bytes => format!(", a{n}: &[u8]"),
+            // Already the pointer the host is handed.
+            Type::Handle { .. } => format!(", a{n}: *mut c_void"),
             other => format!(", a{n}: {}", rust_type(other)),
         })
         .collect();
@@ -159,7 +198,7 @@ fn call(params: &[Type], returns: &Type) -> String {
         .enumerate()
         .map(|(n, ty)| match ty {
             Type::Bool => format!("i32::from(a{n}), "),
-            Type::Str => format!("hxn_abi::Slice::from(a{n}), "),
+            Type::Str | Type::Bytes => format!("hxn_abi::Slice::from(a{n}), "),
             _ => format!("a{n}, "),
         })
         .collect();
@@ -181,10 +220,19 @@ fn call(params: &[Type], returns: &Type) -> String {
 /// The closure an adapter passes the library's function for the callback
 /// `name`: it calls through, and gives the library an `Err` when the Haxe
 /// function failed.
-pub fn closure(name: &str, params: &[Type], returns: &Type) -> String {
+pub fn closure(host: Host, name: &str, params: &[Type], returns: &Type) -> String {
     let names: Vec<String> = (0..params.len()).map(|n| format!("a{n}")).collect();
     if texts(params, returns) {
-        let passed: String = names.iter().map(|name| format!(", {name}")).collect();
+        // An object is given away here, as the handle the host will own.
+        let passed: String = params
+            .iter()
+            .zip(&names)
+            .map(|(ty, name)| match (ty, host) {
+                (Type::Handle { .. }, Host::Cpp) => format!(", Handle::into_raw({name}).cast()"),
+                (Type::Handle { .. }, Host::Hl) => format!(", manage({name}).cast()"),
+                _ => format!(", {name}"),
+            })
+            .collect();
         // Inside the adapter's own `unsafe` block, as every call here is.
         return format!(
             "|{}| {}(&{name}{passed})",
@@ -214,12 +262,15 @@ pub fn closure(name: &str, params: &[Type], returns: &Type) -> String {
 
 /// The closure's type as a HashLink primitive's signature writes it.
 pub fn hl_signature(params: &[Type], returns: &Type) -> String {
-    // Text reaches the wrapper as the VM's bytes, which it makes a `String` of.
+    // Text reaches the wrapper as the VM's bytes, which it makes a `String`
+    // of; bytes come with their length; and an object is a pointer the
+    // wrapper knows the type of.
     let taken: String = params
         .iter()
         .map(|ty| match ty {
-            Type::Str => 'B',
-            other => letter(other),
+            Type::Str | Type::Handle { .. } => String::from("B"),
+            Type::Bytes => String::from("Bi"),
+            other => letter(other).to_string(),
         })
         .collect();
     let given = match returns {
@@ -242,15 +293,19 @@ pub fn hl_trampolines(library: &Library) -> String {
             .enumerate()
             .map(|(n, ty)| format!("a{n}: {}, ", c_type(ty)))
             .collect();
-        // Text is checked and copied for the VM before anything is called.
+        // Text and bytes are checked before anything is called, and copied
+        // for the VM.
         let prepared: String = params
             .iter()
             .enumerate()
-            .filter(|(_, ty)| **ty == Type::Str)
-            .map(|(n, _)| {
-                format!(
+            .map(|(n, ty)| match ty {
+                Type::Str => format!(
                     "    let Ok(a{n}) = a{n}.as_str() else {{\n        return Status::ENCODING;\n    }};\n"
-                )
+                ),
+                Type::Bytes => format!(
+                    "    let Ok(a{n}) = a{n}.as_bytes() else {{\n        return Status::NULL;\n    }};\n    let Ok(a{n}_length) = i32::try_from(a{n}.len()) else {{\n        return Status::TOO_LARGE;\n    }};\n"
+                ),
+                _ => String::new(),
             })
             .collect();
         let boxed: Vec<String> = params
@@ -260,6 +315,11 @@ pub fn hl_trampolines(library: &Library) -> String {
                 Type::Bool => format!("box_bool(a{n} != 0)"),
                 Type::F64 => format!("box_f64(a{n})"),
                 Type::Str => format!("box_bytes(utf16(a{n}))"),
+                Type::Bytes => format!("box_bytes(bytes(a{n})), box_i32(a{n}_length)"),
+                // The VM's own pointer to the object, passed as bytes: a
+                // closure called this way is not given a typed pointer. The
+                // wrapper gets its type back from a primitive.
+                Type::Handle { .. } => format!("box_bytes(a{n}.cast())"),
                 _ => format!("box_i32(a{n})"),
             })
             .collect();
@@ -282,7 +342,7 @@ pub fn hl_trampolines(library: &Library) -> String {
             "\n// The binding's wrapper gives null, or false, when the Haxe function threw.\nunsafe extern \"C\" fn {name}(env: *mut c_void, {taken}out: *mut {ty}) -> Status {{\n{prepared}    let mut args: [*mut vdynamic; {count}] = [{boxed}];\n{finish}}}\n",
             name = trampoline(params, returns),
             ty = c_given(returns),
-            count = params.len(),
+            count = params.len() + params.iter().filter(|ty| **ty == Type::Bytes).count(),
             boxed = boxed.join(", "),
         ));
     }
@@ -299,7 +359,8 @@ pub fn cpp_trampolines(library: &Library) -> String {
             .enumerate()
             .map(|(n, ty)| match ty {
                 Type::F64 => format!("double a{n}, "),
-                Type::Str => format!("hxn_slice a{n}, "),
+                Type::Str | Type::Bytes => format!("hxn_slice a{n}, "),
+                Type::Handle { .. } => format!("void *a{n}, "),
                 _ => format!("int a{n}, "),
             })
             .collect();
@@ -309,6 +370,8 @@ pub fn cpp_trampolines(library: &Library) -> String {
             .map(|(n, ty)| match ty {
                 Type::Bool => format!("a{n} != 0"),
                 Type::Str => format!("hxn::text(a{n})"),
+                Type::Bytes => format!("hxn::bytes(a{n})"),
+                Type::Handle { .. } => format!("cpp::Pointer<void>(a{n})"),
                 _ => format!("a{n}"),
             })
             .collect();
@@ -333,28 +396,43 @@ pub fn cpp_trampolines(library: &Library) -> String {
     out
 }
 
-fn haxe_scalar(ty: &Type) -> &'static str {
+fn haxe_scalar(ty: &Type) -> String {
     match ty {
-        Type::Void => "Void",
-        Type::Bool => "Bool",
-        Type::I32 => "Int",
-        Type::F64 => "Float",
-        Type::Str => "String",
+        Type::Void => String::from("Void"),
+        Type::Bool => String::from("Bool"),
+        Type::I32 => String::from("Int"),
+        Type::F64 => String::from("Float"),
+        Type::Str => String::from("String"),
+        Type::Bytes => String::from("haxe.io.Bytes"),
+        Type::Handle { interface, .. } => interface.clone(),
         _ => unreachable!("not passed to or from a lent function"),
     }
 }
 
 fn haxe_taken(params: &[Type]) -> String {
-    let taken: Vec<&str> = params.iter().map(haxe_scalar).collect();
+    let taken: Vec<String> = params.iter().map(haxe_scalar).collect();
     taken.join(", ")
 }
 
-// What the wrapper is handed for an argument. HashLink's native code cannot
-// make a `String`, so text reaches the wrapper there as the VM's bytes.
-fn haxe_handed(host: Host, ty: &Type) -> &'static str {
+// What the wrapper is handed for an argument: the types, and each with the
+// name it is declared by. HashLink's native code cannot make a `String` or a
+// `haxe.io.Bytes`, so both reach the wrapper there as the VM's bytes, bytes
+// with their length, and so does an object's pointer.
+fn haxe_handed(host: Host, ty: &Type) -> Vec<String> {
     match (host, ty) {
-        (Host::Hl, Type::Str) => "hl.Bytes",
-        (_, other) => haxe_scalar(other),
+        (Host::Hl, Type::Bytes) => vec![String::from("hl.Bytes"), String::from("Int")],
+        (Host::Hl, Type::Str | Type::Handle { .. }) => vec![String::from("hl.Bytes")],
+        (Host::Cpp, Type::Bytes) => vec![String::from("haxe.io.BytesData")],
+        (Host::Cpp, Type::Handle { .. }) => vec![String::from("cpp.Pointer<cpp.Void>")],
+        (_, other) => vec![haxe_scalar(other)],
+    }
+}
+
+fn haxe_declared(host: Host, n: usize, ty: &Type) -> String {
+    let types = haxe_handed(host, ty);
+    match types.as_slice() {
+        [bytes, length] => format!("a{n}:{bytes}, a{n}Length:{length}"),
+        types => format!("a{n}:{}", types[0]),
     }
 }
 
@@ -373,7 +451,7 @@ fn haxe_guarded(returns: &Type) -> String {
 
 /// The type of the wrapper, which is what native code is given.
 pub fn haxe_native_type(host: Host, params: &[Type], returns: &Type) -> String {
-    let handed: Vec<&str> = params.iter().map(|ty| haxe_handed(host, ty)).collect();
+    let handed: Vec<String> = params.iter().flat_map(|ty| haxe_handed(host, ty)).collect();
     format!("({}) -> {}", handed.join(", "), haxe_guarded(returns))
 }
 
@@ -388,13 +466,33 @@ pub fn haxe_guard(host: Host, name: &str, params: &[Type], returns: &Type) -> St
     let declared: Vec<String> = params
         .iter()
         .enumerate()
-        .map(|(n, ty)| format!("a{n}:{}", haxe_handed(host, ty)))
+        .map(|(n, ty)| haxe_declared(host, n, ty))
+        .collect();
+    // An object is owned before anything can throw, so it is released
+    // whatever the function does with it.
+    let owned: String = params
+        .iter()
+        .enumerate()
+        .map(|(n, ty)| match (host, ty) {
+            (Host::Hl, Type::Handle { interface, .. }) => {
+                format!("\n\t\t\tvar o{n} = {interface}.adoptLent(a{n});")
+            }
+            (Host::Cpp, Type::Handle { interface, .. }) => format!(
+                "\n\t\t\tvar o{n} = {interface}.adopt();\n\t\t\to{n}.raw = a{n}.raw;\n\t\t\to{n}.own();"
+            ),
+            _ => String::new(),
+        })
         .collect();
     let passed: Vec<String> = params
         .iter()
         .enumerate()
         .map(|(n, ty)| match (host, ty) {
             (Host::Hl, Type::Str) => format!("@:privateAccess String.fromUCS2(a{n})"),
+            (Host::Hl, Type::Bytes) => {
+                format!("@:privateAccess new haxe.io.Bytes(a{n}, a{n}Length)")
+            }
+            (Host::Cpp, Type::Bytes) => format!("haxe.io.Bytes.ofData(a{n})"),
+            (_, Type::Handle { .. }) => format!("o{n}"),
             _ => format!("a{n}"),
         })
         .collect();
@@ -411,7 +509,7 @@ pub fn haxe_guard(host: Host, name: &str, params: &[Type], returns: &Type) -> St
         _ => (format!("return {call};"), "null"),
     };
     format!(
-        "var {guarded} = function({declared}):{ty} {{\n\t\t\ttry {{\n\t\t\t\t{succeed}\n\t\t\t}} catch (error:haxe.Exception) {{\n\t\t\t\thxn.Callback.failed(error);\n\t\t\t\treturn {fail};\n\t\t\t}}\n\t\t}};",
+        "var {guarded} = function({declared}):{ty} {{{owned}\n\t\t\ttry {{\n\t\t\t\t{succeed}\n\t\t\t}} catch (error:haxe.Exception) {{\n\t\t\t\thxn.Callback.failed(error);\n\t\t\t\treturn {fail};\n\t\t\t}}\n\t\t}};",
         guarded = guarded(name),
         declared = declared.join(", "),
         ty = haxe_guarded(returns),

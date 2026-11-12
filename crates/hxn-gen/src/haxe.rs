@@ -395,6 +395,13 @@ fn hl_module(library: &Library, interface: &Interface) -> String {
         out.push_str("\n}\n");
         return out;
     }
+    let given = lent::given(library).contains(&name.as_str());
+    if given {
+        out.push_str(&format!(
+            "\tpublic static function {}(raw:hl.Bytes):{name}Raw\n\t\treturn null;\n\n",
+            local(name, "adopt_lent")
+        ));
+    }
     out.push_str(&format!(
         "\tpublic static function {}(self:{name}Raw):Void {{}}\n}}\n\n",
         local(name, "close")
@@ -409,6 +416,12 @@ fn hl_module(library: &Library, interface: &Interface) -> String {
         "class {name} {{\n\t@:noCompletion public var raw:{name}Raw;\n{meter}\n\t/** An object for a value the library returned. **/\n\t@:noCompletion public static function adopt(raw:{name}Raw):{name} {{\n\t\tvar made:{name} = Type.createEmptyInstance({name});\n\t\tmade.raw = raw;\n{check}\t\treturn made;\n\t}}\n",
         meter = meter(library),
     ));
+    if given {
+        out.push_str(&format!(
+            "\n\t/** An object for a value the library gave a lent function. **/\n\t@:noCompletion public static function adoptLent(raw:hl.Bytes):{name}\n\t\treturn adopt(Native.{}(raw));\n",
+            local(name, "adopt_lent")
+        ));
+    }
     for method in &interface.methods {
         out.push('\n');
         out.push_str(&hl_method(library, interface, method));

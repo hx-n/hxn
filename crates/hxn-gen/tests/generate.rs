@@ -960,7 +960,7 @@ fn says_how_a_function_is_lent() {
             "is lent as `impl Fn(..) -> Result<T, E>`",
         ),
         (
-            "pub fn b<E>(&self, f: impl Fn(&[u8]) -> Result<i32, E>) {}",
+            "pub fn b<E>(&self, f: impl Fn(Vec<u8>) -> Result<i32, E>) {}",
             "is lent as",
         ),
         (
@@ -1685,4 +1685,85 @@ impl Thing {
     let cpp_class = &cpp_classes(&library)[0].text;
     assert!(cpp_class.contains("var fGuarded = function(a0:String, a1:Bool):Null<String>"));
     assert!(cpp_class.contains("a function lent to a library returned null"));
+}
+
+// Bytes are lent to a Haxe function as text is. An object is given to it:
+// one lent for the call could be kept past it.
+#[test]
+fn a_lent_function_takes_bytes_and_is_given_objects() {
+    let source = r#"
+#[hxn::interface]
+pub struct Thing;
+
+#[hxn::interface(shared)]
+pub struct Band;
+
+#[hxn::methods]
+impl Thing {
+    pub fn each<E>(f: impl FnMut(&[u8], Thing) -> Result<(), E>) -> Result<(), E> { todo!() }
+    pub fn join<E>(f: impl Fn(&[u8], Arc<Band>) -> Result<(), E>) -> Result<(), E> { todo!() }
+}
+"#;
+    let library = parse("thing", source).unwrap();
+    assert_eq!(
+        library.interfaces[0].methods[0].params[0].ty,
+        Type::Lent {
+            params: vec![Type::Bytes, handle("Thing", false)],
+            returns: Box::new(Type::Void),
+        }
+    );
+    // One shape for both: at the boundary an object is a pointer.
+    let c = hxn_gen::c_adapter(&library, "thing");
+    assert_eq!(c.matches("type LentYOToV = ").count(), 1);
+    assert!(c.contains(
+        "type LentYOToV = unsafe extern \"C\" fn(*mut c_void, hxn_abi::Slice<'_>, *mut c_void, *mut i32) -> Status;"
+    ));
+    assert!(c.contains("Thing::each(|a0, a1| call_yo_to_v(&f, a0, Handle::into_raw(a1).cast()))"));
+    let hl = hxn_gen::hl_adapter(&library, "thing");
+    assert!(hl.contains("Thing::join(|a0, a1| call_yo_to_v(&f, a0, manage(a1).cast()))"));
+    assert!(hl.contains("box_bytes(bytes(a0)), box_i32(a0_length), box_bytes(a1.cast())"));
+    assert!(hl.contains("let mut args: [*mut vdynamic; 3]"));
+    assert!(hl.contains("PBiB_b"), "{hl}");
+    // The primitive that gives a lent object's pointer its type back.
+    assert!(
+        hl.contains("pub extern \"C\" fn thing_thing_adopt_lent(raw: *mut vbyte) -> *mut Managed")
+    );
+    assert!(hl.contains("\"PB_Xthing_thing_\""));
+    assert!(hl.contains("thing_band_adopt_lent"));
+    let glue = hxn_gen::cpp_glue(&library);
+    assert!(
+        glue.contains(
+            "inline hxn_status lent_yo_to_v(void *env, hxn_slice a0, void *a1, int *out)"
+        )
+    );
+    assert!(glue.contains("(hxn::bytes(a0), cpp::Pointer<void>(a1))"));
+
+    let hl_class = &hxn_gen::haxe_hl(&library)[0].text;
+    assert!(
+        hl_class.contains("public static function each(f:(haxe.io.Bytes, Thing) -> Void):Void")
+    );
+    assert!(
+        hl_class.contains("var fGuarded = function(a0:hl.Bytes, a0Length:Int, a1:hl.Bytes):Bool")
+    );
+    assert!(hl_class.contains("var o1 = Thing.adoptLent(a1);"));
+    assert!(hl_class.contains("f(@:privateAccess new haxe.io.Bytes(a0, a0Length), o1)"));
+    assert!(hl_class.contains("var o1 = Band.adoptLent(a1);"));
+    let cpp_class = &cpp_classes(&library)[0].text;
+    assert!(cpp_class.contains("function(a0:haxe.io.BytesData, a1:cpp.Pointer<cpp.Void>):Bool"));
+    assert!(cpp_class.contains("var o1 = Thing.adopt();\n\t\t\to1.raw = a1.raw;\n\t\t\to1.own();"));
+    assert!(cpp_class.contains("f(haxe.io.Bytes.ofData(a0), o1)"));
+
+    for (taken, expected) in [
+        ("&Thing", "an object to keep, not one to borrow"),
+        ("Band", "given in its `Arc`: `Arc<Band>`"),
+        ("Arc<Thing>", "needs `Thing` marked"),
+    ] {
+        let source = source.replace("Arc<Band>", taken);
+        let error = parse("thing", &source).unwrap_err();
+        assert!(
+            error.message.contains(expected),
+            "{taken}: {}",
+            error.message
+        );
+    }
 }

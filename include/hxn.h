@@ -98,6 +98,14 @@ inline ::String text(hxn_slice slice) {
 	return slice.len ? ::String::create((const char *)slice.ptr, (int)slice.len) : HX_CSTRING("");
 }
 
+/* A copy of the bytes the library lent, for a haxe.io.Bytes to own. */
+inline Array<unsigned char> bytes(hxn_slice slice) {
+	Array<unsigned char> data = Array_obj<unsigned char>::__new((int)slice.len, (int)slice.len);
+	if (slice.len)
+		memcpy(data->getBase(), slice.ptr, slice.len);
+	return data;
+}
+
 inline void free_text(uint8_t *ptr, size_t, size_t) {
 	free(ptr);
 }

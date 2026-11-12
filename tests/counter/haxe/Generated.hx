@@ -220,6 +220,36 @@ class Generated {
 		throws("one that gives text can throw", () -> counter.described((_, _) -> throw new haxe.Exception("no name")), "no name");
 		throws("and cannot give null", () -> Counter.titled(() -> null), "returned null");
 
+		var chunks = [];
+		check("bytes go to a lent function", counter.chunks(3, (bytes, index) -> chunks.push('$index:${bytes.toHex()}')) == 4
+			&& chunks.join(" ") == "0:300000 1:00 -1:");
+		var live = Counter.live();
+		var kept = [];
+		check("an object given to a lent function is its to keep", Counter.spawnEach(3, (made, word) -> {
+			kept.push(made);
+			return made.add(0) * (word == "made" ? 10 : 0);
+		}) == 60 && Counter.live() == live + 3);
+		check("and to use after the call", kept[2].add(1) == 4);
+		for (made in kept)
+			made.close();
+		throws("one it was given when it threw is not lost", () -> Counter.spawnEach(2, (made, _) -> {
+			kept.push(made);
+			throw new haxe.Exception("not wanted");
+		}), "not wanted");
+		check("but is its own to close", kept[3].add(0) == 1 && Counter.live() == live + 1);
+		kept[3].close();
+		check("or released", Counter.live() == live);
+		var pot = new Pot(10);
+		var halves = [];
+		check("shared objects given to one", Pot.offer(pot, (whole, half) -> {
+			halves.push(half);
+			var same = whole.same(pot);
+			whole.close();
+			return same ? half.total() : -1;
+		}) == 15 && halves[0].total() == 5 && Pot.live() == 2);
+		halves[0].close();
+		pot.close();
+
 		var thrown = new haxe.Exception("from the function");
 		var caught:Null<haxe.Exception> = null;
 		try {

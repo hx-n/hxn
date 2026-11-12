@@ -235,12 +235,21 @@ library sees that as an `Err` to return with. The error is a type parameter so
 the library names no type of hxn's and can be tested with any error it likes;
 the adapter calls it with its own.
 
-A lent function takes and gives numbers, bools and text. Text goes to it as
-`&str`, borrowed: the host makes its own string of it during the call. Text
-comes back as a `String`: the host writes a copy into a buffer that carries
-its own `free`, which the library reads and then frees, so nothing of the
-collector's is held after the function returns. A function that gives text
-cannot give null, which is how its wrapper reports that it threw.
+A lent function takes and gives numbers, bools and text, and takes bytes and
+objects. Text and bytes go to it as `&str` and `&[u8]`, borrowed: the host
+makes its own copy during the call. Text comes back as a `String`: the host
+writes a copy into a buffer that carries its own `free`, which the library
+reads and then frees, so nothing of the collector's is held after the function
+returns. A function that gives text cannot give null, which is how its wrapper
+reports that it threw.
+
+An object goes to a lent function for good, as `T` or as `Arc<T>` of a shared
+interface, and the Haxe side owns it as it owns one a function returns. A
+borrowed one is refused: Haxe could keep the object past the call it was lent
+for. The wrapper makes the Haxe object before it calls the user's function, so
+the value has an owner whatever that function does. HashLink calls a closure
+with arguments it does not know the types of, so there the pointer travels as
+bytes and a primitive of the interface's gives it back typed.
 
 **Kept across calls.** A function needed by later calls is kept in a field of
 the Haxe object and lent to each call that uses it. Native code holds nothing.

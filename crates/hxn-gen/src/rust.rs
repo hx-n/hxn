@@ -258,7 +258,7 @@ fn c_method(library: &Library, interface: &Interface, method: &Method) -> String
         let name = &param.name;
         if let Some((taken, given)) = lent::of(&param.ty) {
             params.push(format!("{name}: Callback<{}>", lent::alias(taken, given)));
-            arguments.push(lent::closure(name, taken, given));
+            arguments.push(lent::closure(lent::Host::Cpp, name, taken, given));
             continue;
         }
         let (ty, argument) = match &param.ty {
@@ -534,7 +534,7 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
                 lent::trampoline(taken, given),
                 lent::alias(taken, given)
             ));
-            arguments.push(lent::closure(name, taken, given));
+            arguments.push(lent::closure(lent::Host::Hl, name, taken, given));
             continue;
         }
         match &param.ty {
@@ -707,6 +707,13 @@ pub fn hl_adapter(library: &Library, core: &str) -> String {
         ));
         if interface.shared {
             out.push_str(&hl_shared(library, interface));
+        }
+        if lent::given(library).contains(&interface.name.as_str()) {
+            let name = export(library, &interface.name, "adopt_lent");
+            out.push_str(&format!(
+                "\n// An object given to a lent function reaches its wrapper as untyped\n// bytes: this gives the pointer back as what it is.\n#[unsafe(no_mangle)]\npub extern \"C\" fn {name}(raw: *mut vbyte) -> *mut Managed {{\n    raw.cast()\n}}\ndefine_prim!(hlp_{local}, {name}, \"PB_X{own}_\");\n",
+                local = local(&interface.name, "adopt_lent"),
+            ));
         }
     }
     if library.returns_cells() {

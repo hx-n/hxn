@@ -245,6 +245,37 @@ impl Counter {
         Ok(f()?.chars().count() as i32)
     }
 
+    /// Calls `f` with the value's bytes, a few at a time, and returns how
+    /// many it was shown.
+    pub fn chunks<E>(
+        &self,
+        size: i32,
+        mut f: impl FnMut(&[u8], i32) -> Result<(), E>,
+    ) -> Result<i32, E> {
+        let bytes = self.value.to_le_bytes();
+        let size = usize::try_from(size).unwrap_or(1).max(1);
+        let mut shown = 0;
+        for (index, chunk) in bytes.chunks(size).enumerate() {
+            f(chunk, index as i32)?;
+            shown += chunk.len() as i32;
+        }
+        f(&[], -1)?;
+        Ok(shown)
+    }
+
+    /// Makes `count` counters, 1, 2 and so on, and gives each to `f` to
+    /// keep. Returns what `f` said of them, added up.
+    pub fn spawn_each<E>(
+        count: i32,
+        mut f: impl FnMut(Counter, &str) -> Result<i32, E>,
+    ) -> Result<i32, E> {
+        let mut total = 0;
+        for n in 1..=count {
+            total += f(Counter::new(n), "made")?;
+        }
+        Ok(total)
+    }
+
     /// What `f` gives.
     pub fn ask<E>(f: impl FnOnce() -> Result<i32, E>) -> Result<i32, E> {
         f()
@@ -580,6 +611,16 @@ impl Pot {
             self.add(also.total());
         }
         Arc::new(Pot::new(self.total()))
+    }
+
+    /// Gives `f` a share of `pot` and a new pot of half of it, and adds
+    /// what `f` says to the total.
+    pub fn offer<E>(
+        pot: Arc<Pot>,
+        f: impl Fn(Arc<Pot>, Arc<Pot>) -> Result<i32, E>,
+    ) -> Result<i32, E> {
+        let half = Arc::new(Pot::new(pot.total() / 2));
+        Ok(pot.add(f(Arc::clone(&pot), half)?))
     }
 
     /// A pot of its own starting at this one's total, made already shared.

@@ -209,22 +209,62 @@ impl Scope<'_> {
 
     // `impl Fn(i32, f64) -> Result<bool, E>`, or `FnMut` or `FnOnce`.
     fn lent(&self, ty: &syn::TypeImplTrait) -> Result<Type, Error> {
-        const SHAPE: &str = "a function is lent as `impl Fn(..) -> Result<T, E>`, taking bool, i32, f64 or &str and giving bool, i32, f64, String or `()`: it can fail, because the Haxe function can throw";
+        const SHAPE: &str = "a function is lent as `impl Fn(..) -> Result<T, E>`, taking bool, i32, f64, &str, &[u8] or an object to keep, and giving bool, i32, f64, String or `()`: it can fail, because the Haxe function can throw";
         let scalar = |ty: &syn::Type| match path_name(ty).as_deref() {
             Some("bool") => Some(Type::Bool),
             Some("i32") => Some(Type::I32),
             Some("f64") => Some(Type::F64),
             _ => None,
         };
-        // Text is borrowed going to the function and owned coming back.
-        let taken = |ty: &syn::Type| match ty {
-            syn::Type::Reference(reference)
-                if reference.mutability.is_none()
-                    && path_name(&reference.elem).as_deref() == Some("str") =>
-            {
-                Some(Type::Str)
+        // Text and bytes are borrowed going to the function. An object goes
+        // to it for good: one lent for the call could be kept past it.
+        let taken = |ty: &syn::Type| -> Result<Option<Type>, Error> {
+            if let syn::Type::Reference(reference) = ty {
+                if reference.mutability.is_none() {
+                    if path_name(&reference.elem).as_deref() == Some("str") {
+                        return Ok(Some(Type::Str));
+                    }
+                    if let syn::Type::Slice(slice) = &*reference.elem
+                        && path_name(&slice.elem).as_deref() == Some("u8")
+                    {
+                        return Ok(Some(Type::Bytes));
+                    }
+                }
+                if self.interface(&reference.elem).is_some() {
+                    return error(
+                        ty.span(),
+                        "a lent function is given an object to keep, not one to borrow: pass `T`, or `Arc<T>` of a shared interface",
+                    );
+                }
+                return Ok(None);
             }
-            other => scalar(other),
+            if let Some(interface) = self.interface(ty) {
+                if self.is_shared(&interface) {
+                    return error(
+                        ty.span(),
+                        format!("a shared interface is given in its `Arc`: `Arc<{interface}>`"),
+                    );
+                }
+                return Ok(Some(Type::Handle {
+                    interface,
+                    nullable: false,
+                }));
+            }
+            if let Some(interface) = self.pointer(ty) {
+                if !self.is_shared(&interface) {
+                    return error(
+                        ty.span(),
+                        format!(
+                            "`Arc<{interface}>` needs `{interface}` marked `#[hxn::interface(shared)]`"
+                        ),
+                    );
+                }
+                return Ok(Some(Type::Handle {
+                    interface,
+                    nullable: false,
+                }));
+            }
+            Ok(scalar(ty))
         };
         let mut bounds = ty.bounds.iter();
         let (Some(syn::TypeParamBound::Trait(bound)), None) = (bounds.next(), bounds.next()) else {
@@ -243,7 +283,7 @@ impl Scope<'_> {
         }
         let mut params = Vec::new();
         for input in &call.inputs {
-            match taken(input) {
+            match taken(input)? {
                 Some(param) => params.push(param),
                 None => return error(input.span(), SHAPE),
             }
