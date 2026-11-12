@@ -381,6 +381,9 @@ class Generated {
 		var gone = counted.intoValueLater(5);
 		throws("an async function that takes the object closes it at once", () -> counted.add(1), "closed");
 		check("and the work has it", gone.await() == 9 && Counter.live() == before);
+		var found = Later.maybeCounter(5).await();
+		check("a future of an object that may be absent", found != null && found.add(0) == 5 && Later.maybeCounter(0).await() == null);
+		found.close();
 		var one = new Counter(3), two = new Counter(4);
 		var summed = Later.totalLater(one, two);
 		throws("an async function that takes an object by value closes it at once", () -> one.add(1), "closed");

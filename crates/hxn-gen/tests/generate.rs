@@ -173,6 +173,17 @@ fn refused(method: &str) -> (usize, String) {
 }
 
 #[test]
+fn a_future_or_a_stream_may_carry_no_object() {
+    let source = "#[hxn::interface]\npub struct Thing;\n\n#[hxn::methods]\nimpl Thing {\n    pub fn find(&self) -> Future<Option<Thing>> { todo!() }\n    pub fn each(&self) -> Stream<Option<Thing>> { todo!() }\n}\n";
+    let library = parse("thing", source).unwrap();
+    for method in &library.interfaces[0].methods {
+        assert!(
+            matches!(&method.returns, Type::Future(of) | Type::Stream(of) if **of == handle("Thing", true))
+        );
+    }
+}
+
+#[test]
 fn an_interface_taken_by_value_is_moved_out_of_its_handle() {
     let source = "#[hxn::interface]\npub struct Thing;\n\n#[hxn::methods]\nimpl Thing {\n    pub fn eat(&self, value: Thing, maybe: Option<Thing>) {}\n}\n";
     let library = parse("thing", source).unwrap();
@@ -858,7 +869,7 @@ fn says_what_a_result_over_time_cannot_carry() {
             "a signal carries one of",
         ),
         (
-            "pub fn all(&self) -> Stream<Option<Thing>> { todo!() }",
+            "pub fn all(&self) -> Stream<Vec<Thing>> { todo!() }",
             "a stream carries one of",
         ),
         (

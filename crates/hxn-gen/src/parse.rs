@@ -654,7 +654,11 @@ impl Scope<'_> {
             return Ok(Type::Data(data));
         }
         // A signal is read any number of times, which a value with a single
-        // owner cannot be.
+        // owner cannot be. A future or a stream may carry no object.
+        let (carried, nullable) = match optional(carried) {
+            Some(inner) if name != "Signal" => (inner, true),
+            _ => (carried, false),
+        };
         let interface = if name == "Signal" {
             None
         } else if let Some(interface) = self.interface(carried) {
@@ -683,7 +687,7 @@ impl Scope<'_> {
         match interface {
             Some(interface) => Ok(Type::Handle {
                 interface,
-                nullable: false,
+                nullable,
             }),
             None if name == "Signal" => error(
                 ty.span(),
@@ -692,7 +696,7 @@ impl Scope<'_> {
             None => error(
                 ty.span(),
                 format!(
-                    "a {} carries one of (), bool, a number, String, Vec<u8>, data marked `#[hxn::data]` or an Option or Vec of data, or an interface",
+                    "a {} carries one of (), bool, a number, String, Vec<u8>, data marked `#[hxn::data]` or an Option or Vec of data, or an interface or an Option of one",
                     name.to_lowercase()
                 ),
             ),

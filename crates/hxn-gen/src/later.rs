@@ -99,7 +99,16 @@ fn suffix(carried: &Type) -> String {
         Type::F64 => String::from("float"),
         Type::Str => String::from("text"),
         Type::Bytes => String::from("bytes"),
-        Type::Handle { interface, .. } => snake(interface),
+        Type::Handle {
+            interface,
+            nullable,
+        } => {
+            if *nullable {
+                format!("option_{}", snake(interface))
+            } else {
+                snake(interface)
+            }
+        }
         Type::Data(data) => data.symbol(),
         _ => unreachable!("not carried by a result over time"),
     }
@@ -144,7 +153,16 @@ fn title(carried: &Type) -> String {
         Type::F64 => String::from("Float"),
         Type::Str => String::from("Text"),
         Type::Bytes => String::from("Bytes"),
-        Type::Handle { interface, .. } => interface.clone(),
+        Type::Handle {
+            interface,
+            nullable,
+        } => {
+            if *nullable {
+                format!("Option{interface}")
+            } else {
+                interface.clone()
+            }
+        }
         Type::Data(data) => pascal(&data.symbol()),
         _ => unreachable!("not carried by a result over time"),
     }
@@ -159,7 +177,16 @@ fn haxe_type(carried: &Type) -> String {
         Type::F64 => String::from("Float"),
         Type::Str => String::from("String"),
         Type::Bytes => String::from("haxe.io.Bytes"),
-        Type::Handle { interface, .. } => interface.clone(),
+        Type::Handle {
+            interface,
+            nullable,
+        } => {
+            if *nullable {
+                format!("Null<{interface}>")
+            } else {
+                interface.clone()
+            }
+        }
         Type::Data(data) => data::haxe_type(data),
         _ => unreachable!("not carried by a result over time"),
     }
@@ -175,7 +202,16 @@ fn rust_type(library: &Library, carried: &Type) -> String {
         Type::F64 => String::from("f64"),
         Type::Str => String::from("String"),
         Type::Bytes => String::from("Vec<u8>"),
-        Type::Handle { interface, .. } => held(library, interface),
+        Type::Handle {
+            interface,
+            nullable,
+        } => {
+            if *nullable {
+                format!("Option<{}>", held(library, interface))
+            } else {
+                held(library, interface)
+            }
+        }
         Type::Data(data) => data::rust_type(data),
         _ => unreachable!("not carried by a result over time"),
     }
@@ -320,6 +356,10 @@ pub fn c_adapter(library: &Library) -> String {
                 Type::F64 => ("f64", value),
                 Type::Str | Type::Bytes => ("Buf", format!("Ok(Buf::from({value}?))")),
                 Type::Data(data) => c_data(data, &format!("{value}?")),
+                Type::Handle { nullable: true, .. } => (
+                    "RawHandle",
+                    format!("Ok({value}?.map_or(null_mut(), Handle::into_raw))"),
+                ),
                 _ => ("RawHandle", format!("Ok(Handle::into_raw({value}?))")),
             };
             out.push_str(&format!(
@@ -430,7 +470,11 @@ pub fn hl_adapter(library: &Library) -> String {
                         "X{}_",
                         abstract_name(library, interface(carried).expect("an interface"))
                     ),
-                    format!("Ok(manage({value}?))"),
+                    if matches!(carried, Type::Handle { nullable: true, .. }) {
+                        format!("Ok({value}?.map_or(null_mut(), manage))")
+                    } else {
+                        format!("Ok(manage({value}?))")
+                    },
                 ),
             };
             let call = format!("{}_{}", kind.take(), suffix(carried));
@@ -623,7 +667,16 @@ fn hl_file(library: &Library, kind: Kind, carried: &[Type]) -> File {
                 suffix(carried)
             ),
             Type::Str => format!("@:privateAccess String.fromUCS2({take})"),
-            Type::Handle { interface, .. } => format!("{interface}.adopt({take})"),
+            Type::Handle {
+                interface,
+                nullable: false,
+            } => format!("{interface}.adopt({take})"),
+            Type::Handle {
+                interface,
+                nullable: true,
+            } => format!(
+                "{{\n\t\t\tvar made = {take};\n\t\t\tmade == null ? null : {interface}.adopt(made);\n\t\t}}"
+            ),
             Type::Data(data) if crossed(carried) == Type::Bytes => format!(
                 "{{\n\t\t\tvar outLength = 0;\n\t\t\tvar data = Native.{local}_{}_{}(raw, outLength);\n\t\t\tvar input = new haxe.io.BytesInput(@:privateAccess new haxe.io.Bytes(data, outLength));\n\t\t\t{};\n\t\t}}",
                 kind.take(),
@@ -703,8 +756,17 @@ fn cpp_file(library: &Library, kind: Kind, carried: &[Type]) -> File {
         let title = title(carried);
         let call = format!("{native}.{local}_{}_{}(raw)", kind.take(), suffix(carried));
         match carried {
-            Type::Handle { interface, .. } => out.push_str(&format!(
-                "\n\tfunction take{title}():{interface} {{\n\t\tvar made = {interface}.adopt();\n\t\tmade.raw = {call};\n\t\tmade.own();\n\t\treturn made;\n\t}}\n"
+            Type::Handle {
+                interface,
+                nullable,
+            } => out.push_str(&format!(
+                "\n\tfunction take{title}():{} {{\n\t\tvar made = {interface}.adopt();\n\t\tmade.raw = {call};\n{}\t\tmade.own();\n\t\treturn made;\n\t}}\n",
+                haxe_type(carried),
+                if *nullable {
+                    "\t\tif (made.raw == null)\n\t\t\treturn null;\n"
+                } else {
+                    ""
+                }
             )),
             Type::Void => out.push_str(&format!(
                 "\n\tfunction take{title}():hxn.Unit {{\n\t\t{call};\n\t\treturn hxn.Unit.Nothing;\n\t}}\n"

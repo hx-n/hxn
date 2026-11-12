@@ -509,6 +509,12 @@ impl Later {
 
     /// String and byte parameters of an async function are owned copies,
     /// because it runs after the call that passed them has returned.
+    /// A counter at `value` once some time has passed, or none for 0.
+    pub async fn maybe_counter(value: i32) -> Option<Counter> {
+        let _ = square_later(1, millis(1)).await;
+        (value != 0).then(|| Counter::new(value))
+    }
+
     /// The sum of two counters' values, taking both, once some time has
     /// passed.
     pub async fn total_later(first: Counter, second: Option<Counter>) -> i32 {

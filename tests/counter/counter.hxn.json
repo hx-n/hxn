@@ -596,8 +596,18 @@
           "blocking": false
         },
         {
+          "name": "maybe_counter",
+          "docs": "String and byte parameters of an async function are owned copies,\nbecause it runs after the call that passed them has returned.\nA counter at `value` once some time has passed, or none for 0.",
+          "kind": "static",
+          "params": [{ "name": "value", "type": "i32" }],
+          "returns": "future<Counter?>",
+          "async": true,
+          "fallible": false,
+          "blocking": false
+        },
+        {
           "name": "total_later",
-          "docs": "String and byte parameters of an async function are owned copies,\nbecause it runs after the call that passed them has returned.\nThe sum of two counters' values, taking both, once some time has\npassed.",
+          "docs": "The sum of two counters' values, taking both, once some time has\npassed.",
           "kind": "static",
           "params": [{ "name": "first", "type": "Counter", "borrow": "taken" }, { "name": "second", "type": "Counter?", "borrow": "taken" }],
           "returns": "future<i32>",
