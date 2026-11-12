@@ -460,6 +460,12 @@ An `hxn_future::Future` can itself be awaited, and that is the source of
 wakeups: settling it wakes the task awaiting it. A waiting task uses no CPU
 on either scheduler.
 
+`stepped` is for work that is all computation, split so a single thread can
+interleave it with other work: `Poll::Pending` from a step means there is
+more to do, and the next step runs at once. Work that waits on something is
+an `async` block given to `spawn`. A task never calls a Haxe function; what
+it produces reaches Haxe as the future's, stream's or signal's value.
+
 ## Delivery
 
 Every result a library produces reaches the app through a single queue.
