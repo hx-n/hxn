@@ -238,6 +238,8 @@ filesystem `#include "counter.h"` would then find the generated one.
   fits in a slice of time are skipped: it runs too slowly for them.
 - A test that depends on a runtime's limits notes it beside the check it
   skips, with the reason.
+- A test program ends with `hxn.Loop.exit`, not `Sys.exit`: a program that
+  exits right after a collection crashes in hxcpp on Windows.
 - A check does not depend on when the collector runs by itself: it forces a
   collection, or asserts a bound that holds either way.
 - The pure crates have unit tests; `hxn-hl` and the adapters are tested only

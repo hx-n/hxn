@@ -214,6 +214,13 @@ code call the runtime.
   does not manage, but a release has to be reported too, a finalizer is not
   allowed to make that call, and reported any later the release is missed by
   the threshold hxcpp sets during the same collection.
+- **`hxn.Loop.exit` ends an hxcpp program without running the C runtime's
+  destructors.** hxcpp goes on zeroing memory on its own threads after a
+  collection, and `exit` destroys a lock they take when they finish, which
+  on Windows crashes a program that ends soon after one. A meter collects
+  when a library's memory is over its budget, a moment the program did not
+  choose, so hxn gives a way to end that does not depend on it. On other
+  runtimes it is `Sys.exit`.
 
 ## Calling a Haxe function
 

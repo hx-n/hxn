@@ -35,4 +35,30 @@ class Loop {
 			Gc.check();
 		return watching;
 	}
+
+	/**
+		Ends the program with `code`, as `Sys.exit` does.
+
+		Use it in place of `Sys.exit` in a program built with hxcpp. After a
+		collection hxcpp goes on zeroing memory on threads of its own, and
+		the C runtime destroys a lock they take on its way out, so a program
+		that ends soon after a collection can crash on Windows instead of
+		exiting. A library's memory can cause a collection at a moment the
+		program did not choose, which may be just before it ends. This
+		flushes what was printed and leaves without running those
+		destructors. Elsewhere it is `Sys.exit`.
+	**/
+	public static function exit(code:Int):Void {
+		#if (cpp && !emscripten)
+		Sys.stdout().flush();
+		Sys.stderr().flush();
+		leave(code);
+		#else
+		Sys.exit(code);
+		#end
+	}
+
+	#if (cpp && !emscripten)
+	@:native("::_Exit") extern static function leave(code:Int):Void;
+	#end
 }

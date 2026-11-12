@@ -366,6 +366,6 @@ class Main {
 		#end
 
 		Sys.println(failed == 0 ? 'PASS ($collected)' : 'FAILED $failed');
-		Finish.exit(failed == 0 ? 0 : 1);
+		hxn.Loop.exit(failed == 0 ? 0 : 1);
 	}
 }

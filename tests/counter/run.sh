@@ -98,7 +98,7 @@ case "$runtime" in
 		# keeps what it does not use itself: a script may.
 		haxe -cp "$root/haxe" -cp "$here/haxe" -cp "$here/haxe/cppia" -cp "$work/gen/haxe/cpp" -main Host -cpp "$work/host" \
 			-D scriptable -dce no -D dll_export="$work/host.classes" \
-			--macro "include('hxn')" --macro "include('', true, null, ['$work/gen/haxe/cpp'])" Finish \
+			--macro "include('hxn')" --macro "include('', true, null, ['$work/gen/haxe/cpp'])" \
 			${linked[@]+"${linked[@]}"} \
 			-D HXN_INCLUDE="$root/include" \
 			-D COUNTER_INCLUDE="$work/gen/include" \
