@@ -17,6 +17,8 @@ env:
   HXN_RUST: nightly-2026-08-25
   HXN_HAXE: 4.3.6
   HXN_HASHLINK: "1.15"
+  HXN_HXCPP: 4.3.2
+  HXN_EMSDK: 5.0.7
 
 defaults:
   run:
@@ -127,7 +129,7 @@ jobs:
       - uses: krdlab/setup-haxe@v1
         with:
           haxe-version: ${{ env.HXN_HAXE }}
-      - run: haxelib install hxcpp 4.3.2 --quiet
+      - run: haxelib install hxcpp "$HXN_HXCPP" --quiet
       - run: tests/cli/run.sh cpp
       - run: tests/examples/run.sh cpp
       - run: tests/counter/run.sh cpp
@@ -153,3 +155,46 @@ jobs:
             echo "== the script in its host"
             "$cdb" -G -cf "$(cygpath -w "$RUNNER_TEMP/crash.cdb")" target/counter-gen-cppia/host/Host.exe target/counter-gen-cppia/generated.cppia || true
           fi
+
+  # hxcpp through Emscripten, run by node. Rust's standard library is
+  # rebuilt for it, which takes its source.
+  emscripten:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.HXN_RUST }}
+          components: rust-src
+      - uses: Swatinem/rust-cache@v2
+      - uses: krdlab/setup-haxe@v1
+        with:
+          haxe-version: ${{ env.HXN_HAXE }}
+      - run: haxelib install hxcpp "$HXN_HXCPP" --quiet
+      - name: Fetch the Emscripten SDK
+        run: |
+          git clone --depth 1 https://github.com/emscripten-core/emsdk "$RUNNER_TEMP/emsdk"
+          "$RUNNER_TEMP/emsdk/emsdk" install "$HXN_EMSDK"
+          "$RUNNER_TEMP/emsdk/emsdk" activate "$HXN_EMSDK"
+      - run: source "$RUNNER_TEMP/emsdk/emsdk_env.sh" && tests/counter/run.sh gen-emcc
+      - run: source "$RUNNER_TEMP/emsdk/emsdk_env.sh" && tests/examples/run.sh emcc
+
+  # Every example in an iOS simulator: hxcpp's toolchain for one, and the
+  # library built for the simulator's machine from this one.
+  ios:
+    name: ios simulator
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.HXN_RUST }}
+          targets: x86_64-apple-ios
+      - uses: Swatinem/rust-cache@v2
+      - uses: krdlab/setup-haxe@v1
+        with:
+          haxe-version: ${{ env.HXN_HAXE }}
+      - run: haxelib install hxcpp "$HXN_HXCPP" --quiet
+      - run: tests/mobile/run.sh ios-sim

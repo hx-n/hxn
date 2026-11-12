@@ -258,7 +258,9 @@ filesystem `#include "counter.h"` would then find the generated one.
   unit tests on Linux, Windows and macOS, the lints and Miri on Linux, and
   the fixture's native modes and the command's and the examples' tests on
   HashLink and hxcpp on Linux and Windows, and the fixture and the command's
-  test as scripts. Windows is run nowhere else. Ash, wasm and Emscripten are run by
+  test as scripts. It also runs the generated fixture and the examples
+  through Emscripten on Linux, and the examples in an iOS simulator on macOS.
+  Windows is run nowhere else. Ash, wasm under Ash, and Android are run by
   hand, as above.
 - Run a runtime test under a timeout. A wrong wait hangs; it does not fail.
 - Anything concurrent is run repeatedly, on more than one machine.
