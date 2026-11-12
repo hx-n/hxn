@@ -20,14 +20,29 @@
 //! HashLink aborts when a thread not registered with it allocates or changes a
 //! root.
 
+// An Ash side module that unwinds defines what libunwind would.
+#![cfg_attr(
+    all(target_os = "wasi", panic = "unwind"),
+    feature(link_llvm_intrinsics, asm_experimental_arch)
+)]
+
 use std::ffi::{c_int, c_void};
 
 use hl_abi::hl_type;
 use hxn_abi::{Failure, Fault, Handle, RawHandle, Slice, SliceMut, catch, release};
 
+#[cfg(all(target_os = "wasi", panic = "unwind"))]
+mod unwind;
+
 // Re-exports the `hl_abi` items a generated adapter uses, so that its crate
 // depends on this one alone.
 pub use hl_abi::{define_prim, vbyte, vdynamic, vstring};
+
+// Raises a Haxe exception. On Ash's wasm build it is a wasm exception, which
+// unwinds through the adapter's frames, so they are `C-unwind`.
+unsafe extern "C-unwind" {
+    fn hl_throw(value: *mut vdynamic) -> !;
+}
 
 unsafe extern "C" {
     // On Windows a DLL's data symbol is read through its `__imp_` import
@@ -63,7 +78,6 @@ unsafe extern "C" {
     fn hl_add_root(slot: *mut c_void);
     fn hl_remove_root(slot: *mut c_void);
     fn hl_blocking(blocking: bool);
-    fn hl_throw(value: *mut vdynamic) -> !;
     fn hl_dyn_call(closure: *mut vclosure, args: *mut *mut vdynamic, count: c_int)
     -> *mut vdynamic;
 }

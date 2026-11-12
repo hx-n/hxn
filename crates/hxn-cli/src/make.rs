@@ -98,9 +98,11 @@ impl Target {
             // linked into its program has to use the same one.
             (false, Runtime::Cpp) if self.windows() => Some("-C target-feature=+crt-static"),
             (false, _) => None,
-            (true, Runtime::Hl) => {
-                Some("-C relocation-model=pic -C target-feature=+mutable-globals")
-            }
+            // Position-independent for a side module, and unwinding with wasm
+            // exceptions in the encoding Ash emits.
+            (true, Runtime::Hl) => Some(
+                "-C relocation-model=pic -C target-feature=+mutable-globals,+exception-handling -C panic=unwind -C llvm-args=-wasm-use-legacy-eh=false",
+            ),
             // The prebuilt std unwinds with wasm exceptions, as hxcpp does.
             (true, Runtime::Cpp) => None,
         }
@@ -424,8 +426,8 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
     let name = &project.library;
     let runtime = target.runtime;
     if target.wasm && runtime == Runtime::Hl {
-        // An Ash side module needs std rebuilt as position-independent code,
-        // and only a nightly cargo can rebuild std.
+        // An Ash side module needs std rebuilt as position-independent code
+        // that unwinds, and only a nightly cargo can rebuild std.
         let release = rustc_reports("release:")?;
         if !release.contains("nightly") && !release.contains("dev") {
             return Err(format!(
@@ -549,7 +551,7 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
             }
         }
         if target.wasm && runtime == Runtime::Hl {
-            cargo.arg("-Zbuild-std=std,panic_abort");
+            cargo.arg("-Zbuild-std=std,panic_unwind");
         }
         built.push(triple);
     }

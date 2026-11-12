@@ -141,12 +141,13 @@ case "$runtime" in
 			adapter="$here/hl/src/lib.rs" classes="$here/haxe/hl"
 		fi
 		# A side module must be position-independent and the prebuilt std is
-		# not, so std is rebuilt. Only the static library is built, because
-		# cargo cannot link a wasm shared library whose imports come from the
-		# main program.
-		RUSTFLAGS="-C relocation-model=pic -C target-feature=+mutable-globals" \
+		# not, so std is rebuilt. It unwinds with wasm exceptions in the
+		# encoding Ash emits, so a panic is caught. Only the static library is
+		# built, because cargo cannot link a wasm shared library whose imports
+		# come from the main program.
+		RUSTFLAGS="-C relocation-model=pic -C target-feature=+mutable-globals,+exception-handling -C panic=unwind -C llvm-args=-wasm-use-legacy-eh=false" \
 			cargo rustc --manifest-path "$root/Cargo.toml" -p "$package" --crate-type staticlib \
-			--target wasm32-wasip1 -Z build-std=std,panic_abort
+			--target wasm32-wasip1 -Z build-std=std,panic_unwind
 		lld="$(rustc --print sysroot)/lib/rustlib/$(rustc -vV | sed -n 's/^host: //p')/bin/rust-lld"
 		exports=()
 		while read -r resolver; do

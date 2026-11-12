@@ -10,7 +10,11 @@ The rules that hxn's code, its bindings and its tests follow.
   once per library in the same process. A function the host must call, such
   as `release`, is re-exported by each library under its own name.
 - **`hxn-future` contains no `unsafe`.** It is `#![forbid(unsafe_code)]`.
-- **Only `hxn-hl` imports a runtime's symbols**, and it defines none.
+- **Only `hxn-hl` imports a runtime's symbols**, and it defines none of the
+  runtime's. In an Ash side module that unwinds it defines the two libunwind
+  functions Rust's unwinding calls, which neither the module nor Ash has.
+- **A HashLink primitive that can throw is `extern "C-unwind"`.** On Ash's
+  wasm build the throw is a wasm exception that passes through its frame.
 - **A library's core is plain Rust.** It depends on `hxn` for the marker
   attributes and on `hxn-future` if it has asynchronous results, and on no
   runtime. It never selects a runtime with a cargo feature.

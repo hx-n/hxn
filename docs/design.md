@@ -155,10 +155,17 @@ Nothing unwinds across the boundary in either direction.
   and dropped everything it owned. HashLink throws by jumping past frames
   without running destructors, and a C++ exception must not cross a Rust
   frame, so the throw is always made by the adapter, never from inside the
-  library.
-- A panic is caught at the boundary and reported as `Status::PANIC`, where the
-  build can catch one. An Ash wasm build aborts on a panic; see the runtime
-  table at the end.
+  library. Ash's wasm build throws a wasm exception, which unwinds through
+  the adapter's own frame; so a HashLink primitive that can throw is
+  `extern "C-unwind"`, which leaves it free to pass, where `extern "C"`
+  would abort the program.
+- A panic is caught at the boundary and reported as `Status::PANIC`, on every
+  runtime. On wasm the library unwinds with wasm exceptions: Rust's prebuilt
+  standard library does for Emscripten, and an Ash side module rebuilds it
+  that way. On WASI Rust takes two functions from the toolchain's libunwind,
+  which an Ash side module does not have, so `hxn-hl` defines them for that
+  build (`unwind.rs`), throwing with the wasm `throw` instruction as Rust's
+  own shim for `wasm32-unknown-unknown` does.
 
 So an error is an ordinary return value until the call has returned, which
 is why errors work the same in builds that cannot unwind.
@@ -578,9 +585,10 @@ flags.
   the program provides; Ash builds the program and loads the module from the
   same directory. For hxcpp it is a static archive for
   `wasm32-unknown-emscripten` that hxcpp links, and node runs the result.
-  For HashLink, Rust's standard library is rebuilt position-independent,
-  which requires a nightly toolchain; the command reports this when the
-  toolchain is not nightly. For hxcpp the prebuilt one for Emscripten is
+  For HashLink, Rust's standard library is rebuilt position-independent and
+  unwinding with wasm exceptions, in the encoding Ash emits
+  (`-wasm-use-legacy-eh=false`), which requires a nightly toolchain; the
+  command reports this when the toolchain is not nightly. For hxcpp the prebuilt one for Emscripten is
   used: it unwinds with wasm exceptions, as hxcpp's Emscripten build does,
   so a panic is caught there as it is natively.
 
@@ -794,7 +802,7 @@ decision.
 |---|---|---|---|---|
 | HashLink | `-hl` as an `.hdll` | yes | becomes a thrown error | |
 | Ash, native | the same `.hdll` | yes; cooperative in its interpreter mode | becomes a thrown error | Tested in its hybrid, JIT and interpreter modes. |
-| Ash, wasm | `-hl` as a side module | Haxe threads as fibers; no Rust threads | aborts the program | The module uses the program's allocator. |
+| Ash, wasm | `-hl` as a side module | Haxe threads as fibers; no Rust threads | becomes a thrown error | The module uses the program's allocator. |
 | hxcpp | `-c` with C++ glue | yes | becomes a thrown error | |
 | CPPIA | none of its own: a script runs in an hxcpp host that contains the binding | yes | becomes a thrown error | The host is built with `-D scriptable` and dead-code elimination off. |
 | hxcpp through Emscripten | the same | none | becomes a thrown error | Rust's prebuilt standard library unwinds with wasm exceptions, which hxcpp from git also uses; hxcpp 4.3.2 uses JavaScript exceptions and does not link with it. hxcpp's collector does not complete a forced collection there, so `hxn.Gc.collect()` does nothing and a meter only counts. |

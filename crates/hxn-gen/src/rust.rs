@@ -500,7 +500,7 @@ fn hl_shared(library: &Library, interface: &Interface) -> String {
     let mut prim = |method: &str, signature: String, params: &str, returns: &str, body: &str| {
         let export = export(library, name, method);
         out.push_str(&format!(
-            "\n#[unsafe(no_mangle)]\npub unsafe extern \"C\" fn {export}({params}){returns} {{\n    unsafe {{\n        prim(|| {{\n            {body}\n        }})\n    }}\n}}\ndefine_prim!(hlp_{local}, {export}, \"{signature}\");\n",
+            "\n#[unsafe(no_mangle)]\npub unsafe extern \"C-unwind\" fn {export}({params}){returns} {{\n    unsafe {{\n        prim(|| {{\n            {body}\n        }})\n    }}\n}}\ndefine_prim!(hlp_{local}, {export}, \"{signature}\");\n",
             local = local(name, method),
         ));
     };
@@ -838,7 +838,7 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
         format!(" -> {ty}")
     };
     format!(
-        "{allow}#[unsafe(no_mangle)]\npub unsafe extern \"C\" fn {name}({params}){returns} {{\n    unsafe {{\n        prim(|| {{\n            {body}\n        }})\n    }}\n}}\ndefine_prim!(hlp_{local}, {name}, \"P{signature}_{ret}\");\n",
+        "{allow}#[unsafe(no_mangle)]\npub unsafe extern \"C-unwind\" fn {name}({params}){returns} {{\n    unsafe {{\n        prim(|| {{\n            {body}\n        }})\n    }}\n}}\ndefine_prim!(hlp_{local}, {name}, \"P{signature}_{ret}\");\n",
         allow = lent_allow(method),
         params = params.join(", "),
         body = body.join("\n            "),
@@ -877,7 +877,7 @@ pub fn hl_adapter(library: &Library, core: &str) -> String {
         }
         let name = export(library, &interface.name, "close");
         out.push_str(&format!(
-            "\n#[unsafe(no_mangle)]\npub unsafe extern \"C\" fn {name}(this: *mut Managed) {{\n    unsafe {{\n        prim(|| {{\n            handle::<{held}>(this)?.take()?;\n            Ok(())\n        }})\n    }}\n}}\ndefine_prim!(hlp_{local}, {name}, \"PX{own}__v\");\n",
+            "\n#[unsafe(no_mangle)]\npub unsafe extern \"C-unwind\" fn {name}(this: *mut Managed) {{\n    unsafe {{\n        prim(|| {{\n            handle::<{held}>(this)?.take()?;\n            Ok(())\n        }})\n    }}\n}}\ndefine_prim!(hlp_{local}, {name}, \"PX{own}__v\");\n",
             held = held(library, &interface.name),
             local = local(&interface.name, "close"),
         ));
@@ -895,7 +895,7 @@ pub fn hl_adapter(library: &Library, core: &str) -> String {
     if library.returns_cells() {
         let name = cell_export(library);
         out.push_str(&format!(
-            "\n// Where a cell the library handed over is, for the VM's own atomic operations.\n#[unsafe(no_mangle)]\npub unsafe extern \"C\" fn {name}(this: *mut Managed) -> *mut i32 {{\n    unsafe {{ prim(|| Ok(handle::<Arc<AtomicI32>>(this)?.borrow()?.as_ptr())) }}\n}}\ndefine_prim!(hlp_atomic_cell, {name}, \"PX{}__Ri\");\n",
+            "\n// Where a cell the library handed over is, for the VM's own atomic operations.\n#[unsafe(no_mangle)]\npub unsafe extern \"C-unwind\" fn {name}(this: *mut Managed) -> *mut i32 {{\n    unsafe {{ prim(|| Ok(handle::<Arc<AtomicI32>>(this)?.borrow()?.as_ptr())) }}\n}}\ndefine_prim!(hlp_atomic_cell, {name}, \"PX{}__Ri\");\n",
             cell_abstract(library)
         ));
     }
@@ -903,11 +903,11 @@ pub fn hl_adapter(library: &Library, core: &str) -> String {
     if !library.errors().is_empty() {
         let name = thrown_export(library);
         out.push_str(&format!(
-            "\n// The value of the failure this thread just met, for the binding to throw as\n// what it is: the bytes and their length, or null if it had none.\n#[unsafe(no_mangle)]\npub unsafe extern \"C\" fn {name}(out: *mut i32) -> *mut vbyte {{\n    let value = hxn_abi::thrown::take();\n    let Ok(length) = i32::try_from(value.len()) else {{\n        return null_mut();\n    }};\n    if value.is_empty() || out.is_null() {{\n        return null_mut();\n    }}\n    unsafe {{ *out = length }};\n    bytes(&value)\n}}\ndefine_prim!(hlp_thrown_take, {name}, \"PRi_B\");\n"
+            "\n// The value of the failure this thread just met, for the binding to throw as\n// what it is: the bytes and their length, or null if it had none.\n#[unsafe(no_mangle)]\npub unsafe extern \"C-unwind\" fn {name}(out: *mut i32) -> *mut vbyte {{\n    let value = hxn_abi::thrown::take();\n    let Ok(length) = i32::try_from(value.len()) else {{\n        return null_mut();\n    }};\n    if value.is_empty() || out.is_null() {{\n        return null_mut();\n    }}\n    unsafe {{ *out = length }};\n    bytes(&value)\n}}\ndefine_prim!(hlp_thrown_take, {name}, \"PRi_B\");\n"
         ));
     }
     out.push_str(&format!(
-        "\n// What the library's values hold that the VM's collector cannot see, and\n// whether the library asked for a collection since the last call.\n#[unsafe(no_mangle)]\npub extern \"C\" fn {held}() -> f64 {{\n    memory::held() as f64\n}}\ndefine_prim!(hlp_memory_held, {held}, \"P_d\");\n\n#[unsafe(no_mangle)]\npub extern \"C\" fn {wanted}() -> bool {{\n    memory::take_request()\n}}\ndefine_prim!(hlp_memory_wanted, {wanted}, \"P_b\");\n",
+        "\n// What the library's values hold that the VM's collector cannot see, and\n// whether the library asked for a collection since the last call.\n#[unsafe(no_mangle)]\npub extern \"C-unwind\" fn {held}() -> f64 {{\n    memory::held() as f64\n}}\ndefine_prim!(hlp_memory_held, {held}, \"P_d\");\n\n#[unsafe(no_mangle)]\npub extern \"C\" fn {wanted}() -> bool {{\n    memory::take_request()\n}}\ndefine_prim!(hlp_memory_wanted, {wanted}, \"P_b\");\n",
         held = held_export(library),
         wanted = wanted_export(library),
     ));

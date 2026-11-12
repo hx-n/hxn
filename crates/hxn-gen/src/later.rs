@@ -403,7 +403,7 @@ pub fn hl_adapter(library: &Library) -> String {
     }
     let name = &crate::names::symbols(library);
     let mut out = format!(
-        "\n// The library's one queue of what it has for the host.\n#[unsafe(no_mangle)]\npub unsafe extern \"C\" fn {name}_outbox_wait(milliseconds: i32) -> bool {{\n    unsafe {{ blocking(|| outbox::wait_millis(milliseconds)) }}\n}}\ndefine_prim!(hlp_outbox_wait, {name}_outbox_wait, \"Pi_b\");\n\n#[unsafe(no_mangle)]\npub extern \"C\" fn {name}_outbox_next() -> i32 {{\n    outbox::next()\n}}\ndefine_prim!(hlp_outbox_next, {name}_outbox_next, \"P_i\");\n"
+        "\n// The library's one queue of what it has for the host.\n#[unsafe(no_mangle)]\npub unsafe extern \"C-unwind\" fn {name}_outbox_wait(milliseconds: i32) -> bool {{\n    unsafe {{ blocking(|| outbox::wait_millis(milliseconds)) }}\n}}\ndefine_prim!(hlp_outbox_wait, {name}_outbox_wait, \"Pi_b\");\n\n#[unsafe(no_mangle)]\npub extern \"C\" fn {name}_outbox_next() -> i32 {{\n    outbox::next()\n}}\ndefine_prim!(hlp_outbox_next, {name}_outbox_next, \"P_i\");\n"
     );
     for (kind, carried) in &used {
         let any = format!("Any{}", kind.title());
@@ -426,7 +426,7 @@ pub fn hl_adapter(library: &Library) -> String {
                 .map(|name| format!(", {name}: i32"))
                 .collect();
             out.push_str(&format!(
-                "\n#[unsafe(no_mangle)]\npub unsafe extern \"C\" fn {export}(this: *mut Managed{params}) -> i32 {{\n    unsafe {{\n        prim(|| {{\n            let this = handle::<{any}>(this)?.borrow()?;\n            Ok({body})\n        }})\n    }}\n}}\ndefine_prim!(hlp_{local}_{call}, {export}, \"PX{own}_{letters}_i\");\n",
+                "\n#[unsafe(no_mangle)]\npub unsafe extern \"C-unwind\" fn {export}(this: *mut Managed{params}) -> i32 {{\n    unsafe {{\n        prim(|| {{\n            let this = handle::<{any}>(this)?.borrow()?;\n            Ok({body})\n        }})\n    }}\n}}\ndefine_prim!(hlp_{local}_{call}, {export}, \"PX{own}_{letters}_i\");\n",
                 local = kind.name(),
             ));
         }
@@ -485,7 +485,7 @@ pub fn hl_adapter(library: &Library) -> String {
                 ("", "")
             };
             out.push_str(&format!(
-                "\n#[unsafe(no_mangle)]\npub unsafe extern \"C\" fn {export}(this: *mut Managed{length}) -> {ty} {{\n    unsafe {{\n        prim(|| {{\n            let this = handle::<{any}>(this)?.borrow()?;\n            {result}\n        }})\n    }}\n}}\ndefine_prim!(hlp_{local}_{call}, {export}, \"PX{own}_{taken}_{letter}\");\n",
+                "\n#[unsafe(no_mangle)]\npub unsafe extern \"C-unwind\" fn {export}(this: *mut Managed{length}) -> {ty} {{\n    unsafe {{\n        prim(|| {{\n            let this = handle::<{any}>(this)?.borrow()?;\n            {result}\n        }})\n    }}\n}}\ndefine_prim!(hlp_{local}_{call}, {export}, \"PX{own}_{taken}_{letter}\");\n",
                 local = kind.name(),
             ));
         }

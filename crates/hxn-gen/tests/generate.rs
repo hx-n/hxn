@@ -307,9 +307,9 @@ fn refuses_what_is_marked_wrongly() {
 fn names_follow_each_language() {
     let library = parse("audio", SOURCE).unwrap();
     let adapter = hxn_gen::hl_adapter(&library, "audio_core");
-    assert!(
-        adapter.contains("pub unsafe extern \"C\" fn hxn_audio_audio_device_default_gain() -> f64")
-    );
+    assert!(adapter.contains(
+        "pub unsafe extern \"C-unwind\" fn hxn_audio_audio_device_default_gain() -> f64"
+    ));
     assert!(adapter.contains("define_prim!(hlp_audio_device_write, hxn_audio_audio_device_write, \"PXaudio_audio_device_Bi_i\");"));
     assert!(adapter.contains("blocking(|| this.drain())"));
     assert!(adapter.contains("use audio_core::{AudioDevice, Mixer};"));
