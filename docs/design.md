@@ -752,8 +752,10 @@ linking objects built against the old one. For `cpp --wasm`, hxn
 tells `cc` to compile with `emcc`. `hl --wasm` is not supported, because
 compiling C for `wasm32-wasip1` needs the WASI SDK.
 
-C++ is not supported directly. A C++ library is bound through a C API over
-it.
+`hxn import` reads C only. A C++ library is bound through a C API over it,
+which the library's author provides: hxn does not generate one, since how
+classes, overloads, templates and exceptions map onto C is the author's
+decision.
 
 ## Runtimes
 
