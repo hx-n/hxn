@@ -19,15 +19,19 @@ fn a_header_is_imported_as_webidl() {
     }
     let api = hxn_c::import(&Path::new(ROOT).join("tally.h"), "tally", &[]).unwrap();
     let idl = hxn_c::write(&api);
-    print!("{idl}");
     weedle::parse(&idl).unwrap_or_else(|error| panic!("not WebIDL: {error:?}"));
-    // What the importer writes, before it is edited.
-    let committed = std::fs::read_to_string(Path::new(ROOT).join("imported.webidl")).unwrap();
-    assert_eq!(idl, committed);
-    // It reads back as it was written, less the list of what was not
-    // imported, which is only comments.
+    // What the importer writes, before it is edited. HXN_BLESS=1 writes it
+    // instead, after a change to the importer.
+    let golden = Path::new(ROOT).join("imported.webidl");
+    if std::env::var_os("HXN_BLESS").is_some() {
+        std::fs::write(&golden, &idl).unwrap();
+    }
+    assert_eq!(idl, std::fs::read_to_string(&golden).unwrap());
+    // It reads back as it was written, less the lists of what was not
+    // imported and what to check, which are only comments.
     let mut expected = api.clone();
     expected.skipped.clear();
+    expected.review.clear();
     assert_eq!(hxn_c::parse("tally", &idl).unwrap(), expected);
 }
 
@@ -36,10 +40,12 @@ fn the_edited_webidl_generates_rust_marked_for_hxn() {
     let text = std::fs::read_to_string(Path::new(ROOT).join("tally.webidl")).unwrap();
     let api = hxn_c::parse("tally", &text).unwrap();
     let rust = hxn_c::bindings(&api, "tally.webidl");
-    print!("{rust}");
+    if std::env::var_os("HXN_SHOW").is_some() {
+        print!("{rust}");
+    }
     // The status code is a failure, not a result.
     assert!(rust.contains("pub fn add(&mut self, amount: i32) -> Result<(), String>"));
-    assert!(rust.contains("return Err(format!(\"tally_add failed with status {value}\"));"));
+    assert!(rust.contains("return Err(format!(\"tally_add failed with status {status}\"));"));
     // The object is freed with its C function.
     assert!(rust.contains("unsafe { ffi::tally_free(self.raw) };"));
     // The text is copied, then freed with the function the WebIDL names.

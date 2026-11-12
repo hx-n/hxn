@@ -1,11 +1,19 @@
-naïve ☃: 3
+name kept: true, total 3
 added 3 bytes, total 9
-naïve ☃: 9
+described: true
 summing: true
 max: 40
+visited 7: 5,-2,1,2,3,40,7
+stopped after 1
+thrown: no more
+total 40 | count 7
 refused: tally_add failed with status -1
 refused: tally_new returned null
 empty: true
 distance: 7
 midpoint: 2.5, 4
 version: 3
+parsed: 42
+refused: tally_parse failed with status -1
+copy: 40
+origin: 0, 0

@@ -10,6 +10,7 @@ struct tally {
 	tally_mode mode;
 	int64_t total;
 	int64_t count;
+	int32_t recent[16];
 };
 
 tally *tally_new(const char *name, tally_mode mode) {
@@ -42,6 +43,7 @@ int tally_add(tally *t, int32_t amount) {
 			t->total = amount;
 		break;
 	}
+	t->recent[t->count % 16] = amount;
 	t->count += 1;
 	return 0;
 }
@@ -101,6 +103,44 @@ unsigned long tally_version(void) {
 }
 
 int tally_parse(const char *text, int *out) {
-	*out = atoi(text);
+	char *end = NULL;
+	long value = strtol(text, &end, 10);
+	if (!*text || *end || value < INT_MIN || value > INT_MAX)
+		return -1;
+	*out = (int)value;
 	return 0;
+}
+
+int tally_copy(const tally *t, const char *name, tally **out) {
+	tally *copy = tally_new(name, t->mode);
+	if (!copy)
+		return -1;
+	copy->total = t->total;
+	copy->count = t->count;
+	*out = copy;
+	return 0;
+}
+
+int tally_each(const tally *t, tally_visitor visit, void *user) {
+	int64_t first = t->count > 16 ? t->count - 16 : 0;
+	int visited = 0;
+	for (int64_t i = first; i < t->count; i++) {
+		visited += 1;
+		if (visit(user, t->recent[i % 16]))
+			break;
+	}
+	return visited;
+}
+
+void tally_report(const tally *t, tally_reporter report, void *user) {
+	char line[64];
+	snprintf(line, sizeof line, "total %lld", (long long)t->total);
+	report(line, user);
+	snprintf(line, sizeof line, "count %lld", (long long)t->count);
+	report(line, user);
+}
+
+void tally_origin(tally_point *out) {
+	out->x = 0;
+	out->y = 0;
 }

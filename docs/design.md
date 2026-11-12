@@ -661,26 +661,67 @@ directly. `hxn-c` does the work in three steps:
      one bytes parameter. A returned `char *` is freed with the library's
      only function that takes a `char *` and frees it, if it has exactly
      one.
-   - Anything else, such as an out-parameter, is listed at the end of the
-     WebIDL as not imported.
+   - A non-`const` pointer to a number, an enum, a struct, text or an
+     object pointer after all the passed parameters is an output: the
+     function returns what C writes through it, and an `int` return value
+     becomes a status. Outputs after the first are passed `NULL`. A function
+     that writes an object through a pointer is that object's constructor
+     or static function, so `sqlite3_open(path, &db)` becomes the
+     constructor of `Sqlite3`.
+   - An object returned by a method of another object is taken as borrowed:
+     it belongs to that object, and is not freed by Haxe.
+   - A function pointer followed by a `void *` for user data is a callback:
+     a Haxe function lent for the call, as the `callback` WebIDL definition
+     of its type. It takes at most four booleans, `int`s, floating-point
+     numbers, strings, enums or structs, and returns nothing, a boolean or
+     an `int`. A function whose name suggests it keeps the callback to call
+     later (`set`, `register`, `hook`, `handler` and so on) is not
+     imported: a Haxe function is lent for one call only.
+   - Each of these guesses is listed under "Check:" at the end of the
+     WebIDL, and anything that cannot be mapped is listed as not imported.
 2. **The WebIDL is reviewed and edited.** A header cannot record which
    `int` is a status code, who frees a returned pointer, or which pointer
    may be null. That is added as extended attributes: `[HxnStatus]` makes a
    non-zero return value an exception, `[HxnFree=f]` names the function
-   that frees an object or returned text, and so on (see `hxn-c`'s `idl`
-   module for the full list). The file is committed. `hxn-c` reads only
+   that frees an object or returned text, `[HxnOut]` and `[HxnNull]` mark
+   outputs, `[HxnBorrowed]` a returned object the caller must not free,
+   `[HxnThreadSafe]` an object the library allows calls on from several
+   threads at once, `[HxnUser]` where C passes a callback its user data and
+   `[HxnStop]` what C is returned when the Haxe function throws (see
+   `hxn-c`'s `idl` module for the full list). The file is committed. `hxn-c` reads only
    this subset of WebIDL, and reports the line of anything else.
 3. **WebIDL to Rust.** Each build generates `src/bindings.rs` from the
    WebIDL again: `extern "C"` declarations, and safe wrappers over them. An
-   object owns its C pointer and frees it in `Drop`. Because a C library is
+   object owns its C pointer and frees it in `Drop`, unless it is borrowed.
+   An object C writes through a pointer is owned before the status is
+   checked, so it is freed even when the call fails. Because a C library is
    not assumed to be thread-safe, every method takes `&mut self`, so the
-   handle allows one call at a time, and the object is only `Send`. A
+   handle allows one call at a time, and the object is only `Send`; a
+   `[HxnThreadSafe]` object's methods take `&self` and it is `Sync`. A
    wrapper returns `Result<_, String>` where the call can fail: text with a
    NUL, a platform-sized integer that does not fit, a C enum value with no
    variant, a null object pointer, or a status code.
+   A callback is passed to C as a generated `extern "C"` trampoline, with
+   the Haxe function as its user data. C cannot be unwound through, so the
+   trampoline catches a panic and keeps it, keeps a failure, and returns
+   `[HxnStop]` to C, or does nothing when C cannot be told to stop. Once C
+   returns, the panic is resumed or the Haxe function's failure returned,
+   ahead of anything the call itself reports.
 
 The crate's `build.rs` compiles the C sources given to `--source` with the
-`cc` crate, or links the libraries given to `--link`. For `cpp --wasm`, hxn
+`cc` crate, or links the libraries given to `--link`. A static library does
+not carry the system libraries it links to the program's link, so for
+hxcpp the build reads them from cargo's messages (`linked_libs` and
+`linked_paths` of each build script) into `link.xml`, which the generated
+glue includes and a package carries beside the archive. This applies to any
+library whose dependencies link a system library, not only to imported
+ones.
+
+The glue the hxcpp build compiles against is in headers, and hxcpp decides
+whether to recompile a file by its own timestamp alone. So the generated
+build XML lists `hxn.h` and the library's two headers as dependencies of
+every file: a change to the glue recompiles what includes it, instead of
+linking objects built against the old one. For `cpp --wasm`, hxn
 tells `cc` to compile with `emcc`. `hl --wasm` is not supported, because
 compiling C for `wasm32-wasip1` needs the WASI SDK.
 

@@ -7,13 +7,21 @@
 //! | a struct passed by value | `dictionary Name { required double x; };` |
 //! | an opaque type and its functions | `[HxnFree=c_free] interface Name { ... };` |
 //! | the C function an operation calls | `[HxnC=c_function]` on the operation |
+//! | a free function that returns an `int`, which is ignored | `[HxnFreeInt]` beside `[HxnFree]` on the interface |
+//! | an object the library allows calls on from several threads at once | `[HxnThreadSafe]` on the interface |
+//! | a returned object the caller must not free | `[HxnBorrowed]` on the operation |
 //! | a function that returns `0` on success | `[HxnStatus]`; `[HxnStatus=negative]` when only a negative value is a failure |
 //! | returned text the caller frees | `[HxnFree=c_free]` on the operation |
 //! | `long`, `unsigned long`, `size_t`, `ssize_t` | `[HxnC=long]` and so on on a 64-bit type; `[HxnReturns=...]` on an operation for its return type |
 //! | a `const` pointer to a struct | `[HxnRef]` on the argument |
+//! | a pointer C writes a result through | `[HxnOut]` on the argument, whose type is the operation's return type |
+//! | an output nobody reads | `[HxnNull]` on the argument: C is passed a null pointer |
 //! | `const char *` | `DOMString`, and `DOMString?` as a return type |
 //! | `const uint8_t *` and a `size_t` length | `Uint8Array` |
 //! | free functions | `namespace <Library> { ... };` |
+//! | a function pointer passed with a `void *` for user data | `callback Name = long (long value);`, and one argument of type `Name` |
+//! | where C passes the user data to the function pointer | `[HxnUser=first]` or `[HxnUser=last]` on the callback |
+//! | what C is returned when the Haxe function throws | `[HxnStop=1]` on the callback |
 //!
 //! A `//` comment directly above a definition or a member is its
 //! documentation, which the bindings carry through to Haxe.
@@ -21,7 +29,7 @@
 //! [`parse`] reads only this subset of WebIDL, and reports the line of
 //! anything else.
 
-use crate::model::{Api, Enum, Function, Int, Object, Param, Status, Struct, Ty};
+use crate::model::{Api, Callback, Enum, Function, Int, Object, Param, Role, Status, Struct, Ty};
 
 const HEADER: &str = "// The API of a C library, for hxn. hxn generates the library's Rust bindings\n// from this file: edit it to record what the header cannot, such as which\n// function frees a returned pointer, or [HxnStatus] on a function whose\n// return value is a status code.\n";
 
@@ -61,6 +69,7 @@ fn type_name(ty: &Ty) -> String {
         Ty::Bytes => String::from("Uint8Array"),
         Ty::Enum(name) | Ty::Struct(name) | Ty::StructRef(name) | Ty::Object(name) => name.clone(),
         Ty::Nullable(of) => format!("{}?", type_name(of)),
+        Ty::Callback(name) => name.clone(),
     }
 }
 
@@ -89,12 +98,13 @@ fn arguments(params: &[Param]) -> String {
     let list: Vec<String> = params
         .iter()
         .map(|param| {
-            format!(
-                "{}{} {}",
-                notes(&value_notes(&param.ty)),
-                type_name(&param.ty),
-                param.name
-            )
+            let mut list = value_notes(&param.ty);
+            match param.role {
+                Role::In => {}
+                Role::Out => list.insert(0, String::from("HxnOut")),
+                Role::Null => list.insert(0, String::from("HxnNull")),
+            }
+            format!("{}{} {}", notes(&list), type_name(&param.ty), param.name)
         })
         .collect();
     list.join(", ")
@@ -109,6 +119,9 @@ fn operation(function: &Function, modifier: &str) -> String {
     }
     if let Some(free) = &function.free {
         list.push(format!("HxnFree={free}"));
+    }
+    if function.borrowed {
+        list.push(String::from("HxnBorrowed"));
     }
     if let Ty::Int(int) = &function.returns
         && let Some(c) = int.alias()
@@ -128,6 +141,25 @@ fn operation(function: &Function, modifier: &str) -> String {
 /// The WebIDL form of `api`.
 pub fn write(api: &Api) -> String {
     let mut parts = Vec::new();
+    for callback in &api.callbacks {
+        let mut out = comment(&callback.docs, "");
+        let mut list = vec![String::from(if callback.user_first {
+            "HxnUser=first"
+        } else {
+            "HxnUser=last"
+        })];
+        if let Some(stop) = callback.stop {
+            list.push(format!("HxnStop={stop}"));
+        }
+        out.push_str(&format!(
+            "[{}]\ncallback {} = {} ({});\n",
+            list.join(", "),
+            callback.name,
+            type_name(&callback.returns),
+            arguments(&callback.params)
+        ));
+        parts.push(out);
+    }
     for known in &api.enums {
         let mut out = comment(&known.docs, "");
         out.push_str(&format!("[HxnEnum]\ninterface {} {{\n", known.name));
@@ -153,14 +185,29 @@ pub fn write(api: &Api) -> String {
     }
     for object in &api.objects {
         let mut out = comment(&object.docs, "");
+        let mut list = Vec::new();
         if let Some(free) = &object.free {
-            out.push_str(&format!("[HxnFree={free}]\n"));
+            list.push(format!("HxnFree={free}"));
+            if object.free_int {
+                list.push(String::from("HxnFreeInt"));
+            }
+        }
+        if object.thread_safe {
+            list.push(String::from("HxnThreadSafe"));
+        }
+        if !list.is_empty() {
+            out.push_str(&format!("[{}]\n", list.join(", ")));
         }
         out.push_str(&format!("interface {} {{\n", object.name));
         if let Some(constructor) = &object.constructor {
             out.push_str(&comment(&constructor.docs, "  "));
+            let status = if constructor.status == Status::Zero {
+                ", HxnStatus"
+            } else {
+                ""
+            };
             out.push_str(&format!(
-                "  [HxnC={}] constructor({});\n",
+                "  [HxnC={}{status}] constructor({});\n",
                 constructor.c,
                 arguments(&constructor.params)
             ));
@@ -186,6 +233,12 @@ pub fn write(api: &Api) -> String {
     for part in parts {
         out.push('\n');
         out.push_str(&part);
+    }
+    if !api.review.is_empty() {
+        out.push_str("\n// Check:\n");
+        for note in &api.review {
+            out.push_str(&format!("// - {note}\n"));
+        }
     }
     if !api.skipped.is_empty() {
         out.push_str("\n// Not imported:\n");
@@ -459,6 +512,7 @@ struct Names {
     enums: Vec<String>,
     structs: Vec<String>,
     objects: Vec<String>,
+    callbacks: Vec<String>,
 }
 
 fn find<'a>(notes: &'a [Note], name: &str) -> Option<&'a Note> {
@@ -529,6 +583,7 @@ fn resolve(
             }
         }
         name if names.objects.iter().any(|known| known == name) => Ty::Object(name.to_owned()),
+        name if names.callbacks.iter().any(|known| known == name) => Ty::Callback(name.to_owned()),
         other => {
             return fail(format!(
                 "`{other}` is not a type this file declares or one hxn maps"
@@ -554,15 +609,32 @@ fn arguments_of(parser: &mut Parser, names: &Names) -> Result<Vec<Param>, String
     let mut params = Vec::new();
     while !parser.is_symbol(')') {
         let notes = parser.notes()?;
-        check_notes(&notes, &["HxnC", "HxnRef"], "an argument")?;
+        check_notes(
+            &notes,
+            &["HxnC", "HxnRef", "HxnOut", "HxnNull"],
+            "an argument",
+        )?;
         let line = parser.line();
         let (words, nullable) = parser.type_words()?;
         let ty = resolve(&words, nullable, &notes, names, line)?;
         if matches!(ty, Ty::Void) {
             return parser.fail("an argument cannot be `undefined`");
         }
+        let role = match (find(&notes, "HxnOut"), find(&notes, "HxnNull")) {
+            (Some(_), Some(_)) => {
+                return parser.fail("an argument is `[HxnOut]` or `[HxnNull]`, not both");
+            }
+            (Some(_), None) => Role::Out,
+            (None, Some(_)) => Role::Null,
+            (None, None) => Role::In,
+        };
+        if role != Role::In && matches!(ty, Ty::Bytes | Ty::StructRef(_) | Ty::Callback(_)) {
+            return parser.fail(format!(
+                "`{words}` cannot be written through a pointer by C"
+            ));
+        }
         let name = parser.word()?;
-        params.push(Param { name, ty });
+        params.push(Param { name, ty, role });
         if parser.is_symbol(',') {
             parser.at += 1;
         }
@@ -589,9 +661,10 @@ fn operation_of(
 ) -> Result<Function, String> {
     check_notes(
         notes,
-        &["HxnC", "HxnStatus", "HxnFree", "HxnReturns"],
+        &["HxnC", "HxnStatus", "HxnFree", "HxnReturns", "HxnBorrowed"],
         "an operation",
     )?;
+    let start = parser.line();
     let line = parser.line();
     let (words, nullable) = parser.type_words()?;
     let returned: Vec<Note> = find(notes, "HxnReturns")
@@ -619,19 +692,11 @@ fn operation_of(
             }
         },
     };
-    match (status, &returns) {
-        (Status::Zero, Ty::Void) | (Status::None, _) => {}
-        (Status::Negative, Ty::Int(_)) => {}
-        (Status::Zero, _) => {
-            return Err(format!(
-                "line {line}: `{name}` has `[HxnStatus]`, so it returns `undefined`: the C function's int is only its status"
-            ));
-        }
-        (Status::Negative, _) => {
-            return Err(format!(
-                "line {line}: `{name}` has `[HxnStatus=negative]`, so it returns an integer"
-            ));
-        }
+    check_returns(&name, &params, &returns, status, start)?;
+    if find(notes, "HxnBorrowed").is_some() && returns.inner_object().is_none() {
+        return Err(format!(
+            "line {line}: `[HxnBorrowed]` applies to an operation that returns an object, and `{name}` returns `{words}`"
+        ));
     }
     let free = find(notes, "HxnFree").and_then(|note| note.value.clone());
     if free.is_some() && returns != Ty::Nullable(Box::new(Ty::Text)) && returns != Ty::Text {
@@ -647,7 +712,56 @@ fn operation_of(
         returns,
         status,
         free,
+        borrowed: find(notes, "HxnBorrowed").is_some(),
     })
+}
+
+// Whether what an operation returns fits how C gives it: as the return
+// value, or written to its `[HxnOut]` argument, with or without a status.
+fn check_returns(
+    name: &str,
+    params: &[Param],
+    returns: &Ty,
+    status: Status,
+    line: usize,
+) -> Result<(), String> {
+    let fail = |message: String| Err(format!("line {line}: {message}"));
+    let outs: Vec<&Param> = params.iter().filter(|p| p.role == Role::Out).collect();
+    match outs.as_slice() {
+        [] => match (status, returns) {
+            (Status::Zero, Ty::Void) | (Status::None, _) | (Status::Negative, Ty::Int(_)) => Ok(()),
+            (Status::Zero, Ty::Object(_)) if name == "constructor" => fail(String::from(
+                "a constructor with `[HxnStatus]` gets its object from an `[HxnOut]` argument",
+            )),
+            (Status::Zero, _) => fail(format!(
+                "`{name}` has `[HxnStatus]`, so it returns `undefined`: the C function's int is only its status. A value C writes through a pointer is an `[HxnOut]` argument"
+            )),
+            (Status::Negative, _) => fail(format!(
+                "`{name}` has `[HxnStatus=negative]`, so it returns an integer"
+            )),
+        },
+        [out] => {
+            if status == Status::Negative {
+                return fail(format!(
+                    "`{name}` has an `[HxnOut]` argument, so its C return value is a status, `[HxnStatus]`, or nothing"
+                ));
+            }
+            let matches = *returns == out.ty
+                || matches!((returns, &out.ty), (Ty::Nullable(of), ty) if **of == *ty)
+                || matches!((returns, &out.ty), (ty, Ty::Nullable(of)) if **of == *ty);
+            if matches {
+                Ok(())
+            } else {
+                fail(format!(
+                    "`{name}` returns its `[HxnOut]` argument `{}`, so its return type is that argument's",
+                    out.name
+                ))
+            }
+        }
+        _ => fail(format!(
+            "`{name}` has more than one `[HxnOut]` argument: return one, and pass `[HxnNull]` for the others"
+        )),
+    }
 }
 
 /// Reads the WebIDL form of a C library's API. `library` names the library,
@@ -667,7 +781,8 @@ pub fn parse(library: &str, text: &str) -> Result<Api, String> {
                 Token::Word(word) if depth == 0 && word == "HxnEnum" => enum_next = true,
                 Token::Word(word)
                     if depth == 0
-                        && ["interface", "dictionary", "namespace"].contains(&word.as_str()) =>
+                        && ["interface", "dictionary", "namespace", "callback"]
+                            .contains(&word.as_str()) =>
                 {
                     kind = Some(word.clone());
                 }
@@ -676,6 +791,7 @@ pub fn parse(library: &str, text: &str) -> Result<Api, String> {
                         Some("interface") if enum_next => names.enums.push(word.clone()),
                         Some("interface") => names.objects.push(word.clone()),
                         Some("dictionary") => names.structs.push(word.clone()),
+                        Some("callback") => names.callbacks.push(word.clone()),
                         _ => {}
                     }
                     enum_next = false;
@@ -696,6 +812,83 @@ pub fn parse(library: &str, text: &str) -> Result<Api, String> {
         let line = parser.line();
         let kind = parser.word()?;
         match kind.as_str() {
+            "callback" => {
+                check_notes(&notes, &["HxnUser", "HxnStop"], "a callback")?;
+                let name = parser.word()?;
+                parser.symbol('=')?;
+                let line = parser.line();
+                let (words, nullable) = parser.type_words()?;
+                let returns = resolve(&words, nullable, &[], &names, line)?;
+                if !matches!(returns, Ty::Void | Ty::Bool | Ty::Int(Int::I32)) {
+                    return Err(format!(
+                        "line {line}: a callback returns `undefined`, `boolean` or `long`"
+                    ));
+                }
+                let params = arguments_of(&mut parser, &names)?;
+                parser.symbol(';')?;
+                if params.len() > 4 {
+                    return Err(format!(
+                        "line {line}: `{name}` takes {} values, and a Haxe function lent to C takes at most 4",
+                        params.len()
+                    ));
+                }
+                for param in &params {
+                    let fits = matches!(
+                        param.ty,
+                        Ty::Bool
+                            | Ty::Int(Int::I32)
+                            | Ty::F32
+                            | Ty::F64
+                            | Ty::Text
+                            | Ty::Enum(_)
+                            | Ty::Struct(_)
+                    );
+                    if !fits || param.role != Role::In {
+                        return Err(format!(
+                            "line {line}: a callback takes `boolean`, `long`, `float`, `double`, `DOMString`, an enum or a dictionary, and `{}` is not one",
+                            param.name
+                        ));
+                    }
+                }
+                let user_first = match find(&notes, "HxnUser")
+                    .and_then(|note| note.value.as_deref())
+                {
+                    None | Some("first") => true,
+                    Some("last") => false,
+                    Some(other) => {
+                        return Err(format!(
+                            "line {line}: `[HxnUser={other}]`: the user data is `first` or `last`"
+                        ));
+                    }
+                };
+                let stop = match find(&notes, "HxnStop") {
+                    None => None,
+                    Some(note) => {
+                        if returns == Ty::Void {
+                            return Err(format!(
+                                "line {}: `[HxnStop]` is what C is returned, and `{name}` returns nothing",
+                                note.line
+                            ));
+                        }
+                        Some(
+                            note.value
+                                .as_deref()
+                                .and_then(|v| v.parse::<i64>().ok())
+                                .ok_or_else(|| {
+                                    format!("line {}: `[HxnStop=n]` needs a number", note.line)
+                                })?,
+                        )
+                    }
+                };
+                api.callbacks.push(Callback {
+                    name,
+                    docs,
+                    params,
+                    returns,
+                    user_first,
+                    stop,
+                });
+            }
             "dictionary" => {
                 check_notes(&notes, &[], "a dictionary")?;
                 let name = parser.word()?;
@@ -717,7 +910,7 @@ pub fn parse(library: &str, text: &str) -> Result<Api, String> {
                     }
                     let field = parser.word()?;
                     parser.symbol(';')?;
-                    fields.push(Param { name: field, ty });
+                    fields.push(Param::new(field, ty));
                 }
                 parser.symbol('}')?;
                 parser.symbol(';')?;
@@ -750,12 +943,18 @@ pub fn parse(library: &str, text: &str) -> Result<Api, String> {
                 api.enums.push(Enum { name, docs, values });
             }
             "interface" => {
-                check_notes(&notes, &["HxnFree"], "an interface")?;
+                check_notes(
+                    &notes,
+                    &["HxnFree", "HxnFreeInt", "HxnThreadSafe"],
+                    "an interface",
+                )?;
                 let name = parser.word()?;
                 let mut object = Object {
                     name,
                     docs,
                     free: find(&notes, "HxnFree").and_then(|note| note.value.clone()),
+                    free_int: find(&notes, "HxnFreeInt").is_some(),
+                    thread_safe: find(&notes, "HxnThreadSafe").is_some(),
                     constructor: None,
                     methods: Vec::new(),
                     statics: Vec::new(),
@@ -767,9 +966,16 @@ pub fn parse(library: &str, text: &str) -> Result<Api, String> {
                     if parser.is("constructor") {
                         let line = parser.line();
                         parser.at += 1;
-                        check_notes(&notes, &["HxnC"], "a constructor")?;
+                        check_notes(&notes, &["HxnC", "HxnStatus"], "a constructor")?;
                         let params = arguments_of(&mut parser, &names)?;
                         parser.symbol(';')?;
+                        let status = if find(&notes, "HxnStatus").is_some() {
+                            Status::Zero
+                        } else {
+                            Status::None
+                        };
+                        let own = Ty::Object(object.name.clone());
+                        check_returns("constructor", &params, &own, status, line)?;
                         if object.constructor.is_some() {
                             return Err(format!(
                                 "line {line}: `{}` has two constructors",
@@ -781,9 +987,10 @@ pub fn parse(library: &str, text: &str) -> Result<Api, String> {
                             c: c_name(&notes, line, "a constructor")?,
                             docs,
                             params,
-                            returns: Ty::Object(object.name.clone()),
-                            status: Status::None,
+                            returns: own,
+                            status,
                             free: None,
+                            borrowed: false,
                         });
                     } else if parser.is("static") {
                         parser.at += 1;

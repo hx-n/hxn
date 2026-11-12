@@ -257,9 +257,12 @@ filesystem `#include "counter.h"` would then find the generated header.
 - `tests/cimport/run.sh` imports the C library in `tests/cimport` with
   `hxn import`, checks that the importer writes `imported.webidl` exactly,
   replaces it with the edited `tally.webidl`, and runs `Main.hx` against
-  the result. It takes `hl <vm>`, `cpp`, `cppia` and `emcc`. A change to
-  the importer that changes its output updates `imported.webidl` in the
-  same commit.
+  the result, then imports the installed `sqlite3.h` unedited, where there
+  is one, and runs `sqlite/Main.hx` against it. It takes `hl <vm>`, `cpp`,
+  `cppia` and `emcc`. A change to the importer that changes its output
+  updates `imported.webidl` in the same commit: `HXN_BLESS=1 cargo test -p
+  hxn-c` writes it. `tally.webidl` is that file with the edit a user would
+  make, `[HxnStatus]` on `add`, and is updated with it.
 - **The readme's example is `examples/greeter`, which is what `hxn new`
   creates.** A test fails when the readme differs from it.
 - **An example is a realistic library:** a crate, a Haxe program, its

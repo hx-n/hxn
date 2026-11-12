@@ -14,14 +14,28 @@
 use std::collections::BTreeSet;
 
 use crate::idl::namespace;
-use crate::model::{Api, Function, Int, Param, Status, Ty};
+use crate::model::{Api, Callback, Function, Int, Param, Role, Status, Ty};
 
-const KEYWORDS: [&str; 39] = [
-    "as", "async", "await", "break", "const", "continue", "crate", "dyn", "else", "enum", "extern",
-    "false", "fn", "for", "if", "impl", "in", "let", "loop", "match", "mod", "move", "mut", "pub",
-    "ref", "return", "self", "Self", "static", "struct", "super", "trait", "true", "type",
-    "unsafe", "use", "where", "while", "gen",
+// Rust's keywords, reserved words among them.
+const KEYWORDS: [&str; 52] = [
+    "abstract", "as", "async", "await", "become", "box", "break", "const", "continue", "crate",
+    "do", "dyn", "else", "enum", "extern", "false", "final", "fn", "for", "gen", "if", "impl",
+    "in", "let", "loop", "macro", "match", "mod", "move", "mut", "override", "priv", "pub", "ref",
+    "return", "self", "Self", "static", "struct", "super", "trait", "true", "try", "type",
+    "typeof", "union", "unsafe", "unsized", "use", "virtual", "where", "while",
 ];
+
+// Methods every hxn class has already.
+const METHODS: [&str; 3] = ["close", "same", "weak"];
+
+// A name usable as a method's.
+fn method_name(name: &str) -> String {
+    if METHODS.contains(&name) {
+        format!("{name}_c")
+    } else {
+        ident(name)
+    }
+}
 
 // Names the adapters and this generator use for their own variables.
 const TAKEN: [&str; 5] = ["this", "out", "err", "raw", "status"];
@@ -65,6 +79,7 @@ fn c_type(ty: &Ty) -> String {
         Ty::StructRef(name) => format!("*const ffi::{name}"),
         Ty::Object(name) => format!("*mut ffi::{name}"),
         Ty::Nullable(of) => c_type(of),
+        Ty::Callback(_) => String::from("*mut c_void"),
         Ty::Text => unreachable!(),
     }
 }
@@ -113,13 +128,158 @@ fn fallible_param(ty: &Ty) -> bool {
 
 fn fallible(function: &Function, constructor: bool) -> bool {
     constructor
+        || lends(function)
         || function.status != Status::None
         || function
             .params
             .iter()
-            .any(|param| fallible_param(&param.ty))
+            .any(|param| param.role == Role::In && fallible_param(&param.ty))
         || matches!(function.returns, Ty::Enum(_) | Ty::Object(_))
 }
+
+// Whether the function takes a Haxe function, which makes its error the
+// one that function fails with.
+fn lends(function: &Function) -> bool {
+    function
+        .params
+        .iter()
+        .any(|param| matches!(param.ty, Ty::Callback(_)))
+}
+
+fn callback<'a>(api: &'a Api, name: &str) -> &'a Callback {
+    api.callbacks
+        .iter()
+        .find(|known| known.name == name)
+        .expect("a callback the WebIDL declares")
+}
+
+// The callback's name in the functions generated for it: `visitor`.
+fn callback_symbol(name: &str) -> String {
+    let mut out = String::new();
+    for (at, letter) in name.chars().enumerate() {
+        if letter.is_ascii_uppercase() {
+            if at > 0 {
+                out.push('_');
+            }
+            out.push(letter.to_ascii_lowercase());
+        } else {
+            out.push(letter);
+        }
+    }
+    out
+}
+
+// The function pointer type C takes for `callback`.
+fn callback_pointer(callback: &Callback) -> String {
+    let mut params: Vec<String> = callback.params.iter().map(|p| c_type(&p.ty)).collect();
+    if callback.user_first {
+        params.insert(0, String::from("*mut c_void"));
+    } else {
+        params.push(String::from("*mut c_void"));
+    }
+    let returns = match callback.returns {
+        Ty::Void => String::new(),
+        Ty::Bool => String::from(" -> bool"),
+        _ => String::from(" -> c_int"),
+    };
+    format!("unsafe extern \"C\" fn({}){returns}", params.join(", "))
+}
+
+// What the Haxe function takes for a callback parameter of type `ty`.
+fn callback_value(ty: &Ty) -> String {
+    match ty {
+        Ty::F32 => String::from("f64"),
+        Ty::Text => String::from("&str"),
+        other => rust_return(other),
+    }
+}
+
+// `impl FnMut(i32) -> Result<i32, E>`, the Haxe function lent for `callback`.
+fn callback_bound(callback: &Callback) -> String {
+    let params: Vec<String> = callback
+        .params
+        .iter()
+        .map(|p| callback_value(&p.ty))
+        .collect();
+    format!(
+        "FnMut({}) -> Result<{}, E>",
+        params.join(", "),
+        rust_return(&callback.returns)
+    )
+}
+
+// The trampoline C calls for `callback`, which calls the Haxe function in
+// the user data. A failure or a panic is kept for after C returns, and C is
+// told to stop, or not called back again where it cannot be told.
+fn trampoline(callback: &Callback) -> String {
+    let symbol = callback_symbol(&callback.name);
+    let bound = callback_bound(callback);
+    let mut params: Vec<String> = callback
+        .params
+        .iter()
+        .map(|p| format!("{}: {}", ident(&p.name), c_type(&p.ty)))
+        .collect();
+    if callback.user_first {
+        params.insert(0, String::from("user: *mut c_void"));
+    } else {
+        params.push(String::from("user: *mut c_void"));
+    }
+    let (returns, stop) = match callback.returns {
+        Ty::Void => (String::new(), String::new()),
+        Ty::Bool => (
+            String::from(" -> bool"),
+            format!(" {}", callback.stop.unwrap_or(0) != 0),
+        ),
+        _ => (
+            String::from(" -> c_int"),
+            format!(" {}", callback.stop.unwrap_or(1)),
+        ),
+    };
+    let mut converted = Vec::new();
+    let mut passed = Vec::new();
+    for param in &callback.params {
+        let name = ident(&param.name);
+        match &param.ty {
+            Ty::F32 => passed.push(format!("f64::from({name})")),
+            Ty::Text => {
+                converted.push(format!(
+                    "let {name} = if {name}.is_null() {{\n        std::borrow::Cow::Borrowed(\"\")\n    }} else {{\n        unsafe {{ CStr::from_ptr({name}) }}.to_string_lossy()\n    }};"
+                ));
+                passed.push(format!("&{name}"));
+            }
+            Ty::Enum(known) => {
+                converted.push(format!(
+                    "let {name} = match {known}::from_c({name}) {{\n        Ok(value) => value,\n        Err(error) => {{\n            lent.failed = Some(E::from(error));\n            return{stop};\n        }}\n    }};"
+                ));
+                passed.push(name);
+            }
+            Ty::Struct(record) => passed.push(format!("{record}::from({name})")),
+            _ => passed.push(name),
+        }
+    }
+    let (ok, value) = match callback.returns {
+        Ty::Void => ("()", String::from("()")),
+        _ => ("value", String::from("value")),
+    };
+    format!(
+        "\n// Called by C for a `{name}`, with the Haxe function in `user`.\nunsafe extern \"C\" fn hxn_{symbol}_call<F: {bound}, E: From<String>>({params}){returns} {{\n    let lent = unsafe {{ &mut *user.cast::<Lent<F, E>>() }};\n    if lent.failed.is_some() || lent.panic.is_some() {{\n        return{stop};\n    }}\n    {converted}match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| (lent.f)({passed}))) {{\n        Ok(Ok({ok})) => {value},\n        Ok(Err(error)) => {{\n            lent.failed = Some(error);\n            {stop_value}\n        }}\n        Err(panic) => {{\n            lent.panic = Some(panic);\n            {stop_value}\n        }}\n    }}\n}}\n\n// The trampoline for the Haxe function `lent` holds, whose type has no name.\nfn hxn_{symbol}_for<F: {bound}, E: From<String>>(_: &Lent<F, E>) -> {pointer} {{\n    hxn_{symbol}_call::<F, E>\n}}\n",
+        name = callback.name,
+        params = params.join(", "),
+        converted = converted
+            .iter()
+            .map(|line| format!("{line}\n    "))
+            .collect::<String>(),
+        passed = passed.join(", "),
+        stop_value = if stop.is_empty() {
+            String::from("()")
+        } else {
+            stop.trim().to_owned()
+        },
+        pointer = callback_pointer(callback),
+    )
+}
+
+const LENT: &str = "\n// A Haxe function lent to C for one call, and what went wrong in it. C\n// cannot be unwound through, so a failure or a panic is kept here and raised\n// once C has returned.\nstruct Lent<F, E> {\n    f: F,\n    failed: Option<E>,\n    panic: Option<Box<dyn std::any::Any + Send>>,\n}\n\nimpl<F, E> Lent<F, E> {\n    fn new(f: F) -> Self {\n        Self {\n            f,\n            failed: None,\n            panic: None,\n        }\n    }\n\n    // What C is passed as the user data.\n    fn user(&mut self) -> *mut c_void {\n        (self as *mut Self).cast()\n    }\n\n    // The Haxe function's failure, or its panic resumed.\n    fn finish(self) -> Result<(), E> {\n        if let Some(panic) = self.panic {\n            std::panic::resume_unwind(panic);\n        }\n        self.failed.map_or(Ok(()), Err)\n    }\n}\n";
 
 fn docs(lines: &[String], indent: &str) -> String {
     lines
@@ -140,6 +300,31 @@ fn convert(params: &[Param]) -> (Vec<String>, Vec<String>) {
     let mut passed = Vec::new();
     for param in params {
         let name = ident(&param.name);
+        match param.role {
+            Role::In => {}
+            Role::Null => {
+                passed.push(String::from("std::ptr::null_mut()"));
+                continue;
+            }
+            // A place for C to write into, read after the call.
+            Role::Out => {
+                let (init, pointer) = match param.ty.inner() {
+                    Ty::Object(_) => (String::from("null_mut()"), format!("&raw mut {name}")),
+                    Ty::Text => (String::from("std::ptr::null()"), format!("&raw mut {name}")),
+                    Ty::Struct(record) => (
+                        format!("std::mem::MaybeUninit::<ffi::{record}>::uninit()"),
+                        format!("{name}.as_mut_ptr()"),
+                    ),
+                    other => (
+                        format!("{}::default()", c_type(other)),
+                        format!("&raw mut {name}"),
+                    ),
+                };
+                before.push(format!("let mut {name} = {init};"));
+                passed.push(pointer);
+                continue;
+            }
+        }
         match &param.ty {
             Ty::Int(int @ (Int::Long | Int::ULong | Int::Size | Int::SSize)) => {
                 before.push(format!(
@@ -150,7 +335,7 @@ fn convert(params: &[Param]) -> (Vec<String>, Vec<String>) {
                 passed.push(name);
             }
             Ty::Text => {
-                before.push(format!("let {name} = text({name})?;"));
+                before.push(format!("let {name} = hxn_text({name})?;"));
                 passed.push(format!("{name}.as_ptr()"));
             }
             Ty::Bytes => passed.push(format!("{name}.as_ptr(), {name}.len()")),
@@ -160,6 +345,7 @@ fn convert(params: &[Param]) -> (Vec<String>, Vec<String>) {
                 before.push(format!("let {name} = ffi::{record}::from({name});"));
                 passed.push(format!("&raw const {name}"));
             }
+            Ty::Callback(_) => passed.push(format!("Some({name}_call), {name}.user()")),
             Ty::Object(_) => passed.push(format!("{name}.raw")),
             Ty::Nullable(of) if matches!(**of, Ty::Object(_)) => {
                 passed.push(format!("{name}.map_or(null_mut(), |value| value.raw)"));
@@ -170,93 +356,109 @@ fn convert(params: &[Param]) -> (Vec<String>, Vec<String>) {
     (before, passed)
 }
 
-// The expression for the value the safe function returns, from `value`,
-// what C returned. Inside a function that can fail when `fallible`.
-fn convert_return(function: &Function) -> Vec<String> {
+// Fails the call when `status`, the C function's return value, reports a
+// failure.
+fn status_check(function: &Function, status: &str) -> Option<String> {
+    let c = &function.c;
+    let failed = match function.status {
+        Status::None => return None,
+        Status::Zero => format!("{status} != 0"),
+        Status::Negative => format!("{status} < 0"),
+    };
+    Some(format!(
+        "if {failed} {{\n            return Err(format!(\"{c} failed with status {{{status}}}\"));\n        }}"
+    ))
+}
+
+// The statements that make `value`, what C gave, the safe function's
+// result, ending with the result.
+fn convert_return(function: &Function, value: &str) -> Vec<String> {
     let c = &function.c;
     let mut lines = Vec::new();
-    match function.status {
-        Status::Zero => {
-            lines.push(format!(
-                "if value != 0 {{\n            return Err(format!(\"{c} failed with status {{value}}\"));\n        }}"
-            ));
-            lines.push(String::from("Ok(())"));
-            return lines;
-        }
-        Status::Negative => {
-            lines.push(format!(
-                "if value < 0 {{\n            return Err(format!(\"{c} failed with status {{value}}\"));\n        }}"
-            ));
-        }
-        Status::None => {}
-    }
-    let value = match &function.returns {
-        Ty::Void => String::from("value"),
-        Ty::Int(Int::Long) => String::from("i64::from(value)"),
-        Ty::Int(Int::ULong) => String::from("u64::from(value)"),
-        Ty::Int(Int::Size) => String::from("value as u64"),
-        Ty::Int(Int::SSize) => String::from("value as i64"),
-        Ty::Enum(name) => format!("{name}::from_c(value)?"),
-        Ty::Struct(name) => format!("{name}::from(value)"),
+    let result = match &function.returns {
+        Ty::Void => String::from("()"),
+        Ty::Int(Int::Long) => format!("i64::from({value})"),
+        Ty::Int(Int::ULong) => format!("u64::from({value})"),
+        Ty::Int(Int::Size) => format!("{value} as u64"),
+        Ty::Int(Int::SSize) => format!("{value} as i64"),
+        Ty::Enum(name) => format!("{name}::from_c({value})?"),
+        Ty::Struct(name) => format!("{name}::from({value})"),
         Ty::Object(name) => {
             lines.push(format!(
-                "if value.is_null() {{\n            return Err(String::from(\"{c} returned null\"));\n        }}"
+                "if {value}.is_null() {{\n            return Err(String::from(\"{c} returned null\"));\n        }}"
             ));
-            format!("{name} {{ raw: value }}")
+            format!("{name} {{ raw: {value}, owned: {} }}", !function.borrowed)
         }
-        Ty::Nullable(of) => match &**of {
-            Ty::Object(name) => format!("(!value.is_null()).then(|| {name} {{ raw: value }})"),
-            _ => {
-                let copy = String::from("let copied = unsafe { copy(value) };");
-                lines.push(copy);
-                if let Some(free) = &function.free {
-                    lines.push(format!(
-                        "if !value.is_null() {{\n            unsafe {{ ffi::{free}(value.cast_mut()) }};\n        }}"
-                    ));
-                }
-                String::from("copied")
-            }
-        },
-        Ty::Text => {
-            lines.push(String::from("let copied = unsafe { copy(value) };"));
+        Ty::Nullable(of) if matches!(**of, Ty::Object(_)) => {
+            let Ty::Object(name) = &**of else {
+                unreachable!()
+            };
+            format!(
+                "(!{value}.is_null()).then(|| {name} {{ raw: {value}, owned: {} }})",
+                !function.borrowed
+            )
+        }
+        Ty::Text | Ty::Nullable(_) => {
+            lines.push(format!("let copied = unsafe {{ hxn_copy({value}) }};"));
             if let Some(free) = &function.free {
                 lines.push(format!(
-                    "if !value.is_null() {{\n            unsafe {{ ffi::{free}(value.cast_mut()) }};\n        }}"
+                    "if !{value}.is_null() {{\n            unsafe {{ ffi::{free}({value}.cast_mut()) }};\n        }}"
                 ));
             }
-            String::from("copied.unwrap_or_default()")
+            if function.returns == Ty::Text {
+                String::from("copied.unwrap_or_default()")
+            } else {
+                String::from("copied")
+            }
         }
-        _ => String::from("value"),
+        _ => value.to_owned(),
     };
     if fallible(function, false) {
-        lines.push(format!("Ok({value})"));
+        lines.push(format!("Ok({result})"));
     } else {
-        lines.push(value);
+        lines.push(result);
     }
     lines
 }
 
-// A safe function over `function`. `receiver` is `&mut self` for a method,
-// and `marker` the attribute a free function carries.
-fn wrapper(function: &Function, receiver: bool, marker: &str) -> String {
+// How a method takes its object: `&mut self`, or `&self` for one marked
+// thread-safe.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Receiver {
+    None,
+    Exclusive,
+    Shared,
+}
+
+// A safe function over `function`, with `marker` the attribute a free
+// function carries.
+fn wrapper(api: &Api, function: &Function, receiver: Receiver, marker: &str) -> String {
     let (before, passed) = convert(&function.params);
     let mut params: Vec<String> = Vec::new();
-    if receiver {
-        params.push(String::from("&mut self"));
+    if receiver != Receiver::None {
+        params.push(String::from(if receiver == Receiver::Shared {
+            "&self"
+        } else {
+            "&mut self"
+        }));
     }
-    for param in &function.params {
-        params.push(format!("{}: {}", ident(&param.name), rust_param(&param.ty)));
+    for param in function.params.iter().filter(|p| p.role == Role::In) {
+        let ty = match &param.ty {
+            Ty::Callback(name) => format!("impl {}", callback_bound(callback(api, name))),
+            other => rust_param(other),
+        };
+        params.push(format!("{}: {ty}", ident(&param.name)));
     }
     let mut arguments = Vec::new();
-    if receiver {
+    if receiver != Receiver::None {
         arguments.push(String::from("self.raw"));
     }
     arguments.extend(passed);
-    let returns = rust_return(&function.returns);
-    let returns = if function.status == Status::Zero {
+    let out = function.out();
+    let returns = if function.status == Status::Zero && out.is_none() {
         String::from("()")
     } else {
-        returns
+        rust_return(&function.returns)
     };
     let signature = if fallible(function, false) {
         format!(" -> Result<{returns}, String>")
@@ -267,51 +469,121 @@ fn wrapper(function: &Function, receiver: bool, marker: &str) -> String {
     };
     let mut body: Vec<String> = before;
     let call = format!("unsafe {{ ffi::{}({}) }}", function.c, arguments.join(", "));
-    let ignore = function.returns == Ty::Void && function.status == Status::None;
-    if ignore {
-        body.push(format!("{call};"));
-    } else {
-        body.push(format!("let value = {call};"));
-        body.extend(convert_return(function));
+    match out {
+        Some(out) => {
+            let name = ident(&out.name);
+            if function.status == Status::None {
+                body.push(format!("{call};"));
+            } else {
+                body.push(format!("let status = {call};"));
+            }
+            // An object C wrote is owned before the status is checked, so
+            // that it is freed when the call failed.
+            let mut value = name.clone();
+            match out.ty.inner() {
+                Ty::Object(object) => {
+                    body.push(format!(
+                        "let {name} = (!{name}.is_null()).then(|| {object} {{ raw: {name}, owned: true }});"
+                    ));
+                }
+                Ty::Struct(_) => {}
+                _ => {}
+            }
+            body.extend(status_check(function, "status"));
+            match (out.ty.inner(), &function.returns) {
+                (Ty::Object(_), Ty::Nullable(_)) => body.push(if fallible(function, false) {
+                    format!("Ok({name})")
+                } else {
+                    name.clone()
+                }),
+                (Ty::Object(_), _) => body.push(format!(
+                    "{name}.ok_or_else(|| String::from(\"{} returned null\"))",
+                    function.c
+                )),
+                (Ty::Struct(_), _) => {
+                    // Written by C, which reported success.
+                    body.push(format!("let {name} = unsafe {{ {name}.assume_init() }};"));
+                    value = name.clone();
+                    body.extend(convert_return(function, &value));
+                }
+                _ => body.extend(convert_return(function, &value)),
+            }
+        }
+        None if function.returns == Ty::Void && function.status == Status::None => {
+            body.push(format!("{call};"));
+            if fallible(function, false) {
+                body.push(String::from("Ok(())"));
+            }
+        }
+        None if function.status == Status::Zero => {
+            body.push(format!("let status = {call};"));
+            body.extend(status_check(function, "status"));
+            body.push(String::from("Ok(())"));
+        }
+        None => {
+            body.push(format!("let value = {call};"));
+            body.extend(status_check(function, "value"));
+            body.extend(convert_return(function, "value"));
+        }
     }
+    // A function that lends Haxe functions runs inside a closure, so that
+    // what a Haxe function failed with is returned ahead of what the call
+    // made of it.
+    let (generics, signature, body) = if lends(function) {
+        let lent: Vec<&Param> = function
+            .params
+            .iter()
+            .filter(|p| matches!(p.ty, Ty::Callback(_)))
+            .collect();
+        let mut wrapped: Vec<String> = Vec::new();
+        for param in &lent {
+            let Ty::Callback(name) = &param.ty else {
+                unreachable!()
+            };
+            let local = ident(&param.name);
+            wrapped.push(format!("let mut {local} = Lent::new({local});"));
+            wrapped.push(format!(
+                "let {local}_call = hxn_{}_for(&{local});",
+                callback_symbol(name)
+            ));
+        }
+        wrapped.push(format!(
+            "let result: Result<{returns}, String> = (|| {{\n            {}\n        }})();",
+            body.join("\n            ")
+        ));
+        for param in &lent {
+            wrapped.push(format!("{}.finish()?;", ident(&param.name)));
+        }
+        wrapped.push(String::from("result.map_err(E::from)"));
+        (
+            String::from("<E: From<String>>"),
+            format!(" -> Result<{returns}, E>"),
+            wrapped,
+        )
+    } else {
+        (String::new(), signature, body)
+    };
     format!(
-        "{}{marker}    pub fn {}({}){signature} {{\n        {}\n    }}\n",
+        "{}{marker}    pub fn {}{generics}({}){signature} {{\n        {}\n    }}\n",
         docs(&function.docs, "    "),
-        ident(&function.name),
-        params.join(", "),
-        body.join("\n        ")
-    )
-}
-
-fn constructor(object: &str, function: &Function) -> String {
-    let (before, passed) = convert(&function.params);
-    let params: Vec<String> = function
-        .params
-        .iter()
-        .map(|param| format!("{}: {}", ident(&param.name), rust_param(&param.ty)))
-        .collect();
-    let mut body = before;
-    body.push(format!(
-        "let raw = unsafe {{ ffi::{}({}) }};",
-        function.c,
-        passed.join(", ")
-    ));
-    body.push(format!(
-        "if raw.is_null() {{\n            return Err(String::from(\"{} returned null\"));\n        }}",
-        function.c
-    ));
-    body.push(format!("Ok({object} {{ raw }})"));
-    format!(
-        "{}    pub fn new({}) -> Result<{object}, String> {{\n        {}\n    }}\n",
-        docs(&function.docs, "    "),
+        method_name(&function.name),
         params.join(", "),
         body.join("\n        ")
     )
 }
 
 // The C parameters `param` is passed as.
-fn c_params(param: &Param) -> Vec<String> {
+fn c_params(api: &Api, param: &Param) -> Vec<String> {
     let name = ident(&param.name);
+    if let Ty::Callback(known) = &param.ty {
+        return vec![
+            format!("{name}: Option<{}>", callback_pointer(callback(api, known))),
+            format!("{name}_user: *mut c_void"),
+        ];
+    }
+    if param.role != Role::In {
+        return vec![format!("{name}: *mut {}", c_type(param.ty.inner()))];
+    }
     match &param.ty {
         Ty::Bytes => vec![
             format!("{name}: *const u8"),
@@ -321,17 +593,18 @@ fn c_params(param: &Param) -> Vec<String> {
     }
 }
 
-fn declaration(function: &Function, receiver: Option<&str>) -> String {
+fn declaration(api: &Api, function: &Function, receiver: Option<&str>) -> String {
     let mut params = Vec::new();
     if let Some(object) = receiver {
         params.push(format!("this: *mut {object}"));
     }
     for param in &function.params {
-        params.extend(c_params(param));
+        params.extend(c_params(api, param));
     }
     // `[HxnStatus]` functions return a C `int`.
     let returns = match (function.status, &function.returns) {
         (Status::Zero, _) => String::from(" -> c_int"),
+        (Status::None, _) if function.out().is_some() => String::new(),
         (_, Ty::Void) => String::new(),
         (_, Ty::Nullable(of)) if matches!(**of, Ty::Text) && function.free.is_some() => {
             String::from(" -> *const c_char")
@@ -349,7 +622,7 @@ fn declaration(function: &Function, receiver: Option<&str>) -> String {
 /// WebIDL file it was generated from.
 pub fn bindings(api: &Api, source: &str) -> String {
     let mut out = format!(
-        "// Generated by hxn from {source}. Do not edit: edit the WebIDL, and the next\n// `hxn build` generates this again.\n\n#![allow(clippy::useless_conversion, clippy::unnecessary_cast, clippy::let_and_return, clippy::needless_question_mark, dead_code, unused_imports)]\n\nuse std::ffi::{{CStr, CString, c_char, c_int, c_long, c_ulong}};\nuse std::ptr::null_mut;\n"
+        "// Generated by hxn from {source}. Do not edit: edit the WebIDL, and the next\n// `hxn build` generates this again.\n\n#![allow(clippy::useless_conversion, clippy::unnecessary_cast, clippy::let_and_return, clippy::needless_question_mark, clippy::unnecessary_lazy_evaluations, clippy::redundant_closure_call, dead_code, unused_imports)]\n\nuse std::ffi::{{CStr, CString, c_char, c_int, c_long, c_ulong, c_void}};\nuse std::ptr::null_mut;\n"
     );
 
     // The C declarations.
@@ -389,23 +662,31 @@ pub fn bindings(api: &Api, source: &str) -> String {
             declare(
                 &mut out,
                 free,
-                format!("        pub fn {free}(this: *mut {});\n", object.name),
+                format!(
+                    "        pub fn {free}(this: *mut {}){};\n",
+                    object.name,
+                    if object.free_int { " -> c_int" } else { "" }
+                ),
             );
         }
         if let Some(made) = &object.constructor {
             let mut function = made.clone();
             function.returns = Ty::Object(object.name.clone());
-            declare(&mut out, &made.c, declaration(&function, None));
+            declare(&mut out, &made.c, declaration(api, &function, None));
         }
         for method in &object.methods {
-            declare(&mut out, &method.c, declaration(method, Some(&object.name)));
+            declare(
+                &mut out,
+                &method.c,
+                declaration(api, method, Some(&object.name)),
+            );
         }
         for function in &object.statics {
-            declare(&mut out, &function.c, declaration(function, None));
+            declare(&mut out, &function.c, declaration(api, function, None));
         }
     }
     for function in &api.functions {
-        declare(&mut out, &function.c, declaration(function, None));
+        declare(&mut out, &function.c, declaration(api, function, None));
     }
     let frees: BTreeSet<&String> = api
         .objects
@@ -424,7 +705,13 @@ pub fn bindings(api: &Api, source: &str) -> String {
     out.push_str("    }\n}\n");
 
     // Helpers.
-    out.push_str("\n// Text as C takes it. Text with a NUL in it cannot be passed.\nfn text(value: &str) -> Result<CString, String> {\n    CString::new(value).map_err(|_| String::from(\"text with a NUL character cannot be passed to C\"))\n}\n\n// A copy of the text C returned, or `None` for a null pointer.\n//\n// # Safety\n// `value` is null or points to text ending in a NUL.\nunsafe fn copy(value: *const c_char) -> Option<String> {\n    if value.is_null() {\n        return None;\n    }\n    Some(unsafe { CStr::from_ptr(value) }.to_string_lossy().into_owned())\n}\n");
+    if !api.callbacks.is_empty() {
+        out.push_str(LENT);
+        for known in &api.callbacks {
+            out.push_str(&trampoline(known));
+        }
+    }
+    out.push_str("\n// Text as C takes it. Text with a NUL in it cannot be passed.\nfn hxn_text(value: &str) -> Result<CString, String> {\n    CString::new(value).map_err(|_| String::from(\"text with a NUL character cannot be passed to C\"))\n}\n\n// A copy of the text C returned, or `None` for a null pointer.\n//\n// # Safety\n// `value` is null or points to text ending in a NUL.\nunsafe fn hxn_copy(value: *const c_char) -> Option<String> {\n    if value.is_null() {\n        return None;\n    }\n    Some(unsafe { CStr::from_ptr(value) }.to_string_lossy().into_owned())\n}\n");
 
     for known in &api.enums {
         let variants: String = known
@@ -482,23 +769,39 @@ pub fn bindings(api: &Api, source: &str) -> String {
     for object in &api.objects {
         let name = &object.name;
         out.push_str(&format!(
-            "\n{}#[hxn::interface]\npub struct {name} {{\n    raw: *mut ffi::{name},\n}}\n\n// Only moved between threads, never shared: every method takes `&mut self`.\nunsafe impl Send for {name} {{}}\n",
+            "\n{}#[hxn::interface]\npub struct {name} {{\n    raw: *mut ffi::{name},\n    // False for an object that belongs to another, which frees it.\n    owned: bool,\n}}\n\n{}",
             docs(&object.docs, ""),
+            if object.thread_safe {
+                String::from("// The C library allows calls on it from several threads at once.\nunsafe impl Send for ")
+                    + name
+                    + " {}\nunsafe impl Sync for "
+                    + name
+                    + " {}\n"
+            } else {
+                String::from("// Only moved between threads, never shared: every method takes `&mut self`.\nunsafe impl Send for ")
+                    + name
+                    + " {}\n"
+            },
         ));
         if let Some(free) = &object.free {
             out.push_str(&format!(
-                "\nimpl Drop for {name} {{\n    fn drop(&mut self) {{\n        unsafe {{ ffi::{free}(self.raw) }};\n    }}\n}}\n"
+                "\nimpl Drop for {name} {{\n    fn drop(&mut self) {{\n        if self.owned {{\n            unsafe {{ ffi::{free}(self.raw) }};\n        }}\n    }}\n}}\n"
             ));
         }
         let mut members = Vec::new();
         if let Some(made) = &object.constructor {
-            members.push(constructor(name, made));
+            members.push(wrapper(api, made, Receiver::None, ""));
         }
         for method in &object.methods {
-            members.push(wrapper(method, true, ""));
+            let receiver = if object.thread_safe {
+                Receiver::Shared
+            } else {
+                Receiver::Exclusive
+            };
+            members.push(wrapper(api, method, receiver, ""));
         }
         for function in &object.statics {
-            members.push(wrapper(function, false, ""));
+            members.push(wrapper(api, function, Receiver::None, ""));
         }
         if !members.is_empty() {
             out.push_str(&format!(
@@ -517,7 +820,7 @@ pub fn bindings(api: &Api, source: &str) -> String {
             format!("#[hxn::function(class = \"{class}\")]\n")
         };
         for function in &api.functions {
-            let text = wrapper(function, false, &marker);
+            let text = wrapper(api, function, Receiver::None, &marker);
             // A free function is not indented.
             let text: String = text
                 .lines()

@@ -43,7 +43,23 @@ bool tally_is_empty(const tally *t);
 double tally_distance(tally_point a, const tally_point *b);
 tally_point tally_midpoint(tally_point a, tally_point b);
 unsigned long tally_version(void);
-/* Not imported: a pointer to an int is an out-parameter. */
+/* Writes the integer `text` holds to `out`. Returns 0 on success, -1 when
+ * `text` is not an integer. */
 int tally_parse(const char *text, int *out);
+/* Writes a new tally with `t`'s total and mode to `out`. Returns 0 on
+ * success, -1 when `name` is empty. */
+int tally_copy(const tally *t, const char *name, tally **out);
+/* Writes the point (0, 0) to `out`. */
+void tally_origin(tally_point *out);
+
+/* Called with each amount added, oldest first. Returning non-zero stops. */
+typedef int (*tally_visitor)(void *user, int32_t amount);
+/* Calls `visit` with each amount added, up to the last 16, oldest first, and
+ * returns how many it was called with. */
+int tally_each(const tally *t, tally_visitor visit, void *user);
+/* Called with each line of a report. */
+typedef void (*tally_reporter)(const char *line, void *user);
+/* Reports the total and the count, a line each. */
+void tally_report(const tally *t, tally_reporter report, void *user);
 
 #endif

@@ -7,7 +7,8 @@
 #   run.sh emcc        hxcpp through Emscripten, run by node; needs emcc on PATH
 #
 # It checks that the importer writes imported.webidl exactly, and that the
-# program prints expected.txt.
+# program prints expected.txt. Where sqlite3 is installed, it also imports
+# sqlite3.h unedited and runs sqlite/Main.hx against it.
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -47,11 +48,24 @@ fi
 cp "$here/tally.webidl" "$crate/tally.webidl"
 cp "$here/Main.hx" "$crate/haxe/Main.hx"
 
-out="$work/out.txt"
-(cd "$crate" && "$hxn" run "${arguments[@]}") | tr -d '\r' | tee "$out"
-expected="$here/expected.txt"
-if [ "$(tail -n "$(wc -l <"$expected")" "$out")" != "$(cat "$expected")" ]; then
-	echo "FAILED: the program did not print what expected.txt lists" >&2
-	exit 1
+# Runs the program in `$1` and compares what it prints with `$2`.
+check() {
+	out="$work/out.txt"
+	(cd "$1" && "$hxn" run "${arguments[@]}") | tr -d '\r' | tee "$out"
+	if [ "$(tail -n "$(wc -l <"$2")" "$out")" != "$(cat "$2")" ]; then
+		echo "FAILED: $1 did not print what $2 lists" >&2
+		exit 1
+	fi
+}
+check "$crate" "$here/expected.txt"
+
+# A real library, imported from its installed header with no edits.
+sqlite="$(printf '#include <sqlite3.h>\n' | clang -E -x c - 2>/dev/null | sed -n 's/^# [0-9]* "\(.*sqlite3\.h\)".*/\1/p' | head -1)"
+if [ -n "$sqlite" ] && [ "$runtime" != emcc ]; then
+	"$hxn" import "$sqlite" --link sqlite3 --hxn "$root" --out "$work/sqlite3" >/dev/null
+	cp "$here/sqlite/Main.hx" "$work/sqlite3/haxe/Main.hx"
+	check "$work/sqlite3" "$here/sqlite/expected.txt"
+else
+	echo "sqlite3: skipped, no sqlite3.h for this runtime"
 fi
 echo "PASS"

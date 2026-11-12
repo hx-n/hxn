@@ -16,18 +16,43 @@
 //!   takes a `char *` and frees it, when there is exactly one.
 //! - Anything else that cannot be mapped is listed as not imported.
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::Path;
 use std::process::Command;
 
 use serde_json::Value;
 
-use crate::model::{Api, Enum, Function, Int, Object, Param, Status, Struct, Ty};
+use crate::model::{Api, Callback, Enum, Function, Int, Object, Param, Role, Status, Struct, Ty};
 
 const FREES: [&str; 8] = [
     "free", "destroy", "delete", "release", "dispose", "unref", "close", "finalize",
 ];
 const MAKES: [&str; 6] = ["new", "create", "make", "open", "init", "alloc"];
+
+// Words in the name of a function that keeps the callback it is given, to
+// call after it returns. A Haxe function is lent for one call only.
+const KEEPS: [&str; 15] = [
+    "set",
+    "register",
+    "install",
+    "hook",
+    "handler",
+    "listen",
+    "listener",
+    "subscribe",
+    "watch",
+    "on",
+    "trace",
+    "profile",
+    "progress",
+    "busy",
+    "notify",
+];
+
+fn keeps_callback(function: &str) -> bool {
+    function.split('_').any(|word| KEEPS.contains(&word))
+}
 
 // A C type as the header spells it.
 #[derive(Clone, PartialEq, Debug)]
@@ -35,13 +60,23 @@ enum CType {
     Builtin(String),
     Record(String),
     Enum(String),
-    Pointer { to: Box<CType>, constant: bool },
+    Pointer {
+        to: Box<CType>,
+        constant: bool,
+    },
+    /// A function pointer: its return type and parameter types as spelled.
+    Function {
+        returns: String,
+        params: Vec<String>,
+    },
     Unsupported(String),
 }
 
 struct Header {
-    // Every typedef clang saw, in the header and in what it includes.
+    // Every typedef clang saw, in the header and in what it includes, and
+    // the documentation of those in the header.
     typedefs: HashMap<String, String>,
+    typedef_docs: HashMap<String, Vec<String>>,
     // What the header declares.
     records: Vec<Record>,
     enums: Vec<CEnum>,
@@ -85,7 +120,8 @@ fn comment(node: &Value) -> Vec<String> {
         if text(node, "kind") == Some("TextComment")
             && let Some(line) = text(node, "text")
         {
-            out.push_str(line.trim());
+            // Many headers start each comment line with `*` or `**`.
+            out.push_str(line.trim().trim_start_matches('*').trim());
             out.push(' ');
         }
         if text(node, "kind") == Some("ParagraphComment") && !out.is_empty() {
@@ -159,6 +195,7 @@ fn file_of(node: &Value, current: &mut Option<String>) {
 fn read(ast: &Value, header: &str) -> Header {
     let mut out = Header {
         typedefs: HashMap::new(),
+        typedef_docs: HashMap::new(),
         records: Vec::new(),
         enums: Vec::new(),
         functions: Vec::new(),
@@ -239,6 +276,10 @@ fn read(ast: &Value, header: &str) -> Header {
             }
             "TypedefDecl" => {
                 let target = qual_type(node);
+                let docs = comment(node);
+                if !docs.is_empty() {
+                    out.typedef_docs.insert(name.clone(), docs);
+                }
                 if let Some(tag) = target.strip_prefix("struct ")
                     && let Some(record) = out.records.iter_mut().find(|r| r.tag == tag)
                 {
@@ -307,12 +348,48 @@ impl Header {
     // an enum. The fixed-width and size typedefs are kept as they are.
     fn c_type(&self, spelled: &str) -> CType {
         let spelled = spelled.trim();
+        // `int (*)(void *, int32_t)`.
+        if let Some(at) = spelled.find("(*)") {
+            let returns = spelled[..at].trim().to_owned();
+            let rest = spelled[at + 3..].trim();
+            let Some(inner) = rest.strip_prefix('(').and_then(|r| r.strip_suffix(')')) else {
+                return CType::Unsupported(spelled.to_owned());
+            };
+            let mut params = Vec::new();
+            let mut depth = 0;
+            let mut current = String::new();
+            for letter in inner.chars() {
+                match letter {
+                    '(' => depth += 1,
+                    ')' => depth -= 1,
+                    ',' if depth == 0 => {
+                        params.push(std::mem::take(&mut current).trim().to_owned());
+                        continue;
+                    }
+                    _ => {}
+                }
+                current.push(letter);
+            }
+            if !current.trim().is_empty() {
+                params.push(current.trim().to_owned());
+            }
+            if params == ["void"] {
+                params.clear();
+            }
+            return CType::Function { returns, params };
+        }
         if spelled.contains('(') || spelled.contains('[') {
             return CType::Unsupported(spelled.to_owned());
         }
         if let Some(at) = spelled.rfind('*') {
             let inner = spelled[..at].trim();
-            let constant = inner.starts_with("const ") || inner.ends_with(" const");
+            // `const` qualifies what it is written beside: in `const char **`
+            // the pointee is a `const char *`, which is not itself const.
+            let constant = if inner.contains('*') {
+                inner.ends_with("const")
+            } else {
+                inner.starts_with("const ") || inner.ends_with(" const")
+            };
             return CType::Pointer {
                 to: Box::new(self.c_type(inner)),
                 constant,
@@ -348,6 +425,29 @@ impl Header {
             _ => CType::Unsupported(base),
         }
     }
+}
+
+// A C name in snake case, as Rust names parameters and functions:
+// `zDbName` to `z_db_name`, `HTTPServer` to `http_server`.
+fn snake(name: &str) -> String {
+    let letters: Vec<char> = name.chars().collect();
+    let mut out = String::new();
+    for (at, letter) in letters.iter().enumerate() {
+        if letter.is_ascii_uppercase() {
+            let before = at.checked_sub(1).map(|n| letters[n]);
+            let after = letters.get(at + 1);
+            let starts_word = before.is_some_and(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
+                || (before.is_some_and(|b| b.is_ascii_uppercase())
+                    && after.is_some_and(char::is_ascii_lowercase));
+            if starts_word && !out.ends_with('_') {
+                out.push('_');
+            }
+            out.push(letter.to_ascii_lowercase());
+        } else {
+            out.push(*letter);
+        }
+    }
+    out
 }
 
 // `tally_mode_t` to `Mode` for library `tally`.
@@ -392,9 +492,120 @@ struct Context<'a> {
     objects: Vec<(String, String)>,
     structs: Vec<(String, String)>,
     enums: Vec<(String, String)>,
+    // The function pointer types met so far, and a note for each function
+    // that is lent one.
+    callbacks: RefCell<Vec<Callback>>,
+    lent: RefCell<Vec<String>>,
 }
 
 impl Context<'_> {
+    // The callback a parameter spelled `spelled` is, made the first time it
+    // is met. `fallback` names it when no typedef does.
+    fn callback(&self, spelled: &str, fallback: &str) -> Result<String, String> {
+        let CType::Function { returns, params } = self.header.c_type(spelled) else {
+            return Err(format!("`{spelled}` is not a function pointer"));
+        };
+        let typedef = spelled.trim_start_matches("const ").trim();
+        let named = self.header.typedefs.contains_key(typedef);
+        let name = if named {
+            type_name(self.library, typedef)
+        } else {
+            crate::idl::namespace(fallback)
+        };
+        if self
+            .callbacks
+            .borrow()
+            .iter()
+            .any(|known| known.name == name)
+        {
+            return Ok(name);
+        }
+        let void_pointer = CType::Pointer {
+            to: Box::new(CType::Builtin(String::from("void"))),
+            constant: false,
+        };
+        let user: Vec<usize> = params
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| self.header.c_type(p) == void_pointer)
+            .map(|(at, _)| at)
+            .collect();
+        let user_first = match user.as_slice() {
+            [0] => true,
+            [at] if *at + 1 == params.len() => false,
+            _ => {
+                return Err(format!(
+                    "`{spelled}` takes its `void *` user data neither first nor last"
+                ));
+            }
+        };
+        let rest: Vec<&String> = params
+            .iter()
+            .enumerate()
+            .filter(|(at, _)| !user.contains(at))
+            .map(|(_, p)| p)
+            .collect();
+        if rest.len() > 4 {
+            return Err(format!(
+                "`{spelled}` takes {} values, and a Haxe function lent to C takes at most 4",
+                rest.len()
+            ));
+        }
+        let mut mapped = Vec::new();
+        for (at, param) in rest.iter().enumerate() {
+            let name = if rest.len() == 1 {
+                String::from("value")
+            } else {
+                format!("value{at}")
+            };
+            let ty = match self.header.c_type(param) {
+                CType::Pointer { to, .. } if matches!(&*to, CType::Builtin(b) if b == "char") => {
+                    Ty::Text
+                }
+                other => match self.value(&other) {
+                    Ok(
+                        ty @ (Ty::Bool
+                        | Ty::Int(Int::I32)
+                        | Ty::F32
+                        | Ty::F64
+                        | Ty::Enum(_)
+                        | Ty::Struct(_)),
+                    ) => ty,
+                    _ => {
+                        return Err(format!(
+                            "`{spelled}` takes `{param}`, which a Haxe function is not passed"
+                        ));
+                    }
+                },
+            };
+            mapped.push(Param::new(name, ty));
+        }
+        let (returns, stop) = match self.value(&self.header.c_type(&returns)) {
+            Ok(Ty::Void) => (Ty::Void, None),
+            Ok(Ty::Bool) => (Ty::Bool, Some(0)),
+            Ok(Ty::Int(Int::I32)) => (Ty::Int(Int::I32), Some(1)),
+            _ => {
+                return Err(format!(
+                    "`{spelled}` returns `{returns}`; a callback returns nothing, a bool or an int"
+                ));
+            }
+        };
+        self.callbacks.borrow_mut().push(Callback {
+            name: name.clone(),
+            docs: self
+                .header
+                .typedef_docs
+                .get(typedef)
+                .cloned()
+                .unwrap_or_default(),
+            params: mapped,
+            returns,
+            user_first,
+            stop,
+        });
+        Ok(name)
+    }
+
     fn object(&self, ty: &CType) -> Option<String> {
         let CType::Pointer { to, .. } = ty else {
             return None;
@@ -441,13 +652,14 @@ impl Context<'_> {
                 .map(|name| Ty::Struct(name.clone()))
                 .ok_or_else(|| format!("`struct {tag}` is not passed by value")),
             CType::Pointer { .. } => Err(String::from("pointer")),
+            CType::Function { .. } => Err(String::from("a function pointer")),
             CType::Unsupported(spelled) => Err(format!("`{spelled}` has no mapping")),
         }
     }
 
     // The parameters, with a byte pointer and the `size_t` after it read as
     // one `Uint8Array`.
-    fn params(&self, given: &[(String, String)]) -> Result<Vec<Param>, String> {
+    fn params(&self, function: &str, given: &[(String, String)]) -> Result<Vec<Param>, String> {
         let mut out = Vec::new();
         let mut at = 0;
         while at < given.len() {
@@ -455,9 +667,39 @@ impl Context<'_> {
             let name = if name.is_empty() {
                 format!("arg{at}")
             } else {
-                name.clone()
+                snake(name)
             };
             let ty = self.header.c_type(spelled);
+            // A function pointer and the `void *` user data after it.
+            if matches!(ty, CType::Function { .. }) {
+                let user = given.get(at + 1).map(|(_, s)| self.header.c_type(s));
+                let void_pointer = CType::Pointer {
+                    to: Box::new(CType::Builtin(String::from("void"))),
+                    constant: false,
+                };
+                if user != Some(void_pointer) {
+                    return Err(format!(
+                        "`{name}`: a function pointer is passed with its `void *` user data after it"
+                    ));
+                }
+                if keeps_callback(function) {
+                    return Err(format!(
+                        "`{name}`: C may keep the function to call after `{function}` returns, and a Haxe function is lent for the call only"
+                    ));
+                }
+                self.lent.borrow_mut().push(format!(
+                    "{function}: C must call `{name}` only before {function} returns; remove the function if C keeps it"
+                ));
+                let stem = function
+                    .strip_prefix(&format!("{}_", self.library))
+                    .unwrap_or(function);
+                let callback = self
+                    .callback(spelled, &format!("{stem}_{name}"))
+                    .map_err(|why| format!("`{name}`: {why}"))?;
+                out.push(Param::new(name, Ty::Callback(callback)));
+                at += 2;
+                continue;
+            }
             let param = match &ty {
                 CType::Pointer { to, constant: true } => match &**to {
                     CType::Builtin(base) if base == "char" => Ty::Text,
@@ -482,13 +724,25 @@ impl Context<'_> {
                     },
                     _ => return Err(format!("`{name}`: `{spelled}` has no mapping")),
                 },
-                CType::Pointer { .. } => match self.object(&ty) {
+                CType::Pointer { to, .. } => match self.object(&ty) {
                     Some(object) => Ty::Object(object),
-                    None => {
-                        return Err(format!(
-                            "`{name}`: `{spelled}` may be an out-parameter or an array, which is not imported"
-                        ));
-                    }
+                    None => match self.written(to) {
+                        // Taken for an output; `finish` checks where it is.
+                        Some(written) => {
+                            out.push(Param {
+                                name,
+                                ty: written,
+                                role: Role::Out,
+                            });
+                            at += 1;
+                            continue;
+                        }
+                        None => {
+                            return Err(format!(
+                                "`{name}`: `{spelled}` may be an array, which is not imported"
+                            ));
+                        }
+                    },
                 },
                 other => self
                     .value(other)
@@ -497,16 +751,105 @@ impl Context<'_> {
             if param == Ty::Void {
                 return Err(format!("`{name}` is `void`"));
             }
-            out.push(Param { name, ty: param });
+            out.push(Param::new(name, param));
             at += 1;
         }
         Ok(out)
     }
 
+    // What C writes through a pointer to `to`, if it can be an output: a
+    // number, an enum, a struct, an object pointer or a text pointer. A
+    // pointer to bytes or characters is a buffer, which is not.
+    fn written(&self, to: &CType) -> Option<Ty> {
+        match to {
+            CType::Builtin(base)
+                if [
+                    "char",
+                    "signed char",
+                    "unsigned char",
+                    "uint8_t",
+                    "int8_t",
+                    "void",
+                ]
+                .contains(&base.as_str()) =>
+            {
+                None
+            }
+            CType::Builtin(_) | CType::Enum(_) | CType::Record(_) => self.value(to).ok(),
+            CType::Pointer { to: inner, .. } => match &**inner {
+                CType::Builtin(base) if base == "char" => Some(Ty::Text),
+                _ => self.object(to).map(Ty::Object),
+            },
+            CType::Function { .. } | CType::Unsupported(_) => None,
+        }
+    }
+
+    // A function's parameters and C return type as what it returns: an
+    // `[HxnOut]` parameter, which comes after every parameter that is passed,
+    // makes the return value a status or nothing. Outputs after the first
+    // are passed null. Guesses are added to `review`.
+    fn finish(
+        &self,
+        function: &str,
+        mut params: Vec<Param>,
+        c_returns: &str,
+        review: &mut Vec<String>,
+    ) -> Result<(Vec<Param>, Ty, Status), String> {
+        let Some(first) = params.iter().position(|p| p.role == Role::Out) else {
+            let returns = self.returns(c_returns)?;
+            return Ok((params, returns, Status::None));
+        };
+        if let Some(late) = params[first..].iter().find(|p| p.role == Role::In) {
+            return Err(format!(
+                "`{}` comes before `{}`, so it may be an array, which is not imported",
+                params[first].name, late.name
+            ));
+        }
+        for param in &mut params[first + 1..] {
+            param.role = Role::Null;
+        }
+        let out = params[first].clone();
+        let status = match self.header.c_type(c_returns) {
+            CType::Builtin(base) if base == "void" => Status::None,
+            CType::Builtin(base) if base == "int" => Status::Zero,
+            _ => {
+                return Err(format!(
+                    "returns `{c_returns}` and writes `{}` through a pointer, which is not imported",
+                    out.name
+                ));
+            }
+        };
+        let mut guess = format!(
+            "{function}: `{}` is taken as an output ([HxnOut])",
+            out.name
+        );
+        if status == Status::Zero {
+            guess.push_str(", and its int return value as a status ([HxnStatus])");
+        }
+        if params.len() > first + 1 {
+            let nulled: Vec<&str> = params[first + 1..]
+                .iter()
+                .map(|p| p.name.as_str())
+                .collect();
+            guess.push_str(&format!(
+                ", passing null for `{}` ([HxnNull])",
+                nulled.join("`, `")
+            ));
+        }
+        review.push(guess);
+        let returns = match out.ty {
+            Ty::Text => Ty::Nullable(Box::new(Ty::Text)),
+            other => other,
+        };
+        Ok((params, returns, status))
+    }
+
     fn returns(&self, spelled: &str) -> Result<Ty, String> {
         let ty = self.header.c_type(spelled);
         match &ty {
-            CType::Pointer { to, .. } if matches!(&**to, CType::Builtin(b) if b == "char") => {
+            // `const unsigned char *` is UTF-8 in many libraries, sqlite3's
+            // among them.
+            CType::Pointer { to, .. } if matches!(&**to, CType::Builtin(b) if b == "char" || b == "unsigned char") => {
                 Ok(Ty::Nullable(Box::new(Ty::Text)))
             }
             CType::Pointer { .. } => match self.object(&ty) {
@@ -560,6 +903,8 @@ fn api_of(library: &str, header: &Header) -> Api {
         objects: Vec::new(),
         structs: Vec::new(),
         enums: Vec::new(),
+        callbacks: RefCell::new(Vec::new()),
+        lent: RefCell::new(Vec::new()),
     };
     for (tag, docs, values) in &header.enums {
         let constants: Vec<String> = values.iter().map(|(name, _)| name.clone()).collect();
@@ -584,6 +929,8 @@ fn api_of(library: &str, header: &Header) -> Api {
                     name,
                     docs: record.docs.clone(),
                     free: None,
+                    free_int: false,
+                    thread_safe: false,
                     constructor: None,
                     methods: Vec::new(),
                     statics: Vec::new(),
@@ -594,10 +941,7 @@ fn api_of(library: &str, header: &Header) -> Api {
                 for (field, spelled) in fields {
                     match context.value(&header.c_type(spelled)) {
                         Ok(ty @ (Ty::Bool | Ty::Int(_) | Ty::F32 | Ty::F64)) => {
-                            mapped.push(Param {
-                                name: field.clone(),
-                                ty,
-                            });
+                            mapped.push(Param::new(snake(field), ty));
                         }
                         _ => {
                             api.skipped.push(format!(
@@ -675,12 +1019,14 @@ fn api_of(library: &str, header: &Header) -> Api {
                 .unwrap_or(tag);
             alias.strip_suffix("_t").unwrap_or(&alias).to_owned()
         };
+        // Without the object's prefix, or else the library's.
         let short = |stem: &str| {
-            function
-                .name
-                .strip_prefix(&format!("{stem}_"))
-                .unwrap_or(&function.name)
-                .to_owned()
+            let name = &function.name;
+            snake(
+                name.strip_prefix(&format!("{stem}_"))
+                    .or_else(|| name.strip_prefix(&format!("{library}_")))
+                    .unwrap_or(name),
+            )
         };
         let free = (function.returns.contains('*') && !function.returns.contains("const"))
             .then(|| text_free.clone())
@@ -693,41 +1039,64 @@ fn api_of(library: &str, header: &Header) -> Api {
                 .iter()
                 .position(|o| &o.name == object)
                 .unwrap_or(0);
+            let returns = header.c_type(&function.returns);
+            let int = returns == CType::Builtin(String::from("int"));
             if function.params.len() == 1
-                && function.returns == "void"
+                && (int || returns == CType::Builtin(String::from("void")))
                 && FREES.contains(&name.as_str())
                 && api.objects[index].free.is_none()
             {
                 api.objects[index].free = Some(function.name.clone());
+                api.objects[index].free_int = int;
                 continue;
             }
-            match (
-                context.params(&function.params[1..]),
-                context.returns(&function.returns),
-            ) {
-                (Ok(params), Ok(returns)) => api.objects[index].methods.push(Function {
+            // An object a method returns usually belongs to its receiver:
+            // `sqlite3_db_handle` gives the statement's database.
+            let borrowed = context.object(&header.c_type(&function.returns)).is_some();
+            if borrowed {
+                api.review.push(format!(
+                    "{}: the object it returns is taken as borrowed ([HxnBorrowed]), not freed by Haxe",
+                    function.name
+                ));
+            }
+            match context
+                .params(&function.name, &function.params[1..])
+                .and_then(|params| {
+                    context.finish(&function.name, params, &function.returns, &mut api.review)
+                }) {
+                Ok((params, returns, status)) => api.objects[index].methods.push(Function {
                     name,
                     c: function.name.clone(),
                     docs: function.docs.clone(),
                     params,
                     returns,
-                    status: Status::None,
+                    status,
                     free,
+                    borrowed,
                 }),
-                (Err(why), _) | (_, Err(why)) => {
-                    api.skipped.push(format!("{}: {why}", function.name));
-                }
+                Err(why) => api.skipped.push(format!("{}: {why}", function.name)),
             }
             continue;
         }
-        let params = match context.params(&function.params) {
-            Ok(params) => params,
+        let (params, returns, status) = match context
+            .params(&function.name, &function.params)
+            .and_then(|params| {
+                context.finish(&function.name, params, &function.returns, &mut api.review)
+            }) {
+            Ok(finished) => finished,
             Err(why) => {
                 api.skipped.push(format!("{}: {why}", function.name));
                 continue;
             }
         };
-        if let Some(object) = &returned {
+        // An object it returns, or writes through a pointer, makes it the
+        // object's constructor or one of its static functions.
+        let made_object = match (&returned, &returns) {
+            (Some(object), _) => Some(object.clone()),
+            (None, Ty::Object(object)) => Some(object.clone()),
+            _ => None,
+        };
+        if let Some(object) = &made_object {
             let name = short(&prefix(object));
             let index = api
                 .objects
@@ -739,9 +1108,10 @@ fn api_of(library: &str, header: &Header) -> Api {
                 c: function.name.clone(),
                 docs: function.docs.clone(),
                 params,
-                returns: Ty::Nullable(Box::new(Ty::Object(object.clone()))),
-                status: Status::None,
+                returns,
+                status,
                 free: None,
+                borrowed: false,
             };
             if MAKES.contains(&name.as_str()) && api.objects[index].constructor.is_none() {
                 api.objects[index].constructor = Some(Function {
@@ -754,20 +1124,27 @@ fn api_of(library: &str, header: &Header) -> Api {
             }
             continue;
         }
-        match context.returns(&function.returns) {
-            Ok(returns) => api.functions.push(Function {
-                name: short(library),
-                c: function.name.clone(),
-                docs: function.docs.clone(),
-                params,
-                returns,
-                status: Status::None,
-                free,
-            }),
-            Err(why) => api.skipped.push(format!("{}: {why}", function.name)),
+        api.functions.push(Function {
+            name: short(library),
+            c: function.name.clone(),
+            docs: function.docs.clone(),
+            params,
+            returns,
+            status,
+            free,
+            borrowed: false,
+        });
+    }
+    api.callbacks = context.callbacks.into_inner();
+    api.review.extend(context.lent.into_inner());
+    for callback in &api.callbacks {
+        if let Some(stop) = callback.stop {
+            api.review.push(format!(
+                "{}: when the Haxe function throws, C is returned {stop} ([HxnStop={stop}])",
+                callback.name
+            ));
         }
     }
-    let _ = context.library;
     api
 }
 
@@ -783,6 +1160,15 @@ mod tests {
         assert_eq!(names(&["MODE_MAX", "MODE_MIN"]), ["Max", "Min"]);
         assert_eq!(names(&["KEY_1", "KEY_2"]), ["Key1", "Key2"]);
         assert_eq!(names(&["ONLY"]), ["Only"]);
+    }
+
+    #[test]
+    fn a_name_is_made_snake_case() {
+        assert_eq!(snake("zDbName"), "z_db_name");
+        assert_eq!(snake("HTTPServer"), "http_server");
+        assert_eq!(snake("N"), "n");
+        assert_eq!(snake("deflateInit2"), "deflate_init2");
+        assert_eq!(snake("already_snake"), "already_snake");
     }
 
     #[test]

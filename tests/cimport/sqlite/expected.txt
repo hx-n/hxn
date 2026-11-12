@@ -1,0 +1,4 @@
+2 columns: name, count
+apple: 3
+pear: 5
+refused: sqlite3_prepare_v2 failed with status 1 (no such table: nowhere)
