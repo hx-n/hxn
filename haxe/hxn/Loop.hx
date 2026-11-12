@@ -44,7 +44,8 @@ class Loop {
 		collection, hxcpp continues zeroing memory on its own background
 		threads. During exit the C runtime destroys a lock those threads
 		acquire, so a program that exits soon after a collection can crash on
-		Windows instead of exiting. A library's memory can trigger a
+		Windows instead of exiting. This affects hxcpp 4.3.2 and hxcpp from
+		git before HaxeFoundation/hxcpp#1298, which fixed it. A library's memory can trigger a
 		collection at a time the program did not choose, including just
 		before it exits. This function flushes stdout and stderr and exits
 		without running those destructors. On other targets it calls

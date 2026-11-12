@@ -289,7 +289,8 @@ filesystem `#include "counter.h"` would then find the generated header.
 - The fixture's JSON manifest is committed, and a test fails when it is out
   of date.
 - A test program ends with `hxn.Loop.exit`, not `Sys.exit`: a program that
-  exits right after a collection crashes in hxcpp on Windows.
+  exits right after a collection crashes on Windows with hxcpp 4.3.2, and
+  with hxcpp from git before HaxeFoundation/hxcpp#1298.
 - A check does not depend on when the collector runs on its own: it forces a
   collection, or asserts a bound that holds either way.
 - The pure crates have unit tests; `hxn-hl` and the adapters are tested only

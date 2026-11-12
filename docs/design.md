@@ -299,7 +299,11 @@ has native code call the runtime.
   crashes. A meter triggers a collection when a library's memory exceeds its
   budget, at a time the program does not choose, so hxn provides an exit
   that does not depend on that timing. On other runtimes it calls
-  `Sys.exit`.
+  `Sys.exit`. The crash is in hxcpp 4.3.2 and in hxcpp's git history before
+  HaxeFoundation/hxcpp#1298 (commit `0e9183de`), which made that lock a
+  `std::mutex`; it does not occur from that commit on. It was reported as
+  HaxeFoundation/hxcpp#1470. `hxn.Loop.exit` is needed until hxn requires
+  an hxcpp release that includes #1298.
 
 ## Calling a Haxe function
 
