@@ -159,6 +159,109 @@ pub fn run(command: &mut Command) -> Result<(), String> {
     }
 }
 
+/// What a library's build scripts asked to link: library names and
+/// directories, as cargo reports them.
+#[derive(Default, Debug, PartialEq)]
+pub struct Linked {
+    libraries: Vec<String>,
+    frameworks: Vec<String>,
+    paths: Vec<String>,
+}
+
+impl Linked {
+    // Reads cargo's `build-script-executed` messages. A static library is
+    // already inside the archive cargo builds, so it is left out.
+    fn read(messages: &str) -> Self {
+        let mut out = Self::default();
+        for line in messages.lines() {
+            let Ok(message) = serde_json::from_str::<serde_json::Value>(line) else {
+                continue;
+            };
+            if message.get("reason").and_then(|r| r.as_str()) != Some("build-script-executed") {
+                continue;
+            }
+            let strings = |key: &str| -> Vec<String> {
+                message
+                    .get(key)
+                    .and_then(|v| v.as_array())
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|v| v.as_str().map(str::to_owned))
+                    .collect()
+            };
+            for library in strings("linked_libs") {
+                let (kind, name) = library.split_once('=').unwrap_or(("", &library));
+                // `dylib:+verbatim=x` and the like: the kind ends at a colon.
+                let kind = kind.split(':').next().unwrap_or(kind);
+                let list = match kind {
+                    "static" => continue,
+                    "framework" => &mut out.frameworks,
+                    _ => &mut out.libraries,
+                };
+                if !list.iter().any(|known| known == name) {
+                    list.push(name.to_owned());
+                }
+            }
+            for path in strings("linked_paths") {
+                let (kind, dir) = path.split_once('=').unwrap_or(("", &path));
+                if kind != "framework" && !out.paths.iter().any(|known| known == dir) {
+                    out.paths.push(dir.to_owned());
+                }
+            }
+        }
+        out
+    }
+
+    /// The hxcpp build XML that links these, for a program built for
+    /// Windows or not.
+    pub fn xml(&self, windows: bool) -> String {
+        let mut out = String::from(
+            "<xml>\n<!-- Written by hxn: what the library links. -->\n<target id=\"haxe\">\n",
+        );
+        let escape = |text: &str| {
+            text.replace('&', "&amp;")
+                .replace('"', "&quot;")
+                .replace('<', "&lt;")
+        };
+        for path in &self.paths {
+            if windows {
+                out.push_str(&format!("\t<flag value=\"-libpath:{}\"/>\n", escape(path)));
+            } else {
+                out.push_str(&format!("\t<flag value=\"-L{}\"/>\n", escape(path)));
+            }
+        }
+        for library in &self.libraries {
+            if windows {
+                out.push_str(&format!("\t<lib name=\"{}.lib\"/>\n", escape(library)));
+            } else {
+                out.push_str(&format!("\t<lib name=\"-l{}\"/>\n", escape(library)));
+            }
+        }
+        for framework in &self.frameworks {
+            out.push_str(&format!(
+                "\t<flag value=\"-framework\"/>\n\t<flag value=\"{}\"/>\n",
+                escape(framework)
+            ));
+        }
+        out.push_str("</target>\n</xml>\n");
+        out
+    }
+}
+
+// Runs cargo with `--message-format=json-render-diagnostics` and reads what
+// its build scripts link. Diagnostics still go to standard error.
+fn linked_by(cargo: &mut Command) -> Result<Linked, String> {
+    let output = cargo
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::inherit())
+        .output()
+        .map_err(|error| format!("running cargo: {error}"))?;
+    if !output.status.success() {
+        return Err(String::from("cargo failed"));
+    }
+    Ok(Linked::read(&String::from_utf8_lossy(&output.stdout)))
+}
+
 pub fn text(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }
@@ -462,7 +565,15 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
         let given = std::env::var("RUSTFLAGS").unwrap_or_default();
         cargo.env("RUSTFLAGS", format!("{given} {flags}"));
     }
-    run(&mut cargo)?;
+    // For hxcpp, what the library's build scripts link is read from cargo's
+    // messages: a static library does not carry it to the program's link.
+    let linked = if runtime == Runtime::Cpp {
+        cargo.arg("--message-format=json-render-diagnostics");
+        linked_by(&mut cargo)?
+    } else {
+        run(&mut cargo)?;
+        Linked::default()
+    };
     built.push(if release { "release" } else { "debug" });
     built.push(artifact(name, target));
 
@@ -506,6 +617,9 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
             arguments.push(("-D", format!("HXN_INCLUDE={include}")));
             arguments.push(("-D", format!("{upper}_INCLUDE={include}")));
             arguments.push(("-D", format!("{upper}_LIB={}", text(&built))));
+            let link = dir.join("link.xml");
+            write(&link, &linked.xml(target.windows()))?;
+            arguments.push(("-D", format!("{upper}_LINK={}", text(&link))));
         }
     }
     let hxml = dir.join("build.hxml");
@@ -529,6 +643,31 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn what_build_scripts_link_is_read_from_cargo() {
+        let messages = concat!(
+            "{\"reason\":\"compiler-artifact\"}\n",
+            "{\"reason\":\"build-script-executed\",\"linked_libs\":[\"sqlite3\",\"static=tally_c\",\"dylib=z\",\"framework=Security\"],\"linked_paths\":[\"native=/opt/lib\"]}\n",
+            "not json\n",
+        );
+        let linked = Linked::read(messages);
+        assert_eq!(linked.libraries, ["sqlite3", "z"]);
+        assert_eq!(linked.frameworks, ["Security"]);
+        assert_eq!(linked.paths, ["/opt/lib"]);
+        let xml = linked.xml(false);
+        assert!(
+            xml.contains("<lib name=\"-lsqlite3\"/>")
+                && xml.contains("<flag value=\"-L/opt/lib\"/>")
+        );
+        assert!(xml.contains("<flag value=\"Security\"/>"));
+        assert!(linked.xml(true).contains("<lib name=\"sqlite3.lib\"/>"));
+        assert!(
+            Linked::default()
+                .xml(false)
+                .contains("<target id=\"haxe\">\n</target>")
+        );
+    }
 
     #[test]
     fn a_wasm_build_has_its_own_directory_and_target() {

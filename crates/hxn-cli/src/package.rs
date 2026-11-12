@@ -10,7 +10,7 @@
 //! | `binding/<runtime>/` | the library's Haxe classes for `hl` or `cpp` |
 //! | `binding/cppia/` | declarations of the `cpp` classes, for a CPPIA script |
 //! | `include/` | `hxn.h` and the library's headers, for hxcpp |
-//! | `native/<triple>/` | the built libraries for one target triple, which may be a wasm one |
+//! | `native/<triple>/` | the built libraries for one target triple, which may be a wasm one; for hxcpp also `link.xml`, the system libraries the archive links |
 //!
 //! Only `native/` differs between platforms. Packaging on another machine
 //! into the same directory, or copying that machine's `native/<triple>/` into
@@ -117,6 +117,12 @@ pub fn package(
             .map_err(|error| format!("{}: {error}", native.display()))?;
         std::fs::copy(&built.library, native.join(packaged(name, target, &built)))
             .map_err(|error| format!("{}: {error}", built.library.display()))?;
+        // What the hxcpp archive links, beside it.
+        let link = built.dir.join("link.xml");
+        if target.runtime == Runtime::Cpp && link.is_file() {
+            std::fs::copy(&link, native.join("link.xml"))
+                .map_err(|error| format!("{}: {error}", link.display()))?;
+        }
         if !triples.contains(&triple) {
             triples.push(triple);
         }

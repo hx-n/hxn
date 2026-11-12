@@ -89,6 +89,10 @@ class Bind {
 				Compiler.define("HXN_INCLUDE", include);
 				Compiler.define('${upper}_INCLUDE', include);
 				Compiler.define('${upper}_LIB', library(['lib${name}_cpp.a', '${name}_cpp.lib']));
+				// What the archive links: system libraries its build scripts named.
+				var link = Path.join([built, "link.xml"]);
+				if (FileSystem.exists(link))
+					Compiler.define('${upper}_LINK', link);
 				// Unless one of these is defined, hxcpp builds 32-bit on
 				// Windows and the host's 64-bit under Emscripten. Neither
 				// matches the library.
