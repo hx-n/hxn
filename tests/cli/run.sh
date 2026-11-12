@@ -75,7 +75,6 @@ grep -q ' ready$' "$work/found.txt" || { echo "FAILED: doctor found nothing read
 # As a package: a program's build refers to the package and its macro, and
 # to none of the paths of its classes, headers or library.
 "$hxn" package "${packaged[@]}" --out "$work/package"
-test -f "$work/package/greeter.hxn.webidl" || { echo "FAILED: the package has no WebIDL" >&2; exit 1; }
 mkdir "$work/program"
 (
 	cd "$work/program"

@@ -4,7 +4,6 @@
 //!
 //! | Path | What it is |
 //! |---|---|
-//! | `<library>.hxn.webidl` | the manifest as WebIDL |
 //! | `support/` | hxn's Haxe support classes (a class path) |
 //! | `include/` | `hxn.h` and the library's headers |
 //! | `<runtime>/crate/` | the adapter crate, which depends on the library |
@@ -352,11 +351,6 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
     )?;
 
     let out = project.target.join("hxn").join(name);
-    // The same API in WebIDL, for readers and tools that use that format.
-    write(
-        &out.join(format!("{name}.hxn.webidl")),
-        &hxn_gen::webidl(&library),
-    )?;
     let support = out.join("support");
     for (path, text) in support::HAXE {
         write(&support.join(path), text)?;

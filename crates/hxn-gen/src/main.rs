@@ -53,10 +53,6 @@ fn run() -> Result<(), String> {
         &hxn_gen::manifest(&library),
     )?;
     write(
-        &out.join(format!("{name}.hxn.webidl")),
-        &hxn_gen::webidl(&library),
-    )?;
-    write(
         &out.join("c/adapter.rs"),
         &hxn_gen::c_adapter(&library, &core),
     )?;

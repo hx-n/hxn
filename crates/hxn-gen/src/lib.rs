@@ -7,7 +7,6 @@
 //! | Output | From |
 //! |---|---|
 //! | the manifest, which is committed and reviewed | [`manifest`] |
-//! | the manifest as WebIDL | [`webidl`] |
 //! | the adapter over the plain C ABI, for hxcpp | [`c_adapter`] |
 //! | the adapter exporting HashLink primitives | [`hl_adapter`] |
 //! | the C header for the C ABI adapter | [`c_header`] |
@@ -30,7 +29,6 @@ mod model;
 mod names;
 mod parse;
 mod rust;
-mod webidl;
 
 pub use c::{c_header, cpp_glue};
 pub use haxe::{File, haxe_cpp, haxe_cppia, haxe_hl};
@@ -41,4 +39,3 @@ pub use model::{
 };
 pub use parse::{parse, parse_crate};
 pub use rust::{c_adapter, hl_adapter};
-pub use webidl::webidl;

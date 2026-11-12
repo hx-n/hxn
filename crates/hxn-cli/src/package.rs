@@ -6,7 +6,6 @@
 //! | `haxelib.json` | the library's name and version, and the other haxelib fields the crate's metadata provides |
 //! | `extraParams.hxml` | calls the macro `hxn.Bind.lib`, which sets up the rest at compile time |
 //! | `<library>.hxn.json` | the manifest, which `hxn.Bind` uses to locate the package |
-//! | `<library>.hxn.webidl` | the manifest as WebIDL |
 //! | `hxn/` | hxn's Haxe support classes |
 //! | `binding/<runtime>/` | the library's Haxe classes for `hl` or `cpp` |
 //! | `binding/cppia/` | declarations of the `cpp` classes, for a CPPIA script |
@@ -127,12 +126,6 @@ pub fn package(
     let text = std::fs::read_to_string(project.dir.join(&manifest))
         .map_err(|error| format!("{manifest}: {error}"))?;
     write(&out.join(&manifest), &text)?;
-    // The WebIDL form of the manifest, written by the last build, goes next
-    // to it.
-    let idl = format!("{name}.hxn.webidl");
-    let built = project.target.join("hxn").join(name).join(&idl);
-    let text = std::fs::read_to_string(&built).map_err(|error| format!("{idl}: {error}"))?;
-    write(&out.join(&idl), &text)?;
     for (path, text) in support::HAXE {
         write(&out.join(path), text)?;
     }

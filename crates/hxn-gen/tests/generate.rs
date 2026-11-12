@@ -1784,120 +1784,6 @@ impl Thing {
     }
 }
 
-// The manifest has a second form, WebIDL, with the same API. The fixture's
-// WebIDL is committed, like its JSON.
-#[test]
-fn the_manifest_is_also_webidl() {
-    let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/counter");
-    let (library, _) =
-        hxn_gen::parse_crate("counter", format!("{root}/core/src/lib.rs").as_ref()).unwrap();
-    let idl = hxn_gen::webidl(&library);
-    let committed = std::fs::read_to_string(format!("{root}/counter.hxn.webidl")).unwrap();
-    assert_eq!(idl, committed);
-
-    // Every interface and every function the JSON lists is here too.
-    for interface in &library.interfaces {
-        let opening = if interface.namespace {
-            format!("\nnamespace {} {{\n", interface.name)
-        } else {
-            format!("\ninterface {} {{\n", interface.name)
-        };
-        assert!(idl.contains(&opening), "{}", interface.name);
-        for method in &interface.methods {
-            // A WebIDL reserved word is escaped with an underscore.
-            let found = if method.constructor {
-                idl.contains("constructor(")
-            } else {
-                idl.contains(&format!(" {}(", method.name))
-                    || idl.contains(&format!(" _{}(", method.name))
-            };
-            assert!(found, "{}::{}", interface.name, method.name);
-        }
-    }
-    // Anything WebIDL has no construct for is an extended attribute, where
-    // the grammar allows one: before an operation or an argument, never a
-    // return type.
-    assert!(idl.contains("[HxnShared]\ninterface Pot {"));
-    assert!(idl.contains("[HxnWeighed]\ninterface Blob {"));
-    assert!(idl.contains("  [HxnStream] static long count_up(long limit, boolean fail);"));
-    assert!(idl.contains("  [HxnSignal] static long ramp(long limit);"));
-    assert!(idl.contains("  [HxnAsync] static Promise<undefined> settle(long milliseconds);"));
-    assert!(
-        idl.contains(
-            "  [HxnAsync, HxnConsuming] Promise<long> into_value_later(long milliseconds);"
-        )
-    );
-    assert!(idl.contains("[HxnAtomic] long progress, [HxnAtomic] boolean cancel"));
-    assert!(idl.contains("callback CounterSpawnEachF = long (Counter a0, USVString a1);"));
-    assert!(idl.contains("static long offer([HxnKept] Pot pot, PotOfferF f);"));
-    assert!(
-        idl.contains("  [HxnSize] static unsigned long doubled([HxnSize] unsigned long count);")
-    );
-    assert!(idl.contains("  static octet _byte(octet value);"));
-    for line in idl.lines() {
-        let line = line.trim_start();
-        if let Some(rest) = line.strip_prefix("static ") {
-            assert!(
-                !rest.starts_with('['),
-                "an attribute on a return type: {line}"
-            );
-        }
-    }
-
-    // And it is valid WebIDL: a WebIDL parser accepts all of it, and finds
-    // each interface, namespace and callback.
-    let parsed = weedle::parse(&idl).unwrap_or_else(|error| panic!("not WebIDL: {error:?}"));
-    let lent: usize = library
-        .interfaces
-        .iter()
-        .flat_map(|interface| &interface.methods)
-        .flat_map(|method| &method.params)
-        .filter(|param| matches!(param.ty, Type::Lent { .. }))
-        .count();
-    // A tagged enum becomes an enum of its tags, its own dictionary, and one
-    // dictionary for each variant with fields.
-    let tagged: usize = library
-        .tagged
-        .iter()
-        .map(|tagged| {
-            2 + tagged
-                .cases
-                .iter()
-                .filter(|case| !case.fields.is_empty())
-                .count()
-        })
-        .sum();
-    assert_eq!(
-        parsed.len(),
-        library.interfaces.len() + lent + library.records.len() + library.enums.len() + tagged
-    );
-    let namespaces = parsed
-        .iter()
-        .filter(|definition| matches!(definition, weedle::Definition::Namespace(_)))
-        .count();
-    assert_eq!(
-        namespaces,
-        library.interfaces.iter().filter(|i| i.namespace).count()
-    );
-}
-
-// Every example's API is also valid WebIDL.
-#[test]
-fn every_example_has_a_webidl_form() {
-    let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples");
-    for entry in std::fs::read_dir(root).unwrap() {
-        let dir = entry.unwrap().path();
-        if !dir.is_dir() {
-            continue;
-        }
-        let name = dir.file_name().unwrap().to_str().unwrap();
-        let (library, _) = hxn_gen::parse_crate(name, &dir.join("src/lib.rs")).unwrap();
-        let idl = hxn_gen::webidl(&library);
-        let parsed = weedle::parse(&idl).unwrap_or_else(|error| panic!("{name}: {error:?}"));
-        assert!(parsed.len() >= library.interfaces.len(), "{name}");
-    }
-}
-
 // Plain data is passed by value: an enum as its integer value, and a record,
 // an option or a list as bytes both sides serialize in the same order.
 #[test]
@@ -2237,10 +2123,6 @@ impl Thing {
         "{ \"name\": \"Progress\", \"fields\": [{ \"name\": \"done\", \"type\": \"u32\" }, { \"name\": \"out\", \"type\": \"i32\" }] }"
     ));
     assert!(manifest.contains("\"type\": \"map<u8, list<Event>>\""));
-    let idl = hxn_gen::webidl(&library);
-    assert!(idl.contains("[HxnTagged] dictionary Event {\n  required EventTag tag;\n"));
-    assert!(idl.contains("record<USVString, long>"));
-    weedle::parse(&idl).unwrap_or_else(|error| panic!("not WebIDL: {error:?}"));
 }
 
 // A function whose error type is one of the library's data types throws a
@@ -2358,10 +2240,6 @@ impl Thing {
     let manifest = hxn_gen::manifest(&library);
     assert!(manifest.contains("\"throws\": \"PantryError\","));
     assert_eq!(manifest.matches("\"throws\"").count(), 4);
-    let idl = hxn_gen::webidl(&library);
-    assert!(idl.contains("[Throws=Refused] constructor();"));
-    assert!(idl.contains("[Throws=PantryError, HxnAsync] static Promise<USVString> later();"));
-    weedle::parse(&idl).unwrap_or_else(|error| panic!("not WebIDL: {error:?}"));
 
     // A library with no such error type generates none of this.
     let plain = parse(
@@ -2508,8 +2386,6 @@ impl Thing {
     assert!(manifest.contains("\"returns\": \"future<Point>\""));
     assert!(manifest.contains("\"returns\": \"stream<list<Mode>>\""));
     assert!(manifest.contains("\"type\": \"fn(Point, Mode) -> Mode\""));
-    weedle::parse(&hxn_gen::webidl(&library))
-        .unwrap_or_else(|error| panic!("not WebIDL: {error:?}"));
 
     // Two carried types whose take calls would have the same name are
     // rejected.

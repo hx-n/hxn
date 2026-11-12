@@ -277,9 +277,8 @@ filesystem `#include "counter.h"` would then find the generated header.
   them.
 - A test that depends on a runtime's limitations documents this next to the
   check it skips, with the reason.
-- **The WebIDL emitter's output is parsed in its tests**, by a WebIDL parser
-  that is a dev-dependency only. The fixture's WebIDL is committed, like its
-  JSON manifest, and a test fails when either is out of date.
+- The fixture's JSON manifest is committed, and a test fails when it is out
+  of date.
 - A test program ends with `hxn.Loop.exit`, not `Sys.exit`: a program that
   exits right after a collection crashes in hxcpp on Windows.
 - A check does not depend on when the collector runs on its own: it forces a
