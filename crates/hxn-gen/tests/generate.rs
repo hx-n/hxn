@@ -184,7 +184,7 @@ fn says_where_and_why_something_cannot_cross() {
             "pub fn stamp(&self) -> Result<i128, String> { todo!() }",
             "wider than 64 bits does not cross",
         ),
-        ("pub fn later(&self) -> Future<i64> { todo!() }", "carries"),
+        ("pub fn later(&self) -> Future<u16> { todo!() }", "carries"),
         (
             "pub fn maybe(&self) -> Option<u8> { todo!() }",
             "a result is one of",
@@ -822,7 +822,7 @@ fn results_over_time_are_handles_the_library_answers_for() {
 fn says_what_a_result_over_time_cannot_carry() {
     let cases = [
         (
-            "pub fn done(&self) -> Future<Vec<u8>> { todo!() }",
+            "pub fn done(&self) -> Future<Vec<i32>> { todo!() }",
             "a future carries one of",
         ),
         (
@@ -830,7 +830,7 @@ fn says_what_a_result_over_time_cannot_carry() {
             "a signal carries one of",
         ),
         (
-            "pub fn all(&self) -> Stream<Vec<u8>> { todo!() }",
+            "pub fn all(&self) -> Stream<Vec<i32>> { todo!() }",
             "a stream carries one of",
         ),
         (
@@ -1565,4 +1565,64 @@ impl Band {
             error.message
         );
     }
+}
+
+#[test]
+fn a_result_over_time_carries_bytes_and_sixty_four_bits() {
+    let source = r#"
+#[hxn::interface]
+pub struct Thing;
+
+#[hxn::methods]
+impl Thing {
+    pub fn stamp() -> Future<i64> { todo!() }
+    pub fn frames() -> Stream<Vec<u8>> { todo!() }
+    pub fn count() -> Signal<i64> { todo!() }
+}
+"#;
+    let library = parse("thing", source).unwrap();
+    let methods = &library.interfaces[0].methods;
+    assert_eq!(methods[0].returns, Type::Future(Box::new(Type::I64)));
+    assert_eq!(methods[1].returns, Type::Stream(Box::new(Type::Bytes)));
+    assert_eq!(methods[2].returns, Type::Signal(Box::new(Type::I64)));
+
+    let c = hxn_gen::c_adapter(&library, "thing");
+    assert!(c.contains("fn thing_future_take_long(this: RawHandle, out: *mut i64, err: *mut Buf)"));
+    assert!(
+        c.contains("fn thing_stream_next_bytes(this: RawHandle, out: *mut Buf, err: *mut Buf)")
+    );
+    let header = hxn_gen::c_header(&library);
+    assert!(
+        header.contains("thing_future_take_long(hxn_handle *self, int64_t *out, hxn_buf *err);")
+    );
+    assert!(
+        header.contains("thing_signal_get_long(hxn_handle *self, int64_t *out, hxn_buf *err);")
+    );
+    // HashLink's bytes come with their length through a last parameter.
+    let hl = hxn_gen::hl_adapter(&library, "thing");
+    assert!(
+        hl.contains("fn thing_stream_next_bytes(this: *mut Managed, out: *mut i32) -> *mut vbyte")
+    );
+    assert!(hl.contains("\"PXthing_stream_Ri_B\""), "{hl}");
+    assert!(hl.contains("\"PXthing_future__l\""));
+    let class = &hxn_gen::haxe_hl(&library)[0];
+    assert!(
+        class
+            .text
+            .contains("public static function frames():hxn.Stream<haxe.io.Bytes>")
+    );
+    assert!(
+        class
+            .text
+            .contains("public static function count():hxn.Signal<haxe.Int64>")
+    );
+
+    // A signal is read any number of times, and bytes are handed over once.
+    let refused = source.replace("Signal<i64>", "Signal<Vec<u8>>");
+    assert!(
+        parse("thing", &refused)
+            .unwrap_err()
+            .message
+            .contains("a signal carries one of")
+    );
 }

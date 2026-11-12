@@ -487,6 +487,44 @@
           "blocking": false
         },
         {
+          "name": "stamp",
+          "docs": "The time `value` names, as 64 bits a future carries.",
+          "kind": "static",
+          "params": [{ "name": "value", "type": "i32" }],
+          "returns": "future<i64>",
+          "async": true,
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "frame",
+          "docs": "`count` bytes, each `fill`, made by the work.",
+          "kind": "static",
+          "params": [{ "name": "count", "type": "i32" }, { "name": "fill", "type": "i32" }],
+          "returns": "future<bytes>",
+          "async": true,
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "frames",
+          "docs": "Frames of 1 to `count` bytes, one after another.",
+          "kind": "static",
+          "params": [{ "name": "count", "type": "i32" }],
+          "returns": "stream<bytes>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "odometer",
+          "docs": "A count too wide for 32 bits, followed as it climbs.",
+          "kind": "static",
+          "params": [{ "name": "limit", "type": "i32" }],
+          "returns": "signal<i64>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
           "name": "ticks",
           "docs": "`count` items of nothing: each is only that something happened.",
           "kind": "static",

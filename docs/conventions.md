@@ -107,8 +107,8 @@ filesystem `#include "counter.h"` would then find the generated one.
   `T` or `Arc<T>`. `Arc` of an interface not marked shared does not cross.
 - A result that arrives later is returned as a `Future<T>`, a `Stream<T>` or
   a `Signal<T>` of `hxn-future`, by a function that itself returns at once.
-  It carries `bool`, `i32`, `f64` or `String`; a future or a stream may carry
-  an interface, a shared one as `Arc<T>`, or `()`.
+  It carries `bool`, `i32`, `i64`, `f64` or `String`; a future or a stream
+  may carry `Vec<u8>`, an interface, a shared one as `Arc<T>`, or `()`.
 - An `async fn` crosses as a function returning a future of what it gives.
   It takes `self` or, of a shared interface, `&self`; numbers, `bool`, `&str`
   and `&[u8]`, which are copied; and shared interfaces. It does not take what

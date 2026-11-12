@@ -388,12 +388,18 @@ impl Scope<'_> {
         let plain = match path_name(carried).as_deref() {
             Some("bool") => Some(Type::Bool),
             Some("i32") => Some(Type::I32),
+            Some("i64") => Some(Type::I64),
             Some("f64") => Some(Type::F64),
             Some("String") => Some(Type::Str),
             _ => None,
         };
         if let Some(plain) = plain {
             return Ok(plain);
+        }
+        // Bytes are handed over once, as an object is.
+        if name != "Signal" && wrapped(carried, "Vec").and_then(path_name).as_deref() == Some("u8")
+        {
+            return Ok(Type::Bytes);
         }
         // Nothing, which is still news: the work is done, or something
         // happened. A signal always has a value.
@@ -435,12 +441,12 @@ impl Scope<'_> {
             }),
             None if name == "Signal" => error(
                 ty.span(),
-                "a signal carries one of bool, i32, f64 or String",
+                "a signal carries one of bool, i32, i64, f64 or String",
             ),
             None => error(
                 ty.span(),
                 format!(
-                    "a {} carries one of (), bool, i32, f64, String or an interface",
+                    "a {} carries one of (), bool, i32, i64, f64, String, Vec<u8> or an interface",
                     name.to_lowercase()
                 ),
             ),

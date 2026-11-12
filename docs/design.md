@@ -278,11 +278,12 @@ A function exposes one by returning it: `Future<T>`, `Stream<T>` or
 generated adapter hands each over type-erased, as a handle. So a library has
 one set of exports to wait on and watch a future, whatever it carries and
 whichever function returned it, and one more for each kind of value its
-futures carry, to take it. A future or stream can carry a number, a bool, text
-or an object; an object taken from one is owned by the Haxe side from then on.
-It can also carry nothing, `()`, which Haxe sees as `hxn.Unit`: that the work
-is done, or that something happened. A signal carries a number, a bool or
-text, because it is read any number of times.
+futures carry, to take it. A future or stream can carry an `i32`, an `i64`,
+an `f64`, a bool, text, bytes or an object; bytes and an object taken from one
+are the Haxe side's from then on. It can also carry nothing, `()`, which Haxe
+sees as `hxn.Unit`: that the work is done, or that something happened. A
+signal carries a number, a bool or text, because it is read any number of
+times.
 
 An `async fn` is exposed as the function it is to its caller: one that returns
 a future of what it gives, with the error of a `Result` failing the future.

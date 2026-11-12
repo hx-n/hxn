@@ -440,6 +440,47 @@ impl Later {
         Counter::new(start)
     }
 
+    /// The time `value` names, as 64 bits a future carries.
+    pub async fn stamp(value: i32) -> i64 {
+        let _ = square_later(1, millis(1)).await;
+        i64::from(value) << 32
+    }
+
+    /// `count` bytes, each `fill`, made by the work.
+    pub async fn frame(count: i32, fill: i32) -> Result<Vec<u8>, &'static str> {
+        let count = usize::try_from(count).map_err(|_| "a negative size")?;
+        Ok(vec![fill as u8; count])
+    }
+
+    /// Frames of 1 to `count` bytes, one after another.
+    pub fn frames(count: i32) -> Stream<Vec<u8>> {
+        let (sender, stream) = channel();
+        let mut size = 1;
+        drop(stepped(move || {
+            if size > count || !sender.send(vec![size as u8; size as usize]) {
+                return Poll::Ready(Ok::<_, Failure>(()));
+            }
+            size += 1;
+            Poll::Pending
+        }));
+        stream
+    }
+
+    /// A count too wide for 32 bits, followed as it climbs.
+    pub fn odometer(limit: i32) -> Signal<i64> {
+        let base = 1_i64 << 40;
+        let (source, odometer) = signal(base);
+        let mut next = 1;
+        drop(stepped(move || {
+            if next > limit || !source.set(base + i64::from(next)) {
+                return Poll::Ready(Ok::<_, Failure>(()));
+            }
+            next += 1;
+            Poll::Pending
+        }));
+        odometer
+    }
+
     /// `count` items of nothing: each is only that something happened.
     pub fn ticks(count: i32) -> Stream<()> {
         let (sender, stream) = channel();

@@ -275,6 +275,12 @@ class Generated {
 		for (pot in [first, second, third])
 			pot.close();
 		check("a stream of nothing counts what happened", [for (_ in Later.ticks(4)) 1].length == 4);
+		check("a future carries 64 bits", Later.stamp(3).await() == haxe.Int64.make(3, 0));
+		var frame = Later.frame(4, 0xAB).await();
+		check("and bytes", frame.length == 4 && frame.get(0) == 0xAB && frame.get(3) == 0xAB && Later.frame(0, 1).await().length == 0);
+		throws("or the failure of the work that would have made them", () -> Later.frame(-1, 0).await(), "negative size");
+		var sizes = [for (frame in Later.frames(5)) frame.length * 10 + frame.get(frame.length - 1)];
+		check('a stream of bytes, $sizes', sizes.join(",") == "11,22,33,44,55");
 
 		check("a stream is read item by item", [for (item in Later.countUp(5, false)) item].join(",") == "1,2,3,4,5");
 		check("one with nothing in it just ends", [for (item in Later.countUp(0, false)) item].length == 0);
@@ -304,8 +310,10 @@ class Generated {
 		var levels = [];
 		var stop = hxn.Reactive.effect(() -> levels.push(ramp.value));
 		var label = Later.label(3);
+		var odometer = Later.odometer(7);
+		var far = haxe.Int64.make(256, 7);
 		var waited = 0;
-		while ((squared < 0 || refused == "" || !ended || ramp.peek() != 50 || label.peek() != "3") && waited++ < 5000) {
+		while ((squared < 0 || refused == "" || !ended || ramp.peek() != 50 || label.peek() != "3" || odometer.peek() != far) && waited++ < 5000) {
 			hxn.Loop.sync();
 			Sys.sleep(0.001);
 		}
@@ -320,6 +328,7 @@ class Generated {
 		// the steps were seen depends on how fast the library got there.
 		check('a signal is followed to its last value: $levels', levels[levels.length - 1] == 50 && rising);
 		check("and one of text", label.peek() == "3");
+		check("and one of 64 bits", odometer.peek() == far);
 		stop();
 		hxn.Loop.manual = false;
 	}

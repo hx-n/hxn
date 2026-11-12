@@ -94,8 +94,10 @@ fn suffix(carried: &Type) -> String {
         Type::Void => String::from("unit"),
         Type::Bool => String::from("bool"),
         Type::I32 => String::from("int"),
+        Type::I64 => String::from("long"),
         Type::F64 => String::from("float"),
         Type::Str => String::from("text"),
+        Type::Bytes => String::from("bytes"),
         Type::Handle { interface, .. } => snake(interface),
         _ => unreachable!("not carried by a result over time"),
     }
@@ -107,8 +109,10 @@ fn title(carried: &Type) -> String {
         Type::Void => String::from("Unit"),
         Type::Bool => String::from("Bool"),
         Type::I32 => String::from("Int"),
+        Type::I64 => String::from("Long"),
         Type::F64 => String::from("Float"),
         Type::Str => String::from("Text"),
+        Type::Bytes => String::from("Bytes"),
         Type::Handle { interface, .. } => interface.clone(),
         _ => unreachable!("not carried by a result over time"),
     }
@@ -119,8 +123,10 @@ fn haxe_type(carried: &Type) -> String {
         Type::Void => String::from("hxn.Unit"),
         Type::Bool => String::from("Bool"),
         Type::I32 => String::from("Int"),
+        Type::I64 => String::from("haxe.Int64"),
         Type::F64 => String::from("Float"),
         Type::Str => String::from("String"),
+        Type::Bytes => String::from("haxe.io.Bytes"),
         Type::Handle { interface, .. } => interface.clone(),
         _ => unreachable!("not carried by a result over time"),
     }
@@ -132,8 +138,10 @@ fn rust_type(library: &Library, carried: &Type) -> String {
         Type::Void => String::from("()"),
         Type::Bool => String::from("bool"),
         Type::I32 => String::from("i32"),
+        Type::I64 => String::from("i64"),
         Type::F64 => String::from("f64"),
         Type::Str => String::from("String"),
+        Type::Bytes => String::from("Vec<u8>"),
         Type::Handle { interface, .. } => held(library, interface),
         _ => unreachable!("not carried by a result over time"),
     }
@@ -273,8 +281,9 @@ pub fn c_adapter(library: &Library) -> String {
                 Type::Void => ("i32", format!("{value}.map(|()| 1)")),
                 Type::Bool => ("i32", format!("Ok(i32::from({value}?))")),
                 Type::I32 => ("i32", value),
+                Type::I64 => ("i64", value),
                 Type::F64 => ("f64", value),
-                Type::Str => ("Buf", format!("Ok(Buf::from({value}?))")),
+                Type::Str | Type::Bytes => ("Buf", format!("Ok(Buf::from({value}?))")),
                 _ => ("RawHandle", format!("Ok(Handle::into_raw({value}?))")),
             };
             out.push_str(&format!(
@@ -331,11 +340,20 @@ pub fn hl_adapter(library: &Library) -> String {
                 Type::Void => ("bool", String::from("b"), format!("{value}.map(|()| true)")),
                 Type::Bool => ("bool", String::from("b"), value),
                 Type::I32 => ("i32", String::from("i"), value),
+                Type::I64 => ("i64", String::from("l"), value),
                 Type::F64 => ("f64", String::from("d"), value),
                 Type::Str => (
                     "*mut vbyte",
                     String::from("B"),
                     format!("Ok(utf16(&{value}?))"),
+                ),
+                // The VM's bytes do not carry their length.
+                Type::Bytes => (
+                    "*mut vbyte",
+                    String::from("B"),
+                    format!(
+                        "let data = {value}?;\n            if out.is_null() {{\n                return Err(Fault::Null.into());\n            }}\n            *out = i32::try_from(data.len()).map_err(|_| Fault::TooLarge)?;\n            Ok(bytes(&data))"
+                    ),
                 ),
                 _ => (
                     "*mut Managed",
@@ -348,8 +366,13 @@ pub fn hl_adapter(library: &Library) -> String {
             };
             let call = format!("{}_{}", kind.take(), suffix(carried));
             let export = export(library, *kind, &call);
+            let (length, taken) = if *carried == Type::Bytes {
+                (", out: *mut i32", "Ri")
+            } else {
+                ("", "")
+            };
             out.push_str(&format!(
-                "\n#[unsafe(no_mangle)]\npub unsafe extern \"C\" fn {export}(this: *mut Managed) -> {ty} {{\n    unsafe {{\n        prim(|| {{\n            let this = handle::<{any}>(this)?.borrow()?;\n            {result}\n        }})\n    }}\n}}\ndefine_prim!(hlp_{local}_{call}, {export}, \"PX{own}__{letter}\");\n",
+                "\n#[unsafe(no_mangle)]\npub unsafe extern \"C\" fn {export}(this: *mut Managed{length}) -> {ty} {{\n    unsafe {{\n        prim(|| {{\n            let this = handle::<{any}>(this)?.borrow()?;\n            {result}\n        }})\n    }}\n}}\ndefine_prim!(hlp_{local}_{call}, {export}, \"PX{own}_{taken}_{letter}\");\n",
                 local = kind.name(),
             ));
         }
@@ -385,8 +408,9 @@ pub fn c_header(library: &Library) -> String {
         for carried in carried {
             let ty = match carried {
                 Type::Void | Type::Bool | Type::I32 => "int32_t *",
+                Type::I64 => "int64_t *",
                 Type::F64 => "double *",
-                Type::Str => "hxn_buf *",
+                Type::Str | Type::Bytes => "hxn_buf *",
                 _ => "hxn_handle **",
             };
             out.push_str(&format!(
@@ -436,6 +460,12 @@ pub fn cpp_glue(library: &Library) -> String {
             let (returns, local, result) = match carried {
                 Type::Void | Type::Bool => ("bool ", "int out = 0;", "out != 0"),
                 Type::I32 => ("int ", "int out = 0;", "out"),
+                Type::I64 => ("cpp::Int64 ", "int64_t out = 0;", "out"),
+                Type::Bytes => (
+                    "Array<unsigned char> ",
+                    "hxn_buf out = HXN_BUF_EMPTY;",
+                    "hxn::take_bytes(out)",
+                ),
                 Type::F64 => ("double ", "double out = 0;", "out"),
                 Type::Str => (
                     "::String ",
@@ -490,15 +520,21 @@ fn hl_file(library: &Library, kind: Kind, carried: &[Type]) -> File {
         let (ty, nothing) = match carried {
             Type::Void | Type::Bool => (String::from("Bool"), "false"),
             Type::I32 => (String::from("Int"), "0"),
+            Type::I64 => (String::from("hl.I64"), "0"),
             Type::F64 => (String::from("Float"), "0."),
-            Type::Str => (String::from("hl.Bytes"), "null"),
+            Type::Str | Type::Bytes => (String::from("hl.Bytes"), "null"),
             _ => {
                 let interface = interface(carried).expect("an interface");
                 (format!("{interface}.{interface}Raw"), "null")
             }
         };
+        let length = if *carried == Type::Bytes {
+            ", out:hl.Ref<Int>"
+        } else {
+            ""
+        };
         out.push_str(&format!(
-            "\tpublic static function {local}_{}_{}(self:{raw}):{ty}\n\t\treturn {nothing};\n\n",
+            "\tpublic static function {local}_{}_{}(self:{raw}{length}):{ty}\n\t\treturn {nothing};\n\n",
             kind.take(),
             suffix(carried)
         ));
@@ -512,6 +548,11 @@ fn hl_file(library: &Library, kind: Kind, carried: &[Type]) -> File {
         let take = format!("Native.{local}_{}_{}(raw)", kind.take(), suffix(carried));
         let take = match carried {
             Type::Void => format!("{{\n\t\t\t{take};\n\t\t\thxn.Unit.Nothing;\n\t\t}}"),
+            Type::Bytes => format!(
+                "{{\n\t\t\tvar outLength = 0;\n\t\t\tvar data = Native.{local}_{}_{}(raw, outLength);\n\t\t\t@:privateAccess new haxe.io.Bytes(data, outLength);\n\t\t}}",
+                kind.take(),
+                suffix(carried)
+            ),
             Type::Str => format!("@:privateAccess String.fromUCS2({take})"),
             Type::Handle { interface, .. } => format!("{interface}.adopt({take})"),
             _ => take,
@@ -576,6 +617,9 @@ fn cpp_file(library: &Library, kind: Kind, carried: &[Type]) -> File {
             )),
             Type::Void => out.push_str(&format!(
                 "\n\tfunction take{title}():hxn.Unit {{\n\t\t{call};\n\t\treturn hxn.Unit.Nothing;\n\t}}\n"
+            )),
+            Type::Bytes => out.push_str(&format!(
+                "\n\tfunction take{title}():haxe.io.Bytes\n\t\treturn haxe.io.Bytes.ofData({call});\n"
             )),
             _ => out.push_str(&format!(
                 "\n\tfunction take{title}():{}\n\t\treturn {call};\n",
@@ -665,6 +709,8 @@ pub fn cpp_natives(library: &Library) -> String {
             let returns = match carried {
                 Type::Handle { .. } => String::from("Handle"),
                 Type::Void => String::from("Bool"),
+                Type::I64 => String::from("cpp.Int64"),
+                Type::Bytes => String::from("haxe.io.BytesData"),
                 other => haxe_type(other),
             };
             out.push_str(&cpp_extern(
