@@ -22,6 +22,9 @@
 //! | a function pointer passed with a `void *` for user data | `callback Name = long (long value);`, and one argument of type `Name` |
 //! | where C passes the user data to the function pointer | `[HxnUser=first]` or `[HxnUser=last]` on the callback |
 //! | what C is returned when the Haxe function throws | `[HxnStop=1]` on the callback |
+//! | a function pointer C keeps, to call after the function returns | `[HxnKept]` on the argument: the operation returns `undefined`, and its binding returns a stream of what C calls it with |
+//! | what C is returned by a callback it keeps, on every call | `[HxnStop=0]` on the callback |
+//! | the return value of a function that keeps a callback, which is ignored | `[HxnIgnore=int]` or `[HxnIgnore=pointer]` on the operation |
 //!
 //! A `//` comment directly above a definition or a member is its
 //! documentation, which the bindings carry through to Haxe.
@@ -29,7 +32,9 @@
 //! [`parse`] reads only this subset of WebIDL, and reports the line of
 //! anything else.
 
-use crate::model::{Api, Callback, Enum, Function, Int, Object, Param, Role, Status, Struct, Ty};
+use crate::model::{
+    Api, Callback, Enum, Function, Ignored, Int, Object, Param, Role, Status, Struct, Ty,
+};
 
 const HEADER: &str = "// The API of a C library, for hxn. hxn generates the library's Rust bindings\n// from this file: edit it to record what the header cannot, such as which\n// function frees a returned pointer, or [HxnStatus] on a function whose\n// return value is a status code.\n";
 
@@ -103,6 +108,7 @@ fn arguments(params: &[Param]) -> String {
                 Role::In => {}
                 Role::Out => list.insert(0, String::from("HxnOut")),
                 Role::Null => list.insert(0, String::from("HxnNull")),
+                Role::Kept => list.insert(0, String::from("HxnKept")),
             }
             format!("{}{} {}", notes(&list), type_name(&param.ty), param.name)
         })
@@ -122,6 +128,11 @@ fn operation(function: &Function, modifier: &str) -> String {
     }
     if function.borrowed {
         list.push(String::from("HxnBorrowed"));
+    }
+    match function.ignored {
+        Ignored::None => {}
+        Ignored::Int => list.push(String::from("HxnIgnore=int")),
+        Ignored::Pointer => list.push(String::from("HxnIgnore=pointer")),
     }
     if let Ty::Int(int) = &function.returns
         && let Some(c) = int.alias()
@@ -389,6 +400,9 @@ struct Note {
 struct Parser {
     tokens: Vec<Lexed>,
     at: usize,
+    /// Each callback argument read: the callback, its line, and whether C
+    /// keeps it. Checked once every callback is read.
+    uses: Vec<(String, usize, Role)>,
 }
 
 impl Parser {
@@ -611,7 +625,7 @@ fn arguments_of(parser: &mut Parser, names: &Names) -> Result<Vec<Param>, String
         let notes = parser.notes()?;
         check_notes(
             &notes,
-            &["HxnC", "HxnRef", "HxnOut", "HxnNull"],
+            &["HxnC", "HxnRef", "HxnOut", "HxnNull", "HxnKept"],
             "an argument",
         )?;
         let line = parser.line();
@@ -620,18 +634,38 @@ fn arguments_of(parser: &mut Parser, names: &Names) -> Result<Vec<Param>, String
         if matches!(ty, Ty::Void) {
             return parser.fail("an argument cannot be `undefined`");
         }
-        let role = match (find(&notes, "HxnOut"), find(&notes, "HxnNull")) {
-            (Some(_), Some(_)) => {
-                return parser.fail("an argument is `[HxnOut]` or `[HxnNull]`, not both");
+        let roles: Vec<Role> = [
+            ("HxnOut", Role::Out),
+            ("HxnNull", Role::Null),
+            ("HxnKept", Role::Kept),
+        ]
+        .into_iter()
+        .filter(|(note, _)| find(&notes, note).is_some())
+        .map(|(_, role)| role)
+        .collect();
+        let role = match roles.as_slice() {
+            [] => Role::In,
+            [role] => *role,
+            _ => {
+                return parser.fail(
+                    "an argument is one of `[HxnOut]`, `[HxnNull]` and `[HxnKept]`, not several",
+                );
             }
-            (Some(_), None) => Role::Out,
-            (None, Some(_)) => Role::Null,
-            (None, None) => Role::In,
         };
-        if role != Role::In && matches!(ty, Ty::Bytes | Ty::StructRef(_) | Ty::Callback(_)) {
-            return parser.fail(format!(
-                "`{words}` cannot be written through a pointer by C"
-            ));
+        match (role, &ty) {
+            (Role::Kept, Ty::Callback(_)) | (Role::In, _) => {}
+            (Role::Kept, _) => {
+                return parser.fail("`[HxnKept]` applies to a callback argument");
+            }
+            (_, Ty::Bytes | Ty::StructRef(_) | Ty::Callback(_)) => {
+                return parser.fail(format!(
+                    "`{words}` cannot be written through a pointer by C"
+                ));
+            }
+            _ => {}
+        }
+        if let Ty::Callback(known) = &ty {
+            parser.uses.push((known.clone(), line, role));
         }
         let name = parser.word()?;
         params.push(Param { name, ty, role });
@@ -661,7 +695,14 @@ fn operation_of(
 ) -> Result<Function, String> {
     check_notes(
         notes,
-        &["HxnC", "HxnStatus", "HxnFree", "HxnReturns", "HxnBorrowed"],
+        &[
+            "HxnC",
+            "HxnStatus",
+            "HxnFree",
+            "HxnReturns",
+            "HxnBorrowed",
+            "HxnIgnore",
+        ],
         "an operation",
     )?;
     let start = parser.line();
@@ -704,6 +745,20 @@ fn operation_of(
             "line {line}: `[HxnFree]` on an operation frees the text it returns, and `{name}` returns `{words}`"
         ));
     }
+    let ignored = match find(notes, "HxnIgnore") {
+        None => Ignored::None,
+        Some(note) => match note.value.as_deref() {
+            Some("int") => Ignored::Int,
+            Some("pointer") => Ignored::Pointer,
+            _ => {
+                return Err(format!(
+                    "line {}: the C return value ignored is `[HxnIgnore=int]` or `[HxnIgnore=pointer]`",
+                    note.line
+                ));
+            }
+        },
+    };
+    check_kept(&name, &params, &returns, status, ignored, start)?;
     Ok(Function {
         name,
         c: c_name(notes, line, "an operation")?,
@@ -713,7 +768,96 @@ fn operation_of(
         status,
         free,
         borrowed: find(notes, "HxnBorrowed").is_some(),
+        ignored,
     })
+}
+
+// Whether an operation that keeps a callback, or ignores its C return
+// value, has the form the binding generates: the stream it returns is its
+// only result.
+fn check_kept(
+    name: &str,
+    params: &[Param],
+    returns: &Ty,
+    status: Status,
+    ignored: Ignored,
+    line: usize,
+) -> Result<(), String> {
+    let fail = |message: String| Err(format!("line {line}: {message}"));
+    let kept = params.iter().filter(|p| p.role == Role::Kept).count();
+    if kept == 0 {
+        if ignored != Ignored::None {
+            return fail(format!(
+                "`[HxnIgnore]` applies to an operation with an `[HxnKept]` argument, and `{name}` has none"
+            ));
+        }
+        return Ok(());
+    }
+    if kept > 1 {
+        return fail(format!("`{name}` has more than one `[HxnKept]` argument"));
+    }
+    if *returns != Ty::Void {
+        return fail(format!(
+            "`{name}` keeps a callback, so it returns `undefined`: its binding returns the stream of what C calls the callback with"
+        ));
+    }
+    if status == Status::Negative || (status == Status::Zero && ignored != Ignored::None) {
+        return fail(format!(
+            "`{name}` keeps a callback: its C return value is a status, `[HxnStatus]`, or ignored, `[HxnIgnore]`"
+        ));
+    }
+    if let Some(other) = params
+        .iter()
+        .find(|p| p.role == Role::Out || (p.role == Role::In && matches!(p.ty, Ty::Callback(_))))
+    {
+        return fail(format!(
+            "`{name}` keeps a callback, and so takes no `[HxnOut]` argument and lends no other callback, as `{}` is",
+            other.name
+        ));
+    }
+    Ok(())
+}
+
+// A callback is lent for a call only if a Haxe function can take what it
+// takes; C may call a kept one with any of the values a callback declares.
+fn check_uses(api: &Api, uses: &[(String, usize, Role)]) -> Result<(), String> {
+    for (name, line, role) in uses {
+        let Some(callback) = api.callbacks.iter().find(|known| &known.name == name) else {
+            continue;
+        };
+        if *role == Role::Kept {
+            if callback.returns != Ty::Void && callback.stop.is_none() {
+                return Err(format!(
+                    "line {line}: C keeps `{name}`, which returns a value: give `{name}` `[HxnStop=n]`, what C is returned on every call"
+                ));
+            }
+            continue;
+        }
+        if callback.params.len() > 4 {
+            return Err(format!(
+                "line {line}: `{name}` takes {} values, and a Haxe function lent to C takes at most 4. If C keeps it, mark the argument `[HxnKept]`",
+                callback.params.len()
+            ));
+        }
+        if let Some(param) = callback.params.iter().find(|param| {
+            !matches!(
+                param.ty,
+                Ty::Bool
+                    | Ty::Int(Int::I32)
+                    | Ty::F32
+                    | Ty::F64
+                    | Ty::Text
+                    | Ty::Enum(_)
+                    | Ty::Struct(_)
+            )
+        }) {
+            return Err(format!(
+                "line {line}: a Haxe function lent to C takes `boolean`, `long`, `float`, `double`, `DOMString`, an enum or a dictionary, and `{}` of `{name}` is not one. If C keeps it, mark the argument `[HxnKept]`",
+                param.name
+            ));
+        }
+    }
+    Ok(())
 }
 
 // Whether what an operation returns fits how C gives it: as the return
@@ -801,7 +945,11 @@ pub fn parse(library: &str, text: &str) -> Result<Api, String> {
         }
     }
 
-    let mut parser = Parser { tokens, at: 0 };
+    let mut parser = Parser {
+        tokens,
+        at: 0,
+        uses: Vec::new(),
+    };
     let mut api = Api {
         library: library.to_owned(),
         ..Api::default()
@@ -826,17 +974,11 @@ pub fn parse(library: &str, text: &str) -> Result<Api, String> {
                 }
                 let params = arguments_of(&mut parser, &names)?;
                 parser.symbol(';')?;
-                if params.len() > 4 {
-                    return Err(format!(
-                        "line {line}: `{name}` takes {} values, and a Haxe function lent to C takes at most 4",
-                        params.len()
-                    ));
-                }
                 for param in &params {
                     let fits = matches!(
                         param.ty,
                         Ty::Bool
-                            | Ty::Int(Int::I32)
+                            | Ty::Int(_)
                             | Ty::F32
                             | Ty::F64
                             | Ty::Text
@@ -845,7 +987,7 @@ pub fn parse(library: &str, text: &str) -> Result<Api, String> {
                     );
                     if !fits || param.role != Role::In {
                         return Err(format!(
-                            "line {line}: a callback takes `boolean`, `long`, `float`, `double`, `DOMString`, an enum or a dictionary, and `{}` is not one",
+                            "line {line}: a callback takes a `boolean`, an integer, a `float`, a `double`, a `DOMString`, an enum or a dictionary, and `{}` is not one",
                             param.name
                         ));
                     }
@@ -969,6 +1111,11 @@ pub fn parse(library: &str, text: &str) -> Result<Api, String> {
                         check_notes(&notes, &["HxnC", "HxnStatus"], "a constructor")?;
                         let params = arguments_of(&mut parser, &names)?;
                         parser.symbol(';')?;
+                        if params.iter().any(|p| p.role == Role::Kept) {
+                            return Err(format!(
+                                "line {line}: a constructor returns its object, and so cannot keep a callback"
+                            ));
+                        }
                         let status = if find(&notes, "HxnStatus").is_some() {
                             Status::Zero
                         } else {
@@ -991,6 +1138,7 @@ pub fn parse(library: &str, text: &str) -> Result<Api, String> {
                             status,
                             free: None,
                             borrowed: false,
+                            ignored: Ignored::None,
                         });
                     } else if parser.is("static") {
                         parser.at += 1;
@@ -1028,10 +1176,11 @@ pub fn parse(library: &str, text: &str) -> Result<Api, String> {
             }
             other => {
                 return Err(format!(
-                    "line {line}: expected `interface`, `dictionary` or `namespace`, found `{other}`"
+                    "line {line}: expected `interface`, `dictionary`, `namespace` or `callback`, found `{other}`"
                 ));
             }
         }
     }
+    check_uses(&api, &parser.uses)?;
     Ok(api)
 }

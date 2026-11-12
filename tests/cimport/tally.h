@@ -1,7 +1,7 @@
 /* A small C library for testing `hxn import`: an opaque object with a
  * constructor and destructor, text and bytes in and out, an enum, a struct
- * passed by value and by pointer, and functions that report errors through
- * their return value. */
+ * passed by value and by pointer, functions that report errors through
+ * their return value, and callbacks called during a call and after it. */
 #ifndef TALLY_H
 #define TALLY_H
 
@@ -61,5 +61,12 @@ int tally_each(const tally *t, tally_visitor visit, void *user);
 typedef void (*tally_reporter)(const char *line, void *user);
 /* Reports the total and the count, a line each. */
 void tally_report(const tally *t, tally_reporter report, void *user);
+/* Called after each amount is added, with the tally's name, the amount and
+ * the new total. */
+typedef void (*tally_listener)(void *user, const char *name, int32_t amount, int64_t total);
+/* Calls `listener` after each amount is added until the tally is freed, in
+ * place of the listener before it. Returns the user data of the listener it
+ * replaces, or NULL. */
+void *tally_listen(tally *t, tally_listener listener, void *user);
 
 #endif

@@ -41,9 +41,11 @@ fn build_script(name: &str, sources: &[String], links: &[String]) -> String {
     out
 }
 
-fn manifest(name: &str, hxn: &str, compiles: bool) -> String {
+// `future` is the `hxn-future` dependency, which the bindings of a callback
+// C keeps use.
+fn manifest(name: &str, hxn: &str, future: &str, compiles: bool) -> String {
     let mut out = format!(
-        "[package]\nname = \"{name}\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\nhxn = {hxn}\n"
+        "[package]\nname = \"{name}\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\nhxn = {hxn}\nhxn-future = {future}\n"
     );
     if compiles {
         out.push_str("\n[build-dependencies]\ncc = \"1\"\n");
@@ -92,7 +94,8 @@ pub fn import(request: &Request) -> Result<Vec<String>, String> {
     if dir.exists() {
         return Err(format!("{} already exists", dir.display()));
     }
-    let hxn = dependency(request.checkout)?;
+    let hxn = dependency(request.checkout, "hxn")?;
+    let future = dependency(request.checkout, "hxn-future")?;
     let c = dir.join("c");
     std::fs::create_dir_all(&c).map_err(|error| format!("{}: {error}", c.display()))?;
     // The header and sources are copied in, so the crate builds on its own.
@@ -118,7 +121,10 @@ pub fn import(request: &Request) -> Result<Vec<String>, String> {
     }
     let webidl = format!("{name}.webidl");
     let files = [
-        ("Cargo.toml", manifest(name, &hxn, !sources.is_empty())),
+        (
+            "Cargo.toml",
+            manifest(name, &hxn, &future, !sources.is_empty()),
+        ),
         (".gitignore", String::from(IGNORE)),
         ("build.rs", build_script(name, &sources, request.links)),
         (webidl.as_str(), hxn_c::write(&api)),

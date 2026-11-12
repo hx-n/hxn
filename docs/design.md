@@ -676,13 +676,15 @@ directly. `hxn-c` does the work in three steps:
      constructor of `Sqlite3`.
    - An object returned by a method of another object is taken as borrowed:
      it belongs to that object, and is not freed by Haxe.
-   - A function pointer followed by a `void *` for user data is a callback:
-     a Haxe function lent for the call, as the `callback` WebIDL definition
-     of its type. It takes at most four booleans, `int`s, floating-point
-     numbers, strings, enums or structs, and returns nothing, a boolean or
-     an `int`. A function whose name suggests it keeps the callback to call
-     later (`set`, `register`, `hook`, `handler` and so on) is not
-     imported: a Haxe function is lent for one call only.
+   - A function pointer followed by a `void *` for user data is a callback,
+     declared as a `callback` WebIDL definition of its type. It takes
+     booleans, integers, floating-point numbers, strings, enums or structs,
+     and returns nothing, a boolean or an `int`. A callback is lent for the
+     call: a Haxe function that takes at most four values, all `int`s and
+     not other integers. A function whose name suggests it keeps the
+     callback to call later (`set`, `register`, `hook`, `handler` and so
+     on) keeps it instead, `[HxnKept]`: an `int` it returns is taken as a
+     status, and a pointer, usually the callback it replaced, is ignored.
    - Each of these guesses is listed under "Check:" at the end of the
      WebIDL, and anything that cannot be mapped is listed as not imported.
    - A header may declare functions the installed library leaves out, as
@@ -697,8 +699,9 @@ directly. `hxn-c` does the work in three steps:
    that frees an object or returned text, `[HxnOut]` and `[HxnNull]` mark
    outputs, `[HxnBorrowed]` a returned object the caller must not free,
    `[HxnThreadSafe]` an object the library allows calls on from several
-   threads at once, `[HxnUser]` where C passes a callback its user data and
-   `[HxnStop]` what C is returned when the Haxe function throws (see
+   threads at once, `[HxnUser]` where C passes a callback its user data,
+   `[HxnStop]` what C is returned when the Haxe function throws, and
+   `[HxnKept]` a callback C keeps (see
    `hxn-c`'s `idl` module for the full list). The file is committed. `hxn-c` reads only
    this subset of WebIDL, and reports the line of anything else.
 3. **WebIDL to Rust.** Each build generates `src/bindings.rs` from the
@@ -718,6 +721,19 @@ directly. `hxn-c` does the work in three steps:
    `[HxnStop]` to C, or does nothing when C cannot be told to stop. Once C
    returns, the panic is resumed or the Haxe function's failure returned,
    ahead of anything the call itself reports.
+   A callback C keeps cannot be a Haxe function, because native code does
+   not keep a host function alive or call one after the call returns. The
+   function that registers it returns a `Stream` instead. Its trampoline
+   copies what C passes, sends it to the stream, and returns `[HxnStop]` to
+   C on every call; the program reads the calls on its own thread. With
+   more than one value, or an unsigned 64-bit one, each call is a record,
+   `<Callback>Event`. The stream's sender is C's user data. A method's
+   object owns it and drops it after its C free function runs, when C can
+   no longer call the callback, and the stream ends. A sender given to a
+   function with no object, or to a borrowed object, is never freed, since
+   nothing reports when C stops calling it. A callback registered again
+   replaces the earlier one in C, and the earlier stream ends when the
+   object is freed.
 
 The crate's `build.rs` compiles the C sources given to `--source` with the
 `cc` crate, or links the libraries given to `--link`. A static library does

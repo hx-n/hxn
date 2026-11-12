@@ -2,3 +2,7 @@
 apple: 3
 pear: 5
 refused: sqlite3_prepare_v2 failed with status 1 (no such table: nowhere)
+updated: true main.fruit row 1
+updated: true main.fruit row 2
+updated: true main.fruit row 3
+2 commits

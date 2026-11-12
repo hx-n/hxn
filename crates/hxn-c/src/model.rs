@@ -40,7 +40,8 @@ pub struct Callback {
     pub returns: Ty,
     /// Whether C passes the user data first; otherwise last.
     pub user_first: bool,
-    /// `[HxnStop=n]`: what C is returned when the Haxe function throws.
+    /// `[HxnStop=n]`: what C is returned when the Haxe function throws, and
+    /// every time for a callback C keeps, since Haxe answers later.
     pub stop: Option<i64>,
 }
 
@@ -87,6 +88,8 @@ pub struct Function {
     /// `[HxnBorrowed]`: the returned object belongs to something else, and
     /// is not freed by its wrapper.
     pub borrowed: bool,
+    /// The C return value of a function that keeps a callback.
+    pub ignored: Ignored,
 }
 
 /// How a C function reports failure through its return value.
@@ -120,6 +123,22 @@ pub enum Role {
     Out,
     /// `[HxnNull]`: an output nobody reads. C is passed a null pointer.
     Null,
+    /// `[HxnKept]`: a callback C keeps, to call after the function returns.
+    /// What it is called with is queued for Haxe as a stream, which the
+    /// function returns.
+    Kept,
+}
+
+/// A C return value the binding ignores: a registration function's, which
+/// reports the callback it replaced or a status nothing reads.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum Ignored {
+    #[default]
+    None,
+    /// `[HxnIgnore=int]`.
+    Int,
+    /// `[HxnIgnore=pointer]`.
+    Pointer,
 }
 
 impl Param {
@@ -180,6 +199,11 @@ impl Function {
     /// The `[HxnOut]` parameter, if it has one.
     pub fn out(&self) -> Option<&Param> {
         self.params.iter().find(|param| param.role == Role::Out)
+    }
+
+    /// The `[HxnKept]` callback, if it has one.
+    pub fn kept(&self) -> Option<&Param> {
+        self.params.iter().find(|param| param.role == Role::Kept)
     }
 }
 

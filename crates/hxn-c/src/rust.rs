@@ -10,11 +10,17 @@
 //!   integer, returns an enum (the C value may name no variant) or an object
 //!   (the pointer may be null), or has `[HxnStatus]`.
 //! - Returned text is copied. Invalid UTF-8 is replaced, not refused.
+//! - A callback C keeps, `[HxnKept]`, is a trampoline that copies what C
+//!   calls it with and sends it to a stream, which the function returns.
+//!   The stream's sender is owned by the object the function was called on
+//!   and dropped after the object's C free function runs, which ends the
+//!   stream. A free or static function, or a borrowed object, never frees
+//!   it.
 
 use std::collections::BTreeSet;
 
 use crate::idl::namespace;
-use crate::model::{Api, Callback, Function, Int, Param, Role, Status, Ty};
+use crate::model::{Api, Callback, Function, Ignored, Int, Object, Param, Role, Status, Ty};
 
 // Rust's keywords, reserved words among them.
 const KEYWORDS: [&str; 52] = [
@@ -143,8 +149,182 @@ fn lends(function: &Function) -> bool {
     function
         .params
         .iter()
-        .any(|param| matches!(param.ty, Ty::Callback(_)))
+        .any(|param| param.role == Role::In && matches!(param.ty, Ty::Callback(_)))
 }
+
+// Every function of `api`, with the object it belongs to.
+fn all_functions(api: &Api) -> impl Iterator<Item = &Function> {
+    api.objects
+        .iter()
+        .flat_map(|object| {
+            object
+                .constructor
+                .iter()
+                .chain(&object.methods)
+                .chain(&object.statics)
+        })
+        .chain(&api.functions)
+}
+
+// The callbacks some function lends, or keeps when `role` is `Kept`.
+fn used(api: &Api, role: Role) -> Vec<&Callback> {
+    api.callbacks
+        .iter()
+        .filter(|known| {
+            all_functions(api).any(|function| {
+                function
+                    .params
+                    .iter()
+                    .any(|p| p.role == role && p.ty == Ty::Callback(known.name.clone()))
+            })
+        })
+        .collect()
+}
+
+// Whether `object` owns the senders of the callbacks its methods keep: it
+// has a free function, after which C calls none of them.
+fn keeps(object: &Object) -> bool {
+    object.free.is_some() && object.methods.iter().any(|m| m.kept().is_some())
+}
+
+// The object `name` made from a pointer.
+fn made(api: &Api, name: &str, raw: &str, owned: bool) -> String {
+    let kept = api
+        .objects
+        .iter()
+        .any(|object| object.name == name && keeps(object));
+    if kept {
+        format!("{name} {{ raw: {raw}, owned: {owned}, kept: Default::default() }}")
+    } else {
+        format!("{name} {{ raw: {raw}, owned: {owned} }}")
+    }
+}
+
+// What a stream of a kept callback's calls carries, for a value of `ty`,
+// and the expression that makes it from `name`, the C value.
+fn kept_value(ty: &Ty, name: &str) -> (String, String) {
+    let (carried, value) = match ty {
+        Ty::Bool => ("bool", name.to_owned()),
+        Ty::Int(Int::I8 | Int::U8 | Int::I16 | Int::U16 | Int::I32) => {
+            ("i32", format!("i32::from({name})"))
+        }
+        Ty::Int(Int::U32 | Int::I64 | Int::Long) => ("i64", format!("i64::from({name})")),
+        Ty::Int(Int::SSize) => ("i64", format!("{name} as i64")),
+        Ty::Int(Int::U64) => ("u64", name.to_owned()),
+        Ty::Int(Int::ULong) => ("u64", format!("u64::from({name})")),
+        Ty::Int(Int::Size) => ("u64", format!("{name} as u64")),
+        Ty::F32 => ("f64", format!("f64::from({name})")),
+        Ty::F64 => ("f64", name.to_owned()),
+        Ty::Text => (
+            "String",
+            format!("unsafe {{ hxn_copy({name}) }}.unwrap_or_default()"),
+        ),
+        // Converted ahead of the others, since it can fail.
+        Ty::Enum(known) => return (known.clone(), name.to_owned()),
+        Ty::Struct(record) => return (record.clone(), format!("{record}::from({name})")),
+        other => unreachable!("a callback does not take {other:?}"),
+    };
+    (carried.to_owned(), value)
+}
+
+// Whether the stream of `callback`'s calls carries one record per call,
+// named `<Callback>Event`, rather than the value it is called with.
+fn has_event(callback: &Callback) -> bool {
+    match callback.params.as_slice() {
+        [] => false,
+        [one] => kept_value(&one.ty, "").0 == "u64",
+        _ => true,
+    }
+}
+
+// What the stream of `callback`'s calls carries.
+fn event_type(callback: &Callback) -> String {
+    match callback.params.as_slice() {
+        [] => String::from("()"),
+        _ if has_event(callback) => format!("{}Event", callback.name),
+        [one] => kept_value(&one.ty, "").0,
+        _ => unreachable!(),
+    }
+}
+
+// The record of one call of `callback`, and the trampoline C calls for it
+// when it keeps it. The trampoline sends what C passed to the stream whose
+// sender is the user data, and returns `[HxnStop]` to C.
+fn keeper(callback: &Callback) -> String {
+    let symbol = callback_symbol(&callback.name);
+    let carried = event_type(callback);
+    let mut out = String::new();
+    if has_event(callback) {
+        let fields: String = callback
+            .params
+            .iter()
+            .map(|p| {
+                format!(
+                    "    pub {}: {},
+",
+                    ident(&p.name),
+                    kept_value(&p.ty, "").0
+                )
+            })
+            .collect();
+        out.push_str(&format!(
+            "\n/// What C called a `{name}` with.\n#[hxn::data]\n#[derive(Clone, Debug, PartialEq)]\npub struct {carried} {{\n{fields}}}\n",
+            name = callback.name
+        ));
+    }
+    let mut params: Vec<String> = callback
+        .params
+        .iter()
+        .map(|p| format!("{}: {}", ident(&p.name), c_type(&p.ty)))
+        .collect();
+    if callback.user_first {
+        params.insert(0, String::from("user: *mut c_void"));
+    } else {
+        params.push(String::from("user: *mut c_void"));
+    }
+    let stop = callback.stop.unwrap_or(0);
+    let (returns, answer) = match callback.returns {
+        Ty::Void => (String::new(), String::new()),
+        Ty::Bool => (String::from(" -> bool"), format!("\n    {}", stop != 0)),
+        _ => (String::from(" -> c_int"), format!("\n    {stop}")),
+    };
+    let mut converted = Vec::new();
+    let mut values = Vec::new();
+    for param in &callback.params {
+        let name = ident(&param.name);
+        if let Ty::Enum(known) = &param.ty {
+            converted.push(format!(
+                "let {name} = match {known}::from_c({name}) {{\n            Ok(value) => value,\n            Err(error) => {{\n                hxn_sender.fail(error);\n                return;\n            }}\n        }};\n        "
+            ));
+        }
+        values.push((name.clone(), kept_value(&param.ty, &name).1));
+    }
+    let item = match callback.params.as_slice() {
+        [] => String::from("()"),
+        _ if has_event(callback) => format!(
+            "{carried} {{\n            {}\n        }}",
+            values
+                .iter()
+                .map(|(name, value)| if name == value {
+                    format!("{name},")
+                } else {
+                    format!("{name}: {value},")
+                })
+                .collect::<Vec<_>>()
+                .join("\n            ")
+        ),
+        _ => values[0].1.clone(),
+    };
+    out.push_str(&format!(
+        "\n// Called by C for a `{name}` it keeps, with the sender of the stream in\n// `user`.\nunsafe extern \"C\" fn hxn_{symbol}_keep({params}){returns} {{\n    let hxn_sender = unsafe {{ &*user.cast::<hxn_future::Sender<{carried}>>() }};\n    // C cannot be unwound through.\n    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {{\n        {converted}hxn_sender.send({item});\n    }}));{answer}\n}}\n",
+        name = callback.name,
+        params = params.join(", "),
+        converted = converted.concat(),
+    ));
+    out
+}
+
+const KEPT: &str = "\n// The sender of a stream, which C holds a pointer to as a callback's user\n// data. Dropping it frees the sender and ends the stream, so it is dropped\n// only once C can no longer call the callback.\nstruct Kept<T>(*mut hxn_future::Sender<T>);\n\n// The sender is `Send`, and C only reads it.\nunsafe impl<T: Send> Send for Kept<T> {}\n\nimpl<T> Kept<T> {\n    fn new(sender: hxn_future::Sender<T>) -> Self {\n        Self(Box::into_raw(Box::new(sender)))\n    }\n\n    // What C is passed as the user data.\n    fn user(&self) -> *mut c_void {\n        self.0.cast()\n    }\n}\n\nimpl<T> Drop for Kept<T> {\n    fn drop(&mut self) {\n        drop(unsafe { Box::from_raw(self.0) });\n    }\n}\n";
 
 fn callback<'a>(api: &'a Api, name: &str) -> &'a Callback {
     api.callbacks
@@ -295,13 +475,29 @@ fn docs(lines: &[String], indent: &str) -> String {
 }
 
 // The statements that make each argument what C takes, and the arguments.
-fn convert(params: &[Param]) -> (Vec<String>, Vec<String>) {
+fn convert(api: &Api, params: &[Param]) -> (Vec<String>, Vec<String>) {
     let mut before = Vec::new();
     let mut passed = Vec::new();
     for param in params {
         let name = ident(&param.name);
         match param.role {
             Role::In => {}
+            Role::Kept => {
+                let Ty::Callback(known) = &param.ty else {
+                    unreachable!("only a callback is kept")
+                };
+                let callback = callback(api, known);
+                before.push(format!(
+                    "let (hxn_sender, hxn_stream) = hxn_future::channel::<{}>();",
+                    event_type(callback)
+                ));
+                before.push(String::from("let hxn_kept = Kept::new(hxn_sender);"));
+                passed.push(format!(
+                    "Some(hxn_{}_keep), hxn_kept.user()",
+                    callback_symbol(known)
+                ));
+                continue;
+            }
             Role::Null => {
                 passed.push(String::from("std::ptr::null_mut()"));
                 continue;
@@ -372,7 +568,7 @@ fn status_check(function: &Function, status: &str) -> Option<String> {
 
 // The statements that make `value`, what C gave, the safe function's
 // result, ending with the result.
-fn convert_return(function: &Function, value: &str) -> Vec<String> {
+fn convert_return(api: &Api, function: &Function, value: &str) -> Vec<String> {
     let c = &function.c;
     let mut lines = Vec::new();
     let result = match &function.returns {
@@ -387,15 +583,15 @@ fn convert_return(function: &Function, value: &str) -> Vec<String> {
             lines.push(format!(
                 "if {value}.is_null() {{\n            return Err(String::from(\"{c} returned null\"));\n        }}"
             ));
-            format!("{name} {{ raw: {value}, owned: {} }}", !function.borrowed)
+            made(api, name, value, !function.borrowed)
         }
         Ty::Nullable(of) if matches!(**of, Ty::Object(_)) => {
             let Ty::Object(name) = &**of else {
                 unreachable!()
             };
             format!(
-                "(!{value}.is_null()).then(|| {name} {{ raw: {value}, owned: {} }})",
-                !function.borrowed
+                "(!{value}.is_null()).then(|| {})",
+                made(api, name, value, !function.borrowed)
             )
         }
         Ty::Text | Ty::Nullable(_) => {
@@ -431,9 +627,16 @@ enum Receiver {
 }
 
 // A safe function over `function`, with `marker` the attribute a free
-// function carries.
-fn wrapper(api: &Api, function: &Function, receiver: Receiver, marker: &str) -> String {
-    let (before, passed) = convert(&function.params);
+// function carries. `keeper` is the object of a method whose object owns
+// the senders of the callbacks it keeps.
+fn wrapper(
+    api: &Api,
+    function: &Function,
+    receiver: Receiver,
+    keeper: bool,
+    marker: &str,
+) -> String {
+    let (before, passed) = convert(api, &function.params);
     let mut params: Vec<String> = Vec::new();
     if receiver != Receiver::None {
         params.push(String::from(if receiver == Receiver::Shared {
@@ -455,7 +658,15 @@ fn wrapper(api: &Api, function: &Function, receiver: Receiver, marker: &str) -> 
     }
     arguments.extend(passed);
     let out = function.out();
-    let returns = if function.status == Status::Zero && out.is_none() {
+    let kept = function.kept().map(|param| {
+        let Ty::Callback(known) = &param.ty else {
+            unreachable!("only a callback is kept")
+        };
+        callback(api, known)
+    });
+    let returns = if let Some(kept) = kept {
+        format!("Stream<{}>", event_type(kept))
+    } else if function.status == Status::Zero && out.is_none() {
         String::from("()")
     } else {
         rust_return(&function.returns)
@@ -470,6 +681,28 @@ fn wrapper(api: &Api, function: &Function, receiver: Receiver, marker: &str) -> 
     let mut body: Vec<String> = before;
     let call = format!("unsafe {{ ffi::{}({}) }}", function.c, arguments.join(", "));
     match out {
+        None if kept.is_some() => {
+            if function.status == Status::None {
+                body.push(format!("{call};"));
+            } else {
+                body.push(format!("let status = {call};"));
+                body.extend(status_check(function, "status"));
+            }
+            if keeper {
+                body.push(String::from(
+                    "if self.owned {\n            self.kept.lock().unwrap_or_else(std::sync::PoisonError::into_inner).push(Box::new(hxn_kept));\n        } else {\n            // Freed by whatever owns the object, which this cannot see.\n            std::mem::forget(hxn_kept);\n        }",
+                ));
+            } else {
+                body.push(String::from(
+                    "// Nothing frees what C calls it with, so it is never freed.\n        std::mem::forget(hxn_kept);",
+                ));
+            }
+            body.push(if fallible(function, false) {
+                String::from("Ok(hxn_stream)")
+            } else {
+                String::from("hxn_stream")
+            });
+        }
         Some(out) => {
             let name = ident(&out.name);
             if function.status == Status::None {
@@ -483,7 +716,8 @@ fn wrapper(api: &Api, function: &Function, receiver: Receiver, marker: &str) -> 
             match out.ty.inner() {
                 Ty::Object(object) => {
                     body.push(format!(
-                        "let {name} = (!{name}.is_null()).then(|| {object} {{ raw: {name}, owned: true }});"
+                        "let {name} = (!{name}.is_null()).then(|| {});",
+                        made(api, object, &name, true)
                     ));
                 }
                 Ty::Struct(_) => {}
@@ -504,9 +738,9 @@ fn wrapper(api: &Api, function: &Function, receiver: Receiver, marker: &str) -> 
                     // Written by C, which reported success.
                     body.push(format!("let {name} = unsafe {{ {name}.assume_init() }};"));
                     value = name.clone();
-                    body.extend(convert_return(function, &value));
+                    body.extend(convert_return(api, function, &value));
                 }
-                _ => body.extend(convert_return(function, &value)),
+                _ => body.extend(convert_return(api, function, &value)),
             }
         }
         None if function.returns == Ty::Void && function.status == Status::None => {
@@ -523,7 +757,7 @@ fn wrapper(api: &Api, function: &Function, receiver: Receiver, marker: &str) -> 
         None => {
             body.push(format!("let value = {call};"));
             body.extend(status_check(function, "value"));
-            body.extend(convert_return(function, "value"));
+            body.extend(convert_return(api, function, "value"));
         }
     }
     // A function that lends Haxe functions runs inside a closure, so that
@@ -604,6 +838,8 @@ fn declaration(api: &Api, function: &Function, receiver: Option<&str>) -> String
     // `[HxnStatus]` functions return a C `int`.
     let returns = match (function.status, &function.returns) {
         (Status::Zero, _) => String::from(" -> c_int"),
+        _ if function.ignored == Ignored::Int => String::from(" -> c_int"),
+        _ if function.ignored == Ignored::Pointer => String::from(" -> *mut c_void"),
         (Status::None, _) if function.out().is_some() => String::new(),
         (_, Ty::Void) => String::new(),
         (_, Ty::Nullable(of)) if matches!(**of, Ty::Text) && function.free.is_some() => {
@@ -624,6 +860,11 @@ pub fn bindings(api: &Api, source: &str) -> String {
     let mut out = format!(
         "// Generated by hxn from {source}. Do not edit: edit the WebIDL, and the next\n// `hxn build` generates this again.\n\n#![allow(clippy::useless_conversion, clippy::unnecessary_cast, clippy::let_and_return, clippy::needless_question_mark, clippy::unnecessary_lazy_evaluations, clippy::redundant_closure_call, dead_code, unused_imports)]\n\nuse std::ffi::{{CStr, CString, c_char, c_int, c_long, c_ulong, c_void}};\nuse std::ptr::null_mut;\n"
     );
+    // hxn reads a function's result as a stream only when it is spelled
+    // `Stream<T>`.
+    if !used(api, Role::Kept).is_empty() {
+        out.push_str("use hxn_future::Stream;\n");
+    }
 
     // The C declarations.
     out.push_str("\nmod ffi {\n    use super::*;\n");
@@ -705,10 +946,18 @@ pub fn bindings(api: &Api, source: &str) -> String {
     out.push_str("    }\n}\n");
 
     // Helpers.
-    if !api.callbacks.is_empty() {
+    let lent = used(api, Role::In);
+    if !lent.is_empty() {
         out.push_str(LENT);
-        for known in &api.callbacks {
+        for known in lent {
             out.push_str(&trampoline(known));
+        }
+    }
+    let kept = used(api, Role::Kept);
+    if !kept.is_empty() {
+        out.push_str(KEPT);
+        for known in kept {
+            out.push_str(&keeper(known));
         }
     }
     out.push_str("\n// Text as C takes it. Text with a NUL in it cannot be passed.\nfn hxn_text(value: &str) -> Result<CString, String> {\n    CString::new(value).map_err(|_| String::from(\"text with a NUL character cannot be passed to C\"))\n}\n\n// A copy of the text C returned, or `None` for a null pointer.\n//\n// # Safety\n// `value` is null or points to text ending in a NUL.\nunsafe fn hxn_copy(value: *const c_char) -> Option<String> {\n    if value.is_null() {\n        return None;\n    }\n    Some(unsafe { CStr::from_ptr(value) }.to_string_lossy().into_owned())\n}\n");
@@ -768,8 +1017,13 @@ pub fn bindings(api: &Api, source: &str) -> String {
 
     for object in &api.objects {
         let name = &object.name;
+        let kept = if keeps(object) {
+            "    // The senders of the callbacks C keeps, dropped after C frees `raw`.\n    kept: std::sync::Mutex<Vec<Box<dyn Send>>>,\n"
+        } else {
+            ""
+        };
         out.push_str(&format!(
-            "\n{}#[hxn::interface]\npub struct {name} {{\n    raw: *mut ffi::{name},\n    // False for an object that belongs to another, which frees it.\n    owned: bool,\n}}\n\n{}",
+            "\n{}#[hxn::interface]\npub struct {name} {{\n    raw: *mut ffi::{name},\n    // False for an object that belongs to another, which frees it.\n    owned: bool,\n{kept}}}\n\n{}",
             docs(&object.docs, ""),
             if object.thread_safe {
                 String::from("// The C library allows calls on it from several threads at once.\nunsafe impl Send for ")
@@ -790,7 +1044,7 @@ pub fn bindings(api: &Api, source: &str) -> String {
         }
         let mut members = Vec::new();
         if let Some(made) = &object.constructor {
-            members.push(wrapper(api, made, Receiver::None, ""));
+            members.push(wrapper(api, made, Receiver::None, false, ""));
         }
         for method in &object.methods {
             let receiver = if object.thread_safe {
@@ -798,10 +1052,10 @@ pub fn bindings(api: &Api, source: &str) -> String {
             } else {
                 Receiver::Exclusive
             };
-            members.push(wrapper(api, method, receiver, ""));
+            members.push(wrapper(api, method, receiver, keeps(object), ""));
         }
         for function in &object.statics {
-            members.push(wrapper(api, function, Receiver::None, ""));
+            members.push(wrapper(api, function, Receiver::None, false, ""));
         }
         if !members.is_empty() {
             out.push_str(&format!(
@@ -820,7 +1074,7 @@ pub fn bindings(api: &Api, source: &str) -> String {
             format!("#[hxn::function(class = \"{class}\")]\n")
         };
         for function in &api.functions {
-            let text = wrapper(api, function, Receiver::None, &marker);
+            let text = wrapper(api, function, Receiver::None, false, &marker);
             // A free function is not indented.
             let text: String = text
                 .lines()

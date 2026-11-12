@@ -19,16 +19,18 @@ fn manifest(name: &str, hxn: &str) -> String {
     )
 }
 
-/// How a new crate depends on hxn: on `checkout`, a local checkout of hxn's
-/// repository, or else on the git repository at this version's release tag.
-pub fn dependency(checkout: Option<&Path>) -> Result<String, String> {
+/// How a new crate depends on `krate`, one of hxn's crates: on `checkout`,
+/// a local checkout of hxn's repository, or else on the git repository at
+/// this version's release tag.
+pub fn dependency(checkout: Option<&Path>, krate: &str) -> Result<String, String> {
     Ok(match checkout {
         Some(checkout) => {
             // Absolute rather than canonical: on Windows a canonical path
             // has a form that cargo accepts and other tools do not.
             let krate = std::path::absolute(checkout)
                 .map_err(|error| format!("{}: {error}", checkout.display()))?
-                .join("crates/hxn");
+                .join("crates")
+                .join(krate);
             if !krate.join("Cargo.toml").is_file() {
                 return Err(format!(
                     "{} is not a checkout of hxn's repository",
@@ -59,7 +61,7 @@ pub fn new(name: &str, checkout: Option<&Path>, at: &Path) -> Result<PathBuf, St
     if dir.exists() {
         return Err(format!("{} already exists", dir.display()));
     }
-    let hxn = dependency(checkout)?;
+    let hxn = dependency(checkout, "hxn")?;
     let files = [
         ("Cargo.toml", manifest(name, &hxn)),
         (".gitignore", String::from(IGNORE)),

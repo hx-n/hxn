@@ -7,6 +7,7 @@ visited 7: 5,-2,1,2,3,40,7
 stopped after 1
 thrown: no more
 total 40 | count 7
+heard: listened 3 3 | listened 4 7
 refused: tally_add failed with status -1
 refused: tally_new returned null
 empty: true

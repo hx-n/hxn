@@ -22,5 +22,7 @@ mod rust;
 
 pub use header::import;
 pub use idl::{parse, write};
-pub use model::{Api, Callback, Enum, Function, Int, Object, Param, Role, Status, Struct, Ty};
+pub use model::{
+    Api, Callback, Enum, Function, Ignored, Int, Object, Param, Role, Status, Struct, Ty,
+};
 pub use rust::bindings;

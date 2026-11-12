@@ -23,7 +23,9 @@ use std::process::Command;
 
 use serde_json::Value;
 
-use crate::model::{Api, Callback, Enum, Function, Int, Object, Param, Role, Status, Struct, Ty};
+use crate::model::{
+    Api, Callback, Enum, Function, Ignored, Int, Object, Param, Role, Status, Struct, Ty,
+};
 
 const FREES: [&str; 8] = [
     "free", "destroy", "delete", "release", "dispose", "unref", "close", "finalize",
@@ -31,7 +33,8 @@ const FREES: [&str; 8] = [
 const MAKES: [&str; 6] = ["new", "create", "make", "open", "init", "alloc"];
 
 // Words in the name of a function that keeps the callback it is given, to
-// call after it returns. A Haxe function is lent for one call only.
+// call after it returns. Such a callback is imported as kept, `[HxnKept]`;
+// any other as lent for the call.
 const KEEPS: [&str; 15] = [
     "set",
     "register",
@@ -493,15 +496,21 @@ struct Context<'a> {
     structs: Vec<(String, String)>,
     enums: Vec<(String, String)>,
     // The function pointer types met so far, and a note for each function
-    // that is lent one.
+    // that is lent or keeps one.
     callbacks: RefCell<Vec<Callback>>,
     lent: RefCell<Vec<String>>,
+    // The callbacks a function keeps.
+    kept: RefCell<Vec<String>>,
 }
 
 impl Context<'_> {
     // The callback a parameter spelled `spelled` is, made the first time it
-    // is met. `fallback` names it when no typedef does.
-    fn callback(&self, spelled: &str, fallback: &str) -> Result<String, String> {
+    // is met. `fallback` names it when no typedef does. `kept` is whether
+    // the function it is first met in keeps it, which sets what C is
+    // returned: 0 or false by default for a kept callback, which is called
+    // on every event, and 1 or false for a lent one when the Haxe function
+    // throws.
+    fn callback(&self, spelled: &str, fallback: &str, kept: bool) -> Result<String, String> {
         let CType::Function { returns, params } = self.header.c_type(spelled) else {
             return Err(format!("`{spelled}` is not a function pointer"));
         };
@@ -545,12 +554,6 @@ impl Context<'_> {
             .filter(|(at, _)| !user.contains(at))
             .map(|(_, p)| p)
             .collect();
-        if rest.len() > 4 {
-            return Err(format!(
-                "`{spelled}` takes {} values, and a Haxe function lent to C takes at most 4",
-                rest.len()
-            ));
-        }
         let mut mapped = Vec::new();
         for (at, param) in rest.iter().enumerate() {
             let name = if rest.len() == 1 {
@@ -559,13 +562,13 @@ impl Context<'_> {
                 format!("value{at}")
             };
             let ty = match self.header.c_type(param) {
-                CType::Pointer { to, .. } if matches!(&*to, CType::Builtin(b) if b == "char") => {
+                CType::Pointer { to, .. } if matches!(&*to, CType::Builtin(b) if b == "char" || b == "unsigned char") => {
                     Ty::Text
                 }
                 other => match self.value(&other) {
                     Ok(
                         ty @ (Ty::Bool
-                        | Ty::Int(Int::I32)
+                        | Ty::Int(_)
                         | Ty::F32
                         | Ty::F64
                         | Ty::Enum(_)
@@ -583,7 +586,7 @@ impl Context<'_> {
         let (returns, stop) = match self.value(&self.header.c_type(&returns)) {
             Ok(Ty::Void) => (Ty::Void, None),
             Ok(Ty::Bool) => (Ty::Bool, Some(0)),
-            Ok(Ty::Int(Int::I32)) => (Ty::Int(Int::I32), Some(1)),
+            Ok(Ty::Int(Int::I32)) => (Ty::Int(Int::I32), Some(i64::from(!kept))),
             _ => {
                 return Err(format!(
                     "`{spelled}` returns `{returns}`; a callback returns nothing, a bool or an int"
@@ -682,21 +685,50 @@ impl Context<'_> {
                         "`{name}`: a function pointer is passed with its `void *` user data after it"
                     ));
                 }
-                if keeps_callback(function) {
-                    return Err(format!(
-                        "`{name}`: C may keep the function to call after `{function}` returns, and a Haxe function is lent for the call only"
-                    ));
-                }
-                self.lent.borrow_mut().push(format!(
-                    "{function}: C must call `{name}` only before {function} returns; remove the function if C keeps it"
-                ));
+                let kept = keeps_callback(function);
                 let stem = function
                     .strip_prefix(&format!("{}_", self.library))
                     .unwrap_or(function);
                 let callback = self
-                    .callback(spelled, &format!("{stem}_{name}"))
+                    .callback(spelled, &format!("{stem}_{name}"), kept)
                     .map_err(|why| format!("`{name}`: {why}"))?;
-                out.push(Param::new(name, Ty::Callback(callback)));
+                if kept {
+                    self.lent.borrow_mut().push(format!(
+                        "{function}: C is taken to keep `{name}` ([HxnKept]), and the binding returns a stream of what C calls it with"
+                    ));
+                    let mut known = self.kept.borrow_mut();
+                    if !known.contains(&callback) {
+                        known.push(callback.clone());
+                    }
+                } else {
+                    let callbacks = self.callbacks.borrow();
+                    let Some(made) = callbacks.iter().find(|known| known.name == callback) else {
+                        unreachable!("a callback just made")
+                    };
+                    if made.params.len() > 4 {
+                        return Err(format!(
+                            "`{name}`: takes {} values, and a Haxe function lent to C takes at most 4",
+                            made.params.len()
+                        ));
+                    }
+                    if made
+                        .params
+                        .iter()
+                        .any(|p| matches!(p.ty, Ty::Int(int) if int != Int::I32))
+                    {
+                        return Err(format!(
+                            "`{name}`: a Haxe function lent to C takes integers as C `int`"
+                        ));
+                    }
+                    self.lent.borrow_mut().push(format!(
+                        "{function}: C must call `{name}` only before {function} returns; mark it [HxnKept] if C keeps it"
+                    ));
+                }
+                out.push(Param {
+                    name,
+                    ty: Ty::Callback(callback),
+                    role: if kept { Role::Kept } else { Role::In },
+                });
                 at += 2;
                 continue;
             }
@@ -794,10 +826,42 @@ impl Context<'_> {
         mut params: Vec<Param>,
         c_returns: &str,
         review: &mut Vec<String>,
-    ) -> Result<(Vec<Param>, Ty, Status), String> {
+    ) -> Result<(Vec<Param>, Ty, Status, Ignored), String> {
+        let kept: Vec<&Param> = params.iter().filter(|p| p.role == Role::Kept).collect();
+        if let Some(param) = kept.first() {
+            if kept.len() > 1 || params.iter().any(|p| p.role == Role::Out) {
+                return Err(String::from(
+                    "keeps a callback and returns more than the stream of its calls, which is not imported",
+                ));
+            }
+            // What a registration function returns: nothing, a status, or
+            // the callback or user data it replaced.
+            let (status, ignored) = match self.header.c_type(c_returns) {
+                CType::Builtin(base) if base == "void" => (Status::None, Ignored::None),
+                CType::Builtin(base) if base == "int" => {
+                    review.push(format!(
+                        "{function}: its int return value is taken as a status ([HxnStatus]); write [HxnIgnore=int] instead if it is not one"
+                    ));
+                    (Status::Zero, Ignored::None)
+                }
+                CType::Pointer { .. } => {
+                    review.push(format!(
+                        "{function}: the pointer it returns is ignored ([HxnIgnore=pointer]): the binding does not give back what `{}` replaced",
+                        param.name
+                    ));
+                    (Status::None, Ignored::Pointer)
+                }
+                _ => {
+                    return Err(format!(
+                        "keeps a callback and returns `{c_returns}`, which is not imported"
+                    ));
+                }
+            };
+            return Ok((params, Ty::Void, status, ignored));
+        }
         let Some(first) = params.iter().position(|p| p.role == Role::Out) else {
             let returns = self.returns(c_returns)?;
-            return Ok((params, returns, Status::None));
+            return Ok((params, returns, Status::None, Ignored::None));
         };
         if let Some(late) = params[first..].iter().find(|p| p.role == Role::In) {
             return Err(format!(
@@ -841,7 +905,7 @@ impl Context<'_> {
             Ty::Text => Ty::Nullable(Box::new(Ty::Text)),
             other => other,
         };
-        Ok((params, returns, status))
+        Ok((params, returns, status, Ignored::None))
     }
 
     fn returns(&self, spelled: &str) -> Result<Ty, String> {
@@ -905,6 +969,7 @@ fn api_of(library: &str, header: &Header) -> Api {
         enums: Vec::new(),
         callbacks: RefCell::new(Vec::new()),
         lent: RefCell::new(Vec::new()),
+        kept: RefCell::new(Vec::new()),
     };
     for (tag, docs, values) in &header.enums {
         let constants: Vec<String> = values.iter().map(|(name, _)| name.clone()).collect();
@@ -1028,9 +1093,14 @@ fn api_of(library: &str, header: &Header) -> Api {
                     .unwrap_or(name),
             )
         };
-        let free = (function.returns.contains('*') && !function.returns.contains("const"))
-            .then(|| text_free.clone())
-            .flatten();
+        // Text returned through a pointer that is not `const` is the caller's
+        // to free.
+        let text = matches!(
+            header.c_type(&function.returns),
+            CType::Pointer { to, constant: false }
+                if matches!(&*to, CType::Builtin(b) if b == "char" || b == "unsigned char")
+        );
+        let free = text.then(|| text_free.clone()).flatten();
 
         if let Some(object) = &owner {
             let name = short(&prefix(object));
@@ -1064,21 +1134,24 @@ fn api_of(library: &str, header: &Header) -> Api {
                 .and_then(|params| {
                     context.finish(&function.name, params, &function.returns, &mut api.review)
                 }) {
-                Ok((params, returns, status)) => api.objects[index].methods.push(Function {
-                    name,
-                    c: function.name.clone(),
-                    docs: function.docs.clone(),
-                    params,
-                    returns,
-                    status,
-                    free,
-                    borrowed,
-                }),
+                Ok((params, returns, status, ignored)) => {
+                    api.objects[index].methods.push(Function {
+                        name,
+                        c: function.name.clone(),
+                        docs: function.docs.clone(),
+                        params,
+                        returns,
+                        status,
+                        free,
+                        borrowed,
+                        ignored,
+                    });
+                }
                 Err(why) => api.skipped.push(format!("{}: {why}", function.name)),
             }
             continue;
         }
-        let (params, returns, status) = match context
+        let (params, returns, status, ignored) = match context
             .params(&function.name, &function.params)
             .and_then(|params| {
                 context.finish(&function.name, params, &function.returns, &mut api.review)
@@ -1112,6 +1185,7 @@ fn api_of(library: &str, header: &Header) -> Api {
                 status,
                 free: None,
                 borrowed: false,
+                ignored,
             };
             if MAKES.contains(&name.as_str()) && api.objects[index].constructor.is_none() {
                 api.objects[index].constructor = Some(Function {
@@ -1133,14 +1207,21 @@ fn api_of(library: &str, header: &Header) -> Api {
             status,
             free,
             borrowed: false,
+            ignored,
         });
     }
     api.callbacks = context.callbacks.into_inner();
     api.review.extend(context.lent.into_inner());
+    let kept = context.kept.into_inner();
     for callback in &api.callbacks {
         if let Some(stop) = callback.stop {
+            let when = if kept.contains(&callback.name) {
+                "on every call"
+            } else {
+                "when the Haxe function throws"
+            };
             api.review.push(format!(
-                "{}: when the Haxe function throws, C is returned {stop} ([HxnStop={stop}])",
+                "{}: {when}, C is returned {stop} ([HxnStop={stop}])",
                 callback.name
             ));
         }

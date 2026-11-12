@@ -32,6 +32,16 @@ class Main {
 		tally.report(line -> lines.push(line));
 		Sys.println(lines.join(" | "));
 
+		// A callback C keeps is a stream of what C calls it with, which ends
+		// when the object is closed.
+		var listened = new Tally("listened", Mode.Sum);
+		var events = listened.listen();
+		listened.add(3);
+		listened.add(4);
+		listened.close();
+		var heard = [for (event in events) '${event.name} ${event.amount} ${haxe.Int64.toStr(event.total)}'];
+		Sys.println('heard: ${heard.join(" | ")}');
+
 		// A status code other than 0 is an exception.
 		tally.setMode(Mode.Sum);
 		try {

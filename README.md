@@ -171,6 +171,9 @@ The crate's API is in `tally.webidl`, generated from the header. Review it
 and add what a header cannot express: `[HxnStatus]` on a function whose `int`
 return value is a status code, `[HxnFree=function]` where returned text or an
 object must be freed. Each `hxn build` regenerates `src/bindings.rs` from it.
+A C callback the library calls during the call is passed a Haxe function; one
+it keeps to call later, such as the one `sqlite3_update_hook` registers, is
+returned as a stream of its calls.
 Use `--link <library>` instead of `--source` to link a library that is
 already built. See "Binding a C library" in
 [docs/design.md](docs/design.md) for what is mapped and what is not.

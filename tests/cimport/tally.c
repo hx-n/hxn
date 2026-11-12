@@ -11,6 +11,8 @@ struct tally {
 	int64_t total;
 	int64_t count;
 	int32_t recent[16];
+	tally_listener listener;
+	void *listener_user;
 };
 
 tally *tally_new(const char *name, tally_mode mode) {
@@ -45,6 +47,8 @@ int tally_add(tally *t, int32_t amount) {
 	}
 	t->recent[t->count % 16] = amount;
 	t->count += 1;
+	if (t->listener)
+		t->listener(t->listener_user, t->name, amount, t->total);
 	return 0;
 }
 
@@ -143,4 +147,11 @@ void tally_report(const tally *t, tally_reporter report, void *user) {
 void tally_origin(tally_point *out) {
 	out->x = 0;
 	out->y = 0;
+}
+
+void *tally_listen(tally *t, tally_listener listener, void *user) {
+	void *replaced = t->listener_user;
+	t->listener = listener;
+	t->listener_user = user;
+	return replaced;
 }

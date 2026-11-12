@@ -11,6 +11,11 @@ callback Visitor = long (long value);
 [HxnUser=last]
 callback Reporter = undefined (DOMString value);
 
+// Called after each amount is added, with the tally's name, the amount and
+// the new total.
+[HxnUser=first]
+callback Listener = undefined (DOMString name, long amount, long long total);
+
 [HxnEnum]
 interface Mode {
   const long Count = 0;
@@ -46,6 +51,10 @@ interface Tally {
   [HxnC=tally_each] long each(Visitor visit);
   // Reports the total and the count, a line each.
   [HxnC=tally_report] undefined report(Reporter report);
+  // Calls `listener` after each amount is added until the tally is freed, in
+  // place of the listener before it. Returns the user data of the listener it
+  // replaces, or NULL.
+  [HxnC=tally_listen, HxnIgnore=pointer] undefined listen([HxnKept] Listener listener);
 };
 
 namespace Tally {
@@ -64,6 +73,8 @@ namespace Tally {
 // - tally_parse: `out` is taken as an output ([HxnOut]), and its int return value as a status ([HxnStatus])
 // - tally_copy: `out` is taken as an output ([HxnOut]), and its int return value as a status ([HxnStatus])
 // - tally_origin: `out` is taken as an output ([HxnOut])
-// - tally_each: C must call `visit` only before tally_each returns; remove the function if C keeps it
-// - tally_report: C must call `report` only before tally_report returns; remove the function if C keeps it
+// - tally_listen: the pointer it returns is ignored ([HxnIgnore=pointer]): the binding does not give back what `listener` replaced
+// - tally_each: C must call `visit` only before tally_each returns; mark it [HxnKept] if C keeps it
+// - tally_report: C must call `report` only before tally_report returns; mark it [HxnKept] if C keeps it
+// - tally_listen: C is taken to keep `listener` ([HxnKept]), and the binding returns a stream of what C calls it with
 // - Visitor: when the Haxe function throws, C is returned 1 ([HxnStop=1])
