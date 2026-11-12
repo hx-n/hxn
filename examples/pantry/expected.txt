@@ -1,0 +1,6 @@
+3 items stocked
+rice: 1
+flour: 2, wholemeal
+eggs note: null, salt: null
+low on flour and rice
+refused: air has nothing to stock

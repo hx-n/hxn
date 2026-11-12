@@ -1,0 +1,66 @@
+{
+  "hxn": 1,
+  "library": "pantry",
+  "enums": [
+    {
+      "name": "Unit",
+      "docs": "What a quantity is counted in. Haxe sees the same names, as numbers.",
+      "variants": [{ "name": "Each", "value": 0 }, { "name": "Kilo", "value": 1 }, { "name": "Litre", "value": 2 }]
+    }
+  ],
+  "records": [
+    {
+      "name": "Item",
+      "docs": "Something on a shelf. Haxe sees a class with these fields.",
+      "fields": [
+        { "name": "name", "type": "str" },
+        { "name": "quantity", "type": "i32" },
+        { "name": "unit", "type": "Unit" },
+        { "name": "note", "type": "option<str>" }
+      ]
+    }
+  ],
+  "interfaces": [
+    {
+      "name": "Pantry",
+      "docs": "The shelves: a value Haxe holds, which data is passed to and from.",
+      "methods": [
+        {
+          "name": "new",
+          "kind": "constructor",
+          "params": [],
+          "returns": "Pantry",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "stock",
+          "docs": "Puts an item on the shelf and returns how many there are. The item\nis the library's own copy from here on.",
+          "kind": "mutating",
+          "params": [{ "name": "item", "type": "Item" }],
+          "returns": "i32",
+          "fallible": true,
+          "blocking": false
+        },
+        {
+          "name": "find",
+          "docs": "The item of that name, if there is one.",
+          "kind": "method",
+          "params": [{ "name": "name", "type": "str" }],
+          "returns": "option<Item>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "low",
+          "docs": "Everything counted in `unit` of which there is less than `below`.",
+          "kind": "method",
+          "params": [{ "name": "unit", "type": "Unit" }, { "name": "below", "type": "i32" }],
+          "returns": "list<Item>",
+          "fallible": false,
+          "blocking": false
+        }
+      ]
+    }
+  ]
+}

@@ -10,6 +10,7 @@ that uses it.
 | [primes](primes) | Work done on another thread: a future to wait for or be called back by, and a stream. |
 | [downloads](downloads) | An `async fn`, a value shared between the library and Haxe, and a counter Haxe reads without a call. |
 | [thermostat](thermostat) | A value the library keeps current, followed from Haxe as a signal. |
+| [pantry](pantry) | Records and enums passed by value, an optional field, and a list of records returned. |
 
 ## Running one
 
