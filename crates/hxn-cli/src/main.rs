@@ -60,6 +60,9 @@ is compiled as a script and run by that host.
       Reports which tools are installed, which targets are ready, and what
       each other target still needs.
 
+  hxn version
+      Prints this program's version, the tag `hxn new` depends on.
+
   hxn package [hl] [cpp] [--wasm] [--target <triple>] [--release] [--out <directory>]
       Builds the library for both runtimes, or only the ones listed, and
       copies everything a Haxe program needs to use it into one directory.
@@ -691,6 +694,10 @@ Not imported (listed at the end of {name}.webidl):"
         }
         "help" | "--help" | "-h" => {
             println!("{USAGE}");
+            Ok(0)
+        }
+        "version" | "--version" | "-V" => {
+            println!("hxn {}", env!("CARGO_PKG_VERSION"));
             Ok(0)
         }
         other => Err(format!("unknown command `{other}`\n\n{USAGE}")),

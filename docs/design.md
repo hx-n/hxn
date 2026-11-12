@@ -549,6 +549,7 @@ flags.
 | `hxn check [hl] [cpp] [cppia]` | runs the program on each runtime and checks that the outputs match |
 | `hxn doctor` | reports which targets can be built and what the others are missing |
 | `hxn import <header.h>` | creates a Rust library crate for a C library, from its header |
+| `hxn version` | prints the version, which is the tag `hxn new` depends on |
 | `--wasm` on any of these | does the same for the runtime's wasm form |
 | `--target <triple>` on `build cpp` or `package` | cross-compiles the hxcpp binding |
 | `cppia` in place of `hl` or `cpp` | builds for hxcpp and a host executable that contains the binding, and runs the program as a script |

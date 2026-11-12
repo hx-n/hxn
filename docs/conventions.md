@@ -311,6 +311,19 @@ filesystem `#include "counter.h"` would then find the generated header.
 - The fixture's manifest and each example's are committed, and a test fails
   when one no longer matches its source.
 
+## Releases
+
+- **A release is a tag `v<version>` of the workspace version**, made once CI
+  is green on its commit. `hxn new` depends on the tag of the version it was
+  built at, so the version is raised before the tag, together with the tag
+  the examples' manifests and the readme name.
+- **The tag's message is the release notes**: a title line, then what
+  changed for a library author.
+- **`.github/workflows/release.yml` publishes it.** For the tag it builds
+  `hxn` for Linux (static, musl), macOS and Windows, on x86-64 and ARM, and
+  attaches the archives and their `SHA256SUMS` to the tag's GitHub release.
+  Run by hand, it builds the archives without publishing them.
+
 ## Comments, commits and issues
 
 - A comment describes what the code does, and why it is shaped that way when
