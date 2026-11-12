@@ -267,6 +267,8 @@ impl AnySignal {
     /// Returns a clone of the current value, or [`Fault::InvalidHandle`] if
     /// `T` is not the signal's type.
     pub fn get<T: Clone + Send + 'static>(&self) -> Result<T, Failure> {
+        // Not in the middle of a `together` scope.
+        let _reading = outbox::reading();
         match self.0.as_any().downcast_ref::<Signal<T>>() {
             Some(signal) => Ok(signal.get()),
             None => Err(Fault::InvalidHandle.into()),

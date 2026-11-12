@@ -10,9 +10,10 @@
 //! Only objects the host registered with `watch` are posted, so a library
 //! whose results are all awaited directly queues nothing.
 
+use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError, RwLock, RwLockReadGuard};
 use std::time::{Duration, Instant};
 
 use crate::{THREADS, local};
@@ -54,13 +55,70 @@ fn queue() -> MutexGuard<'static, VecDeque<Arc<Tag>>> {
     QUEUE.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
+// Held for writing while a `together` scope runs on any thread, and for
+// reading while the host reads a signal's value, so the host reads either
+// every change of a scope or none.
+static GROUP: RwLock<()> = RwLock::new(());
+
+thread_local! {
+    // The tags a `together` scope on this thread has held back, while one
+    // runs.
+    static HELD: RefCell<Option<Vec<Arc<Tag>>>> = const { RefCell::new(None) };
+}
+
 /// Posts `tag` to the queue: it has something new for the host.
 pub(crate) fn publish(tag: &Arc<Tag>) {
     if !tag.watched.load(Ordering::Acquire) || tag.queued.swap(true, Ordering::AcqRel) {
         return;
     }
-    queue().push_back(tag.clone());
-    ARRIVED.notify_all();
+    let held = HELD.with_borrow_mut(|held| match held {
+        Some(held) => {
+            held.push(tag.clone());
+            true
+        }
+        None => false,
+    });
+    if !held {
+        queue().push_back(tag.clone());
+        ARRIVED.notify_all();
+    }
+}
+
+/// Runs `scope`, and gives the host every change it makes as one: the host
+/// is told of the futures settled, the items sent and the signals set in it
+/// only once it has returned, all at once, and does not read a signal's value
+/// while it runs. So a host never sees two signals set together with one of
+/// them changed and the other not. A scope inside another is part of it.
+pub fn together<R>(scope: impl FnOnce() -> R) -> R {
+    // Publishes what was held back when the outermost scope ends, by
+    // returning or by panicking.
+    struct Scope(Option<std::sync::RwLockWriteGuard<'static, ()>>);
+    impl Drop for Scope {
+        fn drop(&mut self) {
+            if self.0.is_none() {
+                return;
+            }
+            let held = HELD.with_borrow_mut(Option::take).unwrap_or_default();
+            if !held.is_empty() {
+                queue().extend(held);
+                ARRIVED.notify_all();
+            }
+        }
+    }
+    let outermost = HELD.with_borrow(Option::is_none);
+    let _scope = if outermost {
+        let guard = GROUP.write().unwrap_or_else(PoisonError::into_inner);
+        HELD.with_borrow_mut(|held| *held = Some(Vec::new()));
+        Scope(Some(guard))
+    } else {
+        Scope(None)
+    };
+    scope()
+}
+
+// Held while the host reads a signal's value.
+pub(crate) fn reading() -> RwLockReadGuard<'static, ()> {
+    GROUP.read().unwrap_or_else(PoisonError::into_inner)
 }
 
 /// Blocks until the queue is non-empty or `timeout` has elapsed, and returns

@@ -58,6 +58,7 @@ mod signal;
 mod stream;
 
 pub use local::pump;
+pub use outbox::together;
 pub use signal::{AnySignal, CLOSED, Change, Signal, Source, signal};
 pub use stream::{AnyStream, Flow, Sender, Stream, channel};
 
@@ -932,5 +933,53 @@ mod tests {
             assert!(outbox::wait_millis(-1));
         });
         assert_eq!([outbox::next(), outbox::next()], [stream, -1]);
+
+        // Changes made together are posted together, once the scope ends.
+        let (a, a_read) = signal(0);
+        let (b, b_read) = signal(0);
+        let (a_read, b_read) = (AnySignal::from(a_read), AnySignal::from(b_read));
+        let (a_id, b_id) = (a_read.watch(), b_read.watch());
+        together(|| {
+            a.set(1);
+            together(|| b.set(1));
+            assert_eq!(outbox::next(), -1);
+        });
+        assert_eq!(
+            [outbox::next(), outbox::next(), outbox::next()],
+            [a_id, b_id, -1]
+        );
+
+        // A host that takes everything posted before it uses what it read
+        // never sees one of two values set together without the other.
+        let rounds = if cfg!(miri) { 20 } else { 2000 };
+        let done = std::sync::atomic::AtomicBool::new(false);
+        std::thread::scope(|scope| {
+            scope.spawn(|| {
+                for round in 2..=rounds {
+                    together(|| {
+                        a.set(round);
+                        b.set(round);
+                    });
+                }
+                done.store(true, std::sync::atomic::Ordering::Release);
+            });
+            let (mut seen_a, mut seen_b) = (1, 1);
+            loop {
+                let finished = done.load(std::sync::atomic::Ordering::Acquire);
+                loop {
+                    match outbox::next() {
+                        -1 => break,
+                        id if id == a_id => seen_a = a_read.get::<i32>().unwrap(),
+                        id if id == b_id => seen_b = b_read.get::<i32>().unwrap(),
+                        _ => {}
+                    }
+                }
+                assert_eq!(seen_a, seen_b);
+                if finished {
+                    break;
+                }
+            }
+            assert_eq!(seen_a, rounds);
+        });
     }
 }

@@ -487,6 +487,15 @@ Every result a library produces reaches the app through a single queue.
 A single queue preserves order across futures, streams and signals, lets the
 app choose when delivery happens, and needs only one wait for all of them.
 
+**Changes made together arrive together.** A library that sets several
+signals as one change does it inside `hxn_future::together(|| { … })`. The
+entries the scope's changes would add are held back until it returns and
+then added at once, and the host does not read a signal's value while any
+scope is running. An inbox takes every entry before it runs effects, so
+effects never see one of those values changed and another not. Scopes on
+different threads run one at a time, and the library's own reads of a
+signal never wait: only the host's do.
+
 ## Reactivity
 
 `hxn.Signal`, `hxn.Computed` and `hxn.Reactive` provide fine-grained
