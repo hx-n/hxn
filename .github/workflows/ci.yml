@@ -193,8 +193,11 @@ jobs:
           toolchain: ${{ env.HXN_RUST }}
           targets: x86_64-apple-ios
       - uses: Swatinem/rust-cache@v2
-      - uses: krdlab/setup-haxe@v1
-        with:
-          haxe-version: ${{ env.HXN_HAXE }}
+      # setup-haxe does not support arm64 macOS, so Haxe comes from Homebrew
+      # here. hxcpp builds x86-64 simulator binaries, which need Rosetta.
+      - run: |
+          brew install haxe
+          mkdir -p "$HOME/haxelib" && haxelib setup "$HOME/haxelib"
+          softwareupdate --install-rosetta --agree-to-license || true
       - run: haxelib install hxcpp "$HXN_HXCPP" --quiet
       - run: tests/mobile/run.sh ios-sim
