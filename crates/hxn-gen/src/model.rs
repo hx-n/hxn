@@ -206,6 +206,10 @@ pub struct Method {
     /// Returns a shared interface already wrapped in an `Arc`, rather than
     /// a value for the adapter to wrap.
     pub returns_arc: bool,
+    /// Returns a `Vec` of an interface. It crosses as a stream of its
+    /// elements that has already ended, and the Haxe method returns them as
+    /// an `Array`; `returns` is that stream.
+    pub returns_list: bool,
     /// The numeric type the function returns, when `returns` is its wire type.
     pub returns_number: Option<Number>,
     /// The data type the function returns, when `returns` is its wire type.
@@ -332,6 +336,9 @@ impl Method {
     pub fn returns_name(&self) -> String {
         if let Some(data) = &self.returns_data {
             return data.name();
+        }
+        if let (true, Type::Stream(of)) = (self.returns_list, &self.returns) {
+            return format!("list<{}>", of.name());
         }
         self.returns_number
             .map_or_else(|| self.returns.name(), |number| number.name().to_owned())

@@ -280,6 +280,35 @@ impl Scope<'_> {
         self.interface(wrapped(ty, "Arc")?)
     }
 
+    // The element of a `Vec` of an interface, `Vec<T>`, or of a shared one,
+    // `Vec<Arc<T>>`.
+    fn listed(&self, ty: &syn::Type) -> Result<Option<Type>, Error> {
+        let Some(element) = wrapped(ty, "Vec") else {
+            return Ok(None);
+        };
+        let (interface, arc) = match (self.interface(element), self.pointer(element)) {
+            (Some(interface), _) => (interface, false),
+            (None, Some(interface)) => (interface, true),
+            (None, None) => return Ok(None),
+        };
+        if self.is_shared(&interface) != arc {
+            return error(
+                ty.span(),
+                if arc {
+                    format!(
+                        "`Arc<{interface}>` needs `{interface}` marked `#[hxn::interface(shared)]`"
+                    )
+                } else {
+                    format!("a shared interface is listed in its `Arc`: `Vec<Arc<{interface}>>`")
+                },
+            );
+        }
+        Ok(Some(Type::Handle {
+            interface,
+            nullable: false,
+        }))
+    }
+
     fn is_shared(&self, interface: &str) -> bool {
         self.shared.iter().any(|shared| shared == interface)
     }
@@ -695,6 +724,10 @@ impl Scope<'_> {
                 "an interface is returned by value: a result cannot borrow",
             );
         }
+        // A list of objects: a stream of them that has already ended.
+        if let Some(element) = self.listed(ty)? {
+            return Ok((Type::Stream(Box::new(element)), false));
+        }
         if let Some(cell) = wrapped(ty, "Arc").and_then(cell) {
             return Ok((cell, false));
         }
@@ -931,6 +964,9 @@ impl Scope<'_> {
             blocking,
             constructor,
             returns_arc,
+            returns_list: !asynchronous
+                && given(&signature.output)
+                    .is_some_and(|(ty, _)| matches!(self.listed(ty), Ok(Some(_)))),
             returns_number: given(&signature.output)
                 .filter(|_| !asynchronous)
                 .and_then(|(ty, _)| path_name(ty))

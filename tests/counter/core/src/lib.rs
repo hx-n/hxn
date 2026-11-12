@@ -153,6 +153,11 @@ impl Counter {
         data.iter().map(|&byte| i32::from(byte)).sum()
     }
 
+    /// `parts` new counters, starting at this one's value and counting up.
+    pub fn split(&self, parts: i32) -> Vec<Counter> {
+        (0..parts).map(|at| Counter::new(self.value + at)).collect()
+    }
+
     /// Writes the value's low byte into every byte of `data`.
     pub fn stamp(&self, data: &mut [u8]) {
         data.fill(self.value as u8);
@@ -659,6 +664,14 @@ impl Pot {
     /// reference.
     pub fn split(&self) -> Arc<Pot> {
         Arc::new(Pot::new(self.total()))
+    }
+
+    /// Two new pots, holding this one's total and twice it.
+    pub fn pair(&self) -> Vec<Arc<Pot>> {
+        vec![
+            Arc::new(Pot::new(self.total())),
+            Arc::new(Pot::new(self.total() * 2)),
+        ]
     }
 
     /// The number of live pots, regardless of how many references each has.

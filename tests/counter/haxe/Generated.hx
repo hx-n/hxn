@@ -258,6 +258,11 @@ class Generated {
 		last.close();
 		b.close();
 		check("until the last holder is gone", Pot.live() == 1 && weak.upgrade() == null);
+		var pots = other.pair();
+		check("a list of shared objects", pots.length == 2 && pots[1].total() == 2 * other.total() && Pot.live() == 3);
+		for (each in pots)
+			each.close();
+		check("each released with its holder", Pot.live() == 1);
 		weak.close();
 		throws("a closed weak reference", () -> weak.upgrade(), "closed");
 
@@ -647,6 +652,11 @@ class Generated {
 		var into = haxe.io.Bytes.alloc(2);
 		check("bytes copied into others", Tools.copy(haxe.io.Bytes.ofHex("0102ff"), into) == 2 && into.toHex() == "0102");
 		throws("the same bytes read and written", () -> Tools.copy(into, into), "passed as two arguments");
+		var parts = counter.split(3);
+		check("a list of objects", parts.length == 3 && parts[0].add(0) == 42 && parts[2].add(0) == 44);
+		check("an empty list", counter.split(0).length == 0);
+		for (part in parts)
+			part.close();
 		throws("a failure in place of bytes", () -> counter.fill(-1), "negative count");
 		check("a bool out", counter.isPositive());
 		check("a float in and out", counter.scaled(0.5) == 21);

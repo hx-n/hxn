@@ -122,9 +122,10 @@ fn signature(method: &Method) -> String {
         return format!("\tpublic function new({})", params(method));
     }
     let modifier = if has_receiver(method) { "" } else { "static " };
-    let returns = match &method.returns_data {
-        Some(data) => data::haxe_type(data),
-        None => number_type(method.returns_number, &method.returns),
+    let returns = match (&method.returns_data, &method.returns) {
+        (Some(data), _) => data::haxe_type(data),
+        (None, Type::Stream(of)) if method.returns_list => format!("Array<{}>", haxe_type(of)),
+        (None, returns) => number_type(method.returns_number, returns),
     };
     format!(
         "\tpublic {modifier}function {}({}):{returns}",
@@ -368,11 +369,16 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
             }
             Type::Future(_) | Type::Stream(_) | Type::Signal(_) => {
                 let (kind, carried) = later::of(&method.returns).expect("a result over time");
-                lines.push(format!(
-                    "return {}.{}({call});",
+                let made = format!(
+                    "{}.{}({call})",
                     later::class(library, kind),
                     later::maker(carried)
-                ));
+                );
+                lines.push(if method.returns_list {
+                    format!("return [for (item in {made}) item];")
+                } else {
+                    format!("return {made};")
+                });
             }
             // The cell is owned by the library; the returned owner keeps it
             // alive for as long as the atomic is referenced.
@@ -616,7 +622,14 @@ fn cpp_method(library: &Library, interface: &Interface, method: &Method) -> Stri
                 ));
                 body.push(format!("made.raw = {call};"));
                 body.push(String::from("made.own();"));
-                body.push(format!("return made.{}();", later::maker(carried)));
+                body.push(if method.returns_list {
+                    format!(
+                        "return [for (item in made.{}()) item];",
+                        later::maker(carried)
+                    )
+                } else {
+                    format!("return made.{}();", later::maker(carried))
+                });
             }
             Type::Bytes => {
                 let bytes = format!("haxe.io.Bytes.ofData({call})");

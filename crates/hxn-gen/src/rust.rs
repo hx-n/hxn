@@ -321,6 +321,18 @@ fn apart_checks(method: &Method, addresses: impl Fn(&str) -> String) -> Vec<Stri
     out
 }
 
+// A call that returns a list of objects, as the stream of them that has
+// ended.
+fn listed(method: &Method, call: String) -> String {
+    if method.returns_list {
+        format!(
+            "{{\n                let (sender, stream) = hxn_future::channel();\n                for item in {call} {{\n                    sender.send(item);\n                }}\n                stream\n            }}"
+        )
+    } else {
+        call
+    }
+}
+
 fn c_method(library: &Library, interface: &Interface, method: &Method) -> String {
     let mut params = Vec::new();
     let mut body = Vec::new();
@@ -403,7 +415,7 @@ fn c_method(library: &Library, interface: &Interface, method: &Method) -> String
     if method.asynchronous {
         call = started(method, &call);
     }
-    let call = encoded(method, call);
+    let call = listed(method, encoded(method, call));
     let (out, result) = match &method.returns {
         Type::Void => (None, format!("{call};\n            Ok(())")),
         Type::Bool => (Some("i32"), format!("Ok(i32::from({call}))")),
@@ -773,7 +785,7 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
         let inner = call.trim_end_matches('?').to_owned();
         call = format!("blocking(|| {inner}){}", question(method));
     }
-    let call = encoded(method, call);
+    let call = listed(method, encoded(method, call));
     let (ty, result) = match &method.returns {
         Type::Void => ("()", format!("{call};\n            Ok(())")),
         Type::Bool => ("bool", format!("Ok({call})")),

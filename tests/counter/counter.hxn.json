@@ -153,6 +153,15 @@
           "blocking": false
         },
         {
+          "name": "split",
+          "docs": "`parts` new counters, starting at this one's value and counting up.",
+          "kind": "method",
+          "params": [{ "name": "parts", "type": "i32" }],
+          "returns": "list<Counter>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
           "name": "stamp",
           "docs": "Writes the value's low byte into every byte of `data`.",
           "kind": "method",
@@ -749,6 +758,15 @@
           "kind": "method",
           "params": [],
           "returns": "Pot",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "pair",
+          "docs": "Two new pots, holding this one's total and twice it.",
+          "kind": "method",
+          "params": [],
+          "returns": "list<Pot>",
           "fallible": false,
           "blocking": false
         },

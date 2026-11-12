@@ -120,14 +120,15 @@ filesystem `#include "counter.h"` would then find the generated header.
   not a chain of boxes.
 - Data carried by a signal must be `Clone`.
 - Another interface is accepted as `&T` or `&mut T` and returned as `T`, with
-  `Option` for one that may be absent. It is never accepted by value and never
-  returned by reference.
+  `Option` for one that may be absent and `Vec` for a list, which Haxe gets
+  as an `Array`. It is never accepted by value and never returned by
+  reference.
 - A value with more than one owner is an interface marked
   `#[hxn::interface(shared)]`. Its functions take `&self`, never `&mut self`
   or `self`, and it is `Send + Sync`. It is accepted as `&T` to use it and as
   `Arc<T>` to keep a reference, never as `&Arc<T>` or `&mut T`, and returned
-  as `T` or `Arc<T>`. `Arc` of an interface not marked shared is not passed
-  across the boundary.
+  as `T` or `Arc<T>`; a list of them is `Vec<Arc<T>>`. `Arc` of an interface
+  not marked shared is not passed across the boundary.
 - An asynchronous result is returned as a `Future<T>`, a `Stream<T>` or a
   `Signal<T>` of `hxn-future`, by a function that itself returns immediately.
   It carries `bool`, a number, `String` or data; a future or a stream may

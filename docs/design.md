@@ -194,6 +194,7 @@ that invariant.
 | `T` result, from any function | a new value; ownership passes to Haxe | a new object |
 | `self` by value | the value is consumed | the object is closed by the call |
 | `Option` of any of these | may be absent | `null` |
+| `Vec<T>` result, `Vec<Arc<T>>` of a shared interface | new values, each passed to Haxe | an `Array` of new objects |
 
 - **A parameter is always borrowed.** Passing the same object twice with
   conflicting borrows, for example as the receiver of a `&mut self` method and
@@ -209,6 +210,11 @@ that invariant.
   function.
 - **A handle belongs to the library that created it.** Passing it to another
   library fails the type check.
+- **A list of objects crosses as a stream that has already ended.** The
+  adapter sends each element to a new stream and returns the stream; the
+  Haxe method takes every element into an `Array` before it returns. So a
+  list uses the handles and the take function a stream of objects already
+  has, on every runtime, and no element waits on anything.
 
 ### Shared values
 

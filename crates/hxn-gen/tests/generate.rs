@@ -209,6 +209,10 @@ fn says_where_and_why_something_cannot_cross() {
             "a result cannot borrow",
         ),
         (
+            "pub fn all(&self) -> Vec<Arc<Thing>> { todo!() }",
+            "needs `Thing` marked `#[hxn::interface(shared)]`",
+        ),
+        (
             "pub fn keep(&self, cell: Arc<AtomicI32>) {}",
             "a cell is lent for the call",
         ),
