@@ -209,12 +209,22 @@ impl Scope<'_> {
 
     // `impl Fn(i32, f64) -> Result<bool, E>`, or `FnMut` or `FnOnce`.
     fn lent(&self, ty: &syn::TypeImplTrait) -> Result<Type, Error> {
-        const SHAPE: &str = "a function is lent as `impl Fn(..) -> Result<T, E>`, taking bool, i32 or f64 and giving one of those or `()`: it can fail, because the Haxe function can throw";
+        const SHAPE: &str = "a function is lent as `impl Fn(..) -> Result<T, E>`, taking bool, i32, f64 or &str and giving bool, i32, f64, String or `()`: it can fail, because the Haxe function can throw";
         let scalar = |ty: &syn::Type| match path_name(ty).as_deref() {
             Some("bool") => Some(Type::Bool),
             Some("i32") => Some(Type::I32),
             Some("f64") => Some(Type::F64),
             _ => None,
+        };
+        // Text is borrowed going to the function and owned coming back.
+        let taken = |ty: &syn::Type| match ty {
+            syn::Type::Reference(reference)
+                if reference.mutability.is_none()
+                    && path_name(&reference.elem).as_deref() == Some("str") =>
+            {
+                Some(Type::Str)
+            }
+            other => scalar(other),
         };
         let mut bounds = ty.bounds.iter();
         let (Some(syn::TypeParamBound::Trait(bound)), None) = (bounds.next(), bounds.next()) else {
@@ -233,7 +243,7 @@ impl Scope<'_> {
         }
         let mut params = Vec::new();
         for input in &call.inputs {
-            match scalar(input) {
+            match taken(input) {
                 Some(param) => params.push(param),
                 None => return error(input.span(), SHAPE),
             }
@@ -246,6 +256,7 @@ impl Scope<'_> {
         };
         let returns = match given {
             syn::Type::Tuple(tuple) if tuple.elems.is_empty() => Type::Void,
+            other if path_name(other).as_deref() == Some("String") => Type::Str,
             other => match scalar(other) {
                 Some(given) => given,
                 None => return error(other.span(), SHAPE),

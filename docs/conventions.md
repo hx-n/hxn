@@ -116,8 +116,8 @@ filesystem `#include "counter.h"` would then find the generated one.
   has to be `Send`.
 - A Haxe function is taken as `impl Fn(..) -> Result<T, E>`, or `FnMut` or
   `FnOnce`, with `E` a type parameter of the function: its only use for one.
-  It takes `bool`, `i32` or `f64` and gives one of those or `()`. The library
-  returns when it fails. A function marked `#[hxn(blocking)]` is not lent one.
+  It takes `bool`, `i32`, `f64` or `&str` and gives `bool`, `i32`, `f64`,
+  `String` or `()`. The library returns when it fails. A function marked `#[hxn(blocking)]` is not lent one.
 - A cell shared with Haxe is an `AtomicI32` or an `hxn::AtomicFlag`, never
   an `AtomicBool`. It is taken as a reference, lent for the call, and
   returned as an `Arc`, kept by the library.

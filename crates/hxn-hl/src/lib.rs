@@ -281,6 +281,15 @@ unsafe fn i32_type() -> *mut hl_type {
     }
 }
 
+/// `value` as the VM passes `hl.Bytes` it does not know the type of.
+pub fn box_bytes(value: *mut vbyte) -> *mut vdynamic {
+    let boxed = unsafe { hl_alloc_dynamic(bytes_type()) };
+    if !boxed.is_null() {
+        unsafe { (*boxed).v.bytes = value };
+    }
+    boxed
+}
+
 /// `value` as the VM passes an `Int` it does not know the type of.
 pub fn box_i32(value: i32) -> *mut vdynamic {
     let boxed = unsafe { hl_alloc_dynamic(i32_type()) };

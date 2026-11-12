@@ -222,6 +222,29 @@ impl Counter {
         f(f64::from(self.value) / 2.0, self.value % 2 != 0)
     }
 
+    /// What `f` makes of a name and the value: text lent to the function,
+    /// and its own text given back.
+    pub fn described<E>(&self, f: impl Fn(&str, i32) -> Result<String, E>) -> Result<String, E> {
+        let made = f("naïve ☃ 𝄞", self.value)?;
+        Ok(format!("[{made}]"))
+    }
+
+    /// How many words of `text` the function keeps.
+    pub fn words<E>(text: &str, mut f: impl FnMut(&str) -> Result<bool, E>) -> Result<i32, E> {
+        let mut kept = 0;
+        for word in text.split_whitespace() {
+            if f(word)? {
+                kept += 1;
+            }
+        }
+        Ok(kept)
+    }
+
+    /// How many characters the text `f` gives has.
+    pub fn titled<E>(f: impl FnOnce() -> Result<String, E>) -> Result<i32, E> {
+        Ok(f()?.chars().count() as i32)
+    }
+
     /// What `f` gives.
     pub fn ask<E>(f: impl FnOnce() -> Result<i32, E>) -> Result<i32, E> {
         f()

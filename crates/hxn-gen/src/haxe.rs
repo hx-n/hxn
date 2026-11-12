@@ -171,7 +171,10 @@ fn hl_native(library: &Library, interface: &Interface, method: &Method) -> Strin
             Type::Lent {
                 params: taken,
                 returns,
-            } => params.push(format!("{name}:{}", lent::haxe_native_type(taken, returns))),
+            } => params.push(format!(
+                "{name}:{}",
+                lent::haxe_native_type(lent::Host::Hl, taken, returns)
+            )),
             Type::Void | Type::Future(_) | Type::Stream(_) | Type::Signal(_) => {
                 unreachable!("not a parameter type")
             }
@@ -261,7 +264,7 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
                 arguments.push(format!("{name} == null ? null : {name}.pointer"));
             }
             Type::Lent { params, returns } => {
-                guards.push(lent::haxe_guard(&name, params, returns));
+                guards.push(lent::haxe_guard(lent::Host::Hl, &name, params, returns));
                 arguments.push(lent::guarded(&name));
             }
             _ => arguments.push(name),
@@ -478,7 +481,7 @@ fn cpp_method(library: &Library, interface: &Interface, method: &Method) -> Stri
                 arguments.push(format!("{name}Raw"));
             }
             Type::Lent { params, returns } => {
-                guards.push(lent::haxe_guard(&name, params, returns));
+                guards.push(lent::haxe_guard(lent::Host::Cpp, &name, params, returns));
                 arguments.push(lent::guarded(&name));
             }
             _ => arguments.push(name),
@@ -771,7 +774,7 @@ fn cpp_native(library: &Library, interface: &Interface, method: &Method) -> Stri
             Type::Lent {
                 params: taken,
                 returns,
-            } => lent::haxe_native_type(taken, returns),
+            } => lent::haxe_native_type(lent::Host::Cpp, taken, returns),
             Type::Void | Type::Future(_) | Type::Stream(_) | Type::Signal(_) => {
                 unreachable!("not a parameter type")
             }

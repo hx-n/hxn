@@ -210,6 +210,16 @@ class Generated {
 		check("a call that is lent a function and returns an object", made.add(0) == 9);
 		made.close();
 
+		check("text goes to a lent function and comes back", counter.described((name, value) -> '$name=$value') == "[naïve ☃ 𝄞=48]");
+		var words = [];
+		check("a word at a time", Counter.words("one  two ☃ three", word -> {
+			words.push(word);
+			return word.charAt(0) == "t";
+		}) == 2 && words.join("|") == "one|two|☃|three");
+		check("text from a function that takes nothing", Counter.titled(() -> "𝄞 clef") == 6 && Counter.titled(() -> "") == 0);
+		throws("one that gives text can throw", () -> counter.described((_, _) -> throw new haxe.Exception("no name")), "no name");
+		throws("and cannot give null", () -> Counter.titled(() -> null), "returned null");
+
 		var thrown = new haxe.Exception("from the function");
 		var caught:Null<haxe.Exception> = null;
 		try {

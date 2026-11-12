@@ -210,6 +210,33 @@
           "blocking": false
         },
         {
+          "name": "described",
+          "docs": "What `f` makes of a name and the value: text lent to the function,\nand its own text given back.",
+          "kind": "method",
+          "params": [{ "name": "f", "type": "fn(str, i32) -> str" }],
+          "returns": "str",
+          "fallible": true,
+          "blocking": false
+        },
+        {
+          "name": "words",
+          "docs": "How many words of `text` the function keeps.",
+          "kind": "static",
+          "params": [{ "name": "text", "type": "str" }, { "name": "f", "type": "fn(str) -> bool" }],
+          "returns": "i32",
+          "fallible": true,
+          "blocking": false
+        },
+        {
+          "name": "titled",
+          "docs": "How many characters the text `f` gives has.",
+          "kind": "static",
+          "params": [{ "name": "f", "type": "fn() -> str" }],
+          "returns": "i32",
+          "fallible": true,
+          "blocking": false
+        },
+        {
           "name": "ask",
           "docs": "What `f` gives.",
           "kind": "static",

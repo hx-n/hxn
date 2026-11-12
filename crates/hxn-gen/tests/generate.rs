@@ -960,11 +960,15 @@ fn says_how_a_function_is_lent() {
             "is lent as `impl Fn(..) -> Result<T, E>`",
         ),
         (
-            "pub fn b<E>(&self, f: impl Fn(&str) -> Result<i32, E>) {}",
+            "pub fn b<E>(&self, f: impl Fn(&[u8]) -> Result<i32, E>) {}",
             "is lent as",
         ),
         (
-            "pub fn c<E>(&self, f: impl Fn(i32) -> Result<String, E>) {}",
+            "pub fn c<E>(&self, f: impl Fn(i32) -> Result<&str, E>) {}",
+            "is lent as",
+        ),
+        (
+            "pub fn j<E>(&self, f: impl Fn(String) -> Result<i32, E>) {}",
             "is lent as",
         ),
         (
@@ -1625,4 +1629,60 @@ impl Thing {
             .message
             .contains("a signal carries one of")
     );
+}
+
+// Text is lent to a Haxe function for the call and comes back as the
+// library's own.
+#[test]
+fn a_lent_function_takes_and_gives_text() {
+    let source = r#"
+#[hxn::interface]
+pub struct Thing;
+
+#[hxn::methods]
+impl Thing {
+    pub fn name<E>(&self, f: impl Fn(&str, bool) -> Result<String, E>) -> Result<String, E> { todo!() }
+}
+"#;
+    let library = parse("thing", source).unwrap();
+    assert_eq!(
+        library.interfaces[0].methods[0].params[0].ty,
+        Type::Lent {
+            params: vec![Type::Str, Type::Bool],
+            returns: Box::new(Type::Str),
+        }
+    );
+    for adapter in [
+        hxn_gen::c_adapter(&library, "thing"),
+        hxn_gen::hl_adapter(&library, "thing"),
+    ] {
+        assert!(adapter.contains(
+            "type LentSBToS = unsafe extern \"C\" fn(*mut c_void, hxn_abi::Slice<'_>, i32, *mut hxn_abi::Buf) -> Status;"
+        ));
+        assert!(adapter.contains(
+            "unsafe fn call_sb_to_s(callback: &Callback<LentSBToS>, a0: &str, a1: bool) -> Result<String, hxn_abi::Failure>"
+        ));
+        assert!(adapter.contains("this.name(|a0, a1| call_sb_to_s(&f, a0, a1))"));
+    }
+    let hl = hxn_gen::hl_adapter(&library, "thing");
+    assert!(hl.contains("let Ok(a0) = a0.as_str() else {"));
+    assert!(hl.contains("box_bytes(utf16(a0)), box_bool(a1 != 0)"));
+    assert!(hl.contains("PBb_OBi_"), "{hl}");
+    let glue = hxn_gen::cpp_glue(&library);
+    assert!(
+        glue.contains(
+            "inline hxn_status lent_sb_to_s(void *env, hxn_slice a0, int a1, hxn_buf *out)"
+        )
+    );
+    assert!(glue.contains("Dynamic((hx::Object *)env)(hxn::text(a0), a1 != 0)"));
+    assert!(glue.contains("hxn::give_text((::String)result, out)"));
+
+    // HashLink's wrapper is handed the VM's bytes and makes the string.
+    let hl_class = &hxn_gen::haxe_hl(&library)[0].text;
+    assert!(hl_class.contains("public function name(f:(String, Bool) -> String):String"));
+    assert!(hl_class.contains("f:(hl.Bytes, Bool) -> Null<String>"));
+    assert!(hl_class.contains("f(@:privateAccess String.fromUCS2(a0), a1)"));
+    let cpp_class = &cpp_classes(&library)[0].text;
+    assert!(cpp_class.contains("var fGuarded = function(a0:String, a1:Bool):Null<String>"));
+    assert!(cpp_class.contains("a function lent to a library returned null"));
 }

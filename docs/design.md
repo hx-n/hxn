@@ -235,6 +235,13 @@ library sees that as an `Err` to return with. The error is a type parameter so
 the library names no type of hxn's and can be tested with any error it likes;
 the adapter calls it with its own.
 
+A lent function takes and gives numbers, bools and text. Text goes to it as
+`&str`, borrowed: the host makes its own string of it during the call. Text
+comes back as a `String`: the host writes a copy into a buffer that carries
+its own `free`, which the library reads and then frees, so nothing of the
+collector's is held after the function returns. A function that gives text
+cannot give null, which is how its wrapper reports that it threw.
+
 **Kept across calls.** A function needed by later calls is kept in a field of
 the Haxe object and lent to each call that uses it. Native code holds nothing.
 

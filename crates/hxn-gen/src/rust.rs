@@ -684,7 +684,7 @@ pub fn hl_adapter(library: &Library, core: &str) -> String {
         "#[allow(unused_imports)]\nuse hxn_abi::{AtomicFlag, Callback, Fault, Status, memory};\n",
     );
     out.push_str(
-        "#[allow(unused_imports)]\nuse hxn_hl::{Managed, blocking, box_bool, box_f64, box_i32, bytes, call, define_prim, handle, manage, prim, slice, string, unbox_bool, unbox_f64, unbox_i32, utf16, vbyte, vclosure, vdynamic, vstring};\n",
+        "#[allow(unused_imports)]\nuse hxn_hl::{Managed, blocking, box_bool, box_bytes, box_f64, box_i32, bytes, call, define_prim, handle, manage, prim, slice, string, unbox_bool, unbox_f64, unbox_i32, utf16, vbyte, vclosure, vdynamic, vstring};\n",
     );
     out.push_str(&imports(library, core));
     out.push_str(later::imports(library));

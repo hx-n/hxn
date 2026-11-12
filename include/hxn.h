@@ -72,6 +72,7 @@ typedef struct hxn_callback {
 
 #if defined(__cplusplus) && defined(HXCPP_H)
 
+#include <stdlib.h>
 #include <string.h>
 
 namespace hxn {
@@ -90,6 +91,35 @@ inline Array<unsigned char> take_bytes(hxn_buf &buf) {
 		memcpy(data->getBase(), buf.ptr, buf.len);
 	hxn_buf_free(&buf);
 	return data;
+}
+
+/* A Haxe String of the UTF-8 text the library lent. */
+inline ::String text(hxn_slice slice) {
+	return slice.len ? ::String::create((const char *)slice.ptr, (int)slice.len) : HX_CSTRING("");
+}
+
+inline void free_text(uint8_t *ptr, size_t, size_t) {
+	free(ptr);
+}
+
+/* Writes a copy of `text` as UTF-8 for the library to free, which is how a
+ * host's function gives text back. False if there is no memory for it. */
+inline bool give_text(const ::String &text, hxn_buf *out) {
+	hx::strbuf storage;
+	int length = 0;
+	const char *utf8 = text.utf8_str(&storage, true, &length);
+	hxn_buf empty = HXN_BUF_EMPTY;
+	*out = empty;
+	if (!utf8 || length <= 0)
+		return true;
+	out->ptr = (uint8_t *)malloc((size_t)length);
+	if (!out->ptr)
+		return false;
+	memcpy(out->ptr, utf8, (size_t)length);
+	out->len = (size_t)length;
+	out->cap = (size_t)length;
+	out->free = free_text;
+	return true;
 }
 
 /* `text` as UTF-8, valid while `text` and `storage` both are. */
