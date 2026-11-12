@@ -23,7 +23,8 @@ const USAGE: &str = "usage: hxn <command>
 
   hxn new <name> [--hxn <checkout>]
       Makes a library in a new directory: a crate, and a Haxe program that
-      uses it. With --hxn it depends on that copy of hxn's repository.
+      uses it. It depends on hxn's repository at this version's tag, or
+      with --hxn on that local copy of the repository.
 
   hxn build <hl|cpp|cppia> [--wasm] [--target <triple>] [--release]
       Writes the library's binding for HashLink or hxcpp and builds it.

@@ -9,6 +9,8 @@ use crate::project::{is_library_name, quoted};
 const LIBRARY: &str = include_str!("../../../examples/greeter/src/lib.rs");
 const PROGRAM: &str = include_str!("../../../examples/greeter/haxe/Main.hx");
 const IGNORE: &str = "/target\n";
+// The tag a release of this version is published under.
+const RELEASE: &str = concat!("v", env!("CARGO_PKG_VERSION"));
 
 /// The new crate's manifest. `hxn` is how it depends on hxn.
 fn manifest(name: &str, hxn: &str) -> String {
@@ -18,8 +20,8 @@ fn manifest(name: &str, hxn: &str) -> String {
 }
 
 /// Makes the library `name` in a directory of that name under `at`. With
-/// `checkout`, it depends on that copy of hxn's repository, and otherwise
-/// on the one this program was built from.
+/// `checkout` it depends on that copy of hxn's repository; otherwise on the
+/// repository at the release tag of this program's version.
 pub fn new(name: &str, checkout: Option<&Path>, at: &Path) -> Result<PathBuf, String> {
     if !is_library_name(&name.replace('-', "_")) {
         return Err(format!(
@@ -45,7 +47,11 @@ pub fn new(name: &str, checkout: Option<&Path>, at: &Path) -> Result<PathBuf, St
             }
             format!("{{ path = {} }}", quoted(&krate.to_string_lossy()))
         }
-        None => format!("{{ git = {} }}", quoted(env!("CARGO_PKG_REPOSITORY"))),
+        None => format!(
+            "{{ git = {}, tag = {} }}",
+            quoted(env!("CARGO_PKG_REPOSITORY")),
+            quoted(RELEASE)
+        ),
     };
     let files = [
         ("Cargo.toml", manifest(name, &hxn)),

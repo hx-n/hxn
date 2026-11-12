@@ -6,6 +6,6 @@ publish = false
 
 [dependencies]
 # In a library of your own, both come from the repository:
-# hxn = { git = "https://github.com/hx-n/hxn" }
+# hxn = { git = "https://github.com/hx-n/hxn", tag = "v0.1.0" }
 hxn = { path = "../../crates/hxn" }
 hxn-future = { path = "../../crates/hxn-future" }
