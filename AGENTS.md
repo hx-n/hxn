@@ -17,6 +17,9 @@ natively and on wasm. Read these before changing anything:
   the `hxn` command the way the readme uses it, and `tests/examples/run.sh`
   runs every library under `examples/`; both take `hl`, `cpp`, `cppia`,
   `wasm` and `emcc`, and a VM with its options, as in `hl "ash --mode jit"`.
+  `tests/mobile/run.sh ios-sim|android` runs the examples in an iOS
+  simulator and on an Android device or emulator. Run it after changing how
+  an hxcpp program is compiled or linked.
 - **Run runtime tests under a timeout.** A wrong wait hangs; it does not fail.
 - **Repeat anything concurrent**, and on more than one machine if you can.
   A change to `hxn-abi` or `hxn-future` is also run under Miri
@@ -79,5 +82,6 @@ natively and on wasm. Read these before changing anything:
 | `tests/counter` | The fixture: a small library bound for every runtime, and the Haxe test they all run. |
 | `tests/cli` | Makes a library with `hxn new`, runs it as the readme describes, and packages it. |
 | `tests/examples` | Runs each example and compares what it prints. |
+| `tests/mobile` | Runs each example in an iOS simulator and on Android. |
 
 `internal/` is not part of the repository.

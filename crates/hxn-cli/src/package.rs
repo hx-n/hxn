@@ -3,7 +3,7 @@
 //!
 //! | Path | What it is |
 //! |---|---|
-//! | `haxelib.json` | the library's name and version |
+//! | `haxelib.json` | the library's name and version, and what else the crate gives of what haxelib lists |
 //! | `extraParams.hxml` | runs `hxn.Bind.lib`, which does the rest at compile time |
 //! | `<library>.hxn.json` | the manifest, which `hxn.Bind` finds the package by |
 //! | `<library>.hxn.webidl` | the same as WebIDL |
@@ -55,14 +55,36 @@ fn packaged(library: &str, target: Target, built: &Built) -> String {
     }
 }
 
+// Each field haxelib lists is written where the crate gives it, and left
+// out where it does not.
 fn haxelib(project: &Project) -> String {
     let quoted = |text: &str| serde_json::Value::from(text).to_string();
-    format!(
-        "{{\n  \"name\": {},\n  \"version\": {},\n  \"description\": {}\n}}\n",
-        quoted(&project.library),
-        quoted(&project.version),
-        quoted(&project.description)
-    )
+    let list = |items: &[String]| {
+        let items: Vec<String> = items.iter().map(|item| quoted(item)).collect();
+        format!("[{}]", items.join(", "))
+    };
+    let listing = &project.listing;
+    let mut fields = vec![
+        format!("\"name\": {}", quoted(&project.library)),
+        format!("\"version\": {}", quoted(&project.version)),
+        format!("\"description\": {}", quoted(&project.description)),
+    ];
+    if let Some(url) = &listing.url {
+        fields.push(format!("\"url\": {}", quoted(url)));
+    }
+    if let Some(license) = listing.haxelib_license() {
+        fields.push(format!("\"license\": {}", quoted(license)));
+    }
+    if !listing.tags.is_empty() {
+        fields.push(format!("\"tags\": {}", list(&listing.tags)));
+    }
+    if !listing.contributors.is_empty() {
+        fields.push(format!("\"contributors\": {}", list(&listing.contributors)));
+    }
+    if let Some(note) = &listing.releasenote {
+        fields.push(format!("\"releasenote\": {}", quoted(note)));
+    }
+    format!("{{\n  {}\n}}\n", fields.join(",\n  "))
 }
 
 /// Builds the library for each of `targets` and gathers the results in

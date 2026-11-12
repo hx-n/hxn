@@ -18,6 +18,8 @@ pub struct Project {
     /// The package's version and description, which its haxelib repeats.
     pub version: String,
     pub description: String,
+    /// What else its haxelib lists.
+    pub listing: Listing,
     /// The Rust file holding its marked items.
     pub source: PathBuf,
     /// Where its Haxe program is, and that program's main class.
@@ -29,6 +31,77 @@ pub struct Project {
     pub target: PathBuf,
     /// Where it gets `hxn` from, so the adapters get the same.
     pub hxn: Source,
+}
+
+/// The extra `haxelib.json` fields that `haxelib submit` requires.
+#[derive(Default)]
+pub struct Listing {
+    /// The crate's `repository`, or its `homepage`.
+    pub url: Option<String>,
+    /// The crate's `license`, as cargo has it.
+    pub license: Option<String>,
+    /// The crate's `keywords`.
+    pub tags: Vec<String>,
+    /// `contributors` under `[package.metadata.hxn]`: haxelib accounts.
+    pub contributors: Vec<String>,
+    /// `releasenote` under `[package.metadata.hxn]`.
+    pub releasenote: Option<String>,
+}
+
+impl Listing {
+    /// The license mapped to one of the names haxelib accepts. For an SPDX
+    /// `OR` expression, the first license that maps is used.
+    pub fn haxelib_license(&self) -> Option<&'static str> {
+        let license = self.license.as_deref()?;
+        license
+            .split(|letter: char| !letter.is_ascii_alphanumeric() && !"-.+".contains(letter))
+            .find_map(|part| {
+                let part = part.to_ascii_uppercase();
+                [
+                    ("MIT", "MIT"),
+                    ("APACHE", "Apache"),
+                    ("LGPL", "LGPL"),
+                    ("GPL", "GPL"),
+                    ("BSD", "BSD"),
+                    ("UNLICENSE", "Public"),
+                    ("CC0", "Public"),
+                ]
+                .into_iter()
+                .find(|(prefix, _)| part.starts_with(prefix))
+                .map(|(_, name)| name)
+            })
+    }
+
+    /// The required fields that are not set, each with where to set it.
+    pub fn missing(&self) -> Vec<&'static str> {
+        let mut missing = Vec::new();
+        if self.url.is_none() {
+            missing.push("`repository` in Cargo.toml");
+        }
+        if self.haxelib_license().is_none() {
+            missing.push("a `license` in Cargo.toml that maps to one haxelib accepts (GPL, LGPL, BSD, Public, MIT, Apache)");
+        }
+        if self.contributors.is_empty() {
+            missing.push("`contributors` (haxelib account names) under `[package.metadata.hxn]`");
+        }
+        if self.releasenote.is_none() {
+            missing.push("`releasenote` under `[package.metadata.hxn]`");
+        }
+        missing
+    }
+}
+
+// A list of strings in cargo's account of a package, or none.
+fn texts(value: Option<&Value>) -> Vec<String> {
+    value
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| item.as_str().map(str::to_owned))
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// Where a crate of hxn's comes from.
@@ -234,6 +307,15 @@ impl Project {
             library,
             version: text(package, "version").unwrap_or("0.0.0").to_owned(),
             description: text(package, "description").unwrap_or_default().to_owned(),
+            listing: Listing {
+                url: text(package, "repository")
+                    .or_else(|| text(package, "homepage"))
+                    .map(str::to_owned),
+                license: text(package, "license").map(str::to_owned),
+                tags: texts(package.get("keywords")),
+                contributors: texts(settings.and_then(|settings| settings.get("contributors"))),
+                releasenote: setting("releasenote").map(str::to_owned),
+            },
             source,
             haxe: dir.join(setting("haxe").unwrap_or("haxe")),
             main: setting("main").unwrap_or("Main").to_owned(),
@@ -243,6 +325,44 @@ impl Project {
             ),
             hxn,
         })
+    }
+}
+
+#[cfg(test)]
+mod listing {
+    use super::Listing;
+
+    #[test]
+    fn a_license_is_listed_as_haxelib_names_it() {
+        let named = |license: &str| {
+            Listing {
+                license: Some(license.to_owned()),
+                ..Listing::default()
+            }
+            .haxelib_license()
+        };
+        assert_eq!(named("MIT"), Some("MIT"));
+        assert_eq!(named("Apache-2.0"), Some("Apache"));
+        assert_eq!(named("MIT OR Apache-2.0"), Some("MIT"));
+        assert_eq!(named("LGPL-3.0-only"), Some("LGPL"));
+        assert_eq!(named("GPL-2.0-or-later"), Some("GPL"));
+        assert_eq!(named("BSD-3-Clause"), Some("BSD"));
+        assert_eq!(named("(Zlib OR Unlicense)"), Some("Public"));
+        assert_eq!(named("Zlib"), None);
+        assert_eq!(Listing::default().haxelib_license(), None);
+    }
+
+    #[test]
+    fn what_haxelib_asks_for_is_named_where_it_is_set() {
+        assert_eq!(Listing::default().missing().len(), 4);
+        let whole = Listing {
+            url: Some(String::from("https://example.org")),
+            license: Some(String::from("MIT")),
+            tags: Vec::new(),
+            contributors: vec![String::from("someone")],
+            releasenote: Some(String::from("First release.")),
+        };
+        assert!(whole.missing().is_empty());
     }
 }
 

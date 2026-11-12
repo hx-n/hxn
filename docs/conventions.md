@@ -242,6 +242,12 @@ filesystem `#include "counter.h"` would then find the generated one.
   what it prints with its `expected.txt`. Both take `hl <vm>`, `cpp`,
   `cppia`, `wasm <ash>` and `emcc`, and a VM is named with its options, so
   `hl "ash --mode jit"` runs Ash's JIT.
+- `tests/mobile/run.sh` runs each example on mobile toolchains: `ios-sim`
+  in an iOS simulator, `android` on a device or emulator reachable by `adb`.
+  It packages each library with `--target`, compiles the program against
+  the package with hxcpp's defines for the platform, links the result into
+  an executable (hxcpp only builds a library on these platforms) and runs
+  it. Run it after changing how an hxcpp program is compiled or linked.
 - **The readme's example is `examples/greeter`, which is what `hxn new`
   makes.** A test fails when the readme differs from it.
 - **An example is a library as someone would write one:** a crate, a Haxe

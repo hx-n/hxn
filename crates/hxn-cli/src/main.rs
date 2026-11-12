@@ -25,7 +25,7 @@ const USAGE: &str = "usage: hxn <command>
       Makes a library in a new directory: a crate, and a Haxe program that
       uses it. With --hxn it depends on that copy of hxn's repository.
 
-  hxn build <hl|cpp|cppia> [--wasm] [--release]
+  hxn build <hl|cpp|cppia> [--wasm] [--target <triple>] [--release]
       Writes the library's binding for HashLink or hxcpp and builds it.
       Prints what to pass haxe to compile against it.
 
@@ -45,14 +45,21 @@ compiled as a script and run by that host.
       manifest is not what the source gives.
 
   hxn doctor [--vm <command>]
-      Says what is installed, which targets are ready, and what each of the
-      others still needs.
+      Reports what is installed, which targets are ready, and what each of
+      the others still needs.
 
-  hxn package [hl] [cpp] [--wasm] [--release] [--out <directory>]
+  hxn package [hl] [cpp] [--wasm] [--target <triple>] [--release] [--out <directory>]
       Builds the library for both runtimes, or the ones named, and gathers
       what a Haxe program needs of it into one directory: a haxelib that
       `-lib` names, or a class path beside --macro 'hxn.Bind.lib(\"<name>\")'.
-      Packaging again, on another machine or with --wasm, adds to it.
+      Packaging again on another machine, or with --wasm or --target, adds
+      to the same directory.
+
+--target cross-compiles the `cpp` binding for a Rust target triple, such as
+`aarch64-apple-ios` or `aarch64-linux-android`. It needs that target
+installed (`rustup target add <triple>`) and nothing else, because the
+binding is a static library that is linked with the program. An .hdll is
+linked when it is built, so it has to be built on the platform it runs on.
 
 With --wasm the binding and the program are built for wasm. `hl --wasm` is
 built and run by Ash, which --vm or HXN_VM names if it is not `ash`.
@@ -74,6 +81,8 @@ struct Arguments {
     release: bool,
     timings: bool,
     wasm: bool,
+    // The target triple given with `--target`, for a cross-compiled binding.
+    cross: Option<&'static str>,
     vm: Option<String>,
     hxn: Option<PathBuf>,
     out: Option<PathBuf>,
@@ -86,6 +95,7 @@ fn arguments(mut given: impl Iterator<Item = String>) -> Result<Arguments, Strin
         release: false,
         timings: false,
         wasm: false,
+        cross: None,
         vm: None,
         hxn: None,
         out: None,
@@ -101,6 +111,8 @@ fn arguments(mut given: impl Iterator<Item = String>) -> Result<Arguments, Strin
             "--release" => out.release = true,
             "--timings" => out.timings = true,
             "--wasm" => out.wasm = true,
+            // Read once, and kept for as long as the command runs.
+            "--target" => out.cross = Some(Box::leak(value("--target")?.into_boxed_str())),
             "--vm" => out.vm = Some(value("--vm")?),
             "--hxn" => out.hxn = Some(PathBuf::from(value("--hxn")?)),
             "--out" => out.out = Some(PathBuf::from(value("--out")?)),
@@ -131,7 +143,29 @@ fn target(arguments: &Arguments) -> Result<Target, String> {
     Ok(Target {
         runtime,
         wasm: arguments.wasm,
+        cross: cross(arguments, runtime)?,
     })
+}
+
+// The `--target` triple, if given and valid for this runtime.
+fn cross(arguments: &Arguments, runtime: Runtime) -> Result<Option<&'static str>, String> {
+    let Some(triple) = arguments.cross else {
+        return Ok(None);
+    };
+    if arguments.wasm {
+        return Err(String::from("--wasm and --target cannot be combined"));
+    }
+    if script(arguments) {
+        return Err(String::from(
+            "--target is not supported for `cppia`: cross-compile the `cpp` binding instead",
+        ));
+    }
+    if runtime == Runtime::Hl {
+        return Err(format!(
+            "--target is not supported for `hl`: an .hdll has to be linked on the platform it runs on ({triple}). Only the `cpp` binding, a static library, can be cross-compiled"
+        ));
+    }
+    Ok(Some(triple))
 }
 
 // A program and its options, from how a command line names them.
@@ -194,6 +228,11 @@ fn exit(command: &mut Command) -> Result<u8, String> {
 }
 
 fn run(project: &Project, target: Target, arguments: Arguments) -> Result<u8, String> {
+    if let Some(triple) = target.cross {
+        return Err(format!(
+            "cannot run a binding built for {triple} on this machine: use `hxn build cpp --target {triple}` or `hxn package --target {triple}`"
+        ));
+    }
     let script = script(&arguments);
     exit(&mut program(project, target, script, &arguments)?)
 }
@@ -354,7 +393,12 @@ fn check(project: &Project, arguments: &Arguments) -> Result<u8, String> {
     };
     if named.is_empty() {
         return Err(String::from(
-            "neither HashLink nor hxcpp is ready to run a program: `hxn doctor` says what each needs",
+            "neither HashLink nor hxcpp is ready to run a program: `hxn doctor` reports what each needs",
+        ));
+    }
+    if arguments.cross.is_some() {
+        return Err(String::from(
+            "`hxn check` runs the program, so it does not accept --target",
         ));
     }
     let mut printed: Vec<(String, String)> = Vec::new();
@@ -372,6 +416,7 @@ fn check(project: &Project, arguments: &Arguments) -> Result<u8, String> {
                 ))?
             },
             wasm: arguments.wasm,
+            cross: None,
         };
         let label = if arguments.wasm {
             format!("{runtime} --wasm")
@@ -478,6 +523,11 @@ fn command() -> Result<u8, String> {
                 ),
                 (Runtime::Cpp, _) => {}
             }
+            if let Some(triple) = target.cross {
+                println!(
+                    "Built for {triple}. Compile the program for the same platform, with hxcpp's defines for it."
+                );
+            }
             Ok(0)
         }
         "run" => {
@@ -490,12 +540,20 @@ fn command() -> Result<u8, String> {
             let named: &[String] = &arguments.positional;
             let both = [String::from("hl"), String::from("cpp")];
             let mut targets = Vec::new();
-            for name in if named.is_empty() { &both } else { named } {
+            // Only the hxcpp binding can be cross-compiled.
+            let other = [String::from("cpp")];
+            let all: &[String] = if arguments.cross.is_some() {
+                &other
+            } else {
+                &both
+            };
+            for name in if named.is_empty() { all } else { named } {
                 let runtime = Runtime::parse(name)
                     .ok_or(format!("unknown runtime `{name}`: it is `hl` or `cpp`"))?;
                 targets.push(Target {
                     runtime,
                     wasm: arguments.wasm,
+                    cross: cross(&arguments, runtime)?,
                 });
             }
             let project = Project::read(&here)?;
@@ -520,6 +578,13 @@ fn command() -> Result<u8, String> {
                 out.display(),
                 out.display()
             );
+            let missing = project.listing.missing();
+            if !missing.is_empty() {
+                println!(
+                    "`haxelib submit` also requires these fields in haxelib.json:\n  {}",
+                    missing.join("\n  ")
+                );
+            }
             Ok(0)
         }
         "check" => {

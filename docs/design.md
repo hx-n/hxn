@@ -511,6 +511,7 @@ flag.
 | `hxn check [hl] [cpp] [cppia]` | runs the program on each runtime and holds them to one another |
 | `hxn doctor` | reports which targets are ready and what the others need |
 | `--wasm` on any of these | does the same for the runtime's wasm form |
+| `--target <triple>` on `build cpp` or `package` | cross-compiles the hxcpp binding |
 | `cppia` in place of `hl` or `cpp` | builds for hxcpp and a host around it, and runs the program as a script |
 
 - **The adapter crates are written, not kept.** A build writes the adapter
@@ -583,7 +584,22 @@ flag.
   | `haxelib.json`, `extraParams.hxml` | its name and version, and the one line that runs `hxn.Bind.lib` |
 
   Only `native/` differs from one machine to another, so packaging again
-  elsewhere, or with `--wasm`, adds a directory to it.
+  elsewhere, with `--wasm` or with `--target`, adds a directory to it.
+- **`--target` cross-compiles the hxcpp binding.** The binding is a static
+  library that is only linked when the program is, so cross-compiling needs
+  the Rust target installed and no linker or SDK for the target. This is
+  how a package gets libraries for iOS (`aarch64-apple-ios`), Android
+  (`aarch64-linux-android`) or another desktop platform. An `.hdll` is a
+  shared library, linked at build time against the system it runs on, so it
+  has to be built on that system. `run` and `check` reject `--target`,
+  since the result cannot be executed locally.
+- **`haxelib.json` is filled in from the crate's metadata.** Name, version
+  and description come from the crate, `url` from `repository`, `license`
+  from the crate's SPDX expression mapped to one of the names haxelib
+  accepts, and `tags` from `keywords`. `contributors` (haxelib account
+  names) and `releasenote` have no Cargo equivalent and are set under
+  `[package.metadata.hxn]`. `package` prints the fields `haxelib submit`
+  still requires.
 - **`hxn.Bind.lib("<library>")` points a compile at a package.** It is a
   macro run before anything is typed, which a package's `extraParams.hxml`
   does, so a program's build specifies `-lib <library>` and nothing of where
@@ -594,8 +610,10 @@ flag.
   archive was built for where hxcpp would assume another; for HashLink it
   copies the `.hdll`, or the `.wasm` module, beside the program once that is
   written, which is where the VM's loader and Ash look. The library is the
-  one for the machine compiling, for wasm when `wasm` or `emscripten` is
-  defined, or the one `-D hxn_triple=<triple>` names. A compile for `cppia`
+  one for the host machine, the wasm one when `wasm` or `emscripten` is
+  defined, the iOS or Android one when hxcpp's defines for those platforms
+  are set (`iphoneos`, `iphonesim`, or `android` with an architecture
+  define), or the one named by `-D hxn_triple=<triple>`. A compile for `cppia`
   gets `binding/cppia` and nothing else; an hxcpp compile with
   `-D scriptable`, a host, keeps every class of the binding and of hxn
   whether or not the host uses it.
@@ -618,6 +636,8 @@ in `tests/counter` has them, gives each a build script that calls `hxn-gen`.
 | hxcpp | `-c` with C++ glue | yes | becomes a thrown error | |
 | CPPIA | none of its own: a script runs in an hxcpp program that holds the binding | yes | becomes a thrown error | The host is built with `-D scriptable` and nothing dropped as unused. |
 | hxcpp through Emscripten | the same | none | ends the program | hxcpp's collector does not complete a forced collection there, so `hxn.Gc.collect()` does nothing and a meter only counts. |
+| hxcpp on iOS | the same, cross-compiled with `--target` | yes | not tested | hxcpp produces a static library for an app to link, and merges the Rust library into it. Tested with the examples in a simulator only, not on a device. |
+| hxcpp on Android | the same, cross-compiled with `--target` | yes | not tested | hxcpp produces a shared library for Java to load, with the Rust library linked in. Program output goes to logcat. Tested with the examples on an emulator only. |
 
 Rayzor's plugin ABI informed the manifest, but there is no Rayzor adapter.
 

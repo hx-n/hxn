@@ -106,6 +106,22 @@ class Bind {
 			return "wasm32-unknown-emscripten";
 		if (Context.defined("wasm"))
 			return runtime == "hl" ? "wasm32-wasip1" : "wasm32-unknown-emscripten";
+		// A phone, by the defines hxcpp builds for one with.
+		if (runtime == "cpp") {
+			if (Context.defined("iphoneos"))
+				return "aarch64-apple-ios";
+			if (Context.defined("iphonesim"))
+				return Context.defined("HXCPP_ARM64") ? "aarch64-apple-ios-sim" : "x86_64-apple-ios";
+			if (Context.defined("android")) {
+				if (Context.defined("HXCPP_ARM64"))
+					return "aarch64-linux-android";
+				if (Context.defined("HXCPP_X86_64"))
+					return "x86_64-linux-android";
+				if (Context.defined("HXCPP_X86"))
+					return "i686-linux-android";
+				return "armv7-linux-androideabi";
+			}
+		}
 		var system = Sys.systemName();
 		var machine = if (runtime == "cpp" && Context.defined("HXCPP_ARM64")) "arm64" else if (runtime == "cpp" && Context.defined("HXCPP_M64")) "x86_64" else if (system == "Windows") Sys.getEnv("PROCESSOR_ARCHITECTURE") else StringTools.trim(new sys.io.Process("uname", ["-m"]).stdout.readAll().toString());
 		var arch = switch machine == null ? "" : machine.toLowerCase() {

@@ -47,32 +47,44 @@ impl Runtime {
     }
 }
 
-/// What a binding is built for: a runtime, natively or as wasm.
+/// What a binding is built for: a runtime, on this machine, as wasm, or
+/// for another machine.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Target {
     pub runtime: Runtime,
     pub wasm: bool,
+    /// The target triple of a cross-compiled build. Only the hxcpp binding
+    /// supports one: it is a static library, linked later with the program.
+    pub cross: Option<&'static str>,
 }
 
 impl Target {
-    /// The directory its output goes in: `hl`, or `cpp-wasm`.
+    /// The directory its output goes in: `hl`, `cpp-wasm`, or
+    /// `cpp-aarch64-apple-ios`.
     pub fn name(self) -> String {
         let runtime = self.runtime.name();
-        if self.wasm {
-            format!("{runtime}-wasm")
-        } else {
-            runtime.to_owned()
+        match self.cross {
+            Some(triple) => format!("{runtime}-{triple}"),
+            None if self.wasm => format!("{runtime}-wasm"),
+            None => runtime.to_owned(),
         }
     }
 
     // What rustc calls it, where that is not the host. HashLink bytecode
     // becomes wasm through Ash, and hxcpp's C++ through Emscripten.
     pub fn triple(self) -> Option<&'static str> {
-        match (self.wasm, self.runtime) {
-            (false, _) => None,
-            (true, Runtime::Hl) => Some("wasm32-wasip1"),
-            (true, Runtime::Cpp) => Some("wasm32-unknown-emscripten"),
+        match (self.cross, self.wasm, self.runtime) {
+            (Some(triple), _, _) => Some(triple),
+            (None, false, _) => None,
+            (None, true, Runtime::Hl) => Some("wasm32-wasip1"),
+            (None, true, Runtime::Cpp) => Some("wasm32-unknown-emscripten"),
         }
+    }
+
+    // Whether what it is built for is Windows.
+    fn windows(self) -> bool {
+        self.cross
+            .map_or(cfg!(windows), |triple| triple.contains("windows"))
     }
 
     // A side module is position-independent. Emscripten's exceptions are
@@ -81,7 +93,7 @@ impl Target {
         match (self.wasm, self.runtime) {
             // hxcpp links the static C runtime on Windows, and a library
             // linked into its program has to use the same one.
-            (false, Runtime::Cpp) if cfg!(windows) => Some("-C target-feature=+crt-static"),
+            (false, Runtime::Cpp) if self.windows() => Some("-C target-feature=+crt-static"),
             (false, _) => None,
             (true, Runtime::Hl) => {
                 Some("-C relocation-model=pic -C target-feature=+mutable-globals")
@@ -192,7 +204,7 @@ fn artifact(library: &str, target: Target) -> String {
         Runtime::Hl if cfg!(windows) => format!("{library}_hl.dll"),
         Runtime::Hl if cfg!(target_os = "macos") => format!("lib{library}_hl.dylib"),
         Runtime::Hl => format!("lib{library}_hl.so"),
-        Runtime::Cpp if cfg!(windows) && !target.wasm => format!("{library}_cpp.lib"),
+        Runtime::Cpp if target.windows() && !target.wasm => format!("{library}_cpp.lib"),
         Runtime::Cpp => format!("lib{library}_cpp.a"),
     }
 }
@@ -409,9 +421,10 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
     }
     let mut built = project.target.clone();
     if let Some(triple) = target.triple() {
-        cargo
-            .args(["--target", triple])
-            .arg("-Zbuild-std=std,panic_abort");
+        cargo.args(["--target", triple]);
+        if target.wasm {
+            cargo.arg("-Zbuild-std=std,panic_abort");
+        }
         built.push(triple);
     }
     // Where the adapter's build script finds the VM's library, unless the
@@ -455,7 +468,7 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
                 for define in ["emscripten", "HXCPP_M32", "disable_unicode_strings"] {
                     arguments.push(("-D", String::from(define)));
                 }
-            } else if cfg!(windows) {
+            } else if cfg!(windows) && target.cross.is_none() {
                 // hxcpp builds for 32 bits there unless told, and the
                 // library is built for the host.
                 let bits = if cfg!(target_arch = "aarch64") {
@@ -499,12 +512,14 @@ mod tests {
         let native = Target {
             runtime: Runtime::Hl,
             wasm: false,
+            cross: None,
         };
         assert_eq!(native.name(), "hl");
         assert_eq!((native.triple(), native.rustflags()), (None, None));
         let ash = Target {
             runtime: Runtime::Hl,
             wasm: true,
+            cross: None,
         };
         assert_eq!(ash.name(), "hl-wasm");
         assert_eq!(ash.triple(), Some("wasm32-wasip1"));
@@ -512,7 +527,26 @@ mod tests {
         let emscripten = Target {
             runtime: Runtime::Cpp,
             wasm: true,
+            cross: None,
         };
+        // A cross-compiled build uses the installed standard library.
+        let phone = Target {
+            runtime: Runtime::Cpp,
+            wasm: false,
+            cross: Some("aarch64-apple-ios"),
+        };
+        assert_eq!(phone.name(), "cpp-aarch64-apple-ios");
+        assert_eq!(
+            (phone.triple(), phone.rustflags()),
+            (Some("aarch64-apple-ios"), None)
+        );
+        assert_eq!(artifact("greeter", phone), "libgreeter_cpp.a");
+        let windows = Target {
+            cross: Some("x86_64-pc-windows-msvc"),
+            ..phone
+        };
+        assert_eq!(artifact("greeter", windows), "greeter_cpp.lib");
+        assert!(windows.rustflags().is_some());
         assert_eq!(emscripten.name(), "cpp-wasm");
         assert_eq!(emscripten.triple(), Some("wasm32-unknown-emscripten"));
         assert_eq!(artifact("greeter", emscripten), "libgreeter_cpp.a");

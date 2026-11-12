@@ -146,4 +146,21 @@ if [ "$(grep '^Howdy' "$work/out.txt")" != "Howdy, one and two" ]; then
 	echo "FAILED: the settings or the arguments did not reach the program" >&2
 	exit 1
 fi
+# What the crate gives of what haxelib lists is in the package, and what it
+# does not give is named.
+cat >>Cargo.toml <<'EOF'
+contributors = ["someone"]
+EOF
+"$hxn" package "${packaged[@]}" --out "$work/listed" | tr -d '\r' >"$work/listed.txt"
+if ! grep -q '"contributors": \["someone"\]' "$work/listed/haxelib.json" || ! grep -q 'releasenote' "$work/listed.txt"; then
+	echo "FAILED: the package's haxelib.json does not list what the crate gives" >&2
+	exit 1
+fi
+# A binding for another machine is not run, and an .hdll is not built for one.
+for refused in "run cpp" "build hl"; do
+	if "$hxn" $refused --target aarch64-apple-ios >/dev/null 2>&1; then
+		echo "FAILED: \`hxn $refused --target\` was not refused" >&2
+		exit 1
+	fi
+done
 echo "PASS"

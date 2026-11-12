@@ -126,7 +126,27 @@ classes for the target being compiled, tells hxcpp where the headers and the
 library are, and for HashLink puts `greeter.hdll` beside `main.hl`. The
 package holds native libraries for the machine it was made on; run
 `hxn package` into the same directory on another machine, or with `--wasm`,
-to add more.
+to add more. The hxcpp library can also be cross-compiled, including for
+iOS and Android:
+
+```
+rustup target add aarch64-apple-ios aarch64-linux-android
+hxn package cpp --target aarch64-apple-ios --out ../greeter-haxelib
+hxn package cpp --target aarch64-linux-android --out ../greeter-haxelib
+```
+
+Compiling with hxcpp's defines for that platform (`-D iphoneos`, or
+`-D android -D HXCPP_ARM64`) selects the matching library.
+
+`haxelib submit` requires a few more fields. Set `repository` and `license`
+in Cargo.toml, and the haxelib contributors and a release note under
+`[package.metadata.hxn]`:
+
+```toml
+[package.metadata.hxn]
+contributors = ["your-haxelib-name"]
+releasenote = "First release."
+```
 
 ## Examples
 
