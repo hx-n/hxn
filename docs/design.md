@@ -406,6 +406,16 @@ told what to include and link; no generated class writes C++ inline.
 The manifest is JSON, generated, committed and reviewed: a change to it is a
 change to the library's ABI.
 
+It has a second form, WebIDL, with the same API in it: an interface or a
+namespace a class, a `callback` a lent function, `Promise<T>` for a future,
+`[Throws]` for a `Result`. What WebIDL has no word for is an extended
+attribute named `Hxn...`, written where its grammar has a place for one:
+before an operation or an argument, and never on a return type. So a function
+that returns a stream of `T` is `[HxnStream]` on one that returns `T`. A
+build writes it beside its other output and a package carries it. Nothing of
+hxn's reads it; it is there for whoever reads interfaces in WebIDL, and a
+parser of the language takes all of it.
+
 ## The command
 
 `hxn` is the generator with the rest of the work around it, so that a library
@@ -484,6 +494,7 @@ flag.
   | | |
   |---|---|
   | `<library>.hxn.json` | the manifest |
+  | `<library>.hxn.webidl` | the same as WebIDL |
   | `hxn/` | hxn's own Haxe classes |
   | `binding/hl/`, `binding/cpp/` | the library's generated classes for each runtime |
   | `binding/cppia/` | declarations of the hxcpp classes, for a script |

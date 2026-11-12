@@ -1767,3 +1767,100 @@ impl Thing {
         );
     }
 }
+
+// The manifest has a second form, WebIDL, with the same API in it. The
+// fixture's is committed, as its JSON is.
+#[test]
+fn the_manifest_is_also_webidl() {
+    let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/counter");
+    let (library, _) =
+        hxn_gen::parse_crate("counter", format!("{root}/core/src/lib.rs").as_ref()).unwrap();
+    let idl = hxn_gen::webidl(&library);
+    let committed = std::fs::read_to_string(format!("{root}/counter.hxn.webidl")).unwrap();
+    assert_eq!(idl, committed);
+
+    // Every interface and every function the JSON names is here too.
+    for interface in &library.interfaces {
+        let opening = if interface.namespace {
+            format!("\nnamespace {} {{\n", interface.name)
+        } else {
+            format!("\ninterface {} {{\n", interface.name)
+        };
+        assert!(idl.contains(&opening), "{}", interface.name);
+        for method in &interface.methods {
+            // A name WebIDL keeps for itself is written with an underscore.
+            let found = if method.constructor {
+                idl.contains("constructor(")
+            } else {
+                idl.contains(&format!(" {}(", method.name))
+                    || idl.contains(&format!(" _{}(", method.name))
+            };
+            assert!(found, "{}::{}", interface.name, method.name);
+        }
+    }
+    // What WebIDL has no word for is an attribute, where the grammar has a
+    // place for one: before an operation or an argument, never a return type.
+    assert!(idl.contains("[HxnShared]\ninterface Pot {"));
+    assert!(idl.contains("[HxnWeighed]\ninterface Blob {"));
+    assert!(idl.contains("  [HxnStream] static long count_up(long limit, boolean fail);"));
+    assert!(idl.contains("  [HxnSignal] static long ramp(long limit);"));
+    assert!(idl.contains("  [HxnAsync] static Promise<undefined> settle(long milliseconds);"));
+    assert!(
+        idl.contains(
+            "  [HxnAsync, HxnConsuming] Promise<long> into_value_later(long milliseconds);"
+        )
+    );
+    assert!(idl.contains("[HxnAtomic] long progress, [HxnAtomic] boolean cancel"));
+    assert!(idl.contains("callback CounterSpawnEachF = long (Counter a0, USVString a1);"));
+    assert!(idl.contains("static long offer([HxnKept] Pot pot, PotOfferF f);"));
+    assert!(
+        idl.contains("  [HxnSize] static unsigned long doubled([HxnSize] unsigned long count);")
+    );
+    assert!(idl.contains("  static octet _byte(octet value);"));
+    for line in idl.lines() {
+        let line = line.trim_start();
+        if let Some(rest) = line.strip_prefix("static ") {
+            assert!(
+                !rest.starts_with('['),
+                "an attribute on a return type: {line}"
+            );
+        }
+    }
+
+    // And it is WebIDL: a parser of the language takes all of it, and finds
+    // each interface, namespace and callback.
+    let parsed = weedle::parse(&idl).unwrap_or_else(|error| panic!("not WebIDL: {error:?}"));
+    let lent: usize = library
+        .interfaces
+        .iter()
+        .flat_map(|interface| &interface.methods)
+        .flat_map(|method| &method.params)
+        .filter(|param| matches!(param.ty, Type::Lent { .. }))
+        .count();
+    assert_eq!(parsed.len(), library.interfaces.len() + lent);
+    let namespaces = parsed
+        .iter()
+        .filter(|definition| matches!(definition, weedle::Definition::Namespace(_)))
+        .count();
+    assert_eq!(
+        namespaces,
+        library.interfaces.iter().filter(|i| i.namespace).count()
+    );
+}
+
+// Every example's API is WebIDL a parser takes too.
+#[test]
+fn every_example_has_a_webidl_form() {
+    let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples");
+    for entry in std::fs::read_dir(root).unwrap() {
+        let dir = entry.unwrap().path();
+        if !dir.is_dir() {
+            continue;
+        }
+        let name = dir.file_name().unwrap().to_str().unwrap();
+        let (library, _) = hxn_gen::parse_crate(name, &dir.join("src/lib.rs")).unwrap();
+        let idl = hxn_gen::webidl(&library);
+        let parsed = weedle::parse(&idl).unwrap_or_else(|error| panic!("{name}: {error:?}"));
+        assert!(parsed.len() >= library.interfaces.len(), "{name}");
+    }
+}

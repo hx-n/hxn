@@ -238,6 +238,9 @@ filesystem `#include "counter.h"` would then find the generated one.
   fits in a slice of time are skipped: it runs too slowly for them.
 - A test that depends on a runtime's limits notes it beside the check it
   skips, with the reason.
+- **What the WebIDL emitter writes is parsed in its tests**, by a parser of
+  the language that is a dependency of the tests alone. The fixture's is
+  committed, as its JSON is, and a test fails when either is not current.
 - A test program ends with `hxn.Loop.exit`, not `Sys.exit`: a program that
   exits right after a collection crashes in hxcpp on Windows.
 - A check does not depend on when the collector runs by itself: it forces a

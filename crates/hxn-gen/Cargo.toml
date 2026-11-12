@@ -10,5 +10,9 @@ repository.workspace = true
 syn = { workspace = true }
 proc-macro2 = { workspace = true }
 
+[dev-dependencies]
+# Parses what the WebIDL emitter writes, in its tests.
+weedle2 = "5"
+
 [lints]
 workspace = true
