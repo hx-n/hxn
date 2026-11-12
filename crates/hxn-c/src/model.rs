@@ -131,6 +131,9 @@ pub enum Role {
     /// destructor constant like sqlite3's `SQLITE_TRANSIENT`. The caller
     /// does not pass it.
     Pass(i64),
+    /// `[HxnWritten]`: bytes C writes into during the call, which the caller
+    /// passes and sees the writes in.
+    Written,
     /// `[HxnFrees]`: a `void (*)(void *)` C calls with the text or bytes
     /// argument before it once it no longer needs them. C is given a copy
     /// and a function that frees it. The caller does not pass it.
@@ -147,6 +150,13 @@ pub enum Ignored {
     Int,
     /// `[HxnIgnore=pointer]`.
     Pointer,
+}
+
+impl Role {
+    /// Whether the caller passes the argument.
+    pub fn passed(self) -> bool {
+        matches!(self, Self::In | Self::Written)
+    }
 }
 
 impl Param {

@@ -676,6 +676,10 @@ directly. `hxn-c` does the work in three steps:
      integer length is one bytes parameter. A length other than a `size_t`
      is `[HxnLength]`, and bytes that do not fit it are an error before the
      call.
+   - A non-`const` byte pointer followed by an integer length is bytes C
+     writes into, `[HxnWritten]`: a `&mut [u8]` in Rust and a `haxe.io.Bytes`
+     in Haxe that sees the writes. It is taken to be written only during the
+     call, like a lent callback, and listed for checking.
    - A `void (*)(void *)` after a text or bytes parameter is taken as its
      destructor, `[HxnFrees]`, as in `sqlite3_bind_text`. C is given a copy
      and a destructor that frees the copy, so it may keep the text or bytes

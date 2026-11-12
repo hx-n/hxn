@@ -9,6 +9,10 @@ class Main {
 		var added = tally.addBytes(haxe.io.Bytes.ofHex("010203"));
 		Sys.println('added ${haxe.Int64.toStr(added)} bytes, total ${haxe.Int64.toStr(tally.total())}');
 		Sys.println('described: ${tally.describe() == "naïve ☃: 9"}');
+		// Bytes C writes into.
+		var buffer = haxe.io.Bytes.alloc(32);
+		var written = haxe.Int64.toInt(tally.writeName(buffer));
+		Sys.println('name written: ${buffer.getString(0, written) == "naïve ☃"}, ${haxe.Int64.toStr(tally.writeName(haxe.io.Bytes.alloc(3)))} bytes when 3 fit');
 		Sys.println('summing: ${tally.modeOf() == Mode.Sum}');
 		tally.setMode(Mode.Max);
 		tally.add(40);

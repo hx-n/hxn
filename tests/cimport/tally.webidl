@@ -49,6 +49,9 @@ interface Tally {
   [HxnC=tally_set_label] undefined set_label(DOMString label, [HxnFrees] any destructor);
   // The label, or "" before one is set.
   [HxnC=tally_label] DOMString? label();
+  // Writes the name into `buffer`, at most `size` bytes of it, and returns how
+  // many it wrote.
+  [HxnC=tally_write_name, HxnReturns=size_t] unsigned long long write_name([HxnWritten] Uint8Array buffer);
   // A new string the caller frees with tally_string_free.
   [HxnC=tally_describe, HxnFree=tally_string_free] DOMString? describe();
   [HxnC=tally_is_empty] boolean is_empty();
@@ -87,6 +90,7 @@ namespace Tally {
 // - tally_listen: the pointer it returns is ignored ([HxnIgnore=pointer]): the binding does not give back what `listener` replaced
 // - tally_add_blob: `destructor` is taken to free `data` ([HxnFrees]): C is given a copy, which it frees by calling it
 // - tally_set_label: `destructor` is taken to free `label` ([HxnFrees]): C is given a copy, which it frees by calling it
+// - tally_write_name: C is taken to write into `buffer` during the call ([HxnWritten]); remove the function if C keeps the pointer
 // - tally_each: C must call `visit` only before tally_each returns; mark it [HxnKept] if C keeps it
 // - tally_report: C must call `report` only before tally_report returns; mark it [HxnKept] if C keeps it
 // - tally_listen: C is taken to keep `listener` ([HxnKept]), and the binding returns a stream of what C calls it with

@@ -788,6 +788,33 @@ impl Context<'_> {
                     },
                     _ => return Err(format!("`{name}`: `{spelled}` has no mapping")),
                 },
+                // Bytes C writes into, with their length after them.
+                CType::Pointer { to, .. }
+                    if matches!(&**to, CType::Builtin(base) if ["char", "signed char", "unsigned char", "uint8_t", "int8_t", "void"].contains(&base.as_str()))
+                        && matches!(
+                            given
+                                .get(at + 1)
+                                .map(|(_, s)| self.value(&self.header.c_type(s))),
+                            Some(Ok(Ty::Int(_)))
+                        ) =>
+                {
+                    let Some(Ok(Ty::Int(length))) = given
+                        .get(at + 1)
+                        .map(|(_, s)| self.value(&self.header.c_type(s)))
+                    else {
+                        unreachable!("matched above")
+                    };
+                    self.lent.borrow_mut().push(format!(
+                        "{function}: C is taken to write into `{name}` during the call ([HxnWritten]); remove the function if C keeps the pointer"
+                    ));
+                    out.push(Param {
+                        name,
+                        ty: Ty::Bytes(length),
+                        role: Role::Written,
+                    });
+                    at += 2;
+                    continue;
+                }
                 CType::Pointer { to, .. } => match self.object(&ty) {
                     Some(object) => Ty::Object(object),
                     None => match self.written(to) {
@@ -895,7 +922,7 @@ impl Context<'_> {
             let returns = self.returns(c_returns)?;
             return Ok((params, returns, Status::None, Ignored::None));
         };
-        if let Some(late) = params[first..].iter().find(|p| p.role == Role::In) {
+        if let Some(late) = params[first..].iter().find(|p| p.role.passed()) {
             return Err(format!(
                 "`{}` comes before `{}`, so it may be an array, which is not imported",
                 params[first].name, late.name

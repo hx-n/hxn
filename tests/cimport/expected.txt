@@ -1,6 +1,7 @@
 name kept: true, total 3
 added 3 bytes, total 9
 described: true
+name written: true, 3 bytes when 3 fit
 summing: true
 max: 40
 checksum: 60

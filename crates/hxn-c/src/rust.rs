@@ -139,7 +139,7 @@ fn fallible(function: &Function, constructor: bool) -> bool {
         || function
             .params
             .iter()
-            .any(|param| param.role == Role::In && fallible_param(&param.ty))
+            .any(|param| param.role.passed() && fallible_param(&param.ty))
         || matches!(function.returns, Ty::Enum(_) | Ty::Object(_))
 }
 
@@ -489,7 +489,7 @@ fn convert(api: &Api, params: &[Param]) -> (Vec<String>, Vec<String>) {
         let name = ident(&param.name);
         let owned = owned.contains(&at);
         match param.role {
-            Role::In => {}
+            Role::In | Role::Written => {}
             Role::Frees => {
                 let freed = &params[freed(params, at).expect("checked when parsed")];
                 passed.push(String::from(if freed.ty == Ty::Text {
@@ -561,6 +561,9 @@ fn convert(api: &Api, params: &[Param]) -> (Vec<String>, Vec<String>) {
                     format!("{name}.as_ptr()")
                 });
             }
+            Ty::Bytes(Int::Size) if param.role == Role::Written => {
+                passed.push(format!("{name}.as_mut_ptr(), {name}.len()"));
+            }
             Ty::Bytes(Int::Size) if owned => {
                 passed.push(format!("hxn_owned_bytes({name}), {name}.len()"));
             }
@@ -571,7 +574,9 @@ fn convert(api: &Api, params: &[Param]) -> (Vec<String>, Vec<String>) {
                     c_type(&Ty::Int(*length)),
                     length.c_name().replace('_', " ")
                 ));
-                passed.push(if owned {
+                passed.push(if param.role == Role::Written {
+                    format!("{name}.as_mut_ptr(), {name}_length")
+                } else if owned {
                     format!("hxn_owned_bytes({name}), {name}_length")
                 } else {
                     format!("{name}.as_ptr(), {name}_length")
@@ -687,9 +692,10 @@ fn wrapper(
             "&mut self"
         }));
     }
-    for param in function.params.iter().filter(|p| p.role == Role::In) {
+    for param in function.params.iter().filter(|p| p.role.passed()) {
         let ty = match &param.ty {
             Ty::Callback(name) => format!("impl {}", callback_bound(callback(api, name))),
+            Ty::Bytes(_) if param.role == Role::Written => String::from("&mut [u8]"),
             other => rust_param(other),
         };
         params.push(format!("{}: {ty}", ident(&param.name)));
@@ -863,6 +869,15 @@ fn c_params(api: &Api, param: &Param) -> Vec<String> {
             return vec![format!(
                 "{name}: Option<unsafe extern \"C\" fn(*mut c_void)>"
             )];
+        }
+        Role::Written => {
+            let Ty::Bytes(length) = &param.ty else {
+                unreachable!("only bytes are written")
+            };
+            return vec![
+                format!("{name}: *mut u8"),
+                format!("{name}_length: {}", c_type(&Ty::Int(*length))),
+            ];
         }
         _ => {}
     }

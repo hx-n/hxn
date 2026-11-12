@@ -119,6 +119,14 @@ const char *tally_label(const tally *t) {
 	return t->label ? t->label : "";
 }
 
+size_t tally_write_name(const tally *t, char *buffer, size_t size) {
+	size_t length = strlen(t->name);
+	if (length > size)
+		length = size;
+	memcpy(buffer, t->name, length);
+	return length;
+}
+
 char *tally_describe(const tally *t) {
 	char *text = malloc(128);
 	if (text)

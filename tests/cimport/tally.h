@@ -50,6 +50,9 @@ int tally_add_blob(tally *t, const void *data, int length, tally_destructor dest
 void tally_set_label(tally *t, const char *label, tally_destructor destructor);
 /* The label, or "" before one is set. */
 const char *tally_label(const tally *t);
+/* Writes the name into `buffer`, at most `size` bytes of it, and returns how
+ * many it wrote. */
+size_t tally_write_name(const tally *t, char *buffer, size_t size);
 /* A new string the caller frees with tally_string_free. */
 char *tally_describe(const tally *t);
 void tally_string_free(char *text);

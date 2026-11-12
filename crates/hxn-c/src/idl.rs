@@ -19,6 +19,7 @@
 //! | `const char *` | `DOMString`, and `DOMString?` as a return type |
 //! | `const uint8_t *` and a `size_t` length | `Uint8Array` |
 //! | a length of another integer type | `[HxnLength=int]` on the `Uint8Array` argument; also `unsigned`, `int64_t`, `uint64_t`, `long` and so on |
+//! | a non-`const` byte pointer and its length, which C writes into | `[HxnWritten] Uint8Array buffer` |
 //! | a pointer C is always passed the same value for, such as a destructor constant | `[HxnPass=-1] any destructor` |
 //! | a `void (*)(void *)` C calls to free the text or bytes argument before it | `[HxnFrees] any destructor`: C is given a copy, which that frees |
 //! | free functions | `namespace <Library> { ... };` |
@@ -118,6 +119,7 @@ fn arguments(params: &[Param]) -> String {
                 Role::Kept => list.insert(0, String::from("HxnKept")),
                 Role::Pass(value) => list.insert(0, format!("HxnPass={value}")),
                 Role::Frees => list.insert(0, String::from("HxnFrees")),
+                Role::Written => list.insert(0, String::from("HxnWritten")),
             }
             format!("{}{} {}", notes(&list), type_name(&param.ty), param.name)
         })
@@ -661,6 +663,7 @@ fn arguments_of(parser: &mut Parser, names: &Names) -> Result<Vec<Param>, String
                 "HxnKept",
                 "HxnPass",
                 "HxnFrees",
+                "HxnWritten",
                 "HxnLength",
             ],
             "an argument",
@@ -685,6 +688,7 @@ fn arguments_of(parser: &mut Parser, names: &Names) -> Result<Vec<Param>, String
             ("HxnNull", Role::Null),
             ("HxnKept", Role::Kept),
             ("HxnFrees", Role::Frees),
+            ("HxnWritten", Role::Written),
         ]
         .into_iter()
         .filter(|(note, _)| find(&notes, note).is_some())
@@ -707,7 +711,10 @@ fn arguments_of(parser: &mut Parser, names: &Names) -> Result<Vec<Param>, String
                     "an argument of type `any` is `[HxnPass=n]`, passed a fixed value, or `[HxnFrees]`, a destructor",
                 );
             }
-            (Role::In, _) => {}
+            (Role::In, _) | (Role::Written, Ty::Bytes(_)) => {}
+            (Role::Written, _) => {
+                return parser.fail("`[HxnWritten]` applies to a `Uint8Array` argument");
+            }
             (Role::Kept, _) => {
                 return parser.fail("`[HxnKept]` applies to a callback argument");
             }
