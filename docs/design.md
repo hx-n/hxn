@@ -562,6 +562,13 @@ flags.
   cargo where the library's `hxn` dependency comes from (a path, a git
   repository or a registry) and takes `hxn-abi` and `hxn-hl` from the same
   source. Two different copies of `hxn-abi` would have incompatible handles.
+- **The command builds only libraries on its own version.** The adapters it
+  generates are written against the `hxn` crates of that version, so a
+  build stops when the library's `hxn` is another version, and says which
+  tag to depend on or which command to install.
+- **The adapter's lock file follows the library's.** It is copied from the
+  library's `Cargo.lock` on the first build and again whenever that file
+  changes, so the adapter builds with the versions the library resolved.
 - **The command embeds hxn's Haxe classes and C header** and writes them next
   to the generated ones, so a library needs nothing installed except the
   command.

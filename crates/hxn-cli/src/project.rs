@@ -36,6 +36,8 @@ pub struct Project {
     pub target: PathBuf,
     /// The source of its `hxn` dependency, which the adapters also use.
     pub hxn: Source,
+    /// The version of that `hxn`.
+    pub hxn_version: String,
 }
 
 /// The extra `haxelib.json` fields that `haxelib submit` requires.
@@ -293,6 +295,7 @@ impl Project {
             .iter()
             .find(|package| text(package, "name") == Some("hxn"))
             .ok_or_else(|| format!("`{name}` does not depend on `hxn`"))?;
+        let hxn_version = text(hxn, "version").unwrap_or_default().to_owned();
         let hxn = match text(hxn, "source") {
             None => {
                 let crates = text(hxn, "manifest_path")
@@ -336,6 +339,7 @@ impl Project {
                     .ok_or("`cargo metadata` reported no target directory")?,
             ),
             hxn,
+            hxn_version,
         })
     }
 }

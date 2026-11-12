@@ -109,6 +109,34 @@ impl Target {
     }
 }
 
+// Whether `file` was modified after `than`, or `than` does not exist.
+fn newer(file: &Path, than: &Path) -> bool {
+    let modified = |path: &Path| std::fs::metadata(path).and_then(|m| m.modified()).ok();
+    match (modified(file), modified(than)) {
+        (Some(file), Some(than)) => file > than,
+        (_, None) => true,
+        (None, Some(_)) => false,
+    }
+}
+
+// The adapters this command generates are written against the `hxn` crates
+// of its own version, which the library's `hxn` dependency selects, so the
+// two have to match.
+fn check_version(package: &str, hxn: &str) -> Result<(), String> {
+    let own = env!("CARGO_PKG_VERSION");
+    if hxn.is_empty() || hxn == own {
+        return Ok(());
+    }
+    Err(format!(
+        "this is hxn {own}, and `{}` depends on hxn {}: the bindings it generates are for its own version. Depend on `hxn = {{ git = \"{}\", tag = \"v{own}\" }}`, or install the command of the library's version with `cargo install --git {} --tag v{} hxn-cli`",
+        package,
+        hxn,
+        env!("CARGO_PKG_REPOSITORY"),
+        env!("CARGO_PKG_REPOSITORY"),
+        hxn,
+    ))
+}
+
 /// The outputs of a build that a Haxe compile uses.
 pub struct Built {
     /// The runtime's output directory: it holds the built library, and a
@@ -425,6 +453,7 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
     } = options;
     let name = &project.library;
     let runtime = target.runtime;
+    check_version(&project.package, &project.hxn_version)?;
     if target.wasm && runtime == Runtime::Hl {
         // An Ash side module needs std rebuilt as position-independent code
         // that unwinds, and only a nightly cargo can rebuild std.
@@ -512,15 +541,20 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
         classes_in(&declarations, &hxn_gen::haxe_cppia(&library))?;
     }
 
-    // The first build starts from the library's Cargo.lock, so the adapter
-    // uses the dependency versions the library resolved.
+    // The adapter starts from the library's Cargo.lock, so it uses the
+    // dependency versions the library resolved, and starts from it again
+    // whenever the library's changes; cargo then adds the adapter's own.
     let lock = krate.join("Cargo.lock");
-    if !lock.exists() {
-        for above in project.dir.ancestors() {
-            if std::fs::copy(above.join("Cargo.lock"), &lock).is_ok() {
-                break;
-            }
-        }
+    let library_lock = project
+        .dir
+        .ancestors()
+        .map(|above| above.join("Cargo.lock"))
+        .find(|path| path.is_file());
+    if let Some(library_lock) = library_lock
+        && newer(&library_lock, &lock)
+    {
+        std::fs::copy(&library_lock, &lock)
+            .map_err(|error| format!("{}: {error}", library_lock.display()))?;
     }
     let mut cargo = Command::new("cargo");
     cargo
@@ -646,6 +680,34 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_lock_file_is_copied_again_once_it_changes() {
+        let dir = std::env::temp_dir().join(format!("hxn-newer-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let (library, adapter) = (dir.join("library.lock"), dir.join("adapter.lock"));
+        std::fs::write(&library, "a").unwrap();
+        assert!(newer(&library, &adapter));
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        std::fs::write(&adapter, "a").unwrap();
+        assert!(!newer(&library, &adapter));
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        std::fs::write(&library, "b").unwrap();
+        assert!(newer(&library, &adapter));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_library_on_another_hxn_is_refused() {
+        let own = env!("CARGO_PKG_VERSION");
+        assert!(check_version("lib", own).is_ok());
+        let error = check_version("lib", "0.0.1").unwrap_err();
+        assert!(error.contains(&format!(
+            "this is hxn {own}, and `lib` depends on hxn 0.0.1"
+        )));
+        assert!(error.contains(&format!("tag = \"v{own}\"")));
+        assert!(error.contains("--tag v0.0.1 hxn-cli"));
+    }
 
     #[test]
     fn what_build_scripts_link_is_read_from_cargo() {
