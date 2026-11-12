@@ -43,7 +43,7 @@ pub use callback::Callback;
 pub use guard::{catch, guard};
 pub use handle::{Handle, Opaque, RawHandle, Ref, RefMut, release};
 pub use memory::Weight;
-pub use slice::{Slice, SliceMut};
+pub use slice::{Slice, SliceMut, apart};
 pub use status::{Failure, Fault, Status};
 
 // These sizes match the layouts include/hxn.h declares. Change both together.

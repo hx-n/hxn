@@ -354,6 +354,9 @@ pub enum Type {
     F64,
     Str,
     Bytes,
+    /// `&mut [u8]`: a Haxe `haxe.io.Bytes` the call writes into, borrowed for
+    /// the call. Parameter type only.
+    BytesMut,
     /// A handle to an interface value, which may be null when `nullable`.
     Handle {
         interface: String,
@@ -442,6 +445,7 @@ impl Type {
             Self::F64 => String::from("f64"),
             Self::Str => String::from("str"),
             Self::Bytes => String::from("bytes"),
+            Self::BytesMut => String::from("bytes_mut"),
             Self::AtomicInt => String::from("atomic_i32"),
             Self::AtomicBool => String::from("atomic_flag"),
             Self::Future(of) => format!("future<{}>", of.name()),

@@ -91,7 +91,10 @@ filesystem `#include "counter.h"` would then find the generated header.
   The function is `pub`, reachable at the crate's root as an interface is,
   not named `new`, and its name is unique within its class.
 - Text is accepted as `&str` and returned as `String`; bytes are accepted as
-  `&[u8]` and returned as `Vec<u8>`.
+  `&[u8]` and returned as `Vec<u8>`. Bytes the function writes into are
+  `&mut [u8]`, and the Haxe `Bytes` passed for them sees the writes. An
+  `async fn` cannot take them, and they are not a lent function's
+  parameter.
 - A number is `i32`, `i64` or `f64`, or one the adapter converts: `i8`,
   `i16`, `u8`, `u16`, `isize` and `usize` are passed as a Haxe `Int`, `u32` as
   a `UInt` with the same bits, `u64` as a `haxe.Int64` with the same bits,

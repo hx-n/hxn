@@ -25,6 +25,7 @@ fn declaration(library: &Library, interface: &Interface, method: &Method) -> Str
             Type::I64 => "int64_t ",
             Type::F64 => "double ",
             Type::Str | Type::Bytes => "hxn_slice ",
+            Type::BytesMut => "hxn_slice_mut ",
             Type::Handle { .. } => "hxn_handle *",
             Type::AtomicInt | Type::AtomicBool => "int32_t *",
             // Borrowed for the call, so its `drop` is null.
@@ -41,7 +42,7 @@ fn declaration(library: &Library, interface: &Interface, method: &Method) -> Str
         Type::I64 => params.push(String::from("int64_t *out")),
         Type::F64 => params.push(String::from("double *out")),
         Type::Str | Type::Bytes => params.push(String::from("hxn_buf *out")),
-        Type::Lent { .. } | Type::Data(_) => unreachable!("not a result type"),
+        Type::Lent { .. } | Type::Data(_) | Type::BytesMut => unreachable!("not a result type"),
         Type::Handle { .. }
         | Type::AtomicInt
         | Type::AtomicBool
@@ -152,6 +153,10 @@ fn glue(library: &Library, interface: &Interface, method: &Method) -> String {
                 params.push(format!("Array<unsigned char> {name}"));
                 arguments.push(format!("hxn::slice({name})"));
             }
+            Type::BytesMut => {
+                params.push(format!("Array<unsigned char> {name}"));
+                arguments.push(format!("hxn::slice_mut({name})"));
+            }
             Type::Handle { .. } => {
                 params.push(format!("void *{name}"));
                 arguments.push(format!("(hxn_handle *){name}"));
@@ -189,7 +194,7 @@ fn glue(library: &Library, interface: &Interface, method: &Method) -> String {
             Some("hxn_buf out = HXN_BUF_EMPTY;"),
             Some("hxn::take_string(out)"),
         ),
-        Type::Lent { .. } | Type::Data(_) => unreachable!("not a result type"),
+        Type::Lent { .. } | Type::Data(_) | Type::BytesMut => unreachable!("not a result type"),
         Type::Bytes => (
             "Array<unsigned char>",
             Some("hxn_buf out = HXN_BUF_EMPTY;"),

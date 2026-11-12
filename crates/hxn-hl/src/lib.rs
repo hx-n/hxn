@@ -23,7 +23,7 @@
 use std::ffi::{c_int, c_void};
 
 use hl_abi::hl_type;
-use hxn_abi::{Failure, Fault, Handle, RawHandle, Slice, catch, release};
+use hxn_abi::{Failure, Fault, Handle, RawHandle, Slice, SliceMut, catch, release};
 
 // Re-exports the `hl_abi` items a generated adapter uses, so that its crate
 // depends on this one alone.
@@ -223,6 +223,17 @@ pub unsafe fn buffer(value: *const vbuffer) -> Option<Vec<u8>> {
 /// `data` is readable for `length` bytes for `'a`, or `length` is not positive.
 pub unsafe fn slice<'a>(data: *const vbyte, length: c_int) -> Slice<'a> {
     unsafe { Slice::from_raw(data, usize::try_from(length).unwrap_or(0)) }
+}
+
+/// Wraps an `hl.Bytes` pointer and a length as bytes the call writes into.
+/// The garbage collector does not move them, so the Haxe `Bytes` sees what
+/// was written.
+///
+/// # Safety
+/// `data` is writable for `length` bytes for `'a` and nothing else reads or
+/// writes them during `'a`, or `length` is not positive.
+pub unsafe fn slice_mut<'a>(data: *mut vbyte, length: c_int) -> SliceMut<'a> {
+    unsafe { SliceMut::from_raw(data, usize::try_from(length).unwrap_or(0)) }
 }
 
 /// Copies `text` into VM-owned, null-terminated UTF-16, the input

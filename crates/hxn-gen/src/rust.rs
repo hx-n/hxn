@@ -292,6 +292,35 @@ fn encoded(method: &Method, call: String) -> String {
     }
 }
 
+// Checks that bytes a call writes through are not also another of its byte
+// arguments, made before any of them is a reference. `addresses` gives the
+// expression for a parameter's address range.
+fn apart_checks(method: &Method, addresses: impl Fn(&str) -> String) -> Vec<String> {
+    let bytes: Vec<&Param> = method
+        .params
+        .iter()
+        .filter(|p| p.data.is_none() && matches!(p.ty, Type::Bytes | Type::BytesMut))
+        .collect();
+    let mut out = Vec::new();
+    for (at, written) in bytes.iter().enumerate() {
+        if written.ty != Type::BytesMut {
+            continue;
+        }
+        for (other_at, other) in bytes.iter().enumerate() {
+            // Two written ones are checked once.
+            if other_at == at || (other.ty == Type::BytesMut && other_at < at) {
+                continue;
+            }
+            out.push(format!(
+                "apart({}, {})?;",
+                addresses(&written.name),
+                addresses(&other.name)
+            ));
+        }
+    }
+    out
+}
+
 fn c_method(library: &Library, interface: &Interface, method: &Method) -> String {
     let mut params = Vec::new();
     let mut body = Vec::new();
@@ -333,6 +362,7 @@ fn c_method(library: &Library, interface: &Interface, method: &Method) -> String
             Type::F64 => ("f64", narrowed(param.number, name)),
             Type::Str => ("Slice<'_>", format!("{name}.as_str()?")),
             Type::Bytes => ("Slice<'_>", format!("{name}.as_bytes()?")),
+            Type::BytesMut => ("SliceMut<'_>", format!("{name}.into_bytes()?")),
             Type::Handle {
                 interface,
                 nullable,
@@ -362,6 +392,10 @@ fn c_method(library: &Library, interface: &Interface, method: &Method) -> String
         params.push(format!("{name}: {ty}"));
         arguments.push(argument);
     }
+    body.splice(
+        0..0,
+        apart_checks(method, |name| format!("{name}.addresses()")),
+    );
     if method.asynchronous {
         body.extend(owned(library, method, &mut arguments));
     }
@@ -386,7 +420,7 @@ fn c_method(library: &Library, interface: &Interface, method: &Method) -> String
             format!("Ok({})", widened(method.returns_number, &call)),
         ),
         Type::Str | Type::Bytes => (Some("Buf"), format!("Ok(Buf::from({call}))")),
-        Type::Lent { .. } | Type::Data(_) => unreachable!("not a result type"),
+        Type::Lent { .. } | Type::Data(_) | Type::BytesMut => unreachable!("not a result type"),
         Type::Handle { .. } => (
             Some("RawHandle"),
             handed(library, method, &call, "Handle::into_raw"),
@@ -517,7 +551,7 @@ pub fn c_adapter(library: &Library, core: &str) -> String {
     out.push_str("#[allow(unused_imports)]\nuse std::sync::{Arc, Weak};\n");
     out.push_str("#[allow(unused_imports)]\nuse std::sync::atomic::AtomicI32;\n\n");
     out.push_str(
-        "#[allow(unused_imports)]\nuse hxn_abi::{AtomicFlag, Buf, Callback, Fault, Handle, RawHandle, Slice, Status, guard, memory, release};\n",
+        "#[allow(unused_imports)]\nuse hxn_abi::{AtomicFlag, Buf, Callback, Fault, Handle, RawHandle, Slice, SliceMut, Status, apart, guard, memory, release};\n",
     );
     out.push_str(&imports(library, core));
     out.push_str(later::imports(library));
@@ -577,7 +611,7 @@ fn hl_letter(library: &Library, ty: &Type) -> String {
         // bytes are VM bytes with their length written to a separate
         // parameter.
         Type::Str | Type::Bytes => String::from("B"),
-        Type::Lent { .. } | Type::Data(_) => unreachable!("not a result type"),
+        Type::Lent { .. } | Type::Data(_) | Type::BytesMut => unreachable!("not a result type"),
         Type::Handle { interface, .. } => format!("X{}_", abstract_name(library, interface)),
         Type::AtomicInt | Type::AtomicBool => format!("X{}_", cell_abstract(library)),
         Type::Future(_) | Type::Stream(_) | Type::Signal(_) => {
@@ -674,6 +708,15 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
                 ));
                 arguments.push(name.clone());
             }
+            Type::BytesMut => {
+                params.push(format!("{name}: *mut vbyte"));
+                params.push(format!("{name}_length: i32"));
+                signature.push_str("Bi");
+                body.push(format!(
+                    "let {name} = slice_mut({name}, {name}_length).into_bytes()?;"
+                ));
+                arguments.push(name.clone());
+            }
             Type::Handle {
                 interface,
                 nullable,
@@ -712,6 +755,12 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
         params.push(String::from("out: *mut i32"));
         signature.push_str("Ri");
     }
+    body.splice(
+        0..0,
+        apart_checks(method, |name| {
+            format!("slice({name}, {name}_length).addresses()")
+        }),
+    );
     if method.asynchronous {
         body.extend(owned(library, method, &mut arguments));
     }
@@ -741,7 +790,7 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
             format!("Ok({})", widened(method.returns_number, &call)),
         ),
         Type::Str => ("*mut vbyte", format!("Ok(utf16(&{call}))")),
-        Type::Lent { .. } | Type::Data(_) => unreachable!("not a result type"),
+        Type::Lent { .. } | Type::Data(_) | Type::BytesMut => unreachable!("not a result type"),
         Type::Handle { .. } => ("*mut Managed", handed(library, method, &call, "manage")),
         Type::Future(_) | Type::Stream(_) | Type::Signal(_) => {
             let (kind, _) = later::of(&method.returns).expect("a result over time");
@@ -784,10 +833,10 @@ pub fn hl_adapter(library: &Library, core: &str) -> String {
     out.push_str("#[allow(unused_imports)]\nuse std::sync::{Arc, Weak};\n");
     out.push_str("#[allow(unused_imports)]\nuse std::sync::atomic::AtomicI32;\n\n");
     out.push_str(
-        "#[allow(unused_imports)]\nuse hxn_abi::{AtomicFlag, Callback, Fault, Status, memory};\n",
+        "#[allow(unused_imports)]\nuse hxn_abi::{AtomicFlag, Callback, Fault, Status, apart, memory};\n",
     );
     out.push_str(
-        "#[allow(unused_imports)]\nuse hxn_hl::{Managed, blocking, box_bool, box_bytes, box_f64, box_i32, buffer, bytes, call, define_prim, handle, manage, prim, slice, string, unbox_bool, unbox_f64, unbox_i32, utf16, vbyte, vclosure, vdynamic, vstring};\n",
+        "#[allow(unused_imports)]\nuse hxn_hl::{Managed, blocking, box_bool, box_bytes, box_f64, box_i32, buffer, bytes, call, define_prim, handle, manage, prim, slice, slice_mut, string, unbox_bool, unbox_f64, unbox_i32, utf16, vbyte, vclosure, vdynamic, vstring};\n",
     );
     out.push_str(&imports(library, core));
     out.push_str(later::imports(library));

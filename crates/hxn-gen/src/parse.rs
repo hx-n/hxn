@@ -442,6 +442,14 @@ impl Scope<'_> {
                 return Ok(plain(cell));
             }
         }
+        // Bytes the call writes into: the Haxe `Bytes` sees what was written.
+        if let syn::Type::Reference(reference) = ty
+            && reference.mutability.is_some()
+            && let syn::Type::Slice(slice) = &*reference.elem
+            && path_name(&slice.elem).as_deref() == Some("u8")
+        {
+            return Ok(plain(Type::BytesMut));
+        }
         if cell(ty).is_some() || wrapped(ty, "Arc").and_then(cell).is_some() {
             return error(
                 ty.span(),
@@ -543,7 +551,7 @@ impl Scope<'_> {
             Some("i128" | "u128") => error(ty.span(), WIDE),
             _ => error(
                 ty.span(),
-                "a parameter is one of bool, a number, &str, &[u8], data marked `#[hxn::data]` or an Option or Vec of data, &AtomicI32, &AtomicFlag, `&` or `&mut` of an interface, or `impl Fn(..) -> Result<T, E>`",
+                "a parameter is one of bool, a number, &str, &[u8], &mut [u8], data marked `#[hxn::data]` or an Option or Vec of data, &AtomicI32, &AtomicFlag, `&` or `&mut` of an interface, or `impl Fn(..) -> Result<T, E>`",
             ),
         }
     }
@@ -767,6 +775,7 @@ impl Scope<'_> {
             let lent = match &param.ty {
                 Type::Lent { .. } => Some("a function"),
                 Type::AtomicInt | Type::AtomicBool => Some("a cell"),
+                Type::BytesMut => Some("bytes to write into"),
                 Type::Handle { interface, .. } if param.exclusive || !self.is_shared(interface) => {
                     Some("an object")
                 }

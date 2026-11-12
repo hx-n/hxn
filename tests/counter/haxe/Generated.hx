@@ -640,6 +640,13 @@ class Generated {
 		var filled = counter.fill(3);
 		check("bytes out", filled.length == 3 && filled.get(0) == 42 && filled.get(2) == 42 && counter.sum(filled) == 126);
 		check("no bytes out", counter.fill(0).length == 0);
+		var stamped = haxe.io.Bytes.alloc(3);
+		counter.stamp(stamped);
+		check("bytes written in place", stamped.toHex() == "2a2a2a");
+		counter.stamp(haxe.io.Bytes.alloc(0));
+		var into = haxe.io.Bytes.alloc(2);
+		check("bytes copied into others", Tools.copy(haxe.io.Bytes.ofHex("0102ff"), into) == 2 && into.toHex() == "0102");
+		throws("the same bytes read and written", () -> Tools.copy(into, into), "passed as two arguments");
 		throws("a failure in place of bytes", () -> counter.fill(-1), "negative count");
 		check("a bool out", counter.isPositive());
 		check("a float in and out", counter.scaled(0.5) == 21);

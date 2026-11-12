@@ -35,6 +35,7 @@ every dependency twice.
 | Value | Wire type | Owner |
 |---|---|---|
 | bytes or UTF-8 text, borrowed for the call | `Slice` | the caller |
+| bytes the library writes into, borrowed for the call | `SliceMut` | the caller |
 | bytes or UTF-8 text, returned | `Buf` | the library, until the host frees it |
 | a Rust value held by the host | `Handle<T>` behind an opaque pointer | the host's garbage collector |
 | a host callback, borrowed for the call | `Callback` | the host |
@@ -64,6 +65,14 @@ JavaScript, where it would be a `BigInt`.
 Text is UTF-8 at the boundary. HashLink strings are UTF-16, so the HashLink
 adapter converts at the boundary, strictly: invalid text in either encoding is
 an error and is never replaced with a replacement character.
+
+Bytes a library writes into are a `&mut [u8]` parameter. The library is
+given the memory of the Haxe `haxe.io.Bytes` itself, not a copy, so the
+caller sees what was written: `hl.Bytes` on HashLink and the array's base on
+hxcpp, which neither collector moves. A `&mut [u8]` may not alias any other
+reference, so before making either the adapter checks that the bytes are not
+also another bytes argument of the same call, which Haxe can pass by giving
+one `Bytes` twice, and fails the call with `Status::ALIASED` if they are.
 
 A `Buf` carries its own `free` function, because each library is linked with
 its own allocator and memory must be freed by the allocator that allocated it.

@@ -59,6 +59,15 @@ pub fn total(first: &Counter, second: &Counter) -> i32 {
     first.value + second.value
 }
 
+/// Copies as much of `from` as fits into `into`, and returns how many bytes
+/// it copied.
+#[hxn::function(class = "Tools")]
+pub fn copy(from: &[u8], into: &mut [u8]) -> i32 {
+    let count = from.len().min(into.len());
+    into[..count].copy_from_slice(&from[..count]);
+    i32::try_from(count).unwrap_or(i32::MAX)
+}
+
 /// Creates a counter from a free function instead of a `Counter` method.
 #[hxn::function(class = "Tools")]
 pub fn starting_at(value: i32) -> Counter {
@@ -142,6 +151,11 @@ impl Counter {
 
     pub fn sum(&self, data: &[u8]) -> i32 {
         data.iter().map(|&byte| i32::from(byte)).sum()
+    }
+
+    /// Writes the value's low byte into every byte of `data`.
+    pub fn stamp(&self, data: &mut [u8]) {
+        data.fill(self.value as u8);
     }
 
     pub fn is_positive(&self) -> bool {

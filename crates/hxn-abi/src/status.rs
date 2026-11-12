@@ -29,6 +29,8 @@ impl Status {
     pub const RANGE: Self = Self(-11);
     /// Recursive data nested deeper than the reader accepts.
     pub const DEPTH: Self = Self(-12);
+    /// Bytes written through are also another argument of the same call.
+    pub const ALIASED: Self = Self(-13);
 
     pub const fn is_ok(self) -> bool {
         self.0 == 0
@@ -55,6 +57,8 @@ pub enum Fault {
     Range,
     /// Data nested deeper than the reader accepts.
     Depth,
+    /// Bytes written through are also another argument of the same call.
+    Aliased,
 }
 
 impl Fault {
@@ -68,6 +72,7 @@ impl Fault {
             Self::TooLarge => Status::TOO_LARGE,
             Self::Range => Status::RANGE,
             Self::Depth => Status::DEPTH,
+            Self::Aliased => Status::ALIASED,
         }
     }
 
@@ -81,6 +86,7 @@ impl Fault {
             Self::TooLarge => "length out of range",
             Self::Range => "number out of range",
             Self::Depth => "data nests too deep",
+            Self::Aliased => "the same bytes are passed as two arguments, one of them written",
         }
     }
 }

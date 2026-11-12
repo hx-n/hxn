@@ -31,7 +31,7 @@ fn haxe_type(ty: &Type) -> String {
         Type::I64 => String::from("haxe.Int64"),
         Type::F64 => String::from("Float"),
         Type::Str => String::from("String"),
-        Type::Bytes => String::from("haxe.io.Bytes"),
+        Type::Bytes | Type::BytesMut => String::from("haxe.io.Bytes"),
         Type::Future(of) => format!("hxn.Future<{}>", carried_type(of)),
         Type::Stream(of) => format!("hxn.Stream<{}>", carried_type(of)),
         Type::Signal(of) => format!("hxn.Signal<{}>", haxe_type(of)),
@@ -184,7 +184,7 @@ fn hl_native(library: &Library, interface: &Interface, method: &Method) -> Strin
             Type::I64 => params.push(format!("{name}:hl.I64")),
             Type::F64 => params.push(format!("{name}:Float")),
             Type::Str => params.push(format!("{name}:String")),
-            Type::Bytes => {
+            Type::Bytes | Type::BytesMut => {
                 params.push(format!("{name}:hl.Bytes"));
                 params.push(format!("{name}Length:Int"));
             }
@@ -216,7 +216,7 @@ fn hl_native(library: &Library, interface: &Interface, method: &Method) -> Strin
         Type::I64 => (String::from("hl.I64"), "\n\t\treturn 0;"),
         Type::F64 => (String::from("Float"), "\n\t\treturn 0.;"),
         Type::Str | Type::Bytes => (String::from("hl.Bytes"), "\n\t\treturn null;"),
-        Type::Lent { .. } | Type::Data(_) => unreachable!("not a result type"),
+        Type::Lent { .. } | Type::Data(_) | Type::BytesMut => unreachable!("not a result type"),
         Type::Handle { interface: of, .. } => (hl_raw(of, &interface.name), "\n\t\treturn null;"),
         Type::AtomicInt | Type::AtomicBool => (String::from("CellRaw"), "\n\t\treturn null;"),
         Type::Future(_) | Type::Stream(_) | Type::Signal(_) => {
@@ -310,7 +310,7 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
             name = bytes;
         }
         match &param.ty {
-            Type::Bytes => {
+            Type::Bytes | Type::BytesMut => {
                 arguments.push(name.clone());
                 arguments.push(format!("{name}.length"));
             }
@@ -543,7 +543,7 @@ fn cpp_method(library: &Library, interface: &Interface, method: &Method) -> Stri
             name = bytes;
         }
         match &param.ty {
-            Type::Bytes => arguments.push(format!("{name}.getData()")),
+            Type::Bytes | Type::BytesMut => arguments.push(format!("{name}.getData()")),
             // Null is passed through whether or not the library accepts it.
             // hxcpp does not null-check an object before reading its field.
             Type::Handle { .. } => {
@@ -910,7 +910,7 @@ fn cpp_native(library: &Library, interface: &Interface, method: &Method) -> Stri
             Type::I64 => String::from("cpp.Int64"),
             Type::F64 => String::from("Float"),
             Type::Str => String::from("String"),
-            Type::Bytes => String::from("haxe.io.BytesData"),
+            Type::Bytes | Type::BytesMut => String::from("haxe.io.BytesData"),
             Type::Handle { .. } => String::from(CPP_HANDLE),
             Type::AtomicInt | Type::AtomicBool => String::from("cpp.RawPointer<Int>"),
             // The wrapper the binding makes, not the function the user passed.

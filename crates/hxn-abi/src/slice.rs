@@ -1,4 +1,5 @@
 use std::marker::PhantomData;
+use std::ops::Range;
 
 use crate::Fault;
 
@@ -47,6 +48,11 @@ impl<'a> Slice<'a> {
     pub fn as_str(self) -> Result<&'a str, Fault> {
         std::str::from_utf8(self.as_bytes()?).map_err(|_| Fault::Encoding)
     }
+
+    /// The addresses it covers, compared by [`apart`] without reading them.
+    pub fn addresses(&self) -> Range<usize> {
+        addresses(self.ptr, self.len)
+    }
 }
 
 impl<'a> From<&'a [u8]> for Slice<'a> {
@@ -90,12 +96,35 @@ impl<'a> SliceMut<'a> {
         }
     }
 
+    /// The addresses it covers, compared by [`apart`] without reading them.
+    pub fn addresses(&self) -> Range<usize> {
+        addresses(self.ptr, self.len)
+    }
+
     pub fn into_bytes(self) -> Result<&'a mut [u8], Fault> {
         check(self.ptr, self.len)?;
         if self.len == 0 {
             return Ok(&mut []);
         }
         Ok(unsafe { std::slice::from_raw_parts_mut(self.ptr, self.len) })
+    }
+}
+
+fn addresses(ptr: *const u8, len: usize) -> Range<usize> {
+    let start = ptr.addr();
+    start..start.saturating_add(len)
+}
+
+/// Fails with [`Fault::Aliased`] when `written`, bytes a call writes through,
+/// shares an address with `other`, another argument of the same call. A
+/// `&mut [u8]` that aliases another reference is undefined behaviour, so this
+/// is checked before either is made.
+pub fn apart(written: Range<usize>, other: Range<usize>) -> Result<(), Fault> {
+    let empty = written.is_empty() || other.is_empty();
+    if !empty && written.start < other.end && other.start < written.end {
+        Err(Fault::Aliased)
+    } else {
+        Ok(())
     }
 }
 
@@ -117,6 +146,23 @@ mod tests {
     fn reads_what_it_was_built_from() {
         assert_eq!(Slice::from("héllo").as_str(), Ok("héllo"));
         assert_eq!(Slice::new(&[1, 2, 3]).as_bytes(), Ok(&[1u8, 2, 3][..]));
+    }
+
+    #[test]
+    fn bytes_written_through_are_apart_from_the_others() {
+        let mut buffer = [0u8; 8];
+        let (left, right) = buffer.split_at_mut(4);
+        let left = SliceMut::new(left).addresses();
+        assert_eq!(
+            apart(left.clone(), SliceMut::new(right).addresses()),
+            Ok(())
+        );
+        let whole = Slice::new(&[1, 2, 3]).addresses();
+        assert_eq!(apart(whole.clone(), whole.clone()), Err(Fault::Aliased));
+        let inside = whole.start + 1..whole.start + 2;
+        assert_eq!(apart(inside, whole.clone()), Err(Fault::Aliased));
+        let empty = whole.start..whole.start;
+        assert_eq!(apart(empty, whole), Ok(()));
     }
 
     #[test]

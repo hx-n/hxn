@@ -153,6 +153,15 @@
           "blocking": false
         },
         {
+          "name": "stamp",
+          "docs": "Writes the value's low byte into every byte of `data`.",
+          "kind": "method",
+          "params": [{ "name": "data", "type": "bytes_mut" }],
+          "returns": "void",
+          "fallible": false,
+          "blocking": false
+        },
+        {
           "name": "is_positive",
           "kind": "method",
           "params": [],
@@ -1325,6 +1334,15 @@
           "docs": "Returns the sum of two counters' values.",
           "kind": "static",
           "params": [{ "name": "first", "type": "Counter" }, { "name": "second", "type": "Counter" }],
+          "returns": "i32",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "copy",
+          "docs": "Copies as much of `from` as fits into `into`, and returns how many bytes\nit copied.",
+          "kind": "static",
+          "params": [{ "name": "from", "type": "bytes" }, { "name": "into", "type": "bytes_mut" }],
           "returns": "i32",
           "fallible": false,
           "blocking": false

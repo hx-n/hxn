@@ -1561,6 +1561,10 @@ impl Band {
             "cannot take a function",
         ),
         (
+            "pub async fn fill(data: &mut [u8]) {}",
+            "cannot take bytes to write into",
+        ),
+        (
             "#[hxn(blocking)]\n    pub async fn wait() {}",
             "an async function does not wait",
         ),

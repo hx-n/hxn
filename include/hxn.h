@@ -25,6 +25,7 @@ typedef int32_t hxn_status;
 #define HXN_CALLBACK (-10)
 #define HXN_RANGE (-11)
 #define HXN_DEPTH (-12)
+#define HXN_ALIASED (-13)
 
 /* Bytes or UTF-8 text borrowed for the call. The caller keeps them alive. */
 typedef struct hxn_slice {
@@ -168,6 +169,17 @@ inline hxn_slice slice(const Array<unsigned char> &data) {
 	hxn_slice out = { 0, 0 };
 	if (data.mPtr) {
 		out.ptr = (const uint8_t *)data->getBase();
+		out.len = (size_t)data->length;
+	}
+	return out;
+}
+
+/* Returns `data` as bytes the call writes into, valid while `data` is alive
+ * and not resized. The Haxe bytes see what was written. */
+inline hxn_slice_mut slice_mut(const Array<unsigned char> &data) {
+	hxn_slice_mut out = { 0, 0 };
+	if (data.mPtr) {
+		out.ptr = (uint8_t *)data->getBase();
 		out.len = (size_t)data->length;
 	}
 	return out;
