@@ -60,7 +60,10 @@ check() {
 check "$crate" "$here/expected.txt"
 
 # A real library, imported from its installed header with no edits.
-sqlite="$(printf '#include <sqlite3.h>\n' | clang -E -x c - 2>/dev/null | sed -n 's/^# [0-9]* "\(.*sqlite3\.h\)".*/\1/p' | head -1)"
+# Where clang finds sqlite3.h, if it does. Read whole, so that neither a
+# missing header nor an early end of the pipe stops the script.
+preprocessed="$(printf '#include <sqlite3.h>\n' | clang -E -x c - 2>/dev/null || true)"
+sqlite="$(printf '%s\n' "$preprocessed" | sed -n 's/^# [0-9]* "\(.*sqlite3\.h\)".*/\1/p' | sed -n 1p)"
 if [ -n "$sqlite" ] && [ "$runtime" != emcc ]; then
 	"$hxn" import "$sqlite" --link sqlite3 --hxn "$root" --out "$work/sqlite3" >/dev/null
 	cp "$here/sqlite/Main.hx" "$work/sqlite3/haxe/Main.hx"
