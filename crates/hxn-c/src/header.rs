@@ -1,0 +1,794 @@
+//! A C header to an [`Api`], from the JSON AST clang writes for it.
+//!
+//! Only declarations in the header itself are imported; what it includes is
+//! read to resolve type names. The mapping is a guess at what the header
+//! means, written to WebIDL for review:
+//!
+//! - A struct declared without its fields is an object. A function whose
+//!   first parameter points to one is a method of it, named without the
+//!   object's prefix: `tally_add` on `tally` is `add`. One named `free`,
+//!   `destroy` and so on frees it, and one named `new`, `create` and so on
+//!   that returns a pointer to it is its constructor. Another function that
+//!   returns one is a static function of it.
+//! - A struct with its fields is passed by value, when every field is a
+//!   boolean or a number.
+//! - Returned `char *` text is freed with the library's one function that
+//!   takes a `char *` and frees it, when there is exactly one.
+//! - Anything else that cannot be mapped is listed as not imported.
+
+use std::collections::HashMap;
+use std::path::Path;
+use std::process::Command;
+
+use serde_json::Value;
+
+use crate::model::{Api, Enum, Function, Int, Object, Param, Status, Struct, Ty};
+
+const FREES: [&str; 8] = [
+    "free", "destroy", "delete", "release", "dispose", "unref", "close", "finalize",
+];
+const MAKES: [&str; 6] = ["new", "create", "make", "open", "init", "alloc"];
+
+// A C type as the header spells it.
+#[derive(Clone, PartialEq, Debug)]
+enum CType {
+    Builtin(String),
+    Record(String),
+    Enum(String),
+    Pointer { to: Box<CType>, constant: bool },
+    Unsupported(String),
+}
+
+struct Header {
+    // Every typedef clang saw, in the header and in what it includes.
+    typedefs: HashMap<String, String>,
+    // What the header declares.
+    records: Vec<Record>,
+    enums: Vec<CEnum>,
+    functions: Vec<CFunction>,
+}
+
+// An enum's tag, its documentation and its constants.
+type CEnum = (String, Vec<String>, Vec<(String, i64)>);
+
+struct Record {
+    tag: String,
+    // The typedef that names it, if any.
+    alias: Option<String>,
+    docs: Vec<String>,
+    fields: Option<Vec<(String, String)>>,
+}
+
+struct CFunction {
+    name: String,
+    docs: Vec<String>,
+    returns: String,
+    params: Vec<(String, String)>,
+    variadic: bool,
+}
+
+fn text<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
+    value.get(key)?.as_str()
+}
+
+fn qual_type(node: &Value) -> String {
+    node.get("type")
+        .and_then(|ty| text(ty, "qualType"))
+        .unwrap_or_default()
+        .to_owned()
+}
+
+// The text of the comment clang attached to a declaration, a line a
+// paragraph line.
+fn comment(node: &Value) -> Vec<String> {
+    fn gather(node: &Value, out: &mut String) {
+        if text(node, "kind") == Some("TextComment")
+            && let Some(line) = text(node, "text")
+        {
+            out.push_str(line.trim());
+            out.push(' ');
+        }
+        if text(node, "kind") == Some("ParagraphComment") && !out.is_empty() {
+            out.push('\n');
+        }
+        for child in node
+            .get("inner")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            gather(child, out);
+        }
+    }
+    let Some(full) = node
+        .get("inner")
+        .and_then(Value::as_array)
+        .and_then(|inner| {
+            inner
+                .iter()
+                .find(|n| text(n, "kind") == Some("FullComment"))
+        })
+    else {
+        return Vec::new();
+    };
+    let mut out = String::new();
+    gather(full, &mut out);
+    let joined: Vec<String> = out
+        .lines()
+        .map(|line| line.split_whitespace().collect::<Vec<_>>().join(" "))
+        .filter(|line| !line.is_empty())
+        .collect();
+    // Wrapped at about 76 columns, as comments in the WebIDL.
+    let mut lines = Vec::new();
+    for paragraph in joined {
+        let mut line = String::new();
+        for word in paragraph.split(' ') {
+            if !line.is_empty() && line.len() + word.len() > 74 {
+                lines.push(std::mem::take(&mut line));
+            }
+            if !line.is_empty() {
+                line.push(' ');
+            }
+            line.push_str(word);
+        }
+        lines.push(line);
+    }
+    lines
+}
+
+// The file a node is declared in. clang writes a location's file only when it
+// differs from the location written before it, so `current` carries the last
+// one seen.
+fn file_of(node: &Value, current: &mut Option<String>) {
+    let loc = node.get("loc");
+    let candidates = [
+        loc.and_then(|l| text(l, "file")),
+        loc.and_then(|l| l.get("spellingLoc"))
+            .and_then(|l| text(l, "file")),
+        loc.and_then(|l| l.get("expansionLoc"))
+            .and_then(|l| text(l, "file")),
+        node.get("range")
+            .and_then(|r| r.get("begin"))
+            .and_then(|b| text(b, "file")),
+    ];
+    if let Some(file) = candidates.into_iter().flatten().next() {
+        *current = Some(file.to_owned());
+    }
+}
+
+fn read(ast: &Value, header: &str) -> Header {
+    let mut out = Header {
+        typedefs: HashMap::new(),
+        records: Vec::new(),
+        enums: Vec::new(),
+        functions: Vec::new(),
+    };
+    let mut current: Option<String> = None;
+    let canonical = |path: &str| std::fs::canonicalize(path).ok();
+    let wanted = canonical(header);
+    let mut known_files: HashMap<String, bool> = HashMap::new();
+    for node in ast
+        .get("inner")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        file_of(node, &mut current);
+        let kind = text(node, "kind").unwrap_or_default();
+        let name = text(node, "name").unwrap_or_default().to_owned();
+        if kind == "TypedefDecl" {
+            out.typedefs.insert(name.clone(), qual_type(node));
+        }
+        let ours = current.as_ref().is_some_and(|file| {
+            *known_files
+                .entry(file.clone())
+                .or_insert_with(|| canonical(file).is_some_and(|path| Some(path) == wanted))
+        });
+        if !ours || text(node, "isImplicit").is_some() {
+            continue;
+        }
+        let inner = node.get("inner").and_then(Value::as_array);
+        match kind {
+            "RecordDecl" if text(node, "tagUsed") == Some("struct") && !name.is_empty() => {
+                let complete =
+                    node.get("completeDefinition").and_then(Value::as_bool) == Some(true);
+                let fields = complete.then(|| {
+                    inner
+                        .into_iter()
+                        .flatten()
+                        .filter(|n| text(n, "kind") == Some("FieldDecl"))
+                        .map(|n| (text(n, "name").unwrap_or_default().to_owned(), qual_type(n)))
+                        .collect()
+                });
+                match out.records.iter_mut().find(|record| record.tag == name) {
+                    Some(record) => {
+                        if fields.is_some() {
+                            record.fields = fields;
+                        }
+                        if record.docs.is_empty() {
+                            record.docs = comment(node);
+                        }
+                    }
+                    None => out.records.push(Record {
+                        tag: name,
+                        alias: None,
+                        docs: comment(node),
+                        fields,
+                    }),
+                }
+            }
+            "EnumDecl" if !name.is_empty() => {
+                let mut next = 0;
+                let mut values = Vec::new();
+                for constant in inner.into_iter().flatten() {
+                    if text(constant, "kind") != Some("EnumConstantDecl") {
+                        continue;
+                    }
+                    // clang records the value only where it was written.
+                    let written = constant
+                        .get("inner")
+                        .and_then(Value::as_array)
+                        .and_then(|inner| inner.first())
+                        .and_then(|expr| text(expr, "value"))
+                        .and_then(|value| value.parse::<i64>().ok());
+                    let value = written.unwrap_or(next);
+                    next = value + 1;
+                    values.push((text(constant, "name").unwrap_or_default().to_owned(), value));
+                }
+                out.enums.push((name, comment(node), values));
+            }
+            "TypedefDecl" => {
+                let target = qual_type(node);
+                if let Some(tag) = target.strip_prefix("struct ")
+                    && let Some(record) = out.records.iter_mut().find(|r| r.tag == tag)
+                {
+                    record.alias.get_or_insert(name);
+                }
+            }
+            "FunctionDecl" if text(node, "storageClass") != Some("static") => {
+                let signature = qual_type(node);
+                let params: Vec<(String, String)> = inner
+                    .into_iter()
+                    .flatten()
+                    .filter(|n| text(n, "kind") == Some("ParmVarDecl"))
+                    .map(|n| (text(n, "name").unwrap_or_default().to_owned(), qual_type(n)))
+                    .collect();
+                // The return type is what comes before the parameter list.
+                let returns = signature
+                    .find('(')
+                    .map_or(signature.as_str(), |at| &signature[..at])
+                    .trim()
+                    .to_owned();
+                out.functions.push(CFunction {
+                    name,
+                    docs: comment(node),
+                    returns,
+                    params,
+                    variadic: node.get("variadic").and_then(Value::as_bool) == Some(true),
+                });
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
+const BUILTINS: [&str; 22] = [
+    "void",
+    "_Bool",
+    "bool",
+    "char",
+    "signed char",
+    "unsigned char",
+    "short",
+    "unsigned short",
+    "int",
+    "unsigned int",
+    "long",
+    "unsigned long",
+    "long long",
+    "unsigned long long",
+    "float",
+    "double",
+    "size_t",
+    "ssize_t",
+    "ptrdiff_t",
+    "int8_t",
+    "uint8_t",
+    "intptr_t",
+];
+
+const FIXED: [&str; 6] = [
+    "int16_t", "uint16_t", "int32_t", "uint32_t", "int64_t", "uint64_t",
+];
+
+impl Header {
+    // `spelled` as a type, typedefs resolved down to a builtin, a record or
+    // an enum. The fixed-width and size typedefs are kept as they are.
+    fn c_type(&self, spelled: &str) -> CType {
+        let spelled = spelled.trim();
+        if spelled.contains('(') || spelled.contains('[') {
+            return CType::Unsupported(spelled.to_owned());
+        }
+        if let Some(at) = spelled.rfind('*') {
+            let inner = spelled[..at].trim();
+            let constant = inner.starts_with("const ") || inner.ends_with(" const");
+            return CType::Pointer {
+                to: Box::new(self.c_type(inner)),
+                constant,
+            };
+        }
+        let base = spelled
+            .split_whitespace()
+            .filter(|word| !["const", "volatile", "restrict"].contains(word))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let base = match base.as_str() {
+            "unsigned" | "unsigned int" => String::from("unsigned int"),
+            "short int" | "signed short" | "signed short int" => String::from("short"),
+            "unsigned short int" => String::from("unsigned short"),
+            "long int" | "signed long" => String::from("long"),
+            "unsigned long int" => String::from("unsigned long"),
+            "long long int" | "signed long long" => String::from("long long"),
+            "unsigned long long int" => String::from("unsigned long long"),
+            "signed" | "signed int" => String::from("int"),
+            other => other.to_owned(),
+        };
+        if BUILTINS.contains(&base.as_str()) || FIXED.contains(&base.as_str()) {
+            return CType::Builtin(base);
+        }
+        if let Some(tag) = base.strip_prefix("struct ") {
+            return CType::Record(tag.to_owned());
+        }
+        if let Some(tag) = base.strip_prefix("enum ") {
+            return CType::Enum(tag.to_owned());
+        }
+        match self.typedefs.get(&base) {
+            Some(target) if *target != base => self.c_type(target),
+            _ => CType::Unsupported(base),
+        }
+    }
+}
+
+// `tally_mode_t` to `Mode` for library `tally`.
+fn type_name(library: &str, c: &str) -> String {
+    let c = c.strip_suffix("_t").unwrap_or(c);
+    let stem = if c == library {
+        c
+    } else {
+        c.strip_prefix(&format!("{library}_")).unwrap_or(c)
+    };
+    crate::idl::namespace(stem)
+}
+
+// `TALLY_MODE_SUM` to `Sum`, given every constant of the enum.
+fn value_names(constants: &[String]) -> Vec<String> {
+    let mut prefix = constants.first().cloned().unwrap_or_default();
+    for constant in constants {
+        while !constant.starts_with(&prefix) {
+            prefix.pop();
+        }
+    }
+    // Cut at an underscore, so `MODE_MAX` and `MODE_MIN` keep their `M`.
+    let cut = prefix.rfind('_').map_or(0, |at| at + 1);
+    constants
+        .iter()
+        .map(|constant| {
+            let rest = &constant[cut..];
+            let rest = if rest.is_empty() || rest.starts_with(|c: char| c.is_ascii_digit()) {
+                constant.as_str()
+            } else {
+                rest
+            };
+            crate::idl::namespace(&rest.to_lowercase())
+        })
+        .collect()
+}
+
+struct Context<'a> {
+    library: &'a str,
+    header: &'a Header,
+    // C tag of each object, and its name.
+    objects: Vec<(String, String)>,
+    structs: Vec<(String, String)>,
+    enums: Vec<(String, String)>,
+}
+
+impl Context<'_> {
+    fn object(&self, ty: &CType) -> Option<String> {
+        let CType::Pointer { to, .. } = ty else {
+            return None;
+        };
+        let CType::Record(tag) = &**to else {
+            return None;
+        };
+        self.objects
+            .iter()
+            .find(|(c, _)| c == tag)
+            .map(|(_, name)| name.clone())
+    }
+
+    fn named<'b>(list: &'b [(String, String)], tag: &str) -> Option<&'b String> {
+        list.iter().find(|(c, _)| c == tag).map(|(_, name)| name)
+    }
+
+    // A value of a builtin, enum or struct type.
+    fn value(&self, ty: &CType) -> Result<Ty, String> {
+        match ty {
+            CType::Builtin(name) => Ok(match name.as_str() {
+                "void" => Ty::Void,
+                "_Bool" | "bool" => Ty::Bool,
+                "char" | "signed char" | "int8_t" => Ty::Int(Int::I8),
+                "unsigned char" | "uint8_t" => Ty::Int(Int::U8),
+                "short" | "int16_t" => Ty::Int(Int::I16),
+                "unsigned short" | "uint16_t" => Ty::Int(Int::U16),
+                "int" | "int32_t" => Ty::Int(Int::I32),
+                "unsigned int" | "uint32_t" => Ty::Int(Int::U32),
+                "long long" | "int64_t" => Ty::Int(Int::I64),
+                "unsigned long long" | "uint64_t" => Ty::Int(Int::U64),
+                "long" => Ty::Int(Int::Long),
+                "unsigned long" => Ty::Int(Int::ULong),
+                "size_t" => Ty::Int(Int::Size),
+                "ssize_t" | "ptrdiff_t" | "intptr_t" => Ty::Int(Int::SSize),
+                "float" => Ty::F32,
+                "double" => Ty::F64,
+                other => return Err(format!("`{other}` has no mapping")),
+            }),
+            CType::Enum(tag) => Self::named(&self.enums, tag)
+                .map(|name| Ty::Enum(name.clone()))
+                .ok_or_else(|| format!("`enum {tag}` is not declared in the header")),
+            CType::Record(tag) => Self::named(&self.structs, tag)
+                .map(|name| Ty::Struct(name.clone()))
+                .ok_or_else(|| format!("`struct {tag}` is not passed by value")),
+            CType::Pointer { .. } => Err(String::from("pointer")),
+            CType::Unsupported(spelled) => Err(format!("`{spelled}` has no mapping")),
+        }
+    }
+
+    // The parameters, with a byte pointer and the `size_t` after it read as
+    // one `Uint8Array`.
+    fn params(&self, given: &[(String, String)]) -> Result<Vec<Param>, String> {
+        let mut out = Vec::new();
+        let mut at = 0;
+        while at < given.len() {
+            let (name, spelled) = &given[at];
+            let name = if name.is_empty() {
+                format!("arg{at}")
+            } else {
+                name.clone()
+            };
+            let ty = self.header.c_type(spelled);
+            let param = match &ty {
+                CType::Pointer { to, constant: true } => match &**to {
+                    CType::Builtin(base) if base == "char" => Ty::Text,
+                    CType::Builtin(base)
+                        if ["unsigned char", "uint8_t", "void"].contains(&base.as_str()) =>
+                    {
+                        let length = given.get(at + 1).map(|(_, s)| self.header.c_type(s));
+                        if length != Some(CType::Builtin(String::from("size_t"))) {
+                            return Err(format!(
+                                "`{name}`: a byte pointer is passed with its `size_t` length after it"
+                            ));
+                        }
+                        at += 1;
+                        Ty::Bytes
+                    }
+                    CType::Record(tag) => match Self::named(&self.structs, tag) {
+                        Some(record) => Ty::StructRef(record.clone()),
+                        None => match self.object(&ty) {
+                            Some(object) => Ty::Object(object),
+                            None => return Err(format!("`{name}`: `{spelled}` has no mapping")),
+                        },
+                    },
+                    _ => return Err(format!("`{name}`: `{spelled}` has no mapping")),
+                },
+                CType::Pointer { .. } => match self.object(&ty) {
+                    Some(object) => Ty::Object(object),
+                    None => {
+                        return Err(format!(
+                            "`{name}`: `{spelled}` may be an out-parameter or an array, which is not imported"
+                        ));
+                    }
+                },
+                other => self
+                    .value(other)
+                    .map_err(|why| format!("`{name}`: {why}"))?,
+            };
+            if param == Ty::Void {
+                return Err(format!("`{name}` is `void`"));
+            }
+            out.push(Param { name, ty: param });
+            at += 1;
+        }
+        Ok(out)
+    }
+
+    fn returns(&self, spelled: &str) -> Result<Ty, String> {
+        let ty = self.header.c_type(spelled);
+        match &ty {
+            CType::Pointer { to, .. } if matches!(&**to, CType::Builtin(b) if b == "char") => {
+                Ok(Ty::Nullable(Box::new(Ty::Text)))
+            }
+            CType::Pointer { .. } => match self.object(&ty) {
+                Some(object) => Ok(Ty::Nullable(Box::new(Ty::Object(object)))),
+                None => Err(format!("returns `{spelled}`, which has no mapping")),
+            },
+            other => self.value(other).map_err(|why| format!("returns {why}")),
+        }
+    }
+}
+
+/// Imports the C header at `header` as the API of library `library`.
+/// `arguments` are passed to clang, such as `-I` directories.
+pub fn import(header: &Path, library: &str, arguments: &[String]) -> Result<Api, String> {
+    let output = Command::new("clang")
+        .args([
+            "-Xclang",
+            "-ast-dump=json",
+            "-fsyntax-only",
+            "-fparse-all-comments",
+            "-x",
+            "c",
+        ])
+        .args(arguments)
+        .arg(header)
+        .output()
+        .map_err(|error| {
+            format!("clang could not be run ({error}): install clang, which reads the header")
+        })?;
+    if !output.status.success() {
+        return Err(format!(
+            "clang could not read {}:\n{}",
+            header.display(),
+            String::from_utf8_lossy(&output.stderr).trim_end()
+        ));
+    }
+    let ast: Value = serde_json::from_slice(&output.stdout)
+        .map_err(|error| format!("clang's AST is not JSON: {error}"))?;
+    let read = read(&ast, &header.to_string_lossy());
+    Ok(api_of(library, &read))
+}
+
+fn api_of(library: &str, header: &Header) -> Api {
+    let mut api = Api {
+        library: library.to_owned(),
+        ..Api::default()
+    };
+    let mut context = Context {
+        library,
+        header,
+        objects: Vec::new(),
+        structs: Vec::new(),
+        enums: Vec::new(),
+    };
+    for (tag, docs, values) in &header.enums {
+        let constants: Vec<String> = values.iter().map(|(name, _)| name.clone()).collect();
+        let name = type_name(library, tag);
+        api.enums.push(Enum {
+            name: name.clone(),
+            docs: docs.clone(),
+            values: value_names(&constants)
+                .into_iter()
+                .zip(values.iter().map(|(_, value)| *value))
+                .collect(),
+        });
+        context.enums.push((tag.clone(), name));
+    }
+    for record in &header.records {
+        let c = record.alias.as_deref().unwrap_or(&record.tag);
+        let name = type_name(library, c);
+        match &record.fields {
+            None => {
+                context.objects.push((record.tag.clone(), name.clone()));
+                api.objects.push(Object {
+                    name,
+                    docs: record.docs.clone(),
+                    free: None,
+                    constructor: None,
+                    methods: Vec::new(),
+                    statics: Vec::new(),
+                });
+            }
+            Some(fields) => {
+                let mut mapped = Vec::new();
+                for (field, spelled) in fields {
+                    match context.value(&header.c_type(spelled)) {
+                        Ok(ty @ (Ty::Bool | Ty::Int(_) | Ty::F32 | Ty::F64)) => {
+                            mapped.push(Param {
+                                name: field.clone(),
+                                ty,
+                            });
+                        }
+                        _ => {
+                            api.skipped.push(format!(
+                                "struct {}: field `{field}` is `{spelled}`; a struct passed by value holds booleans and numbers",
+                                record.tag
+                            ));
+                            mapped.clear();
+                            break;
+                        }
+                    }
+                }
+                if !mapped.is_empty() {
+                    context.structs.push((record.tag.clone(), name.clone()));
+                    api.structs.push(Struct {
+                        name,
+                        docs: record.docs.clone(),
+                        fields: mapped,
+                    });
+                }
+            }
+        }
+    }
+
+    // The one function that frees returned text, if there is one.
+    let text_frees: Vec<&CFunction> = header
+        .functions
+        .iter()
+        .filter(|f| {
+            f.returns == "void"
+                && f.params.len() == 1
+                && header.c_type(&f.params[0].1)
+                    == (CType::Pointer {
+                        to: Box::new(CType::Builtin(String::from("char"))),
+                        constant: false,
+                    })
+                && FREES.iter().any(|word| f.name.ends_with(word))
+        })
+        .collect();
+    let text_free = match text_frees.as_slice() {
+        [only] => Some(only.name.clone()),
+        _ => None,
+    };
+
+    for function in &header.functions {
+        if Some(&function.name) == text_free.as_ref() {
+            continue;
+        }
+        if function.variadic {
+            api.skipped.push(format!(
+                "{}: takes a variable number of arguments",
+                function.name
+            ));
+            continue;
+        }
+        // A function whose first parameter is an object is its method.
+        let owner = function
+            .params
+            .first()
+            .and_then(|(_, spelled)| context.object(&header.c_type(spelled)));
+        let returned = context.object(&header.c_type(&function.returns));
+        let object_of = |name: &str| {
+            context
+                .objects
+                .iter()
+                .find(|(_, n)| n == name)
+                .map(|(tag, _)| tag.clone())
+        };
+        let prefix = |object: &str| {
+            let tag = object_of(object).unwrap_or_default();
+            let alias = header
+                .records
+                .iter()
+                .find(|r| r.tag == tag)
+                .and_then(|r| r.alias.clone())
+                .unwrap_or(tag);
+            alias.strip_suffix("_t").unwrap_or(&alias).to_owned()
+        };
+        let short = |stem: &str| {
+            function
+                .name
+                .strip_prefix(&format!("{stem}_"))
+                .unwrap_or(&function.name)
+                .to_owned()
+        };
+        let free = (function.returns.contains('*') && !function.returns.contains("const"))
+            .then(|| text_free.clone())
+            .flatten();
+
+        if let Some(object) = &owner {
+            let name = short(&prefix(object));
+            let index = api
+                .objects
+                .iter()
+                .position(|o| &o.name == object)
+                .unwrap_or(0);
+            if function.params.len() == 1
+                && function.returns == "void"
+                && FREES.contains(&name.as_str())
+                && api.objects[index].free.is_none()
+            {
+                api.objects[index].free = Some(function.name.clone());
+                continue;
+            }
+            match (
+                context.params(&function.params[1..]),
+                context.returns(&function.returns),
+            ) {
+                (Ok(params), Ok(returns)) => api.objects[index].methods.push(Function {
+                    name,
+                    c: function.name.clone(),
+                    docs: function.docs.clone(),
+                    params,
+                    returns,
+                    status: Status::None,
+                    free,
+                }),
+                (Err(why), _) | (_, Err(why)) => {
+                    api.skipped.push(format!("{}: {why}", function.name));
+                }
+            }
+            continue;
+        }
+        let params = match context.params(&function.params) {
+            Ok(params) => params,
+            Err(why) => {
+                api.skipped.push(format!("{}: {why}", function.name));
+                continue;
+            }
+        };
+        if let Some(object) = &returned {
+            let name = short(&prefix(object));
+            let index = api
+                .objects
+                .iter()
+                .position(|o| &o.name == object)
+                .unwrap_or(0);
+            let made = Function {
+                name: name.clone(),
+                c: function.name.clone(),
+                docs: function.docs.clone(),
+                params,
+                returns: Ty::Nullable(Box::new(Ty::Object(object.clone()))),
+                status: Status::None,
+                free: None,
+            };
+            if MAKES.contains(&name.as_str()) && api.objects[index].constructor.is_none() {
+                api.objects[index].constructor = Some(Function {
+                    name: String::from("new"),
+                    returns: Ty::Object(object.clone()),
+                    ..made
+                });
+            } else {
+                api.objects[index].statics.push(made);
+            }
+            continue;
+        }
+        match context.returns(&function.returns) {
+            Ok(returns) => api.functions.push(Function {
+                name: short(library),
+                c: function.name.clone(),
+                docs: function.docs.clone(),
+                params,
+                returns,
+                status: Status::None,
+                free,
+            }),
+            Err(why) => api.skipped.push(format!("{}: {why}", function.name)),
+        }
+    }
+    let _ = context.library;
+    api
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn constants_lose_the_prefix_they_share() {
+        let names =
+            |list: &[&str]| value_names(&list.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>());
+        assert_eq!(names(&["MODE_COUNT", "MODE_SUM"]), ["Count", "Sum"]);
+        assert_eq!(names(&["MODE_MAX", "MODE_MIN"]), ["Max", "Min"]);
+        assert_eq!(names(&["KEY_1", "KEY_2"]), ["Key1", "Key2"]);
+        assert_eq!(names(&["ONLY"]), ["Only"]);
+    }
+
+    #[test]
+    fn a_type_loses_the_library_prefix() {
+        assert_eq!(type_name("tally", "tally"), "Tally");
+        assert_eq!(type_name("tally", "tally_mode_t"), "Mode");
+        assert_eq!(type_name("tally", "point"), "Point");
+    }
+}

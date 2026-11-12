@@ -19,21 +19,10 @@ fn manifest(name: &str, hxn: &str) -> String {
     )
 }
 
-/// Creates the library `name` in a directory of that name under `at`. With
-/// `checkout` it depends on that local checkout of hxn's repository.
-/// Otherwise it depends on the git repository at the release tag of this
-/// program's version.
-pub fn new(name: &str, checkout: Option<&Path>, at: &Path) -> Result<PathBuf, String> {
-    if !is_library_name(&name.replace('-', "_")) {
-        return Err(format!(
-            "`{name}` cannot name a library: use lowercase letters, digits, `-` and `_`, starting with a letter"
-        ));
-    }
-    let dir = at.join(name);
-    if dir.exists() {
-        return Err(format!("{} already exists", dir.display()));
-    }
-    let hxn = match checkout {
+/// How a new crate depends on hxn: on `checkout`, a local checkout of hxn's
+/// repository, or else on the git repository at this version's release tag.
+pub fn dependency(checkout: Option<&Path>) -> Result<String, String> {
+    Ok(match checkout {
         Some(checkout) => {
             // Absolute rather than canonical: on Windows a canonical path
             // has a form that cargo accepts and other tools do not.
@@ -53,7 +42,24 @@ pub fn new(name: &str, checkout: Option<&Path>, at: &Path) -> Result<PathBuf, St
             quoted(env!("CARGO_PKG_REPOSITORY")),
             quoted(RELEASE)
         ),
-    };
+    })
+}
+
+/// Creates the library `name` in a directory of that name under `at`. With
+/// `checkout` it depends on that local checkout of hxn's repository.
+/// Otherwise it depends on the git repository at the release tag of this
+/// program's version.
+pub fn new(name: &str, checkout: Option<&Path>, at: &Path) -> Result<PathBuf, String> {
+    if !is_library_name(&name.replace('-', "_")) {
+        return Err(format!(
+            "`{name}` cannot name a library: use lowercase letters, digits, `-` and `_`, starting with a letter"
+        ));
+    }
+    let dir = at.join(name);
+    if dir.exists() {
+        return Err(format!("{} already exists", dir.display()));
+    }
+    let hxn = dependency(checkout)?;
     let files = [
         ("Cargo.toml", manifest(name, &hxn)),
         (".gitignore", String::from(IGNORE)),

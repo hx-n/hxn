@@ -519,6 +519,7 @@ flags.
 | `hxn package [hl] [cpp]` | builds for both runtimes, or the ones named, and collects what a Haxe program needs into one directory |
 | `hxn check [hl] [cpp] [cppia]` | runs the program on each runtime and checks that the outputs match |
 | `hxn doctor` | reports which targets can be built and what the others are missing |
+| `hxn import <header.h>` | creates a Rust library crate for a C library, from its header |
 | `--wasm` on any of these | does the same for the runtime's wasm form |
 | `--target <triple>` on `build cpp` or `package` | cross-compiles the hxcpp binding |
 | `cppia` in place of `hl` or `cpp` | builds for hxcpp and a host executable that contains the binding, and runs the program as a script |
@@ -637,6 +638,54 @@ flags.
 
 A library that keeps its adapter crates in its own repository, as the fixture
 in `tests/counter` does, gives each one a build script that calls `hxn-gen`.
+
+## Binding a C library
+
+`hxn import` turns a C library into an hxn library: a Rust crate with a safe
+API marked with hxn's attributes. The Haxe bindings then come from that
+crate as they do for any other library, and Rust programs can use the crate
+directly. `hxn-c` does the work in three steps:
+
+1. **Header to WebIDL.** clang reads the header and writes its AST as JSON
+   (`-ast-dump=json`), so hxn needs clang installed but does not link
+   libclang. Only declarations in the header itself are imported; included
+   headers are read to resolve typedefs. The importer maps what it can:
+   - A struct declared without its fields is an object. A function whose
+     first parameter points to it is a method, named without the object's
+     prefix (`tally_add` becomes `add`). A function named `free`, `destroy`
+     and so on frees it, and one named `new`, `create` and so on that
+     returns it is the constructor.
+   - A struct with fields is passed by value if every field is a boolean or
+     a number. An enum becomes a C-like `#[hxn::data]` enum.
+   - `const char *` is text, and a byte pointer followed by a `size_t` is
+     one bytes parameter. A returned `char *` is freed with the library's
+     only function that takes a `char *` and frees it, if it has exactly
+     one.
+   - Anything else, such as an out-parameter, is listed at the end of the
+     WebIDL as not imported.
+2. **The WebIDL is reviewed and edited.** A header cannot record which
+   `int` is a status code, who frees a returned pointer, or which pointer
+   may be null. That is added as extended attributes: `[HxnStatus]` makes a
+   non-zero return value an exception, `[HxnFree=f]` names the function
+   that frees an object or returned text, and so on (see `hxn-c`'s `idl`
+   module for the full list). The file is committed. `hxn-c` reads only
+   this subset of WebIDL, and reports the line of anything else.
+3. **WebIDL to Rust.** Each build generates `src/bindings.rs` from the
+   WebIDL again: `extern "C"` declarations, and safe wrappers over them. An
+   object owns its C pointer and frees it in `Drop`. Because a C library is
+   not assumed to be thread-safe, every method takes `&mut self`, so the
+   handle allows one call at a time, and the object is only `Send`. A
+   wrapper returns `Result<_, String>` where the call can fail: text with a
+   NUL, a platform-sized integer that does not fit, a C enum value with no
+   variant, a null object pointer, or a status code.
+
+The crate's `build.rs` compiles the C sources given to `--source` with the
+`cc` crate, or links the libraries given to `--link`. For `cpp --wasm`, hxn
+tells `cc` to compile with `emcc`. `hl --wasm` is not supported, because
+compiling C for `wasm32-wasip1` needs the WASI SDK.
+
+C++ is not supported directly. A C++ library is bound through a C API over
+it.
 
 ## Runtimes
 

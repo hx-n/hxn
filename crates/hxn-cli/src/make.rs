@@ -334,6 +334,9 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
             ));
         }
     }
+    if let Some(webidl) = &project.webidl {
+        crate::import::sync(name, webidl, &project.bindings)?;
+    }
     let (library, _) =
         hxn_gen::parse_crate(name, &project.source).map_err(|error| error.to_string())?;
     if library.interfaces.is_empty() {
@@ -429,6 +432,18 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
     let mut built = project.target.clone();
     if let Some(triple) = target.triple() {
         cargo.args(["--target", triple]);
+        // A library's C code, compiled by the `cc` crate, is compiled for
+        // Emscripten by its own compiler, which `cc` does not pick itself.
+        if triple == "wasm32-unknown-emscripten" {
+            for (variable, tool) in [
+                ("CC_wasm32_unknown_emscripten", "emcc"),
+                ("AR_wasm32_unknown_emscripten", "emar"),
+            ] {
+                if std::env::var_os(variable).is_none() {
+                    cargo.env(variable, tool);
+                }
+            }
+        }
         if target.wasm {
             cargo.arg("-Zbuild-std=std,panic_abort");
         }

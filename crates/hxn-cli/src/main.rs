@@ -6,6 +6,7 @@
 //! run a Haxe program against the result.
 
 mod doctor;
+mod import;
 mod make;
 mod new;
 mod package;
@@ -25,6 +26,14 @@ const USAGE: &str = "usage: hxn <command>
       Creates a library in a new directory: a Rust crate and a Haxe program
       that uses it. The crate depends on hxn's git repository at the tag
       for this version, or with --hxn on a local checkout of it.
+
+  hxn import <header.h> [--name <name>] [--source <file.c>]... [--link <library>]... [--out <directory>] [--hxn <checkout>] [-- <clang arguments>]
+      Creates a Rust library crate for a C library. clang reads the header,
+      and the API goes into <name>.webidl, which you review and edit:
+      which function frees a returned pointer, which int is a status code.
+      Rust bindings are generated from the WebIDL into src/bindings.rs on
+      every build. --source compiles C files into the crate; --link links an
+      installed library, found through <NAME>_LIB_DIR if needed.
 
   hxn build <hl|cpp|cppia> [--wasm] [--target <triple>] [--release]
       Generates the library's binding for HashLink or hxcpp and builds it.
@@ -91,6 +100,10 @@ struct Arguments {
     vm: Option<String>,
     hxn: Option<PathBuf>,
     out: Option<PathBuf>,
+    // For `import`: the library's name, its C sources and what it links.
+    name: Option<String>,
+    sources: Vec<PathBuf>,
+    links: Vec<String>,
     rest: Vec<String>,
 }
 
@@ -104,6 +117,9 @@ fn arguments(mut given: impl Iterator<Item = String>) -> Result<Arguments, Strin
         vm: None,
         hxn: None,
         out: None,
+        name: None,
+        sources: Vec::new(),
+        links: Vec::new(),
         rest: Vec::new(),
     };
     while let Some(argument) = given.next() {
@@ -122,6 +138,9 @@ fn arguments(mut given: impl Iterator<Item = String>) -> Result<Arguments, Strin
             "--vm" => out.vm = Some(value("--vm")?),
             "--hxn" => out.hxn = Some(PathBuf::from(value("--hxn")?)),
             "--out" => out.out = Some(PathBuf::from(value("--out")?)),
+            "--name" => out.name = Some(value("--name")?),
+            "--source" => out.sources.push(PathBuf::from(value("--source")?)),
+            "--link" => out.links.push(value("--link")?),
             flag if flag.starts_with('-') => return Err(format!("unknown option `{flag}`")),
             _ => out.positional.push(argument),
         }
@@ -390,6 +409,9 @@ fn program(
 // runs must print the same output.
 fn check(project: &Project, arguments: &Arguments) -> Result<u8, String> {
     let name = &project.library;
+    if let Some(webidl) = &project.webidl {
+        import::sync(name, webidl, &project.bindings)?;
+    }
     // Checked before any build, because a build overwrites the committed
     // manifest.
     let committed = project.dir.join(format!("{name}.hxn.json"));
@@ -503,6 +525,52 @@ fn command() -> Result<u8, String> {
                 "Created {}:\n  Cargo.toml\n  src/lib.rs     the library, in Rust\n  haxe/Main.hx   a Haxe program that uses it\n\nRun `hxn run hl` or `hxn run cpp` in that directory to build and run it.",
                 dir.display()
             );
+            Ok(0)
+        }
+        "import" => {
+            let arguments = arguments(given)?;
+            let [header] = arguments.positional.as_slice() else {
+                return Err(String::from(
+                    "expected one header: `hxn import <header.h> [--name <name>] [--source <file.c>] [--link <library>]`",
+                ));
+            };
+            let header = Path::new(header);
+            let name = match &arguments.name {
+                Some(name) => name.clone(),
+                None => header
+                    .file_stem()
+                    .map(|stem| stem.to_string_lossy().replace('-', "_"))
+                    .unwrap_or_default(),
+            };
+            let out = arguments.out.clone().unwrap_or_else(|| here.join(&name));
+            let skipped = import::import(&import::Request {
+                header,
+                name: &name,
+                sources: &arguments.sources,
+                links: &arguments.links,
+                out: &out,
+                checkout: arguments.hxn.as_deref(),
+                clang: &arguments.rest,
+            })?;
+            println!(
+                "Created {}:
+  {name}.webidl     the C API, to review and edit
+  src/bindings.rs  Rust bindings generated from it
+  build.rs         compiles or links the C library
+  haxe/Main.hx     a Haxe program that uses it
+
+Edit {name}.webidl to add what the header cannot express, then run `hxn run hl` or `hxn run cpp` there. Each build generates src/bindings.rs again.",
+                out.display()
+            );
+            if !skipped.is_empty() {
+                println!(
+                    "
+Not imported (listed at the end of {name}.webidl):"
+                );
+                for reason in skipped {
+                    println!("  {reason}");
+                }
+            }
             Ok(0)
         }
         "build" => {

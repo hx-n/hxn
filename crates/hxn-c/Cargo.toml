@@ -1,0 +1,19 @@
+[package]
+name = "hxn-c"
+description = "Imports a C header as WebIDL, and generates from the WebIDL a Rust crate whose API hxn binds"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde_json = "1"
+
+[dev-dependencies]
+# Checks that the WebIDL this crate writes is valid WebIDL.
+weedle2 = "5"
+# Checks that the generated Rust is what hxn reads.
+hxn-gen = { workspace = true }
+
+[lints]
+workspace = true

@@ -23,6 +23,7 @@ hxn-future = { path = "crates/hxn-future" }
 hxn-macros = { path = "crates/hxn-macros" }
 hxn = { path = "crates/hxn" }
 hxn-gen = { path = "crates/hxn-gen" }
+hxn-c = { path = "crates/hxn-c" }
 syn = { version = "2", features = ["full"] }
 proc-macro2 = { version = "1", features = ["span-locations"] }
 hl_abi = { git = "https://github.com/rayzor-blade/hl_abi" }

@@ -26,6 +26,10 @@ pub struct Project {
     /// The directory of its Haxe program, and that program's main class.
     pub haxe: PathBuf,
     pub main: String,
+    /// For a library made by `hxn import`: the WebIDL file its bindings are
+    /// generated from, and the Rust file they are written to.
+    pub webidl: Option<PathBuf>,
+    pub bindings: PathBuf,
     /// Extra `haxe` arguments for compiling the program, added to hxn's own.
     pub flags: Vec<String>,
     /// Cargo's target directory for it.
@@ -324,6 +328,8 @@ impl Project {
             source,
             haxe: dir.join(setting("haxe").unwrap_or("haxe")),
             main: setting("main").unwrap_or("Main").to_owned(),
+            webidl: setting("webidl").map(|file| dir.join(file)),
+            bindings: dir.join(setting("bindings").unwrap_or("src/bindings.rs")),
             flags: flags(settings)?,
             target: PathBuf::from(
                 text(&metadata, "target_directory")

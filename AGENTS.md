@@ -19,7 +19,9 @@ natively and on wasm. Read these before changing anything:
   `wasm` and `emcc`, and a VM with its options, as in `hl "ash --mode jit"`.
   `tests/mobile/run.sh ios-sim|android` runs the examples in an iOS
   simulator and on an Android device or emulator. Run it after changing how
-  an hxcpp program is compiled or linked.
+  an hxcpp program is compiled or linked. `tests/cimport/run.sh` imports a
+  C library with `hxn import` and runs a program against it; it takes `hl`,
+  `cpp`, `cppia` and `emcc`, and needs clang.
 - **Run runtime tests under a timeout.** A wrong wait hangs instead of failing.
 - **Repeat anything concurrent**, and on more than one machine if you can.
   A change to `hxn-abi` or `hxn-future` is also run under Miri
@@ -75,6 +77,7 @@ natively and on wasm. Read these before changing anything:
 | `crates/hxn-hl` | HashLink support: handles with finalizers, string conversion, exceptions thrown after the Rust call returns. |
 | `crates/hxn-future` | Futures, streams, signals, and running work with or without threads. |
 | `crates/hxn-gen` | Parses a library's annotated source and generates its adapters, C header and Haxe classes. |
+| `crates/hxn-c` | Imports a C header as WebIDL, and generates a Rust crate from the WebIDL. |
 | `crates/hxn-cli` | The `hxn` command: creates a library, builds its binding for a runtime, and runs its Haxe program. |
 | `include/hxn.h` | The `hxn-abi` layouts as C declarations, and the helpers the hxcpp glue uses. |
 | `haxe/hxn` | The Haxe side: `Future`, `Stream`, `Signal`, `Computed`, `Reactive`, `Inbox`, `Loop`, `Callback`, `AtomicInt`, `AtomicBool`, `Gc`, `Unit`, `Wire`, and the macro `Bind`. |
@@ -83,5 +86,6 @@ natively and on wasm. Read these before changing anything:
 | `tests/cli` | Creates a library with `hxn new`, runs it as the readme describes, and packages it. |
 | `tests/examples` | Runs each example and compares its output with the expected output. |
 | `tests/mobile` | Runs each example in an iOS simulator and on Android. |
+| `tests/cimport` | A small C library imported with `hxn import`, and the Haxe program run against it. |
 
 `internal/` is not part of the repository.

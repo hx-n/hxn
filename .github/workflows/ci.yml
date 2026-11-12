@@ -111,6 +111,7 @@ jobs:
       - run: tests/examples/run.sh hl
       - run: tests/counter/run.sh hl
       - run: tests/counter/run.sh gen-hl
+      - run: tests/cimport/run.sh hl
 
   hxcpp:
     name: hxcpp, ${{ matrix.os }}
@@ -137,6 +138,7 @@ jobs:
         run: tests/counter/run.sh gen-cpp
       # As scripts, each in a host that takes most of the time to build.
       - run: tests/counter/run.sh gen-cppia
+      - run: tests/cimport/run.sh cpp
       - run: tests/cli/run.sh cppia
       # Every thread's stack where a fixture crashed, from the debugger the
       # Windows SDK brings.
@@ -179,6 +181,7 @@ jobs:
           "$RUNNER_TEMP/emsdk/emsdk" activate "$HXN_EMSDK"
       - run: source "$RUNNER_TEMP/emsdk/emsdk_env.sh" && tests/counter/run.sh gen-emcc
       - run: source "$RUNNER_TEMP/emsdk/emsdk_env.sh" && tests/examples/run.sh emcc
+      - run: source "$RUNNER_TEMP/emsdk/emsdk_env.sh" && tests/cimport/run.sh emcc
 
   # Every example in an iOS simulator: hxcpp's toolchain for one, and the
   # library built for the simulator's machine from this one.

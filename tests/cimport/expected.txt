@@ -1,0 +1,11 @@
+naïve ☃: 3
+added 3 bytes, total 9
+naïve ☃: 9
+summing: true
+max: 40
+refused: tally_add failed with status -1
+refused: tally_new returned null
+empty: true
+distance: 7
+midpoint: 2.5, 4
+version: 3

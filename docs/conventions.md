@@ -254,6 +254,12 @@ filesystem `#include "counter.h"` would then find the generated header.
   the package with hxcpp's defines for the platform, links the result into
   an executable (hxcpp only builds a library on these platforms) and runs
   it. Run it after changing how an hxcpp program is compiled or linked.
+- `tests/cimport/run.sh` imports the C library in `tests/cimport` with
+  `hxn import`, checks that the importer writes `imported.webidl` exactly,
+  replaces it with the edited `tally.webidl`, and runs `Main.hx` against
+  the result. It takes `hl <vm>`, `cpp`, `cppia` and `emcc`. A change to
+  the importer that changes its output updates `imported.webidl` in the
+  same commit.
 - **The readme's example is `examples/greeter`, which is what `hxn new`
   creates.** A test fails when the readme differs from it.
 - **An example is a realistic library:** a crate, a Haxe program, its
