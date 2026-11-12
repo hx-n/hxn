@@ -305,7 +305,8 @@ has native code call the runtime.
 - **The binding polls; the library never calls the binding.** Each library's
   classes share one `hxn.Gc.Meter`, which reads the total. An interface
   marked `#[hxn::interface(weighed)]` checks the meter whenever one of its
-  objects is created, and every delivery checks it too. A check triggers a
+  objects is created and before each of its methods runs, since an earlier
+  call may have grown what it holds; every delivery checks it too. A check triggers a
   collection when the total exceeds `hxn.Gc.budget`, and then not again until
   the total exceeds twice what remained, so a program whose live values
   exceed the budget does not collect on every allocation.

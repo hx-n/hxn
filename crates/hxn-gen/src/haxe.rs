@@ -294,13 +294,23 @@ fn body(guards: &[String], lines: &[String], thrown: Option<&str>) -> String {
     block(&all)
 }
 
+// A method of a weighed object first checks the library's memory, which an
+// earlier call may have grown.
+fn grown(interface: &Interface, method: &Method) -> Vec<String> {
+    if interface.weighed && has_receiver(method) && !method.constructor {
+        vec![String::from("memory.check();")]
+    } else {
+        Vec::new()
+    }
+}
+
 fn hl_method(library: &Library, interface: &Interface, method: &Method) -> String {
     let mut guards = Vec::new();
     let mut arguments = Vec::new();
     if has_receiver(method) {
         arguments.push(String::from("raw"));
     }
-    let mut lines = Vec::new();
+    let mut lines = grown(interface, method);
     for param in &method.params {
         let mut name = camel(&param.name);
         if let Some(data) = &param.data
@@ -534,7 +544,7 @@ fn cpp_weak(library: &Library, interface: &Interface) -> String {
 
 fn cpp_method(library: &Library, interface: &Interface, method: &Method) -> String {
     let mut guards = Vec::new();
-    let mut before = Vec::new();
+    let mut before = grown(interface, method);
     let mut arguments = Vec::new();
     if has_receiver(method) {
         arguments.push(String::from("raw"));
@@ -764,7 +774,7 @@ fn cpp_thrown(library: &Library) -> String {
     )
 }
 
-const MEMORY_DOCS: &str = "What the library's values hold that the collector cannot see. A weighed\n\tobject checks it when it is made, and a delivery does.";
+const MEMORY_DOCS: &str = "What the library's values hold that the collector cannot see. A weighed\n\tobject checks it when it is made and before each of its methods runs, and\n\ta delivery does.";
 
 fn hl_memory(library: &Library) -> String {
     format!(

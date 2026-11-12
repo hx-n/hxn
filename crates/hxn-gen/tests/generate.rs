@@ -507,6 +507,20 @@ fn what_a_library_holds_is_read_and_a_weighed_object_checks_it() {
     assert!(mixer.contains(
         "cpp.vm.Gc.setFinalizer(this, cpp.Function.fromStaticFunction(finalize));\n\t\tmemory.check();"
     ));
+    // And each of its methods checks first, since an earlier call may have
+    // grown what it holds.
+    for mixer in [
+        &hxn_gen::haxe_hl(&library)[1].text,
+        &hxn_gen::haxe_cpp(&library)[1].text,
+    ] {
+        let attach = &mixer[mixer.find("public function attach(").unwrap()..];
+        assert!(
+            attach
+                .trim_start_matches(|c| c != '{')
+                .starts_with("{\n\t\tmemory.check();"),
+            "{attach}"
+        );
+    }
 
     let manifest = hxn_gen::manifest(&library);
     assert_eq!(manifest.matches("\"weighed\": true").count(), 1);

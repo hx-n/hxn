@@ -197,7 +197,8 @@ filesystem `#include "counter.h"` would then find the generated header.
   finalizer only frees: it runs during a collection.
 - **One `hxn.Gc.Meter` per library**, referenced by every class of the binding
   so that it exists whichever classes a program uses. A weighed class checks it
-  once the new object owns its value, never before and never in a finalizer.
+  once the new object owns its value and at the start of each of its methods,
+  never before the object owns its value and never in a finalizer.
 - **A binding collects through `hxn.Gc`**, not through a runtime's own call.
 - **Two objects are compared with `same`**, never with `==`, when their
   interface is shared.
