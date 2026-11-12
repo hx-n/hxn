@@ -17,7 +17,11 @@ class Main {
 		tally.setMode(Mode.Max);
 		tally.add(40);
 		tally.add(7);
-		Sys.println('max: ${haxe.Int64.toStr(tally.total())}');
+		Sys.println('max: ${haxe.Int64.toStr(tally.total())}, doubled by hand: ${haxe.Int64.toStr(tally.doubled())}');
+
+		// Arrays of numbers, passed in and filled by C.
+		Sys.println('mean: ${Tally.mean([1.0, 2.0, 4.5])}, ${Tally.mean([])}');
+		Sys.println('recent: ${tally.recent(4).join(",")}');
 
 		// Bytes with an `int` length, and a destructor C is always passed
 		// TALLY_TRANSIENT for.

@@ -273,7 +273,9 @@ filesystem `#include "counter.h"` would then find the generated header.
   updates `imported.webidl` in the same commit: `HXN_BLESS=1 cargo test -p
   hxn-c` writes it. `tally.webidl` is that file with the edit a user would
   make, `[HxnStatus]` on `add`, names for the listener's values and
-  `[HxnPass]` on `add_blob`, and is updated with it.
+  `[HxnPass]` on `add_blob`, and is updated with it. `extra.rs` is appended
+  to the crate's `src/lib.rs` as a function written by hand beside the
+  bindings.
 - **The readme's example is `examples/greeter`, which is what `hxn new`
   creates.** A test fails when the readme differs from it.
 - **An example is a realistic library:** a crate, a Haxe program, its

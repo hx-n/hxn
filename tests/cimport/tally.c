@@ -85,6 +85,22 @@ size_t tally_add_bytes(tally *t, const uint8_t *data, size_t length) {
 	return length;
 }
 
+double tally_mean(const double *values, size_t count) {
+	double sum = 0;
+	for (size_t i = 0; i < count; i++)
+		sum += values[i];
+	return count ? sum / (double)count : 0;
+}
+
+void tally_recent(const tally *t, int32_t *amounts, size_t count) {
+	for (size_t i = 0; i < count; i++) {
+		/* The amount `count - i` back from the latest. */
+		size_t back = count - i;
+		int64_t at = t->count - (int64_t)back;
+		amounts[i] = (at >= 0 && back <= 16) ? t->recent[at % 16] : 0;
+	}
+}
+
 int32_t tally_checksum(const uint8_t *data, int32_t length) {
 	int32_t sum = 0;
 	for (int32_t i = 0; i < length; i++)

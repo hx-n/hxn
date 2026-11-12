@@ -86,6 +86,7 @@ fn c_type(ty: &Ty) -> String {
         Ty::Object(name) => format!("*mut ffi::{name}"),
         Ty::Nullable(of) => c_type(of),
         Ty::Callback(_) | Ty::Pointer => String::from("*mut c_void"),
+        Ty::Array(of, _) => format!("*const {}", c_type(of)),
         Ty::Text => unreachable!(),
     }
 }
@@ -106,6 +107,7 @@ fn rust_param(ty: &Ty) -> String {
         Ty::Int(Int::ULong | Int::Size) => String::from("u64"),
         Ty::Text => String::from("&str"),
         Ty::Bytes(_) => String::from("&[u8]"),
+        Ty::Array(of, _) => format!("&[{}]", c_type(of)),
         Ty::Enum(name) | Ty::Struct(name) => name.clone(),
         Ty::StructRef(name) => format!("&{name}"),
         Ty::Object(name) => format!("&mut {name}"),
@@ -121,6 +123,7 @@ fn rust_return(ty: &Ty) -> String {
         Ty::Text => String::from("String"),
         Ty::Nullable(of) => format!("Option<{}>", rust_return(of)),
         Ty::Object(name) | Ty::Enum(name) | Ty::Struct(name) => name.clone(),
+        Ty::Array(of, _) => format!("Vec<{}>", c_type(of)),
         other => rust_param(other),
     }
 }
@@ -129,7 +132,7 @@ fn fallible_param(ty: &Ty) -> bool {
     matches!(
         ty,
         Ty::Text | Ty::Int(Int::Long | Int::ULong | Int::Size | Int::SSize)
-    ) || matches!(ty, Ty::Bytes(length) if *length != Int::Size)
+    ) || matches!(ty, Ty::Bytes(length) | Ty::Array(_, length) if *length != Int::Size)
 }
 
 fn fallible(function: &Function, constructor: bool) -> bool {
@@ -141,6 +144,8 @@ fn fallible(function: &Function, constructor: bool) -> bool {
             .iter()
             .any(|param| param.role.passed() && fallible_param(&param.ty))
         || matches!(function.returns, Ty::Enum(_) | Ty::Object(_))
+        // The count the caller asks for may not fit.
+        || function.filled().is_some()
 }
 
 // Whether the function takes a Haxe function, which makes its error the
@@ -479,6 +484,31 @@ fn convert(api: &Api, params: &[Param]) -> (Vec<String>, Vec<String>) {
         let owned = owned.contains(&at);
         match param.role {
             Role::In | Role::Written => {}
+            // A vector of the count the caller asked for, which C fills and
+            // the function returns.
+            Role::Filled => {
+                let Ty::Array(of, length) = &param.ty else {
+                    unreachable!("only an array is filled")
+                };
+                before.push(format!(
+                    "let {name}_count = usize::try_from({name}_length).map_err(|_| format!(\"{name}_length: {{}} is too large\", {name}_length))?;"
+                ));
+                before.push(format!(
+                    "let mut {name} = vec![{}::default(); {name}_count];",
+                    c_type(of)
+                ));
+                passed.push(if *length == Int::Size {
+                    format!("{name}.as_mut_ptr(), {name}_count")
+                } else {
+                    before.push(format!(
+                        "let {name}_c = {}::try_from({name}_count).map_err(|_| format!(\"{name}_length: {{}} does not fit a C {}\", {name}_count))?;",
+                        c_type(&Ty::Int(*length)),
+                        length.c_name().replace('_', " ")
+                    ));
+                    format!("{name}.as_mut_ptr(), {name}_c")
+                });
+                continue;
+            }
             Role::Frees => {
                 let freed = &params[freed(params, at).expect("checked when parsed")];
                 passed.push(String::from(if freed.ty == Ty::Text {
@@ -556,10 +586,12 @@ fn convert(api: &Api, params: &[Param]) -> (Vec<String>, Vec<String>) {
             Ty::Bytes(Int::Size) if owned => {
                 passed.push(format!("hxn_owned_bytes({name}), {name}.len()"));
             }
-            Ty::Bytes(Int::Size) => passed.push(format!("{name}.as_ptr(), {name}.len()")),
-            Ty::Bytes(length) => {
+            Ty::Bytes(Int::Size) | Ty::Array(_, Int::Size) => {
+                passed.push(format!("{name}.as_ptr(), {name}.len()"));
+            }
+            Ty::Bytes(length) | Ty::Array(_, length) => {
                 before.push(format!(
-                    "let {name}_length = {}::try_from({name}.len()).map_err(|_| format!(\"{name}: {{}} bytes do not fit a C {}\", {name}.len()))?;",
+                    "let {name}_length = {}::try_from({name}.len()).map_err(|_| format!(\"{name}: a length of {{}} does not fit a C {}\", {name}.len()))?;",
                     c_type(&Ty::Int(*length)),
                     length.c_name().replace('_', " ")
                 ));
@@ -681,7 +713,15 @@ fn wrapper(
             "&mut self"
         }));
     }
-    for param in function.params.iter().filter(|p| p.role.passed()) {
+    for param in &function.params {
+        // The caller passes how many elements C fills.
+        if param.role == Role::Filled {
+            params.push(format!("{}_length: u64", ident(&param.name)));
+            continue;
+        }
+        if !param.role.passed() {
+            continue;
+        }
         let ty = match &param.ty {
             Ty::Callback(name) => format!("impl {}", callback_bound(callback(api, name))),
             Ty::Bytes(_) if param.role == Role::Written => String::from("&mut [u8]"),
@@ -718,6 +758,16 @@ fn wrapper(
     let mut body: Vec<String> = before;
     let call = format!("unsafe {{ ffi::{}({}) }}", function.c, arguments.join(", "));
     match out {
+        None if function.filled().is_some() => {
+            let filled = ident(&function.filled().expect("matched").name);
+            if function.status == Status::None {
+                body.push(format!("{call};"));
+            } else {
+                body.push(format!("let status = {call};"));
+                body.extend(status_check(function, "status"));
+            }
+            body.push(format!("Ok({filled})"));
+        }
         None if kept.is_some() => {
             if function.status == Status::None {
                 body.push(format!("{call};"));
@@ -868,6 +918,15 @@ fn c_params(api: &Api, param: &Param) -> Vec<String> {
                 format!("{name}_length: {}", c_type(&Ty::Int(*length))),
             ];
         }
+        Role::Filled => {
+            let Ty::Array(of, length) = &param.ty else {
+                unreachable!("only an array is filled")
+            };
+            return vec![
+                format!("{name}: *mut {}", c_type(of)),
+                format!("{name}_length: {}", c_type(&Ty::Int(*length))),
+            ];
+        }
         _ => {}
     }
     if param.role != Role::In {
@@ -876,6 +935,10 @@ fn c_params(api: &Api, param: &Param) -> Vec<String> {
     match &param.ty {
         Ty::Bytes(length) => vec![
             format!("{name}: *const u8"),
+            format!("{name}_length: {}", c_type(&Ty::Int(*length))),
+        ],
+        Ty::Array(of, length) => vec![
+            format!("{name}: *const {}", c_type(of)),
             format!("{name}_length: {}", c_type(&Ty::Int(*length))),
         ],
         other => vec![format!("{name}: {}", c_type(other))],
@@ -895,7 +958,9 @@ fn declaration(api: &Api, function: &Function, receiver: Option<&str>) -> String
         (Status::Zero, _) => String::from(" -> c_int"),
         _ if function.ignored == Ignored::Int => String::from(" -> c_int"),
         _ if function.ignored == Ignored::Pointer => String::from(" -> *mut c_void"),
-        (Status::None, _) if function.out().is_some() => String::new(),
+        (Status::None, _) if function.out().is_some() || function.filled().is_some() => {
+            String::new()
+        }
         (_, Ty::Void) => String::new(),
         (_, Ty::Nullable(of)) if matches!(**of, Ty::Text) && function.free.is_some() => {
             String::from(" -> *const c_char")
@@ -922,7 +987,9 @@ pub fn bindings(api: &Api, source: &str) -> String {
     }
 
     // The C declarations.
-    out.push_str("\nmod ffi {\n    use super::*;\n");
+    // Visible to the rest of the crate, so that code written beside the
+    // bindings can call what they leave out.
+    out.push_str("\npub(crate) mod ffi {\n    use super::*;\n");
     for object in &api.objects {
         out.push_str(&format!(
             "\n    #[repr(C)]\n    pub struct {} {{\n        _opaque: [u8; 0],\n    }}\n",
@@ -1081,7 +1148,7 @@ pub fn bindings(api: &Api, source: &str) -> String {
             ""
         };
         out.push_str(&format!(
-            "\n{}#[hxn::interface]\npub struct {name} {{\n    raw: *mut ffi::{name},\n    // False for an object that belongs to another, which frees it.\n    owned: bool,\n{kept}}}\n\n{}",
+            "\n{}#[hxn::interface]\npub struct {name} {{\n    // The C object, for code beside the bindings that calls C itself.\n    pub(crate) raw: *mut ffi::{name},\n    // False for an object that belongs to another, which frees it.\n    owned: bool,\n{kept}}}\n\n{}",
             docs(&object.docs, ""),
             if object.thread_safe {
                 String::from("// The C library allows calls on it from several threads at once.\nunsafe impl Send for ")

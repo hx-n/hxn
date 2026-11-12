@@ -20,6 +20,8 @@
 //! | `const uint8_t *` and a `size_t` length | `Uint8Array` |
 //! | a length of another integer type | `[HxnLength=int]` on the `Uint8Array` argument; also `unsigned`, `int64_t`, `uint64_t`, `long` and so on |
 //! | a non-`const` byte pointer and its length, which C writes into | `[HxnWritten] Uint8Array buffer` |
+//! | a `const` pointer to numbers and their count | `sequence<double> values`, with `[HxnLength]` for a count that is not a `size_t` |
+//! | a pointer to numbers C fills, and their count | `[HxnOut] sequence<float> samples`, and `sequence<float>` as the return type; the caller passes the count |
 //! | a pointer C is always passed the same value for, such as a destructor constant | `[HxnPass=-1] any destructor` |
 //! | a `void (*)(void *)` C calls to free the text or bytes argument before it | `[HxnFrees] any destructor`: C is given a copy, which that frees |
 //! | free functions | `namespace <Library> { ... };` |
@@ -80,6 +82,7 @@ fn type_name(ty: &Ty) -> String {
         Ty::Nullable(of) => format!("{}?", type_name(of)),
         Ty::Callback(name) => name.clone(),
         Ty::Pointer => String::from("any"),
+        Ty::Array(of, _) => format!("sequence<{}>", type_name(of)),
     }
 }
 
@@ -92,7 +95,7 @@ fn value_notes(ty: &Ty) -> Vec<String> {
             .into_iter()
             .collect(),
         Ty::StructRef(_) => vec![String::from("HxnRef")],
-        Ty::Bytes(length) if *length != Int::Size => {
+        Ty::Bytes(length) | Ty::Array(_, length) if *length != Int::Size => {
             vec![format!("HxnLength={}", length.c_name())]
         }
         _ => Vec::new(),
@@ -120,6 +123,7 @@ fn arguments(params: &[Param]) -> String {
                 Role::Pass(value) => list.insert(0, format!("HxnPass={value}")),
                 Role::Frees => list.insert(0, String::from("HxnFrees")),
                 Role::Written => list.insert(0, String::from("HxnWritten")),
+                Role::Filled => list.insert(0, String::from("HxnOut")),
             }
             format!("{}{} {}", notes(&list), type_name(&param.ty), param.name)
         })
@@ -386,7 +390,7 @@ fn lex(text: &str) -> Result<Vec<Lexed>, String> {
             }
             .map_err(|_| format!("line {line}: `{digits}` is not a number"))?;
             Token::Number(if negative { -value } else { value })
-        } else if "{}()[];,=?".contains(letter) {
+        } else if "{}()[];,=?<>".contains(letter) {
             at += 1;
             Token::Symbol(letter)
         } else {
@@ -513,6 +517,17 @@ impl Parser {
 
     // A type, as the names it is written with: `unsigned long long`, `Name?`.
     fn type_words(&mut self) -> Result<(String, bool), String> {
+        // `sequence<double>`, written as one word.
+        if self.is("sequence") {
+            self.at += 1;
+            self.symbol('<')?;
+            let (of, nullable) = self.type_words()?;
+            if nullable {
+                return self.fail("a sequence's element cannot be null");
+            }
+            self.symbol('>')?;
+            return Ok((format!("sequence<{of}>"), false));
+        }
         let mut words = vec![self.word()?];
         if words[0] == "unsigned" {
             words.push(self.word()?);
@@ -613,6 +628,27 @@ fn resolve(
             }
         },
         "any" => Ty::Pointer,
+        sequence if sequence.starts_with("sequence<") => {
+            let of = &sequence["sequence<".len()..sequence.len() - 1];
+            let element = resolve(of, false, &[], names, line)?;
+            if !matches!(&element, Ty::Int(int) if int.fixed())
+                && !matches!(element, Ty::F32 | Ty::F64)
+            {
+                return fail(format!(
+                    "`{sequence}`: a sequence is of a fixed-width integer, `float` or `double`"
+                ));
+            }
+            let length = match find(notes, "HxnLength") {
+                None => Int::Size,
+                Some(note) => {
+                    let named = note.value.as_deref().unwrap_or_default();
+                    Int::from_c_name(named).ok_or_else(|| {
+                        format!("line {line}: `[HxnLength={named}]` is not an integer type")
+                    })?
+                }
+            };
+            Ty::Array(Box::new(element), length)
+        }
         name if names.enums.iter().any(|known| known == name) => Ty::Enum(name.to_owned()),
         name if names.structs.iter().any(|known| known == name) => {
             if find(notes, "HxnRef").is_some() {
@@ -629,9 +665,9 @@ fn resolve(
             ));
         }
     };
-    if find(notes, "HxnLength").is_some() && !matches!(ty, Ty::Bytes(_)) {
+    if find(notes, "HxnLength").is_some() && !matches!(ty, Ty::Bytes(_) | Ty::Array(..)) {
         return fail(String::from(
-            "`[HxnLength=...]` applies to a `Uint8Array`, the type of its length",
+            "`[HxnLength=...]` applies to a `Uint8Array` or a `sequence`, the type of its length",
         ));
     }
     if alias.is_some() && !matches!(ty, Ty::Int(Int::Long | Int::ULong | Int::Size | Int::SSize)) {
@@ -704,8 +740,15 @@ fn arguments_of(parser: &mut Parser, names: &Names) -> Result<Vec<Param>, String
                 );
             }
         };
+        let role = if role == Role::Out && matches!(ty, Ty::Array(..)) {
+            Role::Filled
+        } else {
+            role
+        };
         match (role, &ty) {
-            (Role::Pass(_) | Role::Frees, Ty::Pointer) | (Role::Kept, Ty::Callback(_)) => {}
+            (Role::Pass(_) | Role::Frees, Ty::Pointer)
+            | (Role::Kept, Ty::Callback(_))
+            | (Role::Filled, Ty::Array(..)) => {}
             (Role::Pass(_) | Role::Frees, _) | (_, Ty::Pointer) => {
                 return parser.fail(
                     "an argument of type `any` is `[HxnPass=n]`, passed a fixed value, or `[HxnFrees]`, a destructor",
@@ -718,7 +761,7 @@ fn arguments_of(parser: &mut Parser, names: &Names) -> Result<Vec<Param>, String
             (Role::Kept, _) => {
                 return parser.fail("`[HxnKept]` applies to a callback argument");
             }
-            (_, Ty::Bytes(_) | Ty::StructRef(_) | Ty::Callback(_)) => {
+            (_, Ty::Bytes(_) | Ty::StructRef(_) | Ty::Callback(_) | Ty::Array(..)) => {
                 return parser.fail(format!(
                     "`{words}` cannot be written through a pointer by C"
                 ));
@@ -937,6 +980,30 @@ fn check_returns(
     line: usize,
 ) -> Result<(), String> {
     let fail = |message: String| Err(format!("line {line}: {message}"));
+    if let Some(filled) = params.iter().find(|p| p.role == Role::Filled) {
+        let outputs = params
+            .iter()
+            .filter(|p| matches!(p.role, Role::Out | Role::Filled))
+            .count();
+        if outputs > 1 {
+            return fail(format!(
+                "`{name}` has more than one `[HxnOut]` argument: return one, and pass `[HxnNull]` for the others"
+            ));
+        }
+        if status == Status::Negative {
+            return fail(format!(
+                "`{name}` returns the array C fills, so its C return value is a status, `[HxnStatus]`, or nothing"
+            ));
+        }
+        let same = matches!((returns, &filled.ty), (Ty::Array(a, _), Ty::Array(b, _)) if a == b);
+        if !same {
+            return fail(format!(
+                "`{name}` returns the array C fills, `{}`, so its return type is that argument's sequence",
+                filled.name
+            ));
+        }
+        return Ok(());
+    }
     let outs: Vec<&Param> = params.iter().filter(|p| p.role == Role::Out).collect();
     match outs.as_slice() {
         [] => match (status, returns) {

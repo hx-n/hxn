@@ -3,7 +3,9 @@ added 3 bytes, total 9
 described: true
 name written: true, 3 bytes when 3 fit
 summing: true
-max: 40
+max: 40, doubled by hand: 80
+mean: 2.5, 0
+recent: 2,3,40,7
 checksum: 60
 blob: 3
 label: second

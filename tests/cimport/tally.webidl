@@ -40,6 +40,9 @@ interface Tally {
   [HxnC=tally_set_mode] undefined set_mode(Mode mode);
   // Adds every byte of `data`.
   [HxnC=tally_add_bytes, HxnReturns=size_t] unsigned long long add_bytes(Uint8Array data);
+  // Writes the latest `count` amounts added, oldest first, into `amounts`.
+  // Those before the first amount, or more than 16 back, are 0.
+  [HxnC=tally_recent] sequence<long> recent([HxnOut] sequence<long> amounts);
   // Adds every byte of `data`. C reads it during the call, so it is passed
   // TALLY_TRANSIENT for its destructor rather than a copy to free.
   [HxnC=tally_add_blob, HxnStatus] undefined add_blob([HxnLength=int] Uint8Array data, [HxnPass=-1] any destructor);
@@ -70,6 +73,8 @@ interface Tally {
 };
 
 namespace Tally {
+  // The mean of the `count` numbers in `values`, or 0 for none.
+  [HxnC=tally_mean] double mean(sequence<double> values);
   // The sum of the first `length` bytes of `data`.
   [HxnC=tally_checksum] long checksum([HxnLength=int] Uint8Array data);
   // The Manhattan distance between two points.
@@ -88,6 +93,7 @@ namespace Tally {
 // - tally_copy: `out` is taken as an output ([HxnOut]), and its int return value as a status ([HxnStatus])
 // - tally_origin: `out` is taken as an output ([HxnOut])
 // - tally_listen: the pointer it returns is ignored ([HxnIgnore=pointer]): the binding does not give back what `listener` replaced
+// - tally_recent: C is taken to fill `amounts`, as many as `count` gives ([HxnOut]); the caller passes the count and gets the array
 // - tally_add_blob: `destructor` is taken to free `data` ([HxnFrees]): C is given a copy, which it frees by calling it
 // - tally_set_label: `destructor` is taken to free `label` ([HxnFrees]): C is given a copy, which it frees by calling it
 // - tally_write_name: C is taken to write into `buffer` during the call ([HxnWritten]); remove the function if C keeps the pointer

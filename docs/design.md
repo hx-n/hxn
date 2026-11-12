@@ -698,7 +698,17 @@ directly. `hxn-c` does the work in three steps:
    - A non-`const` byte pointer followed by an integer length is bytes C
      writes into, `[HxnWritten]`: a `&mut [u8]` in Rust and a `haxe.io.Bytes`
      in Haxe that sees the writes. It is taken to be written only during the
-     call, like a lent callback, and listed for checking.
+     call, like a lent callback, and listed for checking. The length must be
+     named as one (`n`, `len`, `size`, `count`, `*_len` and so on): a buffer
+     C keeps, such as the one `sqlite3_deserialize` takes, comes with a size
+     named otherwise.
+   - A pointer to fixed-width integers, `float` or `double` followed by a
+     count named the same way is an array: `sequence<double>`, a slice in
+     Rust and an `Array` in Haxe, copied in for a `const` pointer. A
+     non-`const` one is an array C fills, `[HxnOut]`: the caller passes how
+     many elements and gets them back, and the C function returns nothing or
+     a status. An integer whose width depends on the platform, `long` or
+     `size_t`, is not an element, since Haxe's array cannot say which.
    - A `void (*)(void *)` after a text or bytes parameter is taken as its
      destructor, `[HxnFrees]`, as in `sqlite3_bind_text`. C is given a copy
      and a destructor that frees the copy, so it may keep the text or bytes
@@ -796,6 +806,19 @@ compiling C for `wasm32-wasip1` needs the WASI SDK.
 which the library's author provides: hxn does not generate one, since how
 classes, overloads, templates and exceptions map onto C is the author's
 decision.
+
+Some C is left out by design, and listed as not imported:
+
+- **An object passed to a callback.** C owns it and may free it once the
+  callback returns, and a Haxe object for it could be kept past that. A
+  lent function is given objects to keep, which this is not.
+- **A callback whose user data is neither first nor last**, or that takes
+  other untyped pointers, as `sqlite3_trace_v2`'s does: what those point to
+  depends on the other arguments.
+- **Variadic functions and `va_list`.**
+- **Pointers whose meaning the header does not give**, such as a `void *`
+  with no length, or a buffer C keeps. A function that needs one is
+  written in the library's own Rust beside the generated bindings.
 
 ## Runtimes
 

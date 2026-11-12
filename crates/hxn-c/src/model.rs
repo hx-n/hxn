@@ -134,6 +134,9 @@ pub enum Role {
     /// `[HxnWritten]`: bytes C writes into during the call, which the caller
     /// passes and sees the writes in.
     Written,
+    /// `[HxnOut]` on a `sequence`: an array C fills, as many elements as the
+    /// caller asks for, which the function returns.
+    Filled,
     /// `[HxnFrees]`: a `void (*)(void *)` C calls with the text or bytes
     /// argument before it once it no longer needs them. C is given a copy
     /// and a function that frees it. The caller does not pass it.
@@ -227,6 +230,11 @@ impl Function {
         self.params.iter().find(|param| param.role == Role::Out)
     }
 
+    /// The array C fills, if it has one.
+    pub fn filled(&self) -> Option<&Param> {
+        self.params.iter().find(|param| param.role == Role::Filled)
+    }
+
     /// The `[HxnKept]` callback, if it has one.
     pub fn kept(&self) -> Option<&Param> {
         self.params.iter().find(|param| param.role == Role::Kept)
@@ -256,6 +264,12 @@ pub enum Int {
 }
 
 impl Int {
+    /// Whether it has the same width everywhere, which an array element
+    /// needs.
+    pub fn fixed(self) -> bool {
+        !matches!(self, Self::Long | Self::ULong | Self::Size | Self::SSize)
+    }
+
     /// The C type, as `[HxnLength=...]` names it.
     pub fn c_name(self) -> &'static str {
         match self {
@@ -332,4 +346,7 @@ pub enum Ty {
     Callback(String),
     /// A pointer of no type C is given, which is always `[HxnPass]`.
     Pointer,
+    /// A pointer to numbers and their count, of the integer type given, as
+    /// one parameter: a fixed-width integer, `float` or `double`.
+    Array(Box<Ty>, Int),
 }

@@ -34,6 +34,11 @@ tally_mode tally_mode_of(const tally *t);
 void tally_set_mode(tally *t, tally_mode mode);
 /* Adds every byte of `data`. */
 size_t tally_add_bytes(tally *t, const uint8_t *data, size_t length);
+/* The mean of the `count` numbers in `values`, or 0 for none. */
+double tally_mean(const double *values, size_t count);
+/* Writes the latest `count` amounts added, oldest first, into `amounts`. Those
+ * before the first amount, or more than 16 back, are 0. */
+void tally_recent(const tally *t, int32_t *amounts, size_t count);
 /* The sum of the first `length` bytes of `data`. */
 int32_t tally_checksum(const uint8_t *data, int32_t length);
 /* What tally_add_blob does with its data once it has read it. */

@@ -47,6 +47,8 @@ fi
 # The edit a user makes: `tally_add` returns a status code.
 cp "$here/tally.webidl" "$crate/tally.webidl"
 cp "$here/Main.hx" "$crate/haxe/Main.hx"
+# And a function written by hand beside the bindings.
+cat "$here/extra.rs" >> "$crate/src/lib.rs"
 
 # Runs the program in `$1` and compares what it prints with `$2`.
 check() {

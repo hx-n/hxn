@@ -9,7 +9,7 @@ const IGNORE: &str = "/target\n";
 
 fn library_file(name: &str) -> String {
     format!(
-        "//! Rust bindings for the C library `{name}`, made by `hxn import`.\n//!\n//! Its API is described in `{name}.webidl`. Edit that file, not\n//! `src/bindings.rs`: `hxn build` generates the bindings from it again.\n\nmod bindings;\npub use bindings::*;\n"
+        "//! Rust bindings for the C library `{name}`, made by `hxn import`.\n//!\n//! Its API is described in `{name}.webidl`. Edit that file, not\n//! `src/bindings.rs`: `hxn build` generates the bindings from it again.\n//!\n//! A function the WebIDL cannot describe is written here instead, in a\n//! `#[hxn::methods]` block of its own: each object's C pointer is its `raw`\n//! field, and `bindings::ffi` declares the C functions already bound.\n\nmod bindings;\npub use bindings::*;\n"
     )
 }
 

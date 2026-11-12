@@ -61,6 +61,11 @@ fn the_edited_webidl_generates_rust_marked_for_hxn() {
     // Bytes C writes into are the caller's, borrowed mutably.
     assert!(rust.contains("pub fn write_name(&mut self, buffer: &mut [u8]) -> u64"));
     assert!(rust.contains("buffer.as_mut_ptr(), buffer.len()"));
+    // Arrays of numbers: a slice in, and a vector of the count asked for out.
+    assert!(rust.contains("pub fn mean(values: &[f64]) -> f64"));
+    assert!(
+        rust.contains("pub fn recent(&mut self, amounts_length: u64) -> Result<Vec<i32>, String>")
+    );
     // Text C keeps is a copy it frees.
     assert!(rust.contains("label.into_raw(), Some(hxn_free_text)"));
     // And it is what hxn reads.

@@ -53,6 +53,20 @@ const KEEPS: [&str; 15] = [
     "notify",
 ];
 
+// Whether a parameter named `name` reads as the count of the array before it.
+// A pointer followed by an integer is just as often an output and a flag.
+fn counts(name: &str) -> bool {
+    const WORDS: [&str; 9] = [
+        "n", "len", "length", "size", "count", "num", "nelem", "nmemb", "capacity",
+    ];
+    WORDS.contains(&name)
+        || ["_len", "_length", "_size", "_count", "_n"]
+            .iter()
+            .any(|end| name.ends_with(end))
+        || name.starts_with("n_")
+        || name.starts_with("num_")
+}
+
 fn keeps_callback(function: &str) -> bool {
     function.split('_').any(|word| KEEPS.contains(&word))
 }
@@ -504,6 +518,19 @@ struct Context<'a> {
 }
 
 impl Context<'_> {
+    // The element and count types of a pointer to `to` followed by `next`,
+    // if they are an array of numbers and its count.
+    fn array(&self, to: &CType, next: Option<&(String, String)>) -> Option<(Ty, Int)> {
+        let element = self.value(to).ok()?;
+        let fits =
+            matches!(&element, Ty::Int(int) if int.fixed()) || matches!(element, Ty::F32 | Ty::F64);
+        let (name, spelled) = next?;
+        let Ok(Ty::Int(length)) = self.value(&self.header.c_type(spelled)) else {
+            return None;
+        };
+        (fits && counts(&snake(name))).then_some((element, length))
+    }
+
     // The callback a parameter spelled `spelled` is, made the first time it
     // is met. `fallback` names it when no typedef does. `kept` is whether
     // the function it is first met in keeps it, which sets what C is
@@ -779,6 +806,12 @@ impl Context<'_> {
                         at += 1;
                         Ty::Bytes(length)
                     }
+                    other if self.array(other, given.get(at + 1)).is_some() => {
+                        let (element, length) =
+                            self.array(other, given.get(at + 1)).expect("matched");
+                        at += 1;
+                        Ty::Array(Box::new(element), length)
+                    }
                     CType::Record(tag) => match Self::named(&self.structs, tag) {
                         Some(record) => Ty::StructRef(record.clone()),
                         None => match self.object(&ty) {
@@ -788,9 +821,14 @@ impl Context<'_> {
                     },
                     _ => return Err(format!("`{name}`: `{spelled}` has no mapping")),
                 },
-                // Bytes C writes into, with their length after them.
+                // Bytes C writes into, with their length after them. The length
+                // must read as one: a buffer C keeps, such as the one
+                // `sqlite3_deserialize` takes, is passed with a size that does not.
                 CType::Pointer { to, .. }
                     if matches!(&**to, CType::Builtin(base) if ["char", "signed char", "unsigned char", "uint8_t", "int8_t", "void"].contains(&base.as_str()))
+                        && given
+                            .get(at + 1)
+                            .is_some_and(|(length, _)| counts(&snake(length)))
                         && matches!(
                             given
                                 .get(at + 1)
@@ -811,6 +849,21 @@ impl Context<'_> {
                         name,
                         ty: Ty::Bytes(length),
                         role: Role::Written,
+                    });
+                    at += 2;
+                    continue;
+                }
+                // Numbers C fills, with their count after them.
+                CType::Pointer { to, .. } if self.array(to, given.get(at + 1)).is_some() => {
+                    let (element, length) = self.array(to, given.get(at + 1)).expect("matched");
+                    self.lent.borrow_mut().push(format!(
+                        "{function}: C is taken to fill `{name}`, as many as `{}` gives ([HxnOut]); the caller passes the count and gets the array",
+                        snake(&given[at + 1].0)
+                    ));
+                    out.push(Param {
+                        name,
+                        ty: Ty::Array(Box::new(element), length),
+                        role: Role::Filled,
                     });
                     at += 2;
                     continue;
@@ -917,6 +970,35 @@ impl Context<'_> {
                 }
             };
             return Ok((params, Ty::Void, status, ignored));
+        }
+        if let Some(filled) = params.iter().find(|p| p.role == Role::Filled) {
+            if params
+                .iter()
+                .filter(|p| matches!(p.role, Role::Out | Role::Filled))
+                .count()
+                > 1
+            {
+                return Err(String::from(
+                    "fills an array and writes another output, which is not imported",
+                ));
+            }
+            let returns = filled.ty.clone();
+            let status = match self.header.c_type(c_returns) {
+                CType::Builtin(base) if base == "void" => Status::None,
+                CType::Builtin(base) if base == "int" => {
+                    review.push(format!(
+                        "{function}: its int return value is taken as a status ([HxnStatus])"
+                    ));
+                    Status::Zero
+                }
+                _ => {
+                    return Err(format!(
+                        "fills `{}` and returns `{c_returns}`, which is not imported",
+                        filled.name
+                    ));
+                }
+            };
+            return Ok((params, returns, status, Ignored::None));
         }
         let Some(first) = params.iter().position(|p| p.role == Role::Out) else {
             let returns = self.returns(c_returns)?;
