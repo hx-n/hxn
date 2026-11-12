@@ -178,12 +178,9 @@ case "$runtime" in
 		command -v emcc >/dev/null || { echo "emcc is not on PATH; source emsdk_env.sh first" >&2; exit 2; }
 		# hxcpp would use CXX from the environment instead of emcc.
 		unset CC CXX
-		# Panics abort, and std is rebuilt to match: the prebuilt std unwinds
-		# with wasm exceptions, which cannot link with hxcpp's JavaScript-based
-		# exceptions.
-		RUSTFLAGS="-C panic=abort" \
-			cargo build --manifest-path "$root/Cargo.toml" -p "$package" \
-			--target wasm32-unknown-emscripten -Z build-std=std,panic_abort
+		# The prebuilt std unwinds with wasm exceptions, as hxcpp does.
+		cargo build --manifest-path "$root/Cargo.toml" -p "$package" \
+			--target wasm32-unknown-emscripten
 		# hxcpp assumes the build machine's 64-bit word size, and its UTF-16
 		# strings call a Windows-only function under Emscripten.
 		haxe -D wasm -cp "$root/haxe" -cp "$here/haxe" -cp "$classes" -main "$main" -cpp "$work" \

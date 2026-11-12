@@ -57,8 +57,9 @@ class Main {
 
 		throws("a failure is thrown", () -> counter.add(2147483647), "counter overflow");
 		check("and leaves the value usable", counter.add(0) == 42);
-		#if !wasm
-		// A wasm library is built to abort on a panic, which ends the program.
+		#if (!wasm || emscripten)
+		// An Ash wasm library is built to abort on a panic, which ends the
+		// program.
 		throws("a panic is thrown", Counter.fail, "failed on request");
 		#end
 

@@ -77,8 +77,8 @@ linked when it is built, so it has to be built on the platform it runs on.
 With --wasm the binding and the program are built for wasm. `hl --wasm` is
 built and run by Ash. Set --vm or HXN_VM if its command is not `ash`.
 `cpp --wasm` is built by hxcpp with Emscripten and run by node, or by the
-command given with --vm. Both rebuild Rust's standard library, which
-requires a nightly toolchain.
+command given with --vm. `hl --wasm` rebuilds Rust's standard library,
+which requires a nightly toolchain.
 
 build accepts --timings, which makes cargo report how long each crate took
 to build.

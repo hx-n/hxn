@@ -4,11 +4,6 @@
 	<compilerflag value="-I${COUNTER_INCLUDE}"/>
 	<compilerflag value="-I${COUNTER_INCLUDE}/../haxe/cpp"/>
 </files>
-<section if="emscripten">
-	<compiler id="emscripten" exe="emcc">
-		<flag value="-fexceptions"/>
-	</compiler>
-</section>
 <target id="haxe">
 	<lib name="${COUNTER_LIB}"/>
 	<lib name="-lpthread" if="linux"/>

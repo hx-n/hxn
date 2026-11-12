@@ -101,7 +101,8 @@ impl Target {
             (true, Runtime::Hl) => {
                 Some("-C relocation-model=pic -C target-feature=+mutable-globals")
             }
-            (true, Runtime::Cpp) => Some("-C panic=abort"),
+            // The prebuilt std unwinds with wasm exceptions, as hxcpp does.
+            (true, Runtime::Cpp) => None,
         }
     }
 }
@@ -422,20 +423,20 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
     } = options;
     let name = &project.library;
     let runtime = target.runtime;
-    if target.wasm {
-        // A wasm target needs std rebuilt as position-independent code or
-        // with panic=abort, and only a nightly cargo can rebuild std.
+    if target.wasm && runtime == Runtime::Hl {
+        // An Ash side module needs std rebuilt as position-independent code,
+        // and only a nightly cargo can rebuild std.
         let release = rustc_reports("release:")?;
         if !release.contains("nightly") && !release.contains("dev") {
             return Err(format!(
                 "a wasm build rebuilds Rust's standard library, which requires a nightly toolchain, but the current toolchain is {release}: install one with `rustup toolchain install nightly --component rust-src` and set RUSTUP_TOOLCHAIN=nightly"
             ));
         }
-        if runtime == Runtime::Cpp && !on_path("emcc") {
-            return Err(String::from(
-                "`emcc` was not found: hxcpp builds for wasm with the Emscripten SDK, which has to be installed and on PATH",
-            ));
-        }
+    }
+    if target.wasm && runtime == Runtime::Cpp && !on_path("emcc") {
+        return Err(String::from(
+            "`emcc` was not found: hxcpp builds for wasm with the Emscripten SDK, which has to be installed and on PATH",
+        ));
     }
     if let Some(webidl) = &project.webidl {
         crate::import::sync(name, webidl, &project.bindings)?;
@@ -547,7 +548,7 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
                 }
             }
         }
-        if target.wasm {
+        if target.wasm && runtime == Runtime::Hl {
             cargo.arg("-Zbuild-std=std,panic_abort");
         }
         built.push(triple);

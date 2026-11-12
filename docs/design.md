@@ -157,8 +157,8 @@ Nothing unwinds across the boundary in either direction.
   frame, so the throw is always made by the adapter, never from inside the
   library.
 - A panic is caught at the boundary and reported as `Status::PANIC`, where the
-  build can catch one. A wasm build aborts on a panic; see the runtime table
-  at the end.
+  build can catch one. An Ash wasm build aborts on a panic; see the runtime
+  table at the end.
 
 So an error is an ordinary return value until the call has returned, which
 is why errors work the same in builds that cannot unwind.
@@ -577,10 +577,12 @@ flags.
   into a module that exports the primitives' resolvers and imports functions
   the program provides; Ash builds the program and loads the module from the
   same directory. For hxcpp it is a static archive for
-  `wasm32-unknown-emscripten` that hxcpp links, and node runs the result. In
-  both cases Rust's standard library is rebuilt, position-independent for
-  HashLink and aborting on panic for hxcpp, which requires a nightly
-  toolchain; the command reports this when the toolchain is not nightly.
+  `wasm32-unknown-emscripten` that hxcpp links, and node runs the result.
+  For HashLink, Rust's standard library is rebuilt position-independent,
+  which requires a nightly toolchain; the command reports this when the
+  toolchain is not nightly. For hxcpp the prebuilt one for Emscripten is
+  used: it unwinds with wasm exceptions, as hxcpp's Emscripten build does,
+  so a panic is caught there as it is natively.
 
 - **`check` runs the same program on every runtime.** It runs the library's
   Haxe program on each runtime given, or on HashLink and hxcpp if none is,
@@ -591,8 +593,9 @@ flags.
   because a build would overwrite the evidence that the API changed.
 - **`doctor` reports missing prerequisites before a build fails on them.** A
   target is ready when cargo, haxe and the target's own tools are installed:
-  a HashLink VM, hxcpp, and for wasm a nightly toolchain with Rust's source
-  and Ash or the Emscripten SDK. It mentions optional tools that would make
+  a HashLink VM, hxcpp, and for wasm either a nightly toolchain with Rust's
+  source and Ash, or Rust's Emscripten target, the Emscripten SDK and an
+  hxcpp that builds for it with wasm exceptions. It mentions optional tools that would make
   builds faster, and does not require any of them.
 - **A script calls a library through its host.** A CPPIA script cannot call
   C++ or hold a pointer, so no part of the binding is compiled into it. The
@@ -794,7 +797,7 @@ decision.
 | Ash, wasm | `-hl` as a side module | Haxe threads as fibers; no Rust threads | aborts the program | The module uses the program's allocator. |
 | hxcpp | `-c` with C++ glue | yes | becomes a thrown error | |
 | CPPIA | none of its own: a script runs in an hxcpp host that contains the binding | yes | becomes a thrown error | The host is built with `-D scriptable` and dead-code elimination off. |
-| hxcpp through Emscripten | the same | none | aborts the program | hxcpp's collector does not complete a forced collection there, so `hxn.Gc.collect()` does nothing and a meter only counts. |
+| hxcpp through Emscripten | the same | none | becomes a thrown error | Rust's prebuilt standard library unwinds with wasm exceptions, which hxcpp from git also uses; hxcpp 4.3.2 uses JavaScript exceptions and does not link with it. hxcpp's collector does not complete a forced collection there, so `hxn.Gc.collect()` does nothing and a meter only counts. |
 | hxcpp on iOS | the same, cross-compiled with `--target` | yes | not tested | hxcpp produces a static library for an app to link, and merges the Rust library into it. Tested with the examples in a simulator only, not on a device. |
 | hxcpp on Android | the same, cross-compiled with `--target` | yes | not tested | hxcpp produces a shared library for Java to load, with the Rust library linked in. Program output goes to logcat. Tested with the examples on an emulator only. |
 

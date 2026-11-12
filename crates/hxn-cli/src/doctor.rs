@@ -10,12 +10,14 @@ use crate::make::{on_path, printed};
 #[derive(Default)]
 pub struct Found {
     pub cargo: Option<String>,
-    /// Whether that cargo is from a nightly toolchain, which a wasm build
-    /// requires.
+    /// Whether that cargo is from a nightly toolchain, which an Ash wasm
+    /// build requires.
     pub nightly: bool,
-    /// Whether the source of Rust's standard library is installed. A wasm
-    /// build rebuilds it.
+    /// Whether the source of Rust's standard library is installed. An Ash
+    /// wasm build rebuilds it.
     pub source: bool,
+    /// Whether Rust's prebuilt standard library for Emscripten is installed.
+    pub emscripten_std: bool,
     pub haxe: Option<String>,
     /// The HashLink VM, and the command name used to look for it.
     pub vm: Option<String>,
@@ -24,6 +26,9 @@ pub struct Found {
     /// The installed hxcpp predates HaxeFoundation/hxcpp#1298, so a program
     /// can crash on Windows when it exits right after a collection.
     pub hxcpp_old: bool,
+    /// The installed hxcpp builds for Emscripten with wasm exceptions, which
+    /// Rust's standard library for Emscripten unwinds with.
+    pub hxcpp_wasm_exceptions: bool,
     pub ash: bool,
     pub emcc: bool,
     pub node: bool,
@@ -41,6 +46,13 @@ fn predates_1298(path: &str) -> bool {
         .is_ok_and(|source| source.contains("ThreadPoolLock sThreadPoolLock"))
 }
 
+// Whether the hxcpp at `path` compiles for Emscripten with wasm exceptions
+// rather than JavaScript ones.
+fn wasm_exceptions(path: &str) -> bool {
+    std::fs::read_to_string(Path::new(path).join("toolchain/emscripten-toolchain.xml"))
+        .is_ok_and(|toolchain| toolchain.contains("-fwasm-exceptions"))
+}
+
 fn first_line(command: &mut Command) -> Option<String> {
     printed(command).map(|text| text.lines().next().unwrap_or_default().trim().to_owned())
 }
@@ -49,12 +61,15 @@ fn first_line(command: &mut Command) -> Option<String> {
 /// `HXN_VM`.
 pub fn find(vm: &str) -> Found {
     let release = first_line(Command::new("rustc").arg("--version")).unwrap_or_default();
-    let source =
-        printed(Command::new("rustc").args(["--print", "sysroot"])).is_some_and(|sysroot| {
-            Path::new(sysroot.trim())
-                .join("lib/rustlib/src/rust/library")
-                .is_dir()
-        });
+    let sysroot = printed(Command::new("rustc").args(["--print", "sysroot"]))
+        .map(|sysroot| Path::new(sysroot.trim()).join("lib/rustlib"));
+    let installed = |part: &str| {
+        sysroot
+            .as_ref()
+            .is_some_and(|root| root.join(part).is_dir())
+    };
+    let source = installed("src/rust/library");
+    let emscripten_std = installed("wasm32-unknown-emscripten/lib");
     let program = vm.split_whitespace().next().unwrap_or("hl");
     let hxcpp = first_line(Command::new("haxelib").args(["libpath", "hxcpp"]))
         .filter(|path| Path::new(path).is_dir());
@@ -62,6 +77,7 @@ pub fn find(vm: &str) -> Found {
         cargo: first_line(Command::new("cargo").arg("--version")),
         nightly: release.contains("nightly") || release.contains("dev"),
         source,
+        emscripten_std,
         haxe: first_line(Command::new("haxe").arg("--version"))
             .map(|version| format!("haxe {version}")),
         vm: on_path(program).then(|| {
@@ -75,6 +91,7 @@ pub fn find(vm: &str) -> Found {
         vm_command: program.to_owned(),
         hxcpp: hxcpp.clone().map(|path| format!("hxcpp at {path}")),
         hxcpp_old: hxcpp.as_deref().is_some_and(predates_1298),
+        hxcpp_wasm_exceptions: hxcpp.as_deref().is_some_and(wasm_exceptions),
         ash: on_path("ash"),
         emcc: on_path("emcc"),
         node: on_path("node"),
@@ -90,7 +107,7 @@ pub fn find(vm: &str) -> Found {
 }
 
 impl Found {
-    // The Rust components a wasm build requires that are missing.
+    // The Rust components an Ash wasm build requires that are missing.
     fn wasm_missing(&self) -> Vec<String> {
         let mut missing = Vec::new();
         if !self.nightly {
@@ -143,7 +160,16 @@ impl Found {
             ));
         }
         let mut cpp_wasm = hxcpp.clone();
-        cpp_wasm.extend(self.wasm_missing());
+        if self.hxcpp.is_some() && !self.hxcpp_wasm_exceptions {
+            cpp_wasm.push(String::from(
+                "hxcpp from git, whose Emscripten build uses wasm exceptions as Rust's does: `haxelib git hxcpp https://github.com/HaxeFoundation/hxcpp`",
+            ));
+        }
+        if !self.emscripten_std {
+            cpp_wasm.push(String::from(
+                "Rust's standard library for Emscripten (`rustup target add wasm32-unknown-emscripten`)",
+            ));
+        }
         if !self.emcc {
             cpp_wasm.push(String::from("`emcc`, from the Emscripten SDK, on PATH"));
         }
@@ -276,6 +302,8 @@ mod tests {
         let all = Found {
             nightly: true,
             source: true,
+            emscripten_std: true,
+            hxcpp_wasm_exceptions: true,
             ash: true,
             emcc: true,
             node: true,

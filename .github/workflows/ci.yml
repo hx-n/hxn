@@ -165,8 +165,8 @@ jobs:
             "$cdb" -G -cf "$(cygpath -w "$RUNNER_TEMP/crash.cdb")" target/counter-gen-cppia/host/Host.exe target/counter-gen-cppia/generated.cppia || true
           fi
 
-  # hxcpp through Emscripten, run by node. Rust's standard library is
-  # rebuilt for it, which takes its source.
+  # hxcpp through Emscripten, run by node, against Rust's prebuilt standard
+  # library for Emscripten, which unwinds with wasm exceptions as hxcpp does.
   emscripten:
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -175,7 +175,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.HXN_RUST }}
-          components: rust-src
+          targets: wasm32-unknown-emscripten
       - uses: Swatinem/rust-cache@v2
       - uses: krdlab/setup-haxe@v1
         with:
