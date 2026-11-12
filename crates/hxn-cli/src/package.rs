@@ -69,15 +69,14 @@ fn haxelib(project: &Project) -> String {
 pub fn package(
     project: &Project,
     targets: &[Target],
-    release: bool,
-    hashlink: Option<&Path>,
+    options: make::Options,
     out: &Path,
 ) -> Result<Vec<String>, String> {
     let name = &project.library;
     let host = make::rustc_reports("host:")?;
     let mut triples = Vec::new();
     for &target in targets {
-        let built = make::build(project, target, release, hashlink)?;
+        let built = make::build(project, target, options)?;
         mirror(
             &built.classes,
             &out.join("binding").join(target.runtime.name()),

@@ -56,6 +56,22 @@ greeted() {
 greeted "the program"
 test -f greeter.hxn.json || { echo "FAILED: no manifest was written" >&2; exit 1; }
 
+# The same through `check`, which also holds the committed manifest to the
+# source, and `doctor`, which has to find this runtime ready.
+"$hxn" check "${arguments[@]}" | tr -d '\r' | tee "$work/out.txt"
+greeted "the program under check"
+grep -q '^PASS: greeter ran on ' "$work/out.txt" || { echo "FAILED: check did not pass" >&2; exit 1; }
+cp greeter.hxn.json "$work/manifest"
+echo >>greeter.hxn.json
+if "$hxn" check "${arguments[@]}" >/dev/null 2>"$work/refused.txt"; then
+	echo "FAILED: check passed a manifest that is not the source's" >&2
+	exit 1
+fi
+grep -q 'is not what the source gives' "$work/refused.txt" || { cat "$work/refused.txt" >&2; exit 1; }
+cp "$work/manifest" greeter.hxn.json
+"$hxn" doctor --vm "${2:-hl}" | tr -d '\r' | tee "$work/found.txt"
+grep -q ' ready$' "$work/found.txt" || { echo "FAILED: doctor found nothing ready" >&2; exit 1; }
+
 # As a package: a program's build names it and the macro it carries, and
 # nothing of where its classes, headers or library are.
 "$hxn" package "${packaged[@]}" --out "$work/package"

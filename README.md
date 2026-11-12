@@ -107,6 +107,10 @@ binding into a host program and has that run the script. A script calls the
 library through the host, which is the only thing that needs rebuilding when
 the library changes.
 
+`hxn check` runs the program on HashLink and hxcpp, or on the runtimes you
+name, and passes only if they all print the same. `hxn doctor` lists which
+targets your machine is ready for and what the others need.
+
 `hxn package` builds the library for both runtimes and gathers the classes,
 the headers and the native libraries into one directory, for a Haxe project
 that does not have the Rust source. That directory is a haxelib:

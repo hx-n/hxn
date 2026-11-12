@@ -197,7 +197,7 @@ fn artifact(library: &str, target: Target) -> String {
 }
 
 // What a command prints, when it ran and printed something.
-fn printed(command: &mut Command) -> Option<String> {
+pub fn printed(command: &mut Command) -> Option<String> {
     let output = command.output().ok()?;
     output
         .status
@@ -276,14 +276,24 @@ fn classes_in(dir: &Path, classes: &[hxn_gen::File]) -> Result<(), String> {
     Ok(())
 }
 
+/// How a build is made.
+#[derive(Clone, Copy, Default)]
+pub struct Options<'a> {
+    pub release: bool,
+    /// Has cargo report which crates the build spent its time on.
+    pub timings: bool,
+    /// The directory the HashLink VM is in.
+    pub hashlink: Option<&'a Path>,
+}
+
 /// Reads the library's marked items, writes its binding for `target` and
-/// builds the adapter. `hashlink` is the directory the VM is in.
-pub fn build(
-    project: &Project,
-    target: Target,
-    release: bool,
-    hashlink: Option<&Path>,
-) -> Result<Built, String> {
+/// builds the adapter.
+pub fn build(project: &Project, target: Target, options: Options) -> Result<Built, String> {
+    let Options {
+        release,
+        timings,
+        hashlink,
+    } = options;
     let name = &project.library;
     let runtime = target.runtime;
     if target.wasm {
@@ -387,6 +397,9 @@ pub fn build(
         .arg(&project.target);
     if release {
         cargo.arg("--release");
+    }
+    if timings {
+        cargo.arg("--timings");
     }
     let mut built = project.target.clone();
     if let Some(triple) = target.triple() {

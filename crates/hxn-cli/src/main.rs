@@ -5,6 +5,7 @@
 //! cargo's other output, builds the adapter, and can compile and run a Haxe
 //! program against the result.
 
+mod doctor;
 mod make;
 mod new;
 mod package;
@@ -37,6 +38,16 @@ const USAGE: &str = "usage: hxn <command>
 hxcpp program that holds the library's classes, and the Haxe program is
 compiled as a script and run by that host.
 
+  hxn check [hl] [cpp] [cppia] [--wasm] [--release] [--vm <command>]
+      Runs the Haxe program on each runtime named, or on HashLink and hxcpp
+      when both are installed and none is, and fails unless each run
+      succeeds and they all print the same. Fails first if the committed
+      manifest is not what the source gives.
+
+  hxn doctor [--vm <command>]
+      Says what is installed, which targets are ready, and what each of the
+      others still needs.
+
   hxn package [hl] [cpp] [--wasm] [--release] [--out <directory>]
       Builds the library for both runtimes, or the ones named, and gathers
       what a Haxe program needs of it into one directory: a haxelib that
@@ -49,6 +60,9 @@ built and run by Ash, which --vm or HXN_VM names if it is not `ash`.
 program --vm names. Both rebuild Rust's standard library, which takes a
 nightly toolchain.
 
+build takes --timings, which has cargo report the crates the build spent
+its time on.
+
 build and run work on the crate in the current directory. Under
 [package.metadata.hxn] in its Cargo.toml, `library`, `source`, `haxe` and
 `main` replace the crate's name, src/lib.rs, haxe and Main, and `haxe-flags`
@@ -58,6 +72,7 @@ lists what else to pass haxe: [\"-lib\", \"format\"].";
 struct Arguments {
     positional: Vec<String>,
     release: bool,
+    timings: bool,
     wasm: bool,
     vm: Option<String>,
     hxn: Option<PathBuf>,
@@ -69,6 +84,7 @@ fn arguments(mut given: impl Iterator<Item = String>) -> Result<Arguments, Strin
     let mut out = Arguments {
         positional: Vec::new(),
         release: false,
+        timings: false,
         wasm: false,
         vm: None,
         hxn: None,
@@ -83,6 +99,7 @@ fn arguments(mut given: impl Iterator<Item = String>) -> Result<Arguments, Strin
                 break;
             }
             "--release" => out.release = true,
+            "--timings" => out.timings = true,
             "--wasm" => out.wasm = true,
             "--vm" => out.vm = Some(value("--vm")?),
             "--hxn" => out.hxn = Some(PathBuf::from(value("--hxn")?)),
@@ -152,6 +169,15 @@ fn hashlink(arguments: &Arguments, target: Target) -> Option<PathBuf> {
     directory_of(words(&vm).ok()?.0)
 }
 
+// How the command line says to build.
+fn options<'a>(arguments: &Arguments, hashlink: Option<&'a Path>) -> make::Options<'a> {
+    make::Options {
+        release: arguments.release,
+        timings: arguments.timings,
+        hashlink,
+    }
+}
+
 fn exit(command: &mut Command) -> Result<u8, String> {
     let program = command.get_program().to_string_lossy().into_owned();
     let status = command.status().map_err(|error| {
@@ -168,11 +194,22 @@ fn exit(command: &mut Command) -> Result<u8, String> {
 }
 
 fn run(project: &Project, target: Target, arguments: Arguments) -> Result<u8, String> {
+    let script = script(&arguments);
+    exit(&mut program(project, target, script, &arguments)?)
+}
+
+// Builds the binding and the Haxe program for `target`, as a script if
+// `script`, and gives the command that runs it.
+fn program(
+    project: &Project,
+    target: Target,
+    script: bool,
+    arguments: &Arguments,
+) -> Result<Command, String> {
     let built = make::build(
         project,
         target,
-        arguments.release,
-        hashlink(&arguments, target).as_deref(),
+        options(arguments, hashlink(arguments, target).as_deref()),
     )?;
     if !project.haxe.is_dir() {
         return Err(format!(
@@ -181,7 +218,7 @@ fn run(project: &Project, target: Target, arguments: Arguments) -> Result<u8, St
         ));
     }
     let mut haxe = Command::new("haxe");
-    if script(&arguments) {
+    if script {
         let host = script::host(project, &built)?;
         for (flag, value) in &host.arguments {
             haxe.arg(flag).arg(value);
@@ -195,11 +232,9 @@ fn run(project: &Project, target: Target, arguments: Arguments) -> Result<u8, St
             .arg("-cppia")
             .arg(&program);
         make::run(&mut haxe)?;
-        return exit(
-            Command::new(host.program)
-                .arg(program)
-                .args(&arguments.rest),
-        );
+        let mut command = Command::new(host.program);
+        command.arg(program).args(&arguments.rest);
+        return Ok(command);
     }
     for (flag, value) in &built.arguments {
         haxe.arg(flag).arg(value);
@@ -209,7 +244,7 @@ fn run(project: &Project, target: Target, arguments: Arguments) -> Result<u8, St
         .arg("-main")
         .arg(&project.main)
         .args(&project.flags);
-    let vm = |default: &str| vm_command(&arguments, default);
+    let vm = |default: &str| vm_command(arguments, default);
     match target.runtime {
         Runtime::Hl if target.wasm => {
             let program = built.dir.join("main.hl");
@@ -230,12 +265,9 @@ fn run(project: &Project, target: Target, arguments: Arguments) -> Result<u8, St
                     .args(["--target", "wasm32-wasip1"])
                     .arg(&program),
             )?;
-            exit(
-                Command::new(ash)
-                    .arg("run")
-                    .arg(&module)
-                    .args(&arguments.rest),
-            )
+            let mut command = Command::new(ash);
+            command.arg("run").arg(&module).args(&arguments.rest);
+            Ok(command)
         }
         Runtime::Hl => {
             let program = built.dir.join("main.hl");
@@ -260,7 +292,7 @@ fn run(project: &Project, target: Target, arguments: Arguments) -> Result<u8, St
                 let joined = std::env::join_paths(all).map_err(|error| error.to_string())?;
                 command.env(variable, joined);
             }
-            exit(&mut command)
+            Ok(command)
         }
         Runtime::Cpp => {
             let out = built.dir.join("out");
@@ -275,21 +307,114 @@ fn run(project: &Project, target: Target, arguments: Arguments) -> Result<u8, St
             if target.wasm {
                 // HXN_VM names a HashLink VM, which this is not run by.
                 let (node, options) = words(arguments.vm.as_deref().unwrap_or("node"))?;
-                return exit(
-                    Command::new(node)
-                        .args(options)
-                        .arg(out.join(format!("{name}.js")))
-                        .args(&arguments.rest),
-                );
+                let mut command = Command::new(node);
+                command
+                    .args(options)
+                    .arg(out.join(format!("{name}.js")))
+                    .args(&arguments.rest);
+                return Ok(command);
             }
             let program = out.join(if cfg!(windows) {
                 format!("{name}.exe")
             } else {
                 name.to_owned()
             });
-            exit(Command::new(program).args(&arguments.rest))
+            let mut command = Command::new(program);
+            command.args(&arguments.rest);
+            Ok(command)
         }
     }
+}
+
+// The same program on each runtime: every run has to succeed, and print
+// what the others print.
+fn check(project: &Project, arguments: &Arguments) -> Result<u8, String> {
+    let name = &project.library;
+    // Before any build, which would write the manifest over the one committed.
+    let committed = project.dir.join(format!("{name}.hxn.json"));
+    if let Ok(committed) = std::fs::read_to_string(&committed) {
+        let (library, _) =
+            hxn_gen::parse_crate(name, &project.source).map_err(|error| error.to_string())?;
+        if hxn_gen::manifest(&library) != committed {
+            return Err(format!(
+                "{name}.hxn.json is not what the source gives: the library's API changed. `hxn build` rewrites it, and the change is one to review and commit"
+            ));
+        }
+    }
+
+    let found = doctor::find(&vm_command(arguments, "hl"));
+    let named: Vec<String> = if arguments.positional.is_empty() {
+        ["hl", "cpp"]
+            .into_iter()
+            .filter(|runtime| found.ready(runtime))
+            .map(String::from)
+            .collect()
+    } else {
+        arguments.positional.clone()
+    };
+    if named.is_empty() {
+        return Err(String::from(
+            "neither HashLink nor hxcpp is ready to run a program: `hxn doctor` says what each needs",
+        ));
+    }
+    let mut printed: Vec<(String, String)> = Vec::new();
+    for runtime in &named {
+        let script = runtime == "cppia";
+        if script && arguments.wasm {
+            return Err(String::from("a script's host is not built for wasm"));
+        }
+        let target = Target {
+            runtime: if script {
+                Runtime::Cpp
+            } else {
+                Runtime::parse(runtime).ok_or(format!(
+                    "unknown runtime `{runtime}`: it is `hl`, `cpp` or `cppia`"
+                ))?
+            },
+            wasm: arguments.wasm,
+        };
+        let label = if arguments.wasm {
+            format!("{runtime} --wasm")
+        } else {
+            runtime.clone()
+        };
+        let mut command = program(project, target, script, arguments)?;
+        let output = command
+            .stderr(std::process::Stdio::inherit())
+            .output()
+            .map_err(|error| format!("running the program on {label}: {error}"))?;
+        // Less the carriage returns a Windows program ends its lines with.
+        let text = String::from_utf8_lossy(&output.stdout).replace('\r', "");
+        println!("== {label}\n{}", text.trim_end());
+        if !output.status.success() {
+            return Err(format!("the program failed on {label}"));
+        }
+        printed.push((label, text));
+    }
+    let (first, expected) = &printed[0];
+    for (label, text) in &printed[1..] {
+        if text != expected {
+            let line = expected
+                .lines()
+                .zip(text.lines())
+                .position(|(one, other)| one != other)
+                .unwrap_or_else(|| expected.lines().count().min(text.lines().count()));
+            return Err(format!(
+                "the program printed something else on {label} than on {first}, from line {}",
+                line + 1
+            ));
+        }
+    }
+    let labels: Vec<&str> = printed.iter().map(|(label, _)| label.as_str()).collect();
+    match labels.as_slice() {
+        [only] => println!("PASS: {name} ran on {only}"),
+        [most @ .., last] => println!(
+            "PASS: {name} ran on {} and {last}, and printed the same on each",
+            most.join(", ")
+        ),
+        [] => {}
+    }
+    Ok(0)
 }
 
 fn command() -> Result<u8, String> {
@@ -318,8 +443,7 @@ fn command() -> Result<u8, String> {
             let built = make::build(
                 &project,
                 target,
-                arguments.release,
-                hashlink(&arguments, target).as_deref(),
+                options(&arguments, hashlink(&arguments, target).as_deref()),
             )?;
             if script(&arguments) {
                 let host = script::host(&project, &built)?;
@@ -385,8 +509,7 @@ fn command() -> Result<u8, String> {
             let triples = package::package(
                 &project,
                 &targets,
-                arguments.release,
-                hashlink.as_deref(),
+                options(&arguments, hashlink.as_deref()),
                 &out,
             )?;
             let name = &project.library;
@@ -398,6 +521,16 @@ fn command() -> Result<u8, String> {
                 out.display()
             );
             Ok(0)
+        }
+        "check" => {
+            let arguments = arguments(given)?;
+            check(&Project::read(&here)?, &arguments)
+        }
+        "doctor" => {
+            let arguments = arguments(given)?;
+            let found = doctor::find(&vm_command(&arguments, "hl"));
+            print!("{}", found.report());
+            Ok(u8::from(!(found.ready("hl") || found.ready("cpp"))))
         }
         "help" | "--help" | "-h" => {
             println!("{USAGE}");
@@ -441,6 +574,8 @@ mod tests {
         assert_eq!(read.rest, ["--release", "x"]);
         assert!(arguments(["--vm"].into_iter().map(String::from)).is_err());
         assert!(arguments(["--fast"].into_iter().map(String::from)).is_err());
+        let timed = arguments(["cpp", "--timings"].into_iter().map(String::from)).unwrap();
+        assert!(timed.timings && !timed.release);
     }
 
     #[test]

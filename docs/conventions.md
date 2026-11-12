@@ -211,8 +211,9 @@ filesystem `#include "counter.h"` would then find the generated one.
   Ash is run in its hybrid, JIT and interpreter modes, which differ in how
   threads and native calls behave.
 - `tests/cli/run.sh` makes a library with `hxn new` and runs it with
-  `hxn run`, as the readme describes, then packages it with `hxn package` and
-  builds the same program against the package alone.
+  `hxn run`, as the readme describes, runs it again under `hxn check`, then
+  packages it with `hxn package` and builds the same program against the
+  package alone.
   `tests/examples/run.sh` runs each library under `examples/` and compares
   what it prints with its `expected.txt`. Both take `hl <vm>`, `cpp`,
   `cppia`, `wasm <ash>` and `emcc`, and a VM is named with its options, so

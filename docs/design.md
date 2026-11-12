@@ -411,6 +411,8 @@ flag.
 | `hxn build <hl\|cpp>` | writes the binding for a runtime and builds it |
 | `hxn run <hl\|cpp>` | builds, then compiles and runs the library's Haxe program |
 | `hxn package [hl] [cpp]` | builds for both runtimes, or the ones named, and gathers what a Haxe program needs into one directory |
+| `hxn check [hl] [cpp] [cppia]` | runs the program on each runtime and holds them to one another |
+| `hxn doctor` | reports which targets are ready and what the others need |
 | `--wasm` on any of these | does the same for the runtime's wasm form |
 | `cppia` in place of `hl` or `cpp` | builds for hxcpp and a host around it, and runs the program as a script |
 
@@ -447,6 +449,18 @@ flag.
   position-independent for the one and aborting for the other, which takes a
   nightly toolchain; the command reports that when it has another.
 
+- **`check` is the same program on every runtime.** It runs the library's
+  Haxe program on each runtime named, on HashLink and hxcpp if none is, and
+  passes only if every run succeeds and all of them print the same: a
+  binding is the same library whichever runtime calls it, so what a program
+  prints is the same too. Before building anything it compares the committed
+  manifest with what the source gives, and stops if they differ: a build
+  would overwrite the evidence that the API changed.
+- **`doctor` reports what a target needs before a build fails for want of
+  it.** A target is ready when cargo, haxe and its own tools are there: a
+  HashLink VM, hxcpp, and for wasm a nightly toolchain with Rust's source and
+  Ash or the Emscripten SDK. It mentions what would make builds faster, and
+  asks for none of it.
 - **A script reaches a library through its host.** A CPPIA script cannot
   call C++ or hold a pointer, so nothing of a binding is compiled into it.
   Its host is an hxcpp program built to run scripts that holds the library's
