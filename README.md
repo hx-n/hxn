@@ -24,10 +24,17 @@ haxelib git hxcpp https://github.com/HaxeFoundation/hxcpp
 cd "$(haxelib libpath hxcpp)/tools/hxcpp" && haxe compile.hxml
 ```
 
-Install the `hxn` command and create a library with it:
+Install the `hxn` command: download the archive for your platform from the
+[releases](https://github.com/hx-n/hxn/releases), and put the `hxn` in it on
+your `PATH`. Or build it with cargo:
 
 ```
-cargo install --git https://github.com/hx-n/hxn hxn-cli
+cargo install --git https://github.com/hx-n/hxn --tag v0.2.0 hxn-cli
+```
+
+Then create a library with it:
+
+```
 hxn new greeter
 cd greeter
 ```

@@ -6,7 +6,7 @@ publish = false
 
 [dependencies]
 # In a library of your own, this comes from the repository:
-# hxn = { git = "https://github.com/hx-n/hxn", tag = "v0.1.0" }
+# hxn = { git = "https://github.com/hx-n/hxn", tag = "v0.2.0" }
 hxn = { path = "../../crates/hxn" }
 # The crate this library wraps.
 serde_json = "1"
