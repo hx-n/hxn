@@ -18,6 +18,9 @@
 //! | an output nobody reads | `[HxnNull]` on the argument: C is passed a null pointer |
 //! | `const char *` | `DOMString`, and `DOMString?` as a return type |
 //! | `const uint8_t *` and a `size_t` length | `Uint8Array` |
+//! | a length of another integer type | `[HxnLength=int]` on the `Uint8Array` argument; also `unsigned`, `int64_t`, `uint64_t`, `long` and so on |
+//! | a pointer C is always passed the same value for, such as a destructor constant | `[HxnPass=-1] any destructor` |
+//! | a `void (*)(void *)` C calls to free the text or bytes argument before it | `[HxnFrees] any destructor`: C is given a copy, which that frees |
 //! | free functions | `namespace <Library> { ... };` |
 //! | a function pointer passed with a `void *` for user data | `callback Name = long (long value);`, and one argument of type `Name` |
 //! | where C passes the user data to the function pointer | `[HxnUser=first]` or `[HxnUser=last]` on the callback |
@@ -33,7 +36,7 @@
 //! anything else.
 
 use crate::model::{
-    Api, Callback, Enum, Function, Ignored, Int, Object, Param, Role, Status, Struct, Ty,
+    Api, Callback, Enum, Function, Ignored, Int, Object, Param, Role, Status, Struct, Ty, freed,
 };
 
 const HEADER: &str = "// The API of a C library, for hxn. hxn generates the library's Rust bindings\n// from this file: edit it to record what the header cannot, such as which\n// function frees a returned pointer, or [HxnStatus] on a function whose\n// return value is a status code.\n";
@@ -71,10 +74,11 @@ fn type_name(ty: &Ty) -> String {
         Ty::F32 => String::from("float"),
         Ty::F64 => String::from("double"),
         Ty::Text => String::from("DOMString"),
-        Ty::Bytes => String::from("Uint8Array"),
+        Ty::Bytes(_) => String::from("Uint8Array"),
         Ty::Enum(name) | Ty::Struct(name) | Ty::StructRef(name) | Ty::Object(name) => name.clone(),
         Ty::Nullable(of) => format!("{}?", type_name(of)),
         Ty::Callback(name) => name.clone(),
+        Ty::Pointer => String::from("any"),
     }
 }
 
@@ -87,6 +91,9 @@ fn value_notes(ty: &Ty) -> Vec<String> {
             .into_iter()
             .collect(),
         Ty::StructRef(_) => vec![String::from("HxnRef")],
+        Ty::Bytes(length) if *length != Int::Size => {
+            vec![format!("HxnLength={}", length.c_name())]
+        }
         _ => Vec::new(),
     }
 }
@@ -109,6 +116,8 @@ fn arguments(params: &[Param]) -> String {
                 Role::Out => list.insert(0, String::from("HxnOut")),
                 Role::Null => list.insert(0, String::from("HxnNull")),
                 Role::Kept => list.insert(0, String::from("HxnKept")),
+                Role::Pass(value) => list.insert(0, format!("HxnPass={value}")),
+                Role::Frees => list.insert(0, String::from("HxnFrees")),
             }
             format!("{}{} {}", notes(&list), type_name(&param.ty), param.name)
         })
@@ -587,7 +596,21 @@ fn resolve(
         "float" | "unrestricted float" => Ty::F32,
         "double" | "unrestricted double" => Ty::F64,
         "DOMString" | "USVString" | "ByteString" => Ty::Text,
-        "Uint8Array" => Ty::Bytes,
+        "Uint8Array" => match find(notes, "HxnLength") {
+            None => Ty::Bytes(Int::Size),
+            Some(note) => {
+                let named = note.value.as_deref().unwrap_or_default();
+                match Int::from_c_name(named) {
+                    Some(length) => Ty::Bytes(length),
+                    None => {
+                        return fail(format!(
+                            "`[HxnLength={named}]` is not an integer type: use `int`, `unsigned`, `int64_t`, `uint64_t`, `long`, `unsigned_long`, `size_t` or `ssize_t`"
+                        ));
+                    }
+                }
+            }
+        },
+        "any" => Ty::Pointer,
         name if names.enums.iter().any(|known| known == name) => Ty::Enum(name.to_owned()),
         name if names.structs.iter().any(|known| known == name) => {
             if find(notes, "HxnRef").is_some() {
@@ -604,6 +627,11 @@ fn resolve(
             ));
         }
     };
+    if find(notes, "HxnLength").is_some() && !matches!(ty, Ty::Bytes(_)) {
+        return fail(String::from(
+            "`[HxnLength=...]` applies to a `Uint8Array`, the type of its length",
+        ));
+    }
     if alias.is_some() && !matches!(ty, Ty::Int(Int::Long | Int::ULong | Int::Size | Int::SSize)) {
         return fail(String::from(
             "`[HxnC=...]` on a type applies only to `long long` and `unsigned long long`",
@@ -625,7 +653,16 @@ fn arguments_of(parser: &mut Parser, names: &Names) -> Result<Vec<Param>, String
         let notes = parser.notes()?;
         check_notes(
             &notes,
-            &["HxnC", "HxnRef", "HxnOut", "HxnNull", "HxnKept"],
+            &[
+                "HxnC",
+                "HxnRef",
+                "HxnOut",
+                "HxnNull",
+                "HxnKept",
+                "HxnPass",
+                "HxnFrees",
+                "HxnLength",
+            ],
             "an argument",
         )?;
         let line = parser.line();
@@ -634,30 +671,47 @@ fn arguments_of(parser: &mut Parser, names: &Names) -> Result<Vec<Param>, String
         if matches!(ty, Ty::Void) {
             return parser.fail("an argument cannot be `undefined`");
         }
-        let roles: Vec<Role> = [
+        let passed = match find(&notes, "HxnPass") {
+            None => None,
+            Some(note) => Some(
+                note.value
+                    .as_deref()
+                    .and_then(|v| v.parse::<i64>().ok())
+                    .ok_or_else(|| format!("line {}: `[HxnPass=n]` needs a number", note.line))?,
+            ),
+        };
+        let mut roles: Vec<Role> = [
             ("HxnOut", Role::Out),
             ("HxnNull", Role::Null),
             ("HxnKept", Role::Kept),
+            ("HxnFrees", Role::Frees),
         ]
         .into_iter()
         .filter(|(note, _)| find(&notes, note).is_some())
         .map(|(_, role)| role)
         .collect();
+        roles.extend(passed.map(Role::Pass));
         let role = match roles.as_slice() {
             [] => Role::In,
             [role] => *role,
             _ => {
                 return parser.fail(
-                    "an argument is one of `[HxnOut]`, `[HxnNull]` and `[HxnKept]`, not several",
+                    "an argument is one of `[HxnOut]`, `[HxnNull]`, `[HxnKept]` and `[HxnPass]`, not several",
                 );
             }
         };
         match (role, &ty) {
-            (Role::Kept, Ty::Callback(_)) | (Role::In, _) => {}
+            (Role::Pass(_) | Role::Frees, Ty::Pointer) | (Role::Kept, Ty::Callback(_)) => {}
+            (Role::Pass(_) | Role::Frees, _) | (_, Ty::Pointer) => {
+                return parser.fail(
+                    "an argument of type `any` is `[HxnPass=n]`, passed a fixed value, or `[HxnFrees]`, a destructor",
+                );
+            }
+            (Role::In, _) => {}
             (Role::Kept, _) => {
                 return parser.fail("`[HxnKept]` applies to a callback argument");
             }
-            (_, Ty::Bytes | Ty::StructRef(_) | Ty::Callback(_)) => {
+            (_, Ty::Bytes(_) | Ty::StructRef(_) | Ty::Callback(_)) => {
                 return parser.fail(format!(
                     "`{words}` cannot be written through a pointer by C"
                 ));
@@ -669,6 +723,12 @@ fn arguments_of(parser: &mut Parser, names: &Names) -> Result<Vec<Param>, String
         }
         let name = parser.word()?;
         params.push(Param { name, ty, role });
+        if role == Role::Frees && freed(&params, params.len() - 1).is_none() {
+            return parser.fail(format!(
+                "`{}` is `[HxnFrees]`, and no text or bytes argument comes before it to free",
+                params[params.len() - 1].name
+            ));
+        }
         if parser.is_symbol(',') {
             parser.at += 1;
         }

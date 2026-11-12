@@ -127,6 +127,14 @@ pub enum Role {
     /// What it is called with is queued for Haxe as a stream, which the
     /// function returns.
     Kept,
+    /// `[HxnPass=n]`: C is always passed `n` as a pointer, such as a
+    /// destructor constant like sqlite3's `SQLITE_TRANSIENT`. The caller
+    /// does not pass it.
+    Pass(i64),
+    /// `[HxnFrees]`: a `void (*)(void *)` C calls with the text or bytes
+    /// argument before it once it no longer needs them. C is given a copy
+    /// and a function that frees it. The caller does not pass it.
+    Frees,
 }
 
 /// A C return value the binding ignores: a registration function's, which
@@ -195,6 +203,14 @@ impl Ty {
     }
 }
 
+/// The text or bytes argument the `[HxnFrees]` argument at `at` frees: the
+/// nearest one before it.
+pub fn freed(params: &[Param], at: usize) -> Option<usize> {
+    params[..at]
+        .iter()
+        .rposition(|p| p.role == Role::In && matches!(p.ty, Ty::Text | Ty::Bytes(_)))
+}
+
 impl Function {
     /// The `[HxnOut]` parameter, if it has one.
     pub fn out(&self) -> Option<&Param> {
@@ -230,6 +246,44 @@ pub enum Int {
 }
 
 impl Int {
+    /// The C type, as `[HxnLength=...]` names it.
+    pub fn c_name(self) -> &'static str {
+        match self {
+            Self::I8 => "int8_t",
+            Self::U8 => "uint8_t",
+            Self::I16 => "int16_t",
+            Self::U16 => "uint16_t",
+            Self::I32 => "int",
+            Self::U32 => "unsigned",
+            Self::I64 => "int64_t",
+            Self::U64 => "uint64_t",
+            Self::Long => "long",
+            Self::ULong => "unsigned_long",
+            Self::Size => "size_t",
+            Self::SSize => "ssize_t",
+        }
+    }
+
+    /// The integer type `[HxnLength=...]` names.
+    pub fn from_c_name(name: &str) -> Option<Self> {
+        [
+            Self::I8,
+            Self::U8,
+            Self::I16,
+            Self::U16,
+            Self::I32,
+            Self::U32,
+            Self::I64,
+            Self::U64,
+            Self::Long,
+            Self::ULong,
+            Self::Size,
+            Self::SSize,
+        ]
+        .into_iter()
+        .find(|int| int.c_name() == name)
+    }
+
     /// The platform-dependent C type, as `[HxnC=...]` names it.
     pub fn alias(self) -> Option<&'static str> {
         match self {
@@ -251,8 +305,9 @@ pub enum Ty {
     F64,
     /// `const char *`: UTF-8 text ending in a NUL.
     Text,
-    /// A `const uint8_t *` and a `size_t` length, as one parameter.
-    Bytes,
+    /// A `const uint8_t *` and its length, of the integer type given, as one
+    /// parameter: a `size_t` unless `[HxnLength]` names another.
+    Bytes(Int),
     Enum(String),
     /// A struct passed by value.
     Struct(String),
@@ -265,4 +320,6 @@ pub enum Ty {
     Nullable(Box<Ty>),
     /// A function pointer and the user data after it, as one parameter.
     Callback(String),
+    /// A pointer of no type C is given, which is always `[HxnPass]`.
+    Pointer,
 }

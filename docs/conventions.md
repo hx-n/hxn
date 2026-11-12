@@ -262,8 +262,8 @@ filesystem `#include "counter.h"` would then find the generated header.
   `cppia` and `emcc`. A change to the importer that changes its output
   updates `imported.webidl` in the same commit: `HXN_BLESS=1 cargo test -p
   hxn-c` writes it. `tally.webidl` is that file with the edit a user would
-  make, `[HxnStatus]` on `add` and names for the listener's values, and is
-  updated with it.
+  make, `[HxnStatus]` on `add`, names for the listener's values and
+  `[HxnPass]` on `add_blob`, and is updated with it.
 - **The readme's example is `examples/greeter`, which is what `hxn new`
   creates.** A test fails when the readme differs from it.
 - **An example is a realistic library:** a crate, a Haxe program, its

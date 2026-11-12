@@ -3,6 +3,9 @@ added 3 bytes, total 9
 described: true
 summing: true
 max: 40
+checksum: 60
+blob: 3
+label: second
 visited 7: 5,-2,1,2,3,40,7
 stopped after 1
 thrown: no more

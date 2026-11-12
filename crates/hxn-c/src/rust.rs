@@ -20,7 +20,7 @@
 use std::collections::BTreeSet;
 
 use crate::idl::namespace;
-use crate::model::{Api, Callback, Function, Ignored, Int, Object, Param, Role, Status, Ty};
+use crate::model::{Api, Callback, Function, Ignored, Int, Object, Param, Role, Status, Ty, freed};
 
 // Rust's keywords, reserved words among them.
 const KEYWORDS: [&str; 52] = [
@@ -79,13 +79,13 @@ fn c_type(ty: &Ty) -> String {
         Ty::Text | Ty::Nullable(_) if matches!(ty.inner(), Ty::Text) => {
             String::from("*const c_char")
         }
-        Ty::Bytes => String::from("*const u8"),
+        Ty::Bytes(_) => String::from("*const u8"),
         Ty::Enum(_) => String::from("c_int"),
         Ty::Struct(name) => format!("ffi::{name}"),
         Ty::StructRef(name) => format!("*const ffi::{name}"),
         Ty::Object(name) => format!("*mut ffi::{name}"),
         Ty::Nullable(of) => c_type(of),
-        Ty::Callback(_) => String::from("*mut c_void"),
+        Ty::Callback(_) | Ty::Pointer => String::from("*mut c_void"),
         Ty::Text => unreachable!(),
     }
 }
@@ -105,7 +105,7 @@ fn rust_param(ty: &Ty) -> String {
         Ty::Int(Int::Long | Int::SSize) => String::from("i64"),
         Ty::Int(Int::ULong | Int::Size) => String::from("u64"),
         Ty::Text => String::from("&str"),
-        Ty::Bytes => String::from("&[u8]"),
+        Ty::Bytes(_) => String::from("&[u8]"),
         Ty::Enum(name) | Ty::Struct(name) => name.clone(),
         Ty::StructRef(name) => format!("&{name}"),
         Ty::Object(name) => format!("&mut {name}"),
@@ -129,7 +129,7 @@ fn fallible_param(ty: &Ty) -> bool {
     matches!(
         ty,
         Ty::Text | Ty::Int(Int::Long | Int::ULong | Int::Size | Int::SSize)
-    )
+    ) || matches!(ty, Ty::Bytes(length) if *length != Int::Size)
 }
 
 fn fallible(function: &Function, constructor: bool) -> bool {
@@ -324,6 +324,8 @@ fn keeper(callback: &Callback) -> String {
     out
 }
 
+const FREES: &str = "\n// Text C is given to keep, which it frees with `hxn_free_text`.\nunsafe extern \"C\" fn hxn_free_text(text: *mut c_void) {\n    drop(unsafe { CString::from_raw(text.cast()) });\n}\n\n// The size of the length kept in front of bytes C is given.\nconst HXN_HEADER: usize = size_of::<usize>();\n\n// A copy of `bytes` C is given to keep, which it frees with `hxn_free_bytes`.\n// The copy's length is kept in front of it.\nfn hxn_owned_bytes(bytes: &[u8]) -> *const u8 {\n    let mut owned = Vec::with_capacity(HXN_HEADER + bytes.len());\n    owned.extend_from_slice(&bytes.len().to_ne_bytes());\n    owned.extend_from_slice(bytes);\n    let start = Box::into_raw(owned.into_boxed_slice()).cast::<u8>();\n    unsafe { start.add(HXN_HEADER) }\n}\n\n// Frees bytes `hxn_owned_bytes` made.\nunsafe extern \"C\" fn hxn_free_bytes(bytes: *mut c_void) {\n    let start = unsafe { bytes.cast::<u8>().sub(HXN_HEADER) };\n    let length = usize::from_ne_bytes(unsafe { start.cast::<[u8; HXN_HEADER]>().read() });\n    drop(unsafe { Box::from_raw(std::ptr::slice_from_raw_parts_mut(start, HXN_HEADER + length)) });\n}\n";
+
 const KEPT: &str = "\n// The sender of a stream, which C holds a pointer to as a callback's user\n// data. Dropping it frees the sender and ends the stream, so it is dropped\n// only once C can no longer call the callback.\nstruct Kept<T>(*mut hxn_future::Sender<T>);\n\n// The sender is `Send`, and C only reads it.\nunsafe impl<T: Send> Send for Kept<T> {}\n\nimpl<T> Kept<T> {\n    fn new(sender: hxn_future::Sender<T>) -> Self {\n        Self(Box::into_raw(Box::new(sender)))\n    }\n\n    // What C is passed as the user data.\n    fn user(&self) -> *mut c_void {\n        self.0.cast()\n    }\n}\n\nimpl<T> Drop for Kept<T> {\n    fn drop(&mut self) {\n        drop(unsafe { Box::from_raw(self.0) });\n    }\n}\n";
 
 fn callback<'a>(api: &'a Api, name: &str) -> &'a Callback {
@@ -478,10 +480,25 @@ fn docs(lines: &[String], indent: &str) -> String {
 fn convert(api: &Api, params: &[Param]) -> (Vec<String>, Vec<String>) {
     let mut before = Vec::new();
     let mut passed = Vec::new();
-    for param in params {
+    // The text and bytes arguments C is given a copy of, to free.
+    let owned: Vec<usize> = (0..params.len())
+        .filter(|at| params[*at].role == Role::Frees)
+        .filter_map(|at| freed(params, at))
+        .collect();
+    for (at, param) in params.iter().enumerate() {
         let name = ident(&param.name);
+        let owned = owned.contains(&at);
         match param.role {
             Role::In => {}
+            Role::Frees => {
+                let freed = &params[freed(params, at).expect("checked when parsed")];
+                passed.push(String::from(if freed.ty == Ty::Text {
+                    "Some(hxn_free_text)"
+                } else {
+                    "Some(hxn_free_bytes)"
+                }));
+                continue;
+            }
             Role::Kept => {
                 let Ty::Callback(known) = &param.ty else {
                     unreachable!("only a callback is kept")
@@ -498,8 +515,14 @@ fn convert(api: &Api, params: &[Param]) -> (Vec<String>, Vec<String>) {
                 ));
                 continue;
             }
-            Role::Null => {
+            Role::Null | Role::Pass(0) => {
                 passed.push(String::from("std::ptr::null_mut()"));
+                continue;
+            }
+            Role::Pass(value) => {
+                passed.push(format!(
+                    "std::ptr::without_provenance_mut({value}_isize as usize)"
+                ));
                 continue;
             }
             // A place for C to write into, read after the call.
@@ -532,9 +555,28 @@ fn convert(api: &Api, params: &[Param]) -> (Vec<String>, Vec<String>) {
             }
             Ty::Text => {
                 before.push(format!("let {name} = hxn_text({name})?;"));
-                passed.push(format!("{name}.as_ptr()"));
+                passed.push(if owned {
+                    format!("{name}.into_raw()")
+                } else {
+                    format!("{name}.as_ptr()")
+                });
             }
-            Ty::Bytes => passed.push(format!("{name}.as_ptr(), {name}.len()")),
+            Ty::Bytes(Int::Size) if owned => {
+                passed.push(format!("hxn_owned_bytes({name}), {name}.len()"));
+            }
+            Ty::Bytes(Int::Size) => passed.push(format!("{name}.as_ptr(), {name}.len()")),
+            Ty::Bytes(length) => {
+                before.push(format!(
+                    "let {name}_length = {}::try_from({name}.len()).map_err(|_| format!(\"{name}: {{}} bytes do not fit a C {}\", {name}.len()))?;",
+                    c_type(&Ty::Int(*length)),
+                    length.c_name().replace('_', " ")
+                ));
+                passed.push(if owned {
+                    format!("hxn_owned_bytes({name}), {name}_length")
+                } else {
+                    format!("{name}.as_ptr(), {name}_length")
+                });
+            }
             Ty::Enum(_) => passed.push(format!("{name} as c_int")),
             Ty::Struct(record) => passed.push(format!("ffi::{record}::from(&{name})")),
             Ty::StructRef(record) => {
@@ -815,13 +857,22 @@ fn c_params(api: &Api, param: &Param) -> Vec<String> {
             format!("{name}_user: *mut c_void"),
         ];
     }
+    match param.role {
+        Role::Pass(_) => return vec![format!("{name}: *mut c_void")],
+        Role::Frees => {
+            return vec![format!(
+                "{name}: Option<unsafe extern \"C\" fn(*mut c_void)>"
+            )];
+        }
+        _ => {}
+    }
     if param.role != Role::In {
         return vec![format!("{name}: *mut {}", c_type(param.ty.inner()))];
     }
     match &param.ty {
-        Ty::Bytes => vec![
+        Ty::Bytes(length) => vec![
             format!("{name}: *const u8"),
-            format!("{name}_length: usize"),
+            format!("{name}_length: {}", c_type(&Ty::Int(*length))),
         ],
         other => vec![format!("{name}: {}", c_type(other))],
     }
@@ -952,6 +1003,9 @@ pub fn bindings(api: &Api, source: &str) -> String {
         for known in lent {
             out.push_str(&trampoline(known));
         }
+    }
+    if all_functions(api).any(|f| f.params.iter().any(|p| p.role == Role::Frees)) {
+        out.push_str(FREES);
     }
     let kept = used(api, Role::Kept);
     if !kept.is_empty() {

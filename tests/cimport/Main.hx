@@ -15,6 +15,19 @@ class Main {
 		tally.add(7);
 		Sys.println('max: ${haxe.Int64.toStr(tally.total())}');
 
+		// Bytes with an `int` length, and a destructor C is always passed
+		// TALLY_TRANSIENT for.
+		Sys.println('checksum: ${Tally.checksum(haxe.io.Bytes.ofHex("0a141e"))}');
+		var blob = new Tally("blob", Mode.Sum);
+		blob.addBlob(haxe.io.Bytes.ofHex("0102"));
+		Sys.println('blob: ${haxe.Int64.toStr(blob.total())}');
+		// Text C keeps and frees with a destructor: it is given a copy, freed
+		// when the label is replaced and when the tally is freed.
+		blob.setLabel("first");
+		blob.setLabel("second");
+		Sys.println('label: ${blob.label()}');
+		blob.close();
+
 		// Haxe functions passed to C as a callback and its user data.
 		var seen = [];
 		var visited = tally.each(amount -> {

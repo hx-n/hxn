@@ -16,6 +16,18 @@ class Main {
 		while (query.step() == ROW)
 			Sys.println('${query.columnText(0)}: ${query.columnInt(1)}');
 		query.close();
+		// Text and bytes bound to a statement: sqlite3 keeps a copy, which it
+		// frees through the destructor it is given.
+		run(db, "CREATE TABLE box (label TEXT, data BLOB)");
+		var insert = db.prepareV2("INSERT INTO box VALUES (?, ?)", -1);
+		insert.bindText(1, "plum", -1);
+		insert.bindBlob(2, haxe.io.Bytes.ofHex("cafe"));
+		insert.step();
+		insert.close();
+		var read = db.prepareV2("SELECT label, hex(data) FROM box", -1);
+		while (read.step() == ROW)
+			Sys.println('${read.columnText(0)}: ${read.columnText(1)}');
+		read.close();
 		try {
 			db.prepareV2("SELECT name FROM nowhere", -1);
 		} catch (error:haxe.Exception) {

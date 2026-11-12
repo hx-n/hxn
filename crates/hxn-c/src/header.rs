@@ -24,7 +24,7 @@ use std::process::Command;
 use serde_json::Value;
 
 use crate::model::{
-    Api, Callback, Enum, Function, Ignored, Int, Object, Param, Role, Status, Struct, Ty,
+    Api, Callback, Enum, Function, Ignored, Int, Object, Param, Role, Status, Struct, Ty, freed,
 };
 
 const FREES: [&str; 8] = [
@@ -680,9 +680,39 @@ impl Context<'_> {
                     to: Box::new(CType::Builtin(String::from("void"))),
                     constant: false,
                 };
+                // A destructor of the text or bytes before it.
+                let destructor = match &ty {
+                    CType::Function { returns, params } => {
+                        self.header.c_type(returns) == CType::Builtin(String::from("void"))
+                            && params.len() == 1
+                            && self.header.c_type(&params[0]) == void_pointer
+                    }
+                    _ => false,
+                };
+                if user != Some(void_pointer.clone()) && destructor {
+                    out.push(Param {
+                        name,
+                        ty: Ty::Pointer,
+                        role: Role::Frees,
+                    });
+                    let frees = &out[out.len() - 1].name;
+                    match freed(&out, out.len() - 1) {
+                        Some(data) => self.lent.borrow_mut().push(format!(
+                            "{function}: `{frees}` is taken to free `{}` ([HxnFrees]): C is given a copy, which it frees by calling it",
+                            out[data].name
+                        )),
+                        None => {
+                            return Err(format!(
+                                "`{frees}`: a destructor with no text or bytes before it to free"
+                            ));
+                        }
+                    }
+                    at += 1;
+                    continue;
+                }
                 if user != Some(void_pointer) {
                     return Err(format!(
-                        "`{name}`: a function pointer is passed with its `void *` user data after it"
+                        "`{name}`: a function pointer is passed with its `void *` user data after it. If C is always passed the same value for it, such as a destructor constant, add the function by hand with `[HxnPass=<value>] any {name}`"
                     ));
                 }
                 let kept = keeps_callback(function);
@@ -738,14 +768,16 @@ impl Context<'_> {
                     CType::Builtin(base)
                         if ["unsigned char", "uint8_t", "void"].contains(&base.as_str()) =>
                     {
-                        let length = given.get(at + 1).map(|(_, s)| self.header.c_type(s));
-                        if length != Some(CType::Builtin(String::from("size_t"))) {
+                        let length = given
+                            .get(at + 1)
+                            .map(|(_, s)| self.value(&self.header.c_type(s)));
+                        let Some(Ok(Ty::Int(length))) = length else {
                             return Err(format!(
-                                "`{name}`: a byte pointer is passed with its `size_t` length after it"
+                                "`{name}`: a byte pointer is passed with its length, an integer, after it"
                             ));
-                        }
+                        };
                         at += 1;
-                        Ty::Bytes
+                        Ty::Bytes(length)
                     }
                     CType::Record(tag) => match Self::named(&self.structs, tag) {
                         Some(record) => Ty::StructRef(record.clone()),

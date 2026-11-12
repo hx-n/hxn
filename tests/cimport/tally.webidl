@@ -40,6 +40,15 @@ interface Tally {
   [HxnC=tally_set_mode] undefined set_mode(Mode mode);
   // Adds every byte of `data`.
   [HxnC=tally_add_bytes, HxnReturns=size_t] unsigned long long add_bytes(Uint8Array data);
+  // Adds every byte of `data`. C reads it during the call, so it is passed
+  // TALLY_TRANSIENT for its destructor rather than a copy to free.
+  [HxnC=tally_add_blob, HxnStatus] undefined add_blob([HxnLength=int] Uint8Array data, [HxnPass=-1] any destructor);
+  // Labels the tally with `label`, which it keeps until it is labelled again or
+  // freed, and then passes to `destructor`. With TALLY_TRANSIENT it keeps a
+  // copy instead.
+  [HxnC=tally_set_label] undefined set_label(DOMString label, [HxnFrees] any destructor);
+  // The label, or "" before one is set.
+  [HxnC=tally_label] DOMString? label();
   // A new string the caller frees with tally_string_free.
   [HxnC=tally_describe, HxnFree=tally_string_free] DOMString? describe();
   [HxnC=tally_is_empty] boolean is_empty();
@@ -58,6 +67,8 @@ interface Tally {
 };
 
 namespace Tally {
+  // The sum of the first `length` bytes of `data`.
+  [HxnC=tally_checksum] long checksum([HxnLength=int] Uint8Array data);
   // The Manhattan distance between two points.
   [HxnC=tally_distance] double distance(Point a, [HxnRef] Point b);
   [HxnC=tally_midpoint] Point midpoint(Point a, Point b);
@@ -74,6 +85,8 @@ namespace Tally {
 // - tally_copy: `out` is taken as an output ([HxnOut]), and its int return value as a status ([HxnStatus])
 // - tally_origin: `out` is taken as an output ([HxnOut])
 // - tally_listen: the pointer it returns is ignored ([HxnIgnore=pointer]): the binding does not give back what `listener` replaced
+// - tally_add_blob: `destructor` is taken to free `data` ([HxnFrees]): C is given a copy, which it frees by calling it
+// - tally_set_label: `destructor` is taken to free `label` ([HxnFrees]): C is given a copy, which it frees by calling it
 // - tally_each: C must call `visit` only before tally_each returns; mark it [HxnKept] if C keeps it
 // - tally_report: C must call `report` only before tally_report returns; mark it [HxnKept] if C keeps it
 // - tally_listen: C is taken to keep `listener` ([HxnKept]), and the binding returns a stream of what C calls it with

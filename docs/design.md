@@ -663,8 +663,16 @@ directly. `hxn-c` does the work in three steps:
      returns it is the constructor.
    - A struct with fields is passed by value if every field is a boolean or
      a number. An enum becomes a C-like `#[hxn::data]` enum.
-   - `const char *` is text, and a byte pointer followed by a `size_t` is
-     one bytes parameter. A returned `char *` is freed with the library's
+   - `const char *` is text, and a `const` byte pointer followed by an
+     integer length is one bytes parameter. A length other than a `size_t`
+     is `[HxnLength]`, and bytes that do not fit it are an error before the
+     call.
+   - A `void (*)(void *)` after a text or bytes parameter is taken as its
+     destructor, `[HxnFrees]`, as in `sqlite3_bind_text`. C is given a copy
+     and a destructor that frees the copy, so it may keep the text or bytes
+     for as long as it wants. Any other function pointer passed without user
+     data is not imported; one that C is always passed the same value for,
+     such as `SQLITE_TRANSIENT`, is added by hand with `[HxnPass=n]`. A returned `char *` is freed with the library's
      only function that takes a `char *` and frees it, if it has exactly
      one.
    - A non-`const` pointer to a number, an enum, a struct, text or an
@@ -700,8 +708,9 @@ directly. `hxn-c` does the work in three steps:
    outputs, `[HxnBorrowed]` a returned object the caller must not free,
    `[HxnThreadSafe]` an object the library allows calls on from several
    threads at once, `[HxnUser]` where C passes a callback its user data,
-   `[HxnStop]` what C is returned when the Haxe function throws, and
-   `[HxnKept]` a callback C keeps (see
+   `[HxnStop]` what C is returned when the Haxe function throws,
+   `[HxnKept]` a callback C keeps, and `[HxnPass]` a pointer C is always
+   passed the same value for (see
    `hxn-c`'s `idl` module for the full list). The file is committed. `hxn-c` reads only
    this subset of WebIDL, and reports the line of anything else.
 3. **WebIDL to Rust.** Each build generates `src/bindings.rs` from the

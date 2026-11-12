@@ -34,6 +34,22 @@ tally_mode tally_mode_of(const tally *t);
 void tally_set_mode(tally *t, tally_mode mode);
 /* Adds every byte of `data`. */
 size_t tally_add_bytes(tally *t, const uint8_t *data, size_t length);
+/* The sum of the first `length` bytes of `data`. */
+int32_t tally_checksum(const uint8_t *data, int32_t length);
+/* What tally_add_blob does with its data once it has read it. */
+typedef void (*tally_destructor)(void *);
+/* Tells tally_add_blob to read the data during the call and keep nothing. */
+#define TALLY_TRANSIENT ((tally_destructor)-1)
+/* Adds every byte of `data`, `length` of them, then calls `destructor` with
+ * `data` unless it is NULL or TALLY_TRANSIENT. Returns 0, or -1 when `length`
+ * is negative. */
+int tally_add_blob(tally *t, const void *data, int length, tally_destructor destructor);
+/* Labels the tally with `label`, which it keeps until it is labelled again or
+ * freed, and then passes to `destructor`. With TALLY_TRANSIENT it keeps a copy
+ * instead. */
+void tally_set_label(tally *t, const char *label, tally_destructor destructor);
+/* The label, or "" before one is set. */
+const char *tally_label(const tally *t);
 /* A new string the caller frees with tally_string_free. */
 char *tally_describe(const tally *t);
 void tally_string_free(char *text);

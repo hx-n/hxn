@@ -54,6 +54,12 @@ fn the_edited_webidl_generates_rust_marked_for_hxn() {
     // C frees the object.
     assert!(rust.contains("pub fn listen(&mut self) -> Stream<ListenerEvent>"));
     assert!(rust.contains("kept: std::sync::Mutex<Vec<Box<dyn Send>>>"));
+    // A length other than a `size_t` is converted, and a fixed pointer
+    // passed as it is.
+    assert!(rust.contains("let data_length = i32::try_from(data.len())"));
+    assert!(rust.contains("std::ptr::without_provenance_mut(-1_isize as usize)"));
+    // Text C keeps is a copy it frees.
+    assert!(rust.contains("label.into_raw(), Some(hxn_free_text)"));
     // And it is what hxn reads.
     hxn_gen::parse("tally", &rust).unwrap_or_else(|error| panic!("{error}"));
 }
@@ -116,6 +122,14 @@ fn a_mistake_in_the_webidl_is_reported_with_its_line() {
         (
             "namespace Tally {\n  [HxnC=f] undefined f([HxnKept] long a);\n};\n",
             "`[HxnKept]` applies to a callback argument",
+        ),
+        (
+            "namespace Tally {\n  [HxnC=f] undefined f([HxnLength=short] Uint8Array a);\n};\n",
+            "`[HxnLength=short]` is not an integer type",
+        ),
+        (
+            "namespace Tally {\n  [HxnC=f] undefined f(any a);\n};\n",
+            "is `[HxnPass=n]`, passed a fixed value, or `[HxnFrees]`",
         ),
     ];
     for (text, expected) in errors {

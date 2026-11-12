@@ -13,7 +13,16 @@ struct tally {
 	int32_t recent[16];
 	tally_listener listener;
 	void *listener_user;
+	char *label;
+	tally_destructor label_destructor;
 };
+
+static void release_label(tally *t) {
+	if (t->label && t->label_destructor)
+		t->label_destructor(t->label);
+	t->label = NULL;
+	t->label_destructor = NULL;
+}
 
 tally *tally_new(const char *name, tally_mode mode) {
 	if (!name || !*name)
@@ -27,6 +36,8 @@ tally *tally_new(const char *name, tally_mode mode) {
 }
 
 void tally_free(tally *t) {
+	if (t)
+		release_label(t);
 	free(t);
 }
 
@@ -72,6 +83,40 @@ size_t tally_add_bytes(tally *t, const uint8_t *data, size_t length) {
 	for (size_t i = 0; i < length; i++)
 		tally_add(t, data[i]);
 	return length;
+}
+
+int32_t tally_checksum(const uint8_t *data, int32_t length) {
+	int32_t sum = 0;
+	for (int32_t i = 0; i < length; i++)
+		sum += data[i];
+	return sum;
+}
+
+int tally_add_blob(tally *t, const void *data, int length, tally_destructor destructor) {
+	if (length < 0)
+		return -1;
+	tally_add_bytes(t, data, (size_t)length);
+	if (destructor && destructor != TALLY_TRANSIENT)
+		destructor((void *)data);
+	return 0;
+}
+
+void tally_set_label(tally *t, const char *label, tally_destructor destructor) {
+	release_label(t);
+	if (destructor == TALLY_TRANSIENT) {
+		size_t length = strlen(label) + 1;
+		t->label = malloc(length);
+		if (t->label)
+			memcpy(t->label, label, length);
+		t->label_destructor = free;
+	} else {
+		t->label = (char *)label;
+		t->label_destructor = destructor;
+	}
+}
+
+const char *tally_label(const tally *t) {
+	return t->label ? t->label : "";
 }
 
 char *tally_describe(const tally *t) {
