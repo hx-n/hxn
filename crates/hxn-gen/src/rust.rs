@@ -1,9 +1,10 @@
 //! The two Rust adapters: one over the plain C ABI, for hxcpp, and one of
 //! HashLink primitives. Each is the text of a file a thin crate includes.
 
+use crate::data;
 use crate::later;
 use crate::lent;
-use crate::model::{Interface, Library, Method, Number, Param, Receiver, Type};
+use crate::model::{Data, Interface, Library, Method, Number, Param, Receiver, Type};
 use crate::names::{
     abstract_name, cell_abstract, cell_export, export, has_receiver, held_export, local, release,
     wanted_export, weak_abstract,
@@ -44,6 +45,10 @@ fn owned(library: &Library, method: &Method, arguments: &mut [String]) -> Vec<St
     }
     for (param, argument) in method.params.iter().zip(arguments) {
         let name = &param.name;
+        // Data was decoded into a value of the adapter's own already.
+        if param.data.is_some() {
+            continue;
+        }
         match &param.ty {
             Type::Str => {
                 body.push(format!("let {name} = String::from({argument});"));
@@ -240,6 +245,31 @@ fn lent_allow(method: &Method) -> &'static str {
     }
 }
 
+// A parameter of data: the statement that makes the library's value of
+// what crossed, if it takes one, and the argument. `bytes` is the
+// expression for the bytes a record, an option or a list crossed as.
+fn decoded(param: &Param, data: &Data, bytes: &str) -> (Option<String>, String) {
+    let name = &param.name;
+    let reference = if param.borrowed { "&" } else { "" };
+    match data {
+        Data::Enum(known) => (None, format!("{reference}{}({name})?", data::reader(known))),
+        _ => (
+            Some(format!("let {name} = {};", data::rust_decoded(data, bytes))),
+            format!("{reference}{name}"),
+        ),
+    }
+}
+
+// A call whose result is data, as what crosses: an enum's number, or the
+// bytes of anything made of parts.
+fn encoded(method: &Method, call: String) -> String {
+    match &method.returns_data {
+        Some(Data::Enum(known)) => format!("{}(&{call})", data::writer(known)),
+        Some(data) => data::rust_encoded(data, &call),
+        None => call,
+    }
+}
+
 fn c_method(library: &Library, interface: &Interface, method: &Method) -> String {
     let mut params = Vec::new();
     let mut body = Vec::new();
@@ -259,6 +289,18 @@ fn c_method(library: &Library, interface: &Interface, method: &Method) -> String
         if let Some((taken, given)) = lent::of(&param.ty) {
             params.push(format!("{name}: Callback<{}>", lent::alias(taken, given)));
             arguments.push(lent::closure(lent::Host::Cpp, name, taken, given));
+            continue;
+        }
+        if let Some(data) = &param.data {
+            let ty = if matches!(data, Data::Enum(_)) {
+                "i32"
+            } else {
+                "Slice<'_>"
+            };
+            params.push(format!("{name}: {ty}"));
+            let (statement, argument) = decoded(param, data, &format!("{name}.as_bytes()?"));
+            body.extend(statement);
+            arguments.push(argument);
             continue;
         }
         let (ty, argument) = match &param.ty {
@@ -304,6 +346,7 @@ fn c_method(library: &Library, interface: &Interface, method: &Method) -> String
     if method.asynchronous {
         call = started(method, &call);
     }
+    let call = encoded(method, call);
     let (out, result) = match &method.returns {
         Type::Void => (None, format!("{call};\n            Ok(())")),
         Type::Bool => (Some("i32"), format!("Ok(i32::from({call}))")),
@@ -427,6 +470,8 @@ fn imports(library: &Library, core: &str) -> String {
         .iter()
         .filter(|interface| !interface.namespace)
         .map(|interface| interface.name.as_str())
+        .chain(library.records.iter().map(|record| record.name.as_str()))
+        .chain(library.enums.iter().map(|known| known.name.as_str()))
         .collect();
     let types = match names.as_slice() {
         [] => String::new(),
@@ -450,6 +495,7 @@ pub fn c_adapter(library: &Library, core: &str) -> String {
     out.push_str(&imports(library, core));
     out.push_str(later::imports(library));
     out.push_str(&lent::aliases(library));
+    out.push_str(&data::rust_codec(library));
     for interface in &library.interfaces {
         for method in &interface.methods {
             out.push('\n');
@@ -537,6 +583,25 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
             arguments.push(lent::closure(lent::Host::Hl, name, taken, given));
             continue;
         }
+        if let Some(data) = &param.data {
+            let (statement, argument) = if matches!(data, Data::Enum(_)) {
+                params.push(format!("{name}: i32"));
+                signature.push('i');
+                decoded(param, data, "")
+            } else {
+                params.push(format!("{name}: *mut vbyte"));
+                params.push(format!("{name}_length: i32"));
+                signature.push_str("Bi");
+                decoded(
+                    param,
+                    data,
+                    &format!("slice({name}, {name}_length).as_bytes()?"),
+                )
+            };
+            body.extend(statement);
+            arguments.push(argument);
+            continue;
+        }
         match &param.ty {
             Type::Bool => {
                 params.push(format!("{name}: bool"));
@@ -622,6 +687,7 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
         let inner = call.trim_end_matches('?').to_owned();
         call = format!("blocking(|| {inner}){}", question(method));
     }
+    let call = encoded(method, call);
     let (ty, result) = match &method.returns {
         Type::Void => ("()", format!("{call};\n            Ok(())")),
         Type::Bool => ("bool", format!("Ok({call})")),
@@ -690,6 +756,7 @@ pub fn hl_adapter(library: &Library, core: &str) -> String {
     out.push_str(later::imports(library));
     out.push_str(&lent::aliases(library));
     out.push_str(&lent::hl_trampolines(library));
+    out.push_str(&data::rust_codec(library));
     for interface in &library.interfaces {
         let own = abstract_name(library, &interface.name);
         for method in &interface.methods {

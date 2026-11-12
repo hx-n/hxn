@@ -1,7 +1,7 @@
 //! The manifest: what a library exposes, in a form that is committed and
 //! reviewed. A change to it is a change to the library's ABI.
 
-use crate::model::{Interface, Library, Method, Receiver};
+use crate::model::{Enumeration, Interface, Library, Method, Receiver, Record};
 
 fn quoted(text: &str) -> String {
     let mut out = String::from("\"");
@@ -102,12 +102,68 @@ fn interface(interface: &Interface) -> String {
     out
 }
 
+fn enumeration(known: &Enumeration) -> String {
+    let variants: Vec<String> = known
+        .variants
+        .iter()
+        .map(|variant| {
+            format!(
+                "{{ \"name\": {}, \"value\": {} }}",
+                quoted(&variant.name),
+                variant.value
+            )
+        })
+        .collect();
+    let mut out = String::from("    {\n");
+    out.push_str(&format!("      \"name\": {},\n", quoted(&known.name)));
+    out.push_str(&docs(&known.docs, "      "));
+    out.push_str(&format!(
+        "      \"variants\": [{}]\n    }}",
+        variants.join(", ")
+    ));
+    out
+}
+
+fn record(record: &Record) -> String {
+    let fields: Vec<String> = record
+        .fields
+        .iter()
+        .map(|field| {
+            format!(
+                "        {{ \"name\": {}, \"type\": {} }}",
+                quoted(&field.name),
+                quoted(&field.ty.name())
+            )
+        })
+        .collect();
+    let mut out = String::from("    {\n");
+    out.push_str(&format!("      \"name\": {},\n", quoted(&record.name)));
+    out.push_str(&docs(&record.docs, "      "));
+    out.push_str(&format!(
+        "      \"fields\": [\n{}\n      ]\n    }}",
+        fields.join(",\n")
+    ));
+    out
+}
+
 /// The manifest of `library`, as JSON. The same input gives the same text.
 pub fn manifest(library: &Library) -> String {
     let interfaces: Vec<String> = library.interfaces.iter().map(interface).collect();
     let mut out = String::from("{\n");
     out.push_str("  \"hxn\": 1,\n");
     out.push_str(&format!("  \"library\": {},\n", quoted(&library.name)));
+    // Data is written only by a library that has some.
+    if !library.enums.is_empty() {
+        let enums: Vec<String> = library.enums.iter().map(enumeration).collect();
+        out.push_str(&format!("  \"enums\": [\n{}\n  ],\n", enums.join(",\n")));
+    }
+    if !library.records.is_empty() {
+        let records: Vec<String> = library.records.iter().map(record).collect();
+        out.push_str(&format!(
+            "  \"records\": [\n{}\n  ],\n",
+            records.join(",\n")
+        ));
+    }
     if interfaces.is_empty() {
         out.push_str("  \"interfaces\": []\n");
     } else {

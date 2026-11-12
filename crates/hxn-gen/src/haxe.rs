@@ -5,9 +5,10 @@
 //! object of its interface's class, which is how a result of another
 //! interface, or of a function other than `new`, gets an owner.
 
+use crate::data;
 use crate::later;
 use crate::lent;
-use crate::model::{Interface, Library, Method, Number, Type};
+use crate::model::{Data, Interface, Library, Method, Number, Type};
 use crate::names::{
     abstract_name, camel, cell_abstract, cell_class, has_receiver, local, memory_class,
     native_class, weak_abstract, weak_class,
@@ -85,14 +86,33 @@ fn params(method: &Method) -> String {
         .params
         .iter()
         .map(|param| {
-            format!(
-                "{}:{}",
-                camel(&param.name),
-                number_type(param.number, &param.ty)
-            )
+            let ty = match &param.data {
+                Some(data) => data::haxe_type(data),
+                None => number_type(param.number, &param.ty),
+            };
+            format!("{}:{ty}", camel(&param.name))
         })
         .collect();
     params.join(", ")
+}
+
+// A parameter of data that crosses as bytes: the statements that write it
+// into them, and the variable they end up in.
+fn written(name: &str, data: &Data) -> (Vec<String>, String) {
+    let out = format!("{name}Out");
+    let mut lines = vec![format!("var {out} = new haxe.io.BytesBuffer();")];
+    lines.extend(data::haxe_write(data, name, &out, 0));
+    let bytes = format!("{name}Bytes");
+    lines.push(format!("var {bytes} = {out}.getBytes();"));
+    (lines, bytes)
+}
+
+// The statements that read a result of data from the bytes it crossed as.
+fn read(data: &Data, bytes: &str) -> Vec<String> {
+    vec![
+        format!("var input = new haxe.io.BytesInput({bytes});"),
+        format!("return {};", data::haxe_read(data)),
+    ]
 }
 
 // `public function add(amount:Int):Int`, or the constructor's.
@@ -101,11 +121,14 @@ fn signature(method: &Method) -> String {
         return format!("\tpublic function new({})", params(method));
     }
     let modifier = if has_receiver(method) { "" } else { "static " };
+    let returns = match &method.returns_data {
+        Some(data) => data::haxe_type(data),
+        None => number_type(method.returns_number, &method.returns),
+    };
     format!(
-        "\tpublic {modifier}function {}({}):{}",
+        "\tpublic {modifier}function {}({}):{returns}",
         camel(&method.name),
         params(method),
-        number_type(method.returns_number, &method.returns)
     )
 }
 
@@ -248,8 +271,16 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
     if has_receiver(method) {
         arguments.push(String::from("raw"));
     }
+    let mut lines = Vec::new();
     for param in &method.params {
-        let name = camel(&param.name);
+        let mut name = camel(&param.name);
+        if let Some(data) = &param.data
+            && param.ty == Type::Bytes
+        {
+            let (statements, bytes) = written(&name, data);
+            lines.extend(statements);
+            name = bytes;
+        }
         match &param.ty {
             Type::Bytes => {
                 arguments.push(name.clone());
@@ -278,7 +309,6 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
         local(&interface.name, &method.name),
         arguments.join(", ")
     );
-    let mut lines = Vec::new();
     if method.constructor {
         lines.push(format!("raw = {call};"));
         if interface.weighed {
@@ -291,9 +321,11 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
             Type::Bytes => {
                 lines.push(String::from("var outLength = 0;"));
                 lines.push(format!("var data = {call};"));
-                lines.push(String::from(
-                    "return @:privateAccess new haxe.io.Bytes(data, outLength);",
-                ));
+                let bytes = "@:privateAccess new haxe.io.Bytes(data, outLength)";
+                match &method.returns_data {
+                    Some(data) => lines.extend(read(data, bytes)),
+                    None => lines.push(format!("return {bytes};")),
+                }
             }
             Type::Handle {
                 interface: of,
@@ -474,7 +506,14 @@ fn cpp_method(library: &Library, interface: &Interface, method: &Method) -> Stri
         arguments.push(String::from("raw"));
     }
     for param in &method.params {
-        let name = camel(&param.name);
+        let mut name = camel(&param.name);
+        if let Some(data) = &param.data
+            && param.ty == Type::Bytes
+        {
+            let (statements, bytes) = written(&name, data);
+            before.extend(statements);
+            name = bytes;
+        }
         match &param.ty {
             Type::Bytes => arguments.push(format!("{name}.getData()")),
             // Null goes through as null whether or not the library takes
@@ -551,7 +590,11 @@ fn cpp_method(library: &Library, interface: &Interface, method: &Method) -> Stri
                 body.push(format!("return made.{}();", later::maker(carried)));
             }
             Type::Bytes => {
-                body.push(format!("return haxe.io.Bytes.ofData({call});"));
+                let bytes = format!("haxe.io.Bytes.ofData({call})");
+                match &method.returns_data {
+                    Some(data) => body.extend(read(data, &bytes)),
+                    None => body.push(format!("return {bytes};")),
+                }
             }
             _ => body.push(format!("return {call};")),
         }
@@ -622,6 +665,7 @@ pub fn haxe_hl(library: &Library) -> Vec<File> {
             text: hl_weak(library, interface),
         });
     }
+    files.extend(data::haxe_files(library));
     files.extend(later::hl_files(library));
     files.push(File {
         path: format!("{}.hx", memory_class(library)),
@@ -670,6 +714,7 @@ pub fn haxe_cpp(library: &Library) -> Vec<File> {
             text: cpp_weak(library, interface),
         });
     }
+    files.extend(data::haxe_files(library));
     files.extend(later::cpp_files(library));
     files.push(File {
         path: format!("{}.hx", memory_class(library)),
@@ -747,6 +792,8 @@ pub fn haxe_cppia(library: &Library) -> Vec<File> {
             text: cppia_weak(interface),
         });
     }
+    // Data is plain Haxe, the same for a script as for its host.
+    files.extend(data::haxe_files(library));
     files.push(File {
         path: format!("{}.hx", memory_class(library)),
         text: format!(

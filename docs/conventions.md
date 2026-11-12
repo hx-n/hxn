@@ -97,6 +97,15 @@ filesystem `#include "counter.h"` would then find the generated one.
   position in one, a count of nanoseconds, is a `u64` or an `i64` and not a
   `usize`: as a `usize` it would be right natively and wrap in the same
   library built for wasm.
+- Plain data is a struct or an enum marked `#[hxn::data]`, `pub` and
+  reachable at the crate's root, with a name no interface has. A struct has
+  named fields, every one `pub`, each a `bool`, a number with a width,
+  `String`, `Vec<u8>`, other data, or an `Option` or a `Vec` of these. An
+  enum's variants hold nothing, and a number written for one is a whole
+  number. Data is taken by value or by `&`, a list also as `&[T]`, and
+  returned by value; an `Option` or a `Vec` of data crosses the same way,
+  as a parameter or a result. It is not carried by a future, a stream or a
+  signal, nor passed to a lent function.
 - Another interface is taken as `&T` or `&mut T` and returned as `T`, with
   `Option` for one that may be absent. It is never taken by value and never
   returned by reference.

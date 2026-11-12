@@ -186,7 +186,7 @@ fn says_where_and_why_something_cannot_cross() {
         ),
         ("pub fn later(&self) -> Future<u16> { todo!() }", "carries"),
         (
-            "pub fn maybe(&self) -> Option<u8> { todo!() }",
+            "pub fn maybe(&self) -> Option<Unknown> { todo!() }",
             "a result is one of",
         ),
         (
@@ -199,7 +199,7 @@ fn says_where_and_why_something_cannot_cross() {
         ),
         ("pub fn eat(&self, value: Thing) {}", "not by value"),
         (
-            "pub fn items(&self) -> Vec<i32> { todo!() }",
+            "pub fn items(&self) -> Vec<Unknown> { todo!() }",
             "a result is one of",
         ),
         (
@@ -1396,6 +1396,10 @@ fn a_script_is_told_what_each_class_is_called_with() {
             .iter()
             .find(|file| file.path == declaration.path)
             .unwrap_or_else(|| panic!("{} declares a class no host holds", declaration.path));
+        // Data is plain Haxe: a script is given the class itself.
+        if declaration.text == class.text {
+            continue;
+        }
         assert!(
             declaration.text.contains("\nextern class "),
             "{}",
@@ -1837,7 +1841,10 @@ fn the_manifest_is_also_webidl() {
         .flat_map(|method| &method.params)
         .filter(|param| matches!(param.ty, Type::Lent { .. }))
         .count();
-    assert_eq!(parsed.len(), library.interfaces.len() + lent);
+    assert_eq!(
+        parsed.len(),
+        library.interfaces.len() + lent + library.records.len() + library.enums.len()
+    );
     let namespaces = parsed
         .iter()
         .filter(|definition| matches!(definition, weedle::Definition::Namespace(_)))
@@ -1862,5 +1869,200 @@ fn every_example_has_a_webidl_form() {
         let idl = hxn_gen::webidl(&library);
         let parsed = weedle::parse(&idl).unwrap_or_else(|error| panic!("{name}: {error:?}"));
         assert!(parsed.len() >= library.interfaces.len(), "{name}");
+    }
+}
+
+// Plain data crosses by value: an enum as its number, and a record, an
+// option or a list as bytes both sides write and read in the same order.
+#[test]
+fn data_crosses_by_value() {
+    let source = r#"
+/// How loud.
+#[hxn::data]
+pub enum Mode { Quiet = 3, Loud = 9, Off }
+
+#[hxn::data]
+pub struct Point { pub x: f64, pub y: f64 }
+
+#[hxn::data]
+pub struct Options {
+    pub label: String,
+    pub small: u8,
+    pub mode: Mode,
+    pub at: Point,
+    /// May be left out.
+    pub note: Option<String>,
+    pub path: Vec<Point>,
+}
+
+#[hxn::interface]
+pub struct Thing;
+
+#[hxn::methods]
+impl Thing {
+    pub fn open(options: &Options, mode: Mode) -> Options { todo!() }
+    pub fn find(points: &[Point], limit: Option<i32>) -> Option<Point> { todo!() }
+    pub fn names() -> Vec<String> { todo!() }
+    pub fn mode(&self) -> Result<Mode, String> { todo!() }
+    pub async fn later(options: Options) -> i32 { todo!() }
+}
+"#;
+    let library = parse("thing", source).unwrap();
+    assert_eq!(library.enums[0].name, "Mode");
+    let values: Vec<i32> = library.enums[0].variants.iter().map(|v| v.value).collect();
+    assert_eq!(values, [3, 9, 10]);
+    let options = &library.records[1];
+    assert_eq!(options.fields[1].ty, hxn_gen::Data::Number(Number::U8));
+    assert_eq!(
+        options.fields[5].ty,
+        hxn_gen::Data::List(Box::new(hxn_gen::Data::Record(String::from("Point"))))
+    );
+    // What a function takes or gives is noted beside what it crosses as.
+    let open = &library.interfaces[0].methods[0];
+    assert_eq!(
+        (&open.params[0].ty, open.params[0].borrowed),
+        (&Type::Bytes, true)
+    );
+    assert_eq!(
+        (&open.params[1].ty, open.params[1].borrowed),
+        (&Type::I32, false)
+    );
+    assert_eq!(open.returns, Type::Bytes);
+    assert_eq!(
+        open.returns_data,
+        Some(hxn_gen::Data::Record(String::from("Options")))
+    );
+
+    for adapter in [
+        hxn_gen::c_adapter(&library, "thing"),
+        hxn_gen::hl_adapter(&library, "thing"),
+    ] {
+        assert!(
+            adapter.contains("use thing::{Thing, Point, Options, Mode};"),
+            "{adapter}"
+        );
+        assert!(adapter.contains(
+            "fn hxn_read_options(input: &mut hxn_abi::wire::Reader) -> Result<Options, Fault>"
+        ));
+        assert!(adapter.contains("small: u8::try_from(input.i32()?).map_err(|_| Fault::Range)?,"));
+        assert!(adapter.contains("mode: hxn_read_mode(input.i32()?)?,"));
+        assert!(adapter.contains("at: hxn_read_point(input)?,"));
+        assert!(adapter.contains("note: if input.bool()? { Some(input.text()?) } else { None },"));
+        // An enum is matched by name both ways, never transmuted.
+        assert!(adapter.contains("value if value == Mode::Loud as i32 => Ok(Mode::Loud),"));
+        assert!(adapter.contains("_ => Err(Fault::Range),"));
+        assert!(adapter.contains("Mode::Off => Mode::Off as i32,"));
+        // Read whole, with nothing left over, and passed as it is taken.
+        assert!(adapter.contains("let value = hxn_read_options(input)?; input.end()?; value };"));
+        assert!(adapter.contains("Thing::open(&options, hxn_read_mode(mode)?)"));
+        assert!(adapter.contains("Thing::find(&points, limit)"));
+        assert!(adapter.contains("hxn_write_mode(&this.mode()?)"));
+        // An async function owns the data it was passed.
+        assert!(adapter.contains("hxn_future::spawn(async move { Ok::<_, hxn_future::Failure>(Thing::later(options).await) })"));
+    }
+    let c = hxn_gen::c_adapter(&library, "thing");
+    assert!(c.contains(
+        "fn thing_thing_open(options: Slice<'_>, mode: i32, out: *mut Buf, err: *mut Buf)"
+    ));
+    let hl = hxn_gen::hl_adapter(&library, "thing");
+    assert!(hl.contains("fn thing_thing_open(options: *mut vbyte, options_length: i32, mode: i32, out: *mut i32) -> *mut vbyte"));
+
+    // The Haxe classes of data are plain Haxe, the same for every runtime.
+    let hl_files = hxn_gen::haxe_hl(&library);
+    let file = |name: &str| {
+        hl_files
+            .iter()
+            .find(|file| file.path == name)
+            .unwrap_or_else(|| panic!("no {name}"))
+            .text
+            .clone()
+    };
+    let mode = file("Mode.hx");
+    assert!(mode.contains("/** How loud. **/\nenum abstract Mode(Int) from Int to Int {\n\tvar Quiet = 3;\n\tvar Loud = 9;\n\tvar Off = 10;\n}"));
+    let record = file("Options.hx");
+    assert!(record.contains("@:structInit class Options {"));
+    assert!(
+        record.contains("\tpublic var small:Int;\n\tpublic var mode:Mode;\n\tpublic var at:Point;")
+    );
+    assert!(record.contains("\t/** May be left out. **/\n\tpublic var note:Null<String> = null;"));
+    assert!(record.contains("\tpublic var path:Array<Point>;"));
+    assert!(record.contains("hxn.Wire.text(out, label);"));
+    assert!(record.contains("throw new haxe.Exception(\"null where a Point is needed\");"));
+    assert!(record.contains(
+        "var path:Array<Point> = [for (_ in 0...input.readInt32()) Point.hxnRead(input)];"
+    ));
+    for files in [hxn_gen::haxe_cpp(&library), hxn_gen::haxe_cppia(&library)] {
+        for name in ["Mode.hx", "Point.hx", "Options.hx"] {
+            let other = files.iter().find(|file| file.path == name).unwrap();
+            assert_eq!(other.text, file(name), "{name}");
+        }
+    }
+    let thing = file("Thing.hx");
+    assert!(thing.contains("public static function open(options:Options, mode:Mode):Options {"));
+    assert!(thing.contains(
+        "public static function find(points:Array<Point>, limit:Null<Int>):Null<Point> {"
+    ));
+    assert!(thing.contains("public static function names():Array<String> {"));
+    assert!(thing.contains("public function mode():Mode"));
+    assert!(thing.contains("return Options.hxnRead(input);"));
+
+    let manifest = hxn_gen::manifest(&library);
+    assert!(manifest.contains("\"enums\": ["));
+    assert!(manifest.contains("{ \"name\": \"Off\", \"value\": 10 }"));
+    assert!(manifest.contains("{ \"name\": \"path\", \"type\": \"list<Point>\" }"));
+    assert!(manifest.contains("{ \"name\": \"points\", \"type\": \"list<Point>\" }, { \"name\": \"limit\", \"type\": \"option<i32>\" }"));
+    assert!(manifest.contains("\"returns\": \"option<Point>\""));
+
+    let refused = [
+        (
+            "#[hxn::data]\nstruct Hidden { pub x: i32 }",
+            "data has to be `pub`",
+        ),
+        (
+            "#[hxn::data]\npub struct Wrapped<T> { pub x: T }",
+            "generic data cannot cross",
+        ),
+        (
+            "#[hxn::data]\npub struct Tuple(pub i32);",
+            "a struct of named fields",
+        ),
+        (
+            "#[hxn::data]\npub struct Private { x: i32 }",
+            "every field of data is `pub`",
+        ),
+        (
+            "#[hxn::data]\npub struct Odd { pub x: Thing }",
+            "a field of data is one of",
+        ),
+        (
+            "#[hxn::data]\npub struct Sized { pub x: usize }",
+            "give a field of data a width",
+        ),
+        (
+            "#[hxn::data]\npub enum Holds { One(i32) }",
+            "a variant of data holds nothing",
+        ),
+        (
+            "#[hxn::data]\npub enum Twice { One = 1, Other = 1 }",
+            "two variants are 1",
+        ),
+        (
+            "#[hxn::data]\npub enum Sum { One = 1 + 1 }",
+            "a variant's number is written",
+        ),
+        ("#[hxn::data]\npub enum Empty {}", "no variants"),
+        (
+            "#[hxn::data]\npub struct Thing { pub x: i32 }",
+            "`Thing` is marked twice",
+        ),
+    ];
+    for (item, expected) in refused {
+        let source = format!("#[hxn::interface]\npub struct Thing;\n\n{item}\n");
+        let error = parse("thing", &source).unwrap_err();
+        assert!(
+            error.message.contains(expected),
+            "{item}: {}",
+            error.message
+        );
     }
 }

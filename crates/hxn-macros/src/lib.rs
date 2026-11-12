@@ -29,6 +29,14 @@ pub fn function(_arguments: TokenStream, item: TokenStream) -> TokenStream {
     without_notes(item)
 }
 
+/// Marks a struct or an enum as plain data, which crosses by value. A
+/// struct's public fields become those of a Haxe class; an enum of names
+/// becomes a Haxe `enum abstract` of the same.
+#[proc_macro_attribute]
+pub fn data(_arguments: TokenStream, item: TokenStream) -> TokenStream {
+    without_notes(item)
+}
+
 // `#[hxn(...)]` is a `#` and then a bracket group that starts `hxn (`.
 fn is_note(group: &Group) -> bool {
     if group.delimiter() != Delimiter::Bracket {

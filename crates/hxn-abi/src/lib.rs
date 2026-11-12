@@ -9,6 +9,7 @@
 //! | a host closure | [`Callback`] | the library, until it drops it |
 //! | a cell both sides read and write | `AtomicI32`, [`AtomicFlag`] | whoever made it |
 //! | failure | [`Status`], with a message in a [`Buf`] | - |
+//! | a value made of plain data | bytes, as [`wire`] lays them out | as bytes are |
 //!
 //! [`memory`] is how a library tells the host's collector what its values
 //! hold.
@@ -32,6 +33,7 @@ mod handle;
 pub mod memory;
 mod slice;
 mod status;
+pub mod wire;
 
 pub use atomic::AtomicFlag;
 pub use buf::Buf;

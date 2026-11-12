@@ -1,6 +1,45 @@
 {
   "hxn": 1,
   "library": "counter",
+  "enums": [
+    {
+      "name": "Mode",
+      "docs": "How loud. Two of its numbers are written and one follows on.",
+      "variants": [{ "name": "Quiet", "value": 3 }, { "name": "Loud", "value": 9 }, { "name": "Off", "value": 10 }]
+    }
+  ],
+  "records": [
+    {
+      "name": "Point",
+      "docs": "A place.",
+      "fields": [
+        { "name": "x", "type": "f64" },
+        { "name": "y", "type": "f64" }
+      ]
+    },
+    {
+      "name": "Settings",
+      "docs": "One of each thing a record holds.",
+      "fields": [
+        { "name": "title", "type": "str" },
+        { "name": "count", "type": "i32" },
+        { "name": "wide", "type": "i64" },
+        { "name": "ratio", "type": "f32" },
+        { "name": "small", "type": "u8" },
+        { "name": "flags", "type": "u32" },
+        { "name": "enabled", "type": "bool" },
+        { "name": "mode", "type": "Mode" },
+        { "name": "origin", "type": "Point" },
+        { "name": "note", "type": "option<str>" },
+        { "name": "limit", "type": "option<i32>" },
+        { "name": "fallback", "type": "option<Mode>" },
+        { "name": "path", "type": "list<Point>" },
+        { "name": "tags", "type": "list<str>" },
+        { "name": "payload", "type": "bytes" },
+        { "name": "grid", "type": "list<list<i32>>" }
+      ]
+    }
+  ],
   "interfaces": [
     {
       "name": "Counter",
@@ -898,6 +937,120 @@
           "params": [{ "name": "count", "type": "usize" }],
           "returns": "usize",
           "fallible": true,
+          "blocking": false
+        }
+      ]
+    },
+    {
+      "name": "Shapes",
+      "docs": "Functions over data, with no value behind them.",
+      "methods": [
+        {
+          "name": "describe",
+          "docs": "The record as the library read it, taken by reference.",
+          "kind": "static",
+          "params": [{ "name": "settings", "type": "Settings" }],
+          "returns": "str",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "bumped",
+          "docs": "A record taken by value and given back changed.",
+          "kind": "static",
+          "params": [{ "name": "settings", "type": "Settings" }],
+          "returns": "Settings",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "louder",
+          "docs": "The mode one step louder.",
+          "kind": "static",
+          "params": [{ "name": "mode", "type": "Mode" }],
+          "returns": "Mode",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "named",
+          "docs": "An enum taken by reference.",
+          "kind": "static",
+          "params": [{ "name": "mode", "type": "Mode" }],
+          "returns": "str",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "mode_of",
+          "docs": "The mode a number names, if it names one.",
+          "kind": "static",
+          "params": [{ "name": "number", "type": "i32" }],
+          "returns": "option<Mode>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "midpoint",
+          "docs": "Halfway between two points, one taken each way.",
+          "kind": "static",
+          "params": [{ "name": "a", "type": "Point" }, { "name": "b", "type": "Point" }],
+          "returns": "Point",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "right_of",
+          "docs": "The first point right of `x`, taken from a slice.",
+          "kind": "static",
+          "params": [{ "name": "points", "type": "list<Point>" }, { "name": "x", "type": "f64" }],
+          "returns": "option<Point>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "total",
+          "docs": "A list of numbers, added up.",
+          "kind": "static",
+          "params": [{ "name": "values", "type": "list<i32>" }],
+          "returns": "i32",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "doubled",
+          "docs": "A number that may be missing, doubled if it is there.",
+          "kind": "static",
+          "params": [{ "name": "value", "type": "option<i32>" }],
+          "returns": "option<i32>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "words",
+          "docs": "The words of `text`.",
+          "kind": "static",
+          "params": [{ "name": "text", "type": "str" }],
+          "returns": "list<str>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "preset",
+          "docs": "A record, or a failure.",
+          "kind": "static",
+          "params": [{ "name": "mode", "type": "Mode" }],
+          "returns": "Settings",
+          "fallible": true,
+          "blocking": false
+        },
+        {
+          "name": "counter",
+          "docs": "A counter starting at what a record says: data in, an object out.",
+          "kind": "static",
+          "params": [{ "name": "settings", "type": "Settings" }],
+          "returns": "Counter",
+          "fallible": false,
           "blocking": false
         }
       ]

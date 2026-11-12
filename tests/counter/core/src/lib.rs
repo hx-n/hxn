@@ -19,9 +19,11 @@ use hxn_future::{
 // An interface in a module is named at the root, where the adapters look.
 mod blob;
 mod numbers;
+mod shapes;
 pub use blob::Blob;
 // A function in a module is named at the root too.
 pub use numbers::{Numbers, halve};
+pub use shapes::{Mode, Point, Settings, Shapes};
 
 static LIVE: AtomicI32 = AtomicI32::new(0);
 

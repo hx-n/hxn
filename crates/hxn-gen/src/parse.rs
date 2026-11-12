@@ -7,7 +7,10 @@ use proc_macro2::Span;
 use syn::spanned::Spanned;
 use syn::{Attribute, FnArg, ImplItem, Item, Meta, ReturnType, Visibility};
 
-use crate::model::{Error, Interface, Library, Method, Number, Param, Receiver, Type};
+use crate::model::{
+    Data, Enumeration, Error, Field, Interface, Library, Method, Number, Param, Receiver, Record,
+    Type, Variant,
+};
 use crate::names::pascal;
 
 fn error<T>(span: Span, message: impl Into<String>) -> Result<T, Error> {
@@ -174,6 +177,35 @@ struct Scope<'a> {
     // Those of them marked `shared`.
     shared: &'a [String],
     own: &'a str,
+    // The names of the library's `#[hxn::data]` structs and enums.
+    records: &'a [String],
+    enums: &'a [String],
+}
+
+// Plain data, given the names of the library's records and enums. `None`
+// for a type that is not data.
+fn data_of(ty: &syn::Type, records: &[String], enums: &[String]) -> Option<Data> {
+    if let Some(inner) = optional(ty) {
+        return Some(Data::Option(Box::new(data_of(inner, records, enums)?)));
+    }
+    if let Some(inner) = wrapped(ty, "Vec") {
+        if path_name(inner).as_deref() == Some("u8") {
+            return Some(Data::Bytes);
+        }
+        return Some(Data::List(Box::new(data_of(inner, records, enums)?)));
+    }
+    let name = path_name(ty)?;
+    Some(match name.as_str() {
+        "bool" => Data::Bool,
+        "i32" => Data::I32,
+        "i64" => Data::I64,
+        "f64" => Data::F64,
+        "String" => Data::Text,
+        name if Number::parse(name).is_some() => Data::Number(Number::parse(name)?),
+        name if records.iter().any(|record| record == name) => Data::Record(name.to_owned()),
+        name if enums.iter().any(|known| known == name) => Data::Enum(name.to_owned()),
+        _ => return None,
+    })
 }
 
 impl Scope<'_> {
@@ -205,6 +237,13 @@ impl Scope<'_> {
 
     fn is_shared(&self, interface: &str) -> bool {
         self.shared.iter().any(|shared| shared == interface)
+    }
+
+    // Data that crosses as a value of its own kind: an enum, a record, or
+    // an `Option` or a list of data. What has a way across already, a bare
+    // number or text, is `None` here.
+    fn shape(&self, ty: &syn::Type) -> Option<Data> {
+        data_of(ty, self.records, self.enums).filter(|data| data.wire().is_some())
     }
 
     // `impl Fn(i32, f64) -> Result<bool, E>`, or `FnMut` or `FnOnce`.
@@ -315,6 +354,8 @@ impl Scope<'_> {
             exclusive: false,
             kept: false,
             number: None,
+            data: None,
+            borrowed: false,
         };
         if let syn::Type::ImplTrait(lent) = ty {
             return Ok(plain(self.lent(lent)?));
@@ -360,6 +401,8 @@ impl Scope<'_> {
                 exclusive,
                 kept: false,
                 number: None,
+                data: None,
+                borrowed: false,
             });
         }
         if let Some(interface) = self.pointer(inner) {
@@ -380,6 +423,8 @@ impl Scope<'_> {
                 exclusive: false,
                 kept: true,
                 number: None,
+                data: None,
+                borrowed: false,
             });
         }
         if let syn::Type::Reference(reference) = inner
@@ -396,6 +441,27 @@ impl Scope<'_> {
                 "an interface is taken as `&T` or `&mut T`, not by value",
             );
         }
+        // Data is copied in either way: by value, or behind a reference
+        // that is to the adapter's copy. A list is also taken as a slice.
+        let (target, borrowed) = match ty {
+            syn::Type::Reference(reference) if reference.mutability.is_none() => {
+                (&*reference.elem, true)
+            }
+            other => (other, false),
+        };
+        let shape = match target {
+            syn::Type::Slice(slice) if borrowed => {
+                data_of(&slice.elem, self.records, self.enums).map(|of| Data::List(Box::new(of)))
+            }
+            other => self.shape(other),
+        };
+        if let Some(data) = shape {
+            return Ok(Param {
+                borrowed,
+                ..plain(data.wire().unwrap_or(Type::Bytes))
+            }
+            .of(data));
+        }
         match path_name(ty).as_deref() {
             Some("bool") => Ok(plain(Type::Bool)),
             Some("i32") => Ok(plain(Type::I32)),
@@ -411,7 +477,7 @@ impl Scope<'_> {
             Some("i128" | "u128") => error(ty.span(), WIDE),
             _ => error(
                 ty.span(),
-                "a parameter is one of bool, a number, &str, &[u8], &AtomicI32, &AtomicFlag, `&` or `&mut` of an interface, or `impl Fn(..) -> Result<T, E>`",
+                "a parameter is one of bool, a number, &str, &[u8], data marked `#[hxn::data]` or an Option or Vec of data, &AtomicI32, &AtomicFlag, `&` or `&mut` of an interface, or `impl Fn(..) -> Result<T, E>`",
             ),
         }
     }
@@ -562,6 +628,10 @@ impl Scope<'_> {
         if wrapped(ty, "Vec").and_then(path_name).as_deref() == Some("u8") {
             return Ok((Type::Bytes, false));
         }
+        // Which data it is, `method` reads off the signature.
+        if let Some(wire) = self.shape(ty).and_then(|data| data.wire()) {
+            return Ok((wire, false));
+        }
         let plain = match path_name(ty).as_deref() {
             Some("bool") => Type::Bool,
             Some("i32") => Type::I32,
@@ -576,7 +646,7 @@ impl Scope<'_> {
             _ => {
                 return error(
                     ty.span(),
-                    "a result is one of (), bool, a number, String, Vec<u8>, Arc<AtomicI32>, Arc<AtomicFlag>, an interface or an Option of one, a Future, Stream or Signal, or a Result of these",
+                    "a result is one of (), bool, a number, String, Vec<u8>, data marked `#[hxn::data]` or an Option or Vec of data, Arc<AtomicI32>, Arc<AtomicFlag>, an interface or an Option of one, a Future, Stream or Signal, or a Result of these",
                 );
             }
         };
@@ -785,6 +855,9 @@ impl Scope<'_> {
                 .filter(|_| !asynchronous)
                 .and_then(|(ty, _)| path_name(ty))
                 .and_then(|name| Number::parse(&name)),
+            returns_data: given(&signature.output)
+                .filter(|_| !asynchronous)
+                .and_then(|(ty, _)| self.shape(ty)),
             free: false,
         })
     }
@@ -940,6 +1013,184 @@ fn located<T>(result: Result<T, Error>, source: &Source) -> Result<T, Error> {
 // What the adapters name their own exports after.
 const RESERVED: [&str; 6] = ["Atomic", "Memory", "Future", "Stream", "Signal", "Outbox"];
 
+// The names of the library's data, which a signature is read against.
+#[derive(Clone, Copy)]
+struct Known<'a> {
+    records: &'a [String],
+    enums: &'a [String],
+}
+
+// A `#[hxn::data]` item's name, checked as an interface's is.
+fn data_name(
+    item: &syn::Ident,
+    vis: &Visibility,
+    generics: &syn::Generics,
+    taken: &[String],
+) -> Result<String, Error> {
+    if !matches!(vis, Visibility::Public(_)) {
+        return error(item.span(), "data has to be `pub`");
+    }
+    if !generics.params.is_empty() {
+        return error(generics.span(), "generic data cannot cross");
+    }
+    let name = item.to_string();
+    if RESERVED.contains(&name.as_str()) {
+        return error(
+            item.span(),
+            format!("`{name}` is a name the adapters use; call the data something else"),
+        );
+    }
+    if taken.contains(&name) {
+        return error(item.span(), format!("`{name}` is marked twice"));
+    }
+    Ok(name)
+}
+
+// The names of every `#[hxn::data]` struct and enum, before any field is
+// read: a field of one may be another, declared later or in another file.
+fn data_names(
+    items: &[Item],
+    taken: &mut Vec<String>,
+    records: &mut Vec<String>,
+    enums: &mut Vec<String>,
+) -> Result<(), Error> {
+    for item in items {
+        match item {
+            Item::Struct(item) if item.attrs.iter().any(|a| is_marker(a, "data")) => {
+                let name = data_name(&item.ident, &item.vis, &item.generics, taken)?;
+                taken.push(name.clone());
+                records.push(name);
+            }
+            Item::Enum(item) if item.attrs.iter().any(|a| is_marker(a, "data")) => {
+                let name = data_name(&item.ident, &item.vis, &item.generics, taken)?;
+                taken.push(name.clone());
+                enums.push(name);
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+// A variant's number: the one written, or one more than the last.
+fn discriminant(variant: &syn::Variant, next: i32) -> Result<i32, Error> {
+    const NUMBER: &str =
+        "a variant's number is written as a whole number that fits an i32, or left out";
+    let Some((_, value)) = &variant.discriminant else {
+        return Ok(next);
+    };
+    let (literal, negative) = match value {
+        syn::Expr::Unary(unary) if matches!(unary.op, syn::UnOp::Neg(_)) => (&*unary.expr, true),
+        other => (other, false),
+    };
+    let syn::Expr::Lit(syn::ExprLit {
+        lit: syn::Lit::Int(number),
+        ..
+    }) = literal
+    else {
+        return error(value.span(), NUMBER);
+    };
+    let Ok(number) = number.base10_parse::<i64>() else {
+        return error(value.span(), NUMBER);
+    };
+    i32::try_from(if negative { -number } else { number }).or_else(|_| error(value.span(), NUMBER))
+}
+
+// The records and enums themselves, once every name is known.
+fn data_items(
+    items: &[Item],
+    known: Known,
+    records: &mut Vec<Record>,
+    enums: &mut Vec<Enumeration>,
+) -> Result<(), Error> {
+    for item in items {
+        match item {
+            Item::Struct(item) if item.attrs.iter().any(|a| is_marker(a, "data")) => {
+                let syn::Fields::Named(named) = &item.fields else {
+                    return error(
+                        item.ident.span(),
+                        "data is a struct of named fields, or an enum of names",
+                    );
+                };
+                let mut fields = Vec::new();
+                for field in &named.named {
+                    let name = field
+                        .ident
+                        .as_ref()
+                        .map(ToString::to_string)
+                        .unwrap_or_default();
+                    // The adapter builds the value field by field.
+                    if !matches!(field.vis, Visibility::Public(_)) {
+                        return error(
+                            field.span(),
+                            format!(
+                                "every field of data is `pub`: the adapter builds it, and `{name}` is not"
+                            ),
+                        );
+                    }
+                    let Some(ty) = data_of(&field.ty, known.records, known.enums) else {
+                        return error(
+                            field.ty.span(),
+                            "a field of data is one of bool, a number, String, Vec<u8>, other data, or an Option or Vec of these",
+                        );
+                    };
+                    if matches!(ty, Data::Number(Number::Isize | Number::Usize)) {
+                        return error(
+                            field.ty.span(),
+                            "a size is as wide as the machine: give a field of data a width, such as `u32`",
+                        );
+                    }
+                    fields.push(Field {
+                        name,
+                        docs: docs(&field.attrs),
+                        ty,
+                    });
+                }
+                records.push(Record {
+                    name: item.ident.to_string(),
+                    docs: docs(&item.attrs),
+                    fields,
+                });
+            }
+            Item::Enum(item) if item.attrs.iter().any(|a| is_marker(a, "data")) => {
+                if item.variants.is_empty() {
+                    return error(
+                        item.ident.span(),
+                        "an enum with no variants has no value to cross",
+                    );
+                }
+                let mut variants: Vec<Variant> = Vec::new();
+                let mut next = 0;
+                for variant in &item.variants {
+                    if !matches!(variant.fields, syn::Fields::Unit) {
+                        return error(
+                            variant.span(),
+                            "a variant of data holds nothing: it is a name for a number",
+                        );
+                    }
+                    let value = discriminant(variant, next)?;
+                    if variants.iter().any(|known| known.value == value) {
+                        return error(variant.span(), format!("two variants are {value}"));
+                    }
+                    next = value.wrapping_add(1);
+                    variants.push(Variant {
+                        name: variant.ident.to_string(),
+                        docs: docs(&variant.attrs),
+                        value,
+                    });
+                }
+                enums.push(Enumeration {
+                    name: item.ident.to_string(),
+                    docs: docs(&item.attrs),
+                    variants,
+                });
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
 fn interfaces_of(items: &[Item], interfaces: &mut Vec<Interface>) -> Result<(), Error> {
     for item in items {
         let Item::Struct(item) = item else { continue };
@@ -1006,6 +1257,7 @@ fn methods_of(
     interfaces: &mut [Interface],
     names: &[String],
     shared: &[String],
+    known: Known,
 ) -> Result<(), Error> {
     for item in items {
         let Item::Impl(block) = item else { continue };
@@ -1028,6 +1280,8 @@ fn methods_of(
             interfaces: names,
             shared,
             own: &target,
+            records: known.records,
+            enums: known.enums,
         };
         for item in &block.items {
             let ImplItem::Fn(function) = item else {
@@ -1098,6 +1352,7 @@ fn functions_of(
     interfaces: &mut Vec<Interface>,
     names: &[String],
     shared: &[String],
+    known: Known,
 ) -> Result<(), Error> {
     for item in items {
         let Item::Fn(function) = item else { continue };
@@ -1125,6 +1380,8 @@ fn functions_of(
             interfaces: names,
             shared,
             own: &class,
+            records: known.records,
+            enums: known.enums,
         };
         let mut method = scope.method(&function.sig, &function.attrs)?;
         method.free = true;
@@ -1174,22 +1431,50 @@ fn build(name: &str, sources: &[Source]) -> Result<Library, Error> {
     for source in sources {
         located(weak_clash(&source.items, &names, &shared), source)?;
     }
+    // Data shares its names with the interfaces and their weak classes.
+    let mut taken = names.clone();
+    taken.extend(shared.iter().map(|name| crate::names::weak_class(name)));
+    let (mut record_names, mut enum_names) = (Vec::new(), Vec::new());
     for source in sources {
         located(
-            methods_of(&source.items, &mut interfaces, &names, &shared),
+            data_names(
+                &source.items,
+                &mut taken,
+                &mut record_names,
+                &mut enum_names,
+            ),
+            source,
+        )?;
+    }
+    let known = Known {
+        records: &record_names,
+        enums: &enum_names,
+    };
+    let (mut records, mut enums) = (Vec::new(), Vec::new());
+    for source in sources {
+        located(
+            data_items(&source.items, known, &mut records, &mut enums),
+            source,
+        )?;
+    }
+    for source in sources {
+        located(
+            methods_of(&source.items, &mut interfaces, &names, &shared, known),
             source,
         )?;
     }
     // After every `impl`, so a function finds what its class already has.
     for source in sources {
         located(
-            functions_of(&source.items, name, &mut interfaces, &names, &shared),
+            functions_of(&source.items, name, &mut interfaces, &names, &shared, known),
             source,
         )?;
     }
     Ok(Library {
         name: name.to_owned(),
         interfaces,
+        records,
+        enums,
     })
 }
 

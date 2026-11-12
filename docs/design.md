@@ -38,6 +38,7 @@ every dependency twice.
 | a Rust value the host holds | `Handle<T>` behind an opaque pointer | the host's collector |
 | a host function, for one call | `Callback` | the host |
 | a cell both sides read and write | an atomic `i32` | whoever made it |
+| a value made of plain data | bytes holding its parts in order | as bytes are |
 | failure | `Status`, with a message in a `Buf` | - |
 
 Numbers cross as an `i32`, an `i64` or an `f64` and nothing else, which is
@@ -65,6 +66,40 @@ is an error, not a replacement character.
 
 A `Buf` carries its own `free` function. Each library is linked with its own
 allocator, and only the one that allocated can release.
+
+## Data
+
+An interface crosses as a handle: one value, held by reference, with an owner.
+Plain data crosses by value. A library marks it with `#[hxn::data]`: a struct
+of public fields, which Haxe sees as a class with the same fields, and an enum
+of names, which Haxe sees as an `enum abstract` over `Int` with the same
+numbers.
+
+- **An enum crosses as its number.** The adapter turns a number into a
+  variant and back by matching each name, so nothing depends on how Rust lays
+  the enum out, and a number that names no variant fails the call.
+- **Anything made of parts crosses as bytes.** A record, an `Option` of data
+  and a `Vec` of data are written as their parts in order: a field after a
+  field, a flag and then the value, a count and then the items. Each side has
+  generated code that writes a value and reads one, from the same
+  declaration, and nothing in the bytes says what they are. One way across
+  serves every runtime, since each already carries bytes, and it composes: a
+  record in a list in a record needs nothing of its own.
+- **A reader takes exactly what was written.** Bytes that run out, a count
+  the bytes left cannot back, text that is not UTF-8 and bytes left over all
+  fail the call, with the same status as badly encoded text.
+- **Data is copied, both ways.** A function takes it by value or by
+  reference, and the reference is to the adapter's copy; what it returns is
+  written out and dropped. So there is no owner to track and no `close()`,
+  and changing a record in Haxe after passing it changes nothing in the
+  library.
+- **The Haxe class is plain Haxe**, the same file for HashLink, hxcpp and a
+  script. It is made from its fields by name, `{label: "x", enabled: true}`,
+  and a field that is an `Option` can be left out. A null where a value is
+  needed is refused in Haxe, before anything is written.
+- **The cost is a copy and a pass over the fields a call.** That suits what
+  data is for: a descriptor, a result, a short list. A large buffer is bytes,
+  and a thing with identity is an interface.
 
 ## Failures
 

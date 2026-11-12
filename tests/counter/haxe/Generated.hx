@@ -35,6 +35,75 @@ class Generated {
 		second.close();
 	}
 
+	// Plain data: an enum crosses as its number, and a record, an option or a
+	// list as bytes each side writes and reads.
+	static function data() {
+		check("an enum crosses as itself", Shapes.louder(Mode.Off) == Mode.Quiet && Shapes.louder(Mode.Quiet) == Mode.Loud);
+		check("with the numbers the library gave it", (Mode.Quiet : Int) == 3 && (Mode.Loud : Int) == 9 && (Mode.Off : Int) == 10);
+		check("and by reference", Shapes.named(Mode.Loud) == "Loud");
+		throws("a number that names none is refused", () -> Shapes.louder((77 : Mode)), "number out of range");
+		check("an enum that may be missing", Shapes.modeOf(9) == Mode.Loud && Shapes.modeOf(4) == null);
+
+		var mid = Shapes.midpoint({x: 1, y: 2}, {x: 3, y: -4});
+		check("a record in, by value and by reference, and one out", mid.x == 2 && mid.y == -1);
+
+		var settings:Settings = {
+			title: "naïve ☃",
+			count: 41,
+			wide: haxe.Int64.make(1, 2),
+			ratio: 0.25,
+			small: 200,
+			flags: 0xF0000000,
+			enabled: true,
+			mode: Mode.Quiet,
+			origin: {x: 0.5, y: -0.5},
+			note: "kept",
+			fallback: Mode.Off,
+			path: [{x: 1, y: 1}, {x: 2, y: 2}, {x: 3, y: 3}],
+			tags: ["a", "𝄞"],
+			payload: haxe.io.Bytes.ofHex("00ff10"),
+			grid: [[1, 2, 3], [], [-4]]
+		};
+		var described = Shapes.describe(settings);
+		check('every kind of field arrives: $described',
+			described == 'naïve ☃ x41 wide=4294967298 ratio=0.25 small=200 flags=4026531840 on Quiet at (0.5, -0.5) note=Some("kept") limit=None fallback=Some(Off) path=3 tags=a+𝄞 payload=[0, 255, 16] grid=[[1, 2, 3], [], [-4]]');
+		var bumped = Shapes.bumped(settings);
+		check("and comes back",
+			bumped.title == "naïve ☃!" && bumped.count == 42 && bumped.wide == haxe.Int64.make(257, 2) && bumped.ratio == 0.25 && bumped.small == 200
+			&& bumped.enabled && bumped.mode == Mode.Loud && bumped.origin.x == 0.5 && bumped.origin.y == -0.5);
+		check("with what may be missing", bumped.note == "KEPT" && bumped.limit == null && bumped.fallback == Mode.Off);
+		check("an unsigned field keeps its bits", (bumped.flags : UInt) == (0xF0000000 : UInt));
+		check("and its lists",
+			bumped.path.length == 3 && bumped.path[0].x == 3 && bumped.path[2].x == 1 && bumped.tags.join(",") == "a,𝄞,bumped"
+			&& bumped.payload.toHex() == "00ff10" && bumped.grid.length == 3 && bumped.grid[0].join(",") == "1,2,3" && bumped.grid[1].length == 0
+			&& bumped.grid[2][0] == -4);
+		check("the record that went in is as it was", settings.count == 41 && settings.tags.length == 2);
+
+		var preset = Shapes.preset(Mode.Loud);
+		check("a record the library made",
+			preset.title == "preset" && preset.wide == haxe.Int64.make(-1, -1) && preset.small == 255 && preset.mode == Mode.Loud && preset.note == null
+			&& preset.limit == 7 && preset.fallback == Mode.Quiet && preset.path.length == 0 && preset.tags[1] == "naïve ☃"
+			&& preset.payload.toHex() == "00ff" && preset.grid[1].length == 0);
+		throws("or a failure in its place", () -> Shapes.preset(Mode.Off), "nothing is preset for off");
+		settings.small = 256;
+		throws("a field that does not fit its number is refused", () -> Shapes.describe(settings), "number out of range");
+		settings.small = 0;
+		settings.title = null;
+		throws("and so is text that is missing", () -> Shapes.describe(settings), "null where text is needed");
+		throws("and a record that is", () -> Shapes.describe(null), "null where a Settings is needed");
+		settings.title = "";
+
+		check("a list from a slice, and a record that may be missing",
+			Shapes.rightOf([{x: 1, y: 0}, {x: 5, y: 9}], 2).y == 9 && Shapes.rightOf([], 0) == null);
+		check("a list of numbers", Shapes.total([1, 2, 3, 4]) == 10 && Shapes.total([]) == 0);
+		check("a number that may be missing", Shapes.doubled(21) == 42 && Shapes.doubled(null) == null);
+		check("a list of text out", Shapes.words(" one  two ☃ ").join("|") == "one|two|☃" && Shapes.words("").length == 0);
+		settings.count = 5;
+		var counter = Shapes.counter(settings);
+		check("data in and an object out", counter.add(1) == 6);
+		counter.close();
+	}
+
 	static function numbers() {
 		check("narrow numbers come back as they went",
 			Numbers.byte(200) == 200 && Numbers.small(-100) == -100 && Numbers.word(60000) == 60000 && Numbers.short(-30000) == -30000);
@@ -460,6 +529,7 @@ class Generated {
 		handles();
 		functions();
 		numbers();
+		data();
 		atomics();
 		shared();
 		callbacks();

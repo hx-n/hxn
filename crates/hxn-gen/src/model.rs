@@ -9,6 +9,89 @@ pub struct Library {
     /// `counter.hdll` and `libcounter.a`.
     pub name: String,
     pub interfaces: Vec<Interface>,
+    /// The `#[hxn::data]` structs: values that cross whole, by copy.
+    pub records: Vec<Record>,
+    /// The `#[hxn::data]` enums: names for numbers.
+    pub enums: Vec<Enumeration>,
+}
+
+/// A struct of public fields, each plain data: a Haxe class of the same.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Record {
+    pub name: String,
+    pub docs: Vec<String>,
+    pub fields: Vec<Field>,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Field {
+    pub name: String,
+    pub docs: Vec<String>,
+    pub ty: Data,
+}
+
+/// An enum whose variants hold nothing: a Haxe `enum abstract` over `Int`.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Enumeration {
+    pub name: String,
+    pub docs: Vec<String>,
+    pub variants: Vec<Variant>,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Variant {
+    pub name: String,
+    pub docs: Vec<String>,
+    /// What it is as a number, on both sides.
+    pub value: i32,
+}
+
+/// Plain data: what a record's field holds, and what crosses by value. An
+/// enum crosses as its number. Anything made of parts, a record, an
+/// `Option` or a list, crosses as bytes that hold the parts in order, which
+/// `hxn_abi::wire` lays out.
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub enum Data {
+    Bool,
+    I32,
+    I64,
+    F64,
+    /// A number Rust has and Haxe does not, converted as one is anywhere.
+    Number(Number),
+    Text,
+    Bytes,
+    Enum(String),
+    Record(String),
+    Option(Box<Data>),
+    List(Box<Data>),
+}
+
+impl Data {
+    /// What it crosses as when it is a parameter or a result of its own:
+    /// `None` for what has a way across already.
+    pub fn wire(&self) -> Option<Type> {
+        match self {
+            Self::Enum(_) => Some(Type::I32),
+            Self::Record(_) | Self::Option(_) | Self::List(_) => Some(Type::Bytes),
+            _ => None,
+        }
+    }
+
+    /// Its name in the manifest.
+    pub fn name(&self) -> String {
+        match self {
+            Self::Bool => String::from("bool"),
+            Self::I32 => String::from("i32"),
+            Self::I64 => String::from("i64"),
+            Self::F64 => String::from("f64"),
+            Self::Number(number) => number.name().to_owned(),
+            Self::Text => String::from("str"),
+            Self::Bytes => String::from("bytes"),
+            Self::Enum(name) | Self::Record(name) => name.clone(),
+            Self::Option(of) => format!("option<{}>", of.name()),
+            Self::List(of) => format!("list<{}>", of.name()),
+        }
+    }
 }
 
 /// A `#[hxn::interface]` struct with the functions of its
@@ -51,6 +134,8 @@ pub struct Method {
     pub returns_arc: bool,
     /// The number the function returns, when `returns` is what it crosses as.
     pub returns_number: Option<Number>,
+    /// The data the function returns, when `returns` is what it crosses as.
+    pub returns_data: Option<Data>,
     /// A function outside an `impl`, marked `#[hxn::function]`: found at the
     /// crate's root and not on the interface.
     pub free: bool,
@@ -78,6 +163,10 @@ pub struct Param {
     pub kept: bool,
     /// The number the function takes, when `ty` is what it crosses as.
     pub number: Option<Number>,
+    /// The data the function takes, when `ty` is what it crosses as.
+    pub data: Option<Data>,
+    /// For data, taken by reference: `&Options`, or `&[T]` for a list.
+    pub borrowed: bool,
 }
 
 /// A number Rust has and the boundary does not. It crosses as an `i32`, an
@@ -143,8 +232,17 @@ impl Number {
 }
 
 impl Param {
+    /// The same parameter, taking `data`.
+    pub fn of(mut self, data: Data) -> Self {
+        self.data = Some(data);
+        self
+    }
+
     /// Its type's name in the manifest.
     pub fn type_name(&self) -> String {
+        if let Some(data) = &self.data {
+            return data.name();
+        }
         self.number
             .map_or_else(|| self.ty.name(), |number| number.name().to_owned())
     }
@@ -153,6 +251,9 @@ impl Param {
 impl Method {
     /// Its result's name in the manifest.
     pub fn returns_name(&self) -> String {
+        if let Some(data) = &self.returns_data {
+            return data.name();
+        }
         self.returns_number
             .map_or_else(|| self.returns.name(), |number| number.name().to_owned())
     }

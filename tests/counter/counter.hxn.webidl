@@ -2,6 +2,42 @@
 // The API of `counter`, version 1 of hxn's manifest, as WebIDL. An attribute
 // named Hxn... is hxn's: WebIDL has no word for what it marks.
 
+// How loud. Two of its numbers are written and one follows on.
+enum Mode {
+  "Quiet", // 3
+  // As loud as it goes.
+  "Loud", // 9
+  "Off" // 10
+};
+
+// A place.
+dictionary Point {
+  required double x;
+  required double y;
+};
+
+// One of each thing a record holds.
+dictionary Settings {
+  required USVString title;
+  required long count;
+  required long long wide;
+  required float ratio;
+  required octet small;
+  required unsigned long flags;
+  required boolean enabled;
+  required Mode mode;
+  // Another record, inside this one.
+  required Point origin;
+  // May be left out.
+  USVString? note;
+  long? limit;
+  Mode? fallback;
+  required sequence<Point> path;
+  required sequence<USVString> tags;
+  required Uint8Array payload;
+  required sequence<sequence<long>> grid;
+};
+
 callback CounterEachF = undefined (long a0, double a1);
 callback CounterTestF = boolean (long a0);
 callback CounterScaledByF = double (double a0, boolean a1);
@@ -322,6 +358,45 @@ interface Numbers {
 
   // A length, checked by the library after the binding let it through.
   [Throws, HxnSize] static unsigned long sized([HxnSize] unsigned long count);
+};
+
+// Functions over data, with no value behind them.
+interface Shapes {
+  // The record as the library read it, taken by reference.
+  static USVString describe(Settings settings);
+
+  // A record taken by value and given back changed.
+  static Settings bumped(Settings settings);
+
+  // The mode one step louder.
+  static Mode louder(Mode mode);
+
+  // An enum taken by reference.
+  static USVString named(Mode mode);
+
+  // The mode a number names, if it names one.
+  static Mode? mode_of(long number);
+
+  // Halfway between two points, one taken each way.
+  static Point midpoint(Point a, Point b);
+
+  // The first point right of `x`, taken from a slice.
+  static Point? right_of(sequence<Point> points, double x);
+
+  // A list of numbers, added up.
+  static long total(sequence<long> values);
+
+  // A number that may be missing, doubled if it is there.
+  static long? doubled(long? value);
+
+  // The words of `text`.
+  static sequence<USVString> words(USVString text);
+
+  // A record, or a failure.
+  [Throws] static Settings preset(Mode mode);
+
+  // A counter starting at what a record says: data in, an object out.
+  static Counter counter(Settings settings);
 };
 
 namespace Tools {
