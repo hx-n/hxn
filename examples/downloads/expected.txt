@@ -1,0 +1,6 @@
+a.txt: 3000 bytes
+b.txt: 5000 bytes
+8000 bytes so far
+refused: c.txt has a negative size
+d.txt: 2000 bytes
+10000 bytes in all

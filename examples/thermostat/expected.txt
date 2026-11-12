@@ -1,0 +1,4 @@
+set to 20: idle
+set to 21.5: heating
+set to 22: heating
+refused: the target is already followed

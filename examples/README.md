@@ -8,6 +8,8 @@ that uses it.
 | [greeter](greeter) | A struct used as a Haxe class, text in and out, and a failure thrown as an exception. |
 | [picture](picture) | A Haxe function called by the library, bytes returned, and one object passed to another. |
 | [primes](primes) | Work done on another thread: a future to wait for or be called back by, and a stream. |
+| [downloads](downloads) | An `async fn`, a value shared between the library and Haxe, and a counter Haxe reads without a call. |
+| [thermostat](thermostat) | A value the library keeps current, followed from Haxe as a signal. |
 
 ## Running one
 

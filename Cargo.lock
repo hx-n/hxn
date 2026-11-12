@@ -53,6 +53,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "downloads"
+version = "0.1.0"
+dependencies = [
+ "hxn",
+ "hxn-future",
+]
+
+[[package]]
 name = "greeter"
 version = "0.1.0"
 dependencies = [
@@ -243,6 +251,14 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
+]
+
+[[package]]
+name = "thermostat"
+version = "0.1.0"
+dependencies = [
+ "hxn",
+ "hxn-future",
 ]
 
 [[package]]

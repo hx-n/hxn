@@ -1,0 +1,38 @@
+{
+  "hxn": 1,
+  "library": "thermostat",
+  "interfaces": [
+    {
+      "name": "Thermostat",
+      "docs": "A thermostat, and the temperature it is set to.",
+      "methods": [
+        {
+          "name": "new",
+          "kind": "constructor",
+          "params": [{ "name": "degrees", "type": "f64" }],
+          "returns": "Thermostat",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "target",
+          "docs": "The temperature it is set to, as a value that changes. Haxe reads\nthe latest, and whatever was computed from it is computed again.",
+          "kind": "mutating",
+          "params": [],
+          "returns": "signal<f64>",
+          "fallible": true,
+          "blocking": false
+        },
+        {
+          "name": "turn",
+          "docs": "Turns the dial by `degrees`, and returns the new setting.",
+          "kind": "mutating",
+          "params": [{ "name": "degrees", "type": "f64" }],
+          "returns": "f64",
+          "fallible": false,
+          "blocking": false
+        }
+      ]
+    }
+  ]
+}
