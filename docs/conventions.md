@@ -288,9 +288,11 @@ filesystem `#include "counter.h"` would then find the generated header.
   check it skips, with the reason.
 - The fixture's JSON manifest is committed, and a test fails when it is out
   of date.
-- A test program ends with `hxn.Loop.exit`, not `Sys.exit`: a program that
-  exits right after a collection crashes on Windows with hxcpp 4.3.2, and
-  with hxcpp from git before HaxeFoundation/hxcpp#1298.
+- hxcpp is used from git, at the commit `HXN_HXCPP` in
+  `.github/workflows/ci.yml` pins, which comes after
+  HaxeFoundation/hxcpp#1298. A test program still ends with
+  `hxn.Loop.exit`, not `Sys.exit`, so that it also passes with hxcpp 4.3.2,
+  where a program that exits right after a collection crashes on Windows.
 - A check does not depend on when the collector runs on its own: it forces a
   collection, or asserts a bound that holds either way.
 - The pure crates have unit tests; `hxn-hl` and the adapters are tested only

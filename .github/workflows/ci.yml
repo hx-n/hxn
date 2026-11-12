@@ -17,7 +17,9 @@ env:
   HXN_RUST: nightly-2026-08-25
   HXN_HAXE: 4.3.6
   HXN_HASHLINK: "1.15"
-  HXN_HXCPP: 4.3.2
+  # hxcpp from git, at a commit after HaxeFoundation/hxcpp#1298: 4.3.2 can
+  # crash on Windows when a program exits right after a collection.
+  HXN_HXCPP: 615adc73d5ef28f3f74ea47977c39c4f25ce256d
   HXN_EMSDK: 5.0.7
 
 defaults:
@@ -130,7 +132,12 @@ jobs:
       - uses: krdlab/setup-haxe@v1
         with:
           haxe-version: ${{ env.HXN_HAXE }}
-      - run: haxelib install hxcpp "$HXN_HXCPP" --quiet
+      - name: Install hxcpp from git
+        run: |
+          haxelib git hxcpp https://github.com/HaxeFoundation/hxcpp --quiet
+          dir="$(haxelib libpath hxcpp)"
+          git -C "$dir" checkout -q "$HXN_HXCPP"
+          (cd "$dir/tools/hxcpp" && haxe compile.hxml)
       - run: tests/cli/run.sh cpp
       - run: tests/examples/run.sh cpp
       - run: tests/counter/run.sh cpp
@@ -173,7 +180,12 @@ jobs:
       - uses: krdlab/setup-haxe@v1
         with:
           haxe-version: ${{ env.HXN_HAXE }}
-      - run: haxelib install hxcpp "$HXN_HXCPP" --quiet
+      - name: Install hxcpp from git
+        run: |
+          haxelib git hxcpp https://github.com/HaxeFoundation/hxcpp --quiet
+          dir="$(haxelib libpath hxcpp)"
+          git -C "$dir" checkout -q "$HXN_HXCPP"
+          (cd "$dir/tools/hxcpp" && haxe compile.hxml)
       - name: Fetch the Emscripten SDK
         run: |
           git clone --depth 1 https://github.com/emscripten-core/emsdk "$RUNNER_TEMP/emsdk"
@@ -202,5 +214,10 @@ jobs:
           brew install haxe
           mkdir -p "$HOME/haxelib" && haxelib setup "$HOME/haxelib"
           softwareupdate --install-rosetta --agree-to-license || true
-      - run: haxelib install hxcpp "$HXN_HXCPP" --quiet
+      - name: Install hxcpp from git
+        run: |
+          haxelib git hxcpp https://github.com/HaxeFoundation/hxcpp --quiet
+          dir="$(haxelib libpath hxcpp)"
+          git -C "$dir" checkout -q "$HXN_HXCPP"
+          (cd "$dir/tools/hxcpp" && haxe compile.hxml)
       - run: tests/mobile/run.sh ios-sim

@@ -21,6 +21,9 @@ pub struct Found {
     pub vm: Option<String>,
     pub vm_command: String,
     pub hxcpp: Option<String>,
+    /// The installed hxcpp predates HaxeFoundation/hxcpp#1298, so a program
+    /// can crash on Windows when it exits right after a collection.
+    pub hxcpp_old: bool,
     pub ash: bool,
     pub emcc: bool,
     pub node: bool,
@@ -28,6 +31,14 @@ pub struct Found {
     /// A linker faster than the system's, if the platform has one and it is
     /// installed.
     pub linker: Option<&'static str>,
+}
+
+// Whether the hxcpp at `path` predates HaxeFoundation/hxcpp#1298, which made
+// the collector's thread-pool lock a `std::mutex`. Read from its source,
+// which a release and a git checkout both have.
+fn predates_1298(path: &str) -> bool {
+    std::fs::read_to_string(Path::new(path).join("src/hx/gc/Immix.cpp"))
+        .is_ok_and(|source| source.contains("ThreadPoolLock sThreadPoolLock"))
 }
 
 fn first_line(command: &mut Command) -> Option<String> {
@@ -45,6 +56,8 @@ pub fn find(vm: &str) -> Found {
                 .is_dir()
         });
     let program = vm.split_whitespace().next().unwrap_or("hl");
+    let hxcpp = first_line(Command::new("haxelib").args(["libpath", "hxcpp"]))
+        .filter(|path| Path::new(path).is_dir());
     Found {
         cargo: first_line(Command::new("cargo").arg("--version")),
         nightly: release.contains("nightly") || release.contains("dev"),
@@ -60,9 +73,8 @@ pub fn find(vm: &str) -> Found {
                 )
         }),
         vm_command: program.to_owned(),
-        hxcpp: first_line(Command::new("haxelib").args(["libpath", "hxcpp"]))
-            .filter(|path| Path::new(path).is_dir())
-            .map(|path| format!("hxcpp at {path}")),
+        hxcpp: hxcpp.clone().map(|path| format!("hxcpp at {path}")),
+        hxcpp_old: hxcpp.as_deref().is_some_and(predates_1298),
         ash: on_path("ash"),
         emcc: on_path("emcc"),
         node: on_path("node"),
@@ -120,7 +132,9 @@ impl Found {
         let hxcpp = if self.hxcpp.is_some() {
             Vec::new()
         } else {
-            vec![String::from("hxcpp (`haxelib install hxcpp`)")]
+            vec![String::from(
+                "hxcpp from git: `haxelib git hxcpp https://github.com/HaxeFoundation/hxcpp`, then `haxe compile.hxml` in its tools/hxcpp",
+            )]
         };
         let mut hl_wasm = self.wasm_missing();
         if !self.ash {
@@ -184,6 +198,9 @@ impl Found {
                 }
             }
         }
+        if self.hxcpp_old {
+            out.push_str("\nThis hxcpp predates HaxeFoundation/hxcpp#1298: on Windows a program can crash when it exits right after a collection. Use hxcpp from git, or end programs with `hxn.Loop.exit`.\n");
+        }
         let mut faster = Vec::new();
         if !self.sccache {
             faster.push(
@@ -211,6 +228,24 @@ mod tests {
     use super::*;
 
     #[test]
+    fn an_hxcpp_is_old_when_its_collector_has_the_old_lock() {
+        let dir = std::env::temp_dir().join(format!("hxn-hxcpp-{}", std::process::id()));
+        let gc = dir.join("src/hx/gc");
+        std::fs::create_dir_all(&gc).unwrap();
+        let path = dir.to_string_lossy().into_owned();
+        std::fs::write(
+            gc.join("Immix.cpp"),
+            "static ThreadPoolLock sThreadPoolLock;",
+        )
+        .unwrap();
+        assert!(predates_1298(&path));
+        std::fs::write(gc.join("Immix.cpp"), "static std::mutex sThreadPoolLock;").unwrap();
+        assert!(!predates_1298(&path));
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert!(!predates_1298(&path));
+    }
+
+    #[test]
     fn a_target_is_ready_when_nothing_it_needs_is_missing() {
         let bare = Found {
             vm_command: String::from("hl"),
@@ -227,6 +262,7 @@ mod tests {
             vm: Some(String::from("hl 1.15.0")),
             vm_command: String::from("hl"),
             hxcpp: Some(String::from("hxcpp at /lib/hxcpp")),
+            hxcpp_old: false,
             ..Found::default()
         };
         assert!(native.ready("hl") && native.ready("cpp") && native.ready("cppia"));

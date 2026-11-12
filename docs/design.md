@@ -302,8 +302,10 @@ has native code call the runtime.
   `Sys.exit`. The crash is in hxcpp 4.3.2 and in hxcpp's git history before
   HaxeFoundation/hxcpp#1298 (commit `0e9183de`), which made that lock a
   `std::mutex`; it does not occur from that commit on. It was reported as
-  HaxeFoundation/hxcpp#1470. `hxn.Loop.exit` is needed until hxn requires
-  an hxcpp release that includes #1298.
+  HaxeFoundation/hxcpp#1470. hxn is built and tested against hxcpp from git
+  at a commit after #1298, which CI pins; `hxn doctor` warns about an hxcpp
+  from before it. `hxn.Loop.exit` remains the safe way to exit with hxcpp
+  4.3.2.
 
 ## Calling a Haxe function
 

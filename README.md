@@ -14,8 +14,17 @@ glue for each target.
 
 ## Quick setup
 
-You need Rust, Haxe, and HashLink or hxcpp. Install the `hxn` command and
-create a library with it:
+You need Rust, Haxe, and HashLink or hxcpp. For hxcpp, use its git version:
+hxcpp 4.3.2 can crash on Windows when a program exits right after a
+collection ([HaxeFoundation/hxcpp#1470](https://github.com/HaxeFoundation/hxcpp/issues/1470)),
+which is fixed in git.
+
+```
+haxelib git hxcpp https://github.com/HaxeFoundation/hxcpp
+cd "$(haxelib libpath hxcpp)/tools/hxcpp" && haxe compile.hxml
+```
+
+Install the `hxn` command and create a library with it:
 
 ```
 cargo install --git https://github.com/hx-n/hxn hxn-cli
