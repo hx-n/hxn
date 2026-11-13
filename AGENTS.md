@@ -1,7 +1,8 @@
 # Working on hxn
 
 A Rust library is written once and used from Haxe on HashLink, Ash and hxcpp,
-natively and on wasm. Read these before changing anything:
+natively and on wasm. Start with these indexes, then read the linked pages
+for the area you are changing:
 
 - [docs/design.md](docs/design.md): how each part works and why.
 - [docs/conventions.md](docs/conventions.md): the rules the code, the
@@ -47,9 +48,10 @@ natively and on wasm. Read these before changing anything:
 
 ## Documents, comments, commits and issues
 
-- **Keep the two documents current.** When an approach or a rule changes,
-  change `docs/design.md` or `docs/conventions.md` in the same commit. They
-  describe the current design, not its history.
+- **Keep the documentation current.** When an approach or a rule changes,
+  update the relevant page under `docs/design/` or `docs/conventions/` in
+  the same commit. Keep the indexes current when adding or moving pages.
+  These pages describe the current design, not its history.
 - **No planning, backlog or status documents.** History, measurements,
   alternatives weighed and open questions go in `git-bug` issues. Look at
   `git-bug bug` before starting on an area: the area's issue records what is

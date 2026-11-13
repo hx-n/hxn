@@ -8,8 +8,9 @@ Use the same Rust library from Haxe on HashLink, Ash and hxcpp, natively and
 on wasm. Annotate the Rust types and methods to expose; hxn generates the Haxe
 classes and native adapters for each target.
 
-[docs/design.md](docs/design.md) describes how it works, and
-[docs/conventions.md](docs/conventions.md) lists the rules it follows.
+[Design](docs/design.md) links to guides on the architecture, bindings and
+tools. [Conventions](docs/conventions.md) covers API rules, testing and
+contribution workflow.
 
 ## Quick setup
 
@@ -197,9 +198,9 @@ object must be freed. Each `hxn build` regenerates `src/bindings.rs` from it.
 A C callback the library calls during the call is passed a Haxe function; one
 it keeps to call later, such as the one `sqlite3_update_hook` registers, is
 returned as a stream of its calls. Use `--link <library>` instead of
-`--source` to link a library that is already built. See "Binding a C library"
-in [docs/design.md](docs/design.md) for supported declarations and import
-restrictions.
+`--source` to link a library that is already built. See
+[Importing C libraries](docs/design/c-import.md) for supported declarations
+and import restrictions.
 
 ## Examples
 
