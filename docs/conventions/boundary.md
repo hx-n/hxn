@@ -28,12 +28,16 @@ In this table, `P` means `hxn_<library>_`; interfaces use snake case in exports.
 | Typed reads | `Pfuture_take_<kind>`, `Pstream_next_<kind>`, `Psignal_get_<kind>` |
 | Typed data error | `Pthrown_take`, generated only for data errors. |
 | Memory accounting | `Pmemory_held`, `Pmemory_wanted` |
-| HashLink resolver / abstract | `hlp_<interface>_<method>` / `<library>_<interface>` |
+| HashLink primitive / resolver / abstract | `<library>_<interface>_<method>`, through `@:hlNative("<library>", "<library>_")` / `hlp_<library>_<interface>_<method>` / `<library>_<interface>` |
 | Weak class / abstract | `<Interface>Weak` / `<library>_<interface>_weak` |
 | Typed exception / enum serializer | `<Name>Exception` (strip trailing `Error`) / `<Name>Wire` |
 | C / glue headers | `<library>_abi.h` / `<library>_glue.h`, namespace `<library>_glue` |
 | hxcpp extern / support class | `Hxn<Library>Native` / `Hxn<Library><Role>` |
 | Haxe method | Rust name in camel case. |
+
+Every HashLink primitive, the library-wide ones included (`<library>_future_state`,
+`<library>_outbox_wait`), starts with the library's name. A phone links every
+library and the runtime into one program, where unprefixed resolvers collide.
 
 Kinds name scalars or snake-case types. Wrappers add `option_`, `list_`,
 `map_`, `set_`, `sorted_set_`, `tuple_<arity>_<element kinds>` or
