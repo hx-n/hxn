@@ -88,7 +88,7 @@ Plain data crosses by value. A library marks it with `#[hxn::data]`:
 | a C-like enum (no variant has fields) | an `enum abstract` over `Int` with the same values |
 | a tagged enum (some variants have fields) | an `enum` with the same constructors |
 | `Option<T>`, `Vec<T>` | `Null<T>`, `Array<T>` |
-| a nonempty tuple `(A, B, ...)` | a typed anonymous record `{ _0: A, _1: B, ... }` |
+| a nonempty tuple `(A, B, ...)` | `hxn.Tuple<A, B, ...>`, with typed `_0`, `_1`, ... fields |
 | `HashMap<K, V>`, `BTreeMap<K, V>` | `Map<K, V>`; keys are `String`, `Int` or a C-like enum |
 | `HashSet<T>`, `BTreeSet<T>` | `hxn.Set<T>`; a `BTreeSet` returns Rust's `Ord` order |
 | `Box<T>` | `T` |
@@ -111,13 +111,23 @@ Plain data crosses by value. A library marks it with `#[hxn::data]`:
   is expressed. The generated reader for such a type is recursive, so it
   tracks nesting depth and fails with `Status::DEPTH` beyond
   `wire::Reader::DEPTH`.
-- **Tuples keep each position's type.** A nonempty Rust tuple crosses as a
-  Haxe anonymous record with `_0`, `_1`, and subsequent fields. A one-element
-  tuple `(T,)` still has an `_0` field. Its elements use the data encoding,
-  in position order, with no count or tag. The Haxe reader reads each element
-  before constructing the record, so evaluation order cannot reorder the
-  input. Tuples can nest anywhere data is accepted; `()` remains a return
-  value that carries no data, rather than an empty data tuple.
+- **Tuples are array-backed abstracts.** A nonempty Rust tuple crosses as
+  `hxn.Tuple<A, B, ...>`. Construct one with `hxn.Tuple.of("name", 42)` or
+  `new hxn.Tuple<String, Int>("name", 42)`; numbered record literals are also
+  accepted. `pair[index]` reads and writes with runtime bounds checks. Since
+  positions can have different types, indexing returns `Dynamic`. For a
+  statically typed position, `pair.at(1)` and `pair.set(1, value)` require an
+  integer literal and check its bounds and type during compilation. Typed
+  `_0`, `_1`, ... properties remain available. Positions are mutable, but
+  their declared types and the tuple's `length` are fixed. `copy` makes a
+  shallow copy; `toArray` returns a separate `Array<Dynamic>` for inspection.
+  A generic-build macro defines the typed properties for each arity. The
+  common indexing abstract and each arity's abstract erase to the same array,
+  including in a CPPIA host and its scripts, with no wrapper allocation.
+  Elements use the data encoding in position order, with no count or tag.
+  The reader reads each element before constructing the tuple, so evaluation
+  order cannot reorder the input. Tuples can nest anywhere data is accepted;
+  `()` remains a return value with no data, rather than an empty data tuple.
 - **A map may be keyed by a C-like enum.** Haxe keeps the enum type in
   `Map<Mode, T>` and uses its integer key storage. The wire contains each
   key's declared discriminant, checked by Rust's enum reader, followed by

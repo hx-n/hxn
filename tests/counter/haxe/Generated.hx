@@ -45,38 +45,74 @@ class Generated {
 		throws("a number that names none is refused", () -> Shapes.louder((77 : Mode)), "number out of range");
 		check("an enum that may be missing", Shapes.modeOf(9) == Mode.Loud && Shapes.modeOf(4) == null);
 
+		var made:hxn.Tuple<String, Int> = hxn.Tuple.of("pair", 42);
+		check("a tuple constructor infers each position", made.at(0) == "pair" && made.at(1) == 42 && made.length == 2);
+		var explicit = new hxn.Tuple<String, Int>("typed", 7);
+		check("an explicit tuple constructor", explicit[0] == "typed" && explicit[1] == 7);
+		check("a one-element tuple constructor", Shapes.tupleOne(hxn.Tuple.of(true))[0]);
+		var mixed = hxn.Tuple.of(1, "two", true, 4.5, hxn.Tuple.of(5));
+		check("tuple constructors accept arbitrary arity and nesting", mixed.length == 5 && mixed[3] == 4.5 && mixed.at(4).at(0) == 5);
+		var tupleCopy = made.copy();
+		check("a tuple can be copied", tupleCopy != made && tupleCopy[0] == made[0] && tupleCopy[1] == made[1]);
+		tupleCopy.set(1, 99);
+		check("editing a copied tuple leaves the original alone", made[1] == 42 && tupleCopy[1] == 99);
+		var inspected = made.toArray();
+		inspected[0] = "changed";
+		check("a tuple array is an independent copy", made[0] == "pair" && inspected.length == 2 && inspected[1] == 42);
+		var inferred:hxn.Tuple<String, Array<Int>> = hxn.Tuple.of("empty", []);
+		inferred[1].push(3);
+		check("a tuple factory respects the expected type", inferred[1][0] == 3);
+
 		var tuples = Shapes.tupleData({pair: {_0: "naïve ☃", _1: 7}, nested: {_0: {_0: true, _1: 255}, _1: {_0: "nested", _1: 2.5}}, listed: [{_0: true}, {_0: false}]});
-		check("tuple fields keep their types and read order", tuples.pair._0 == "naïve ☃" && tuples.pair._1 == 7
-			&& tuples.nested._0._0 && tuples.nested._0._1 == 255 && tuples.nested._1._0 == "nested" && tuples.nested._1._1 == 2.5);
-		check("one-byte tuples work inside a list", tuples.listed.length == 2 && tuples.listed[0]._0 && !tuples.listed[1]._0);
-		check("a one-element tuple is distinct from its element", !Shapes.tupleOne({_0: false})._0);
+		check("tuple fields keep their types and read order", tuples.pair[0] == "naïve ☃" && tuples.pair[1] == 7
+			&& tuples.nested[0][0] && tuples.nested[0][1] == 255 && tuples.nested[1][0] == "nested" && tuples.nested[1][1] == 2.5);
+		check("one-byte tuples work inside a list", tuples.listed.length == 2 && tuples.listed[0][0] && !tuples.listed[1][0]);
+		check("a one-element tuple is distinct from its element", !Shapes.tupleOne({_0: false})[0]);
 		var pairs = Shapes.tupleValues([{_0: "first", _1: 0}, {_0: "second", _1: 255}]);
-		check("a slice of tuples crosses both ways", pairs.length == 2 && pairs[0]._0 == "first" && pairs[1]._1 == 255);
+		check("a slice of tuples crosses both ways", pairs.length == 2 && pairs[0][0] == "first" && pairs[1][1] == 255);
 		check("an empty list of tuples", Shapes.tupleValues([]).length == 0);
 		var optional = Shapes.tupleOptional({_0: Mode.Loud, _1: {x: 3.5, y: -1}});
-		check("an optional tuple may contain data", optional._0 == Mode.Loud && optional._1.x == 3.5 && Shapes.tupleOptional(null) == null);
+		check("an optional tuple may contain data", optional[0] == Mode.Loud && optional[1].x == 3.5 && Shapes.tupleOptional(null) == null);
 		var wide = haxe.Int64.make(0x12345678, 0x76543210);
 		var bytesTuple = Shapes.tupleBytes({_0: wide, _1: haxe.io.Bytes.ofString("hello"), _2: Mode.Quiet, _3: 255});
-		check("tuples preserve bytes, enum and wide-number values", haxe.Int64.compare(bytesTuple._0, wide) == 0 && bytesTuple._1.toString() == "hello"
-			&& bytesTuple._2 == Mode.Quiet && bytesTuple._3 == 255);
+		check("a tuple copy keeps wide integers", haxe.Int64.compare(bytesTuple.copy().at(0), wide) == 0);
+		check("a tuple array keeps wide integers", haxe.Int64.compare(cast bytesTuple.toArray()[0], wide) == 0);
+		check("tuples preserve bytes, enum and wide-number values", haxe.Int64.compare(bytesTuple.at(0), wide) == 0 && bytesTuple.at(1).toString() == "hello"
+			&& bytesTuple[2] == Mode.Quiet && bytesTuple[3] == 255);
 		throws("tuple elements keep their range checks", () -> Shapes.tupleValues([{_0: "bad", _1: 256}]), "number out of range");
 		throws("a null tuple is refused", () -> Shapes.tupleOne(null), "null where a tuple is needed");
 		var tupleSet = Shapes.tupleSet([{_0: 2, _1: "b"}, {_0: 1, _1: "a"}, {_0: 2, _1: "b"}]).toArray();
-		check("Rust equality and ordering apply to tuple sets", tupleSet.length == 2 && tupleSet[0]._0 == 1 && tupleSet[1]._1 == "b");
+		check("Rust equality and ordering apply to tuple sets", tupleSet.length == 2 && tupleSet[0][0] == 1 && tupleSet[1][1] == "b");
 		var tupleLater = Shapes.tupleLater({_0: wide, _1: Mode.Off}).await();
-		check("a future carries a tuple", haxe.Int64.compare(tupleLater._0, wide) == 0 && tupleLater._1 == Mode.Off);
-		var tupleAsync = Shapes.tupleAsync({_0: "async", _1: 42}).await();
-		check("an async function accepts and returns tuples", tupleAsync._0 == 42 && tupleAsync._1 == "async");
-		check("a signal carries a tuple", Shapes.tupleSignal().peek()._0 && Shapes.tupleSignal().peek()._1 == "ready");
-		var tupleItems = [for (item in Shapes.tupleStream()) item._0];
+		check("a future carries a tuple", haxe.Int64.compare(tupleLater.at(0), wide) == 0 && tupleLater[1] == Mode.Off);
+		var tupleAsync = Shapes.tupleAsync(hxn.Tuple.of("async", 42)).await();
+		check("an async function accepts and returns tuples", tupleAsync[0] == 42 && tupleAsync[1] == "async");
+		check("a signal carries a tuple", Shapes.tupleSignal().peek()[0] && Shapes.tupleSignal().peek()[1] == "ready");
+		var tupleItems = [for (item in Shapes.tupleStream()) item[0]];
 		check("a stream carries one-element tuples", tupleItems.length == 2 && tupleItems[0] && !tupleItems[1]);
 		var tupleCallback = Shapes.mappedTuple(pair -> {
-			check("a callback receives a typed tuple", pair._0 == "naïve ☃" && haxe.Int64.compare(pair._1, wide) == 0);
-			return {_0: pair._1, _1: pair._0};
+			check("a callback receives a typed tuple", pair[0] == "naïve ☃" && haxe.Int64.compare(pair.at(1), wide) == 0);
+			return hxn.Tuple.of(pair.at(1), pair.at(0));
 		});
-		check("a callback returns a typed tuple", haxe.Int64.compare(tupleCallback._0, wide) == 0 && tupleCallback._1 == "naïve ☃");
+		check("a callback returns a typed tuple", haxe.Int64.compare(tupleCallback.at(0), wide) == 0 && tupleCallback[1] == "naïve ☃");
 		throws("a tuple callback can fail", () -> Shapes.mappedTuple(_ -> throw new haxe.Exception("tuple refused")), "tuple refused");
-		check("the next tuple callback remains usable", Shapes.mappedTuple(pair -> {_0: pair._1, _1: "after"})._1 == "after");
+		check("the next tuple callback remains usable", Shapes.mappedTuple(pair -> {_0: pair[1], _1: "after"})[1] == "after");
+
+		var cursor = 0;
+		check("a runtime tuple index is evaluated once", made[cursor++] == "pair" && cursor == 1);
+		made[cursor++] = 43;
+		check("an indexed tuple assignment uses one index", cursor == 2 && made.at(1) == 43);
+		var receivers = 0;
+		var receiver = () -> { receivers++; return made; };
+		receiver()[1] += 2;
+		check("compound tuple indexing evaluates its receiver once", receivers == 1 && made.at(1) == 45);
+		var typedNumber:Int = receiver().at(1);
+		receiver().set(1, 46);
+		check("typed tuple access evaluates its receiver once", typedNumber == 45 && receivers == 3 && made.at(1) == 46);
+		throws("a tuple read checks the upper bound", () -> made[2], "tuple index out of range");
+		throws("a tuple write checks the lower bound", () -> made[-1] = 0, "tuple index out of range");
+		throws("a tuple write checks the upper bound", () -> made[2] = 0, "tuple index out of range");
+		check("an invalid index leaves a tuple unchanged", made.at(0) == "pair" && made.at(1) == 46);
 
 		var input = [3, 1, 3];
 		var local:hxn.Set<Int> = input;

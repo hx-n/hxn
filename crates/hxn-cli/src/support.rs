@@ -32,6 +32,11 @@ pub const HAXE: &[(&str, &str)] = &[
     ("hxn/Set.hx", include_str!("../../../haxe/hxn/Set.hx")),
     ("hxn/Signal.hx", include_str!("../../../haxe/hxn/Signal.hx")),
     ("hxn/Stream.hx", include_str!("../../../haxe/hxn/Stream.hx")),
+    ("hxn/Tuple.hx", include_str!("../../../haxe/hxn/Tuple.hx")),
+    (
+        "hxn/TupleMacro.hx",
+        include_str!("../../../haxe/hxn/TupleMacro.hx"),
+    ),
     ("hxn/Unit.hx", include_str!("../../../haxe/hxn/Unit.hx")),
     ("hxn/Wire.hx", include_str!("../../../haxe/hxn/Wire.hx")),
     (

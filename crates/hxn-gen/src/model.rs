@@ -91,7 +91,7 @@ pub enum Data {
     Tagged(String),
     Option(Box<Data>),
     List(Box<Data>),
-    /// A nonempty Rust tuple: a typed Haxe record with `_0`, `_1`, ... fields.
+    /// A nonempty Rust tuple: `hxn.Tuple` with typed `_0`, `_1`, ... fields.
     Tuple(Vec<Data>),
     /// A Rust set, represented as `hxn.Set` in Haxe. A sorted set writes its
     /// elements in Rust's `Ord` order.

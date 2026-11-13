@@ -119,9 +119,14 @@ filesystem `#include "counter.h"` would then find the generated header.
   (some variants have fields, named or unnamed; no explicit discriminants).
   Data is accepted by value or by `&`, a list also as `&[T]`, and returned
   by value. `Option`, `Vec`, maps and sets of data are accepted wherever data is.
-- A nonempty Rust tuple `(A, B, ...)` is a typed Haxe anonymous record
-  `{ _0: A, _1: B, ... }`. Each position is required, including `_0` for
-  `(T,)`; its value can be null only when that position is an `Option`.
+- A nonempty Rust tuple `(A, B, ...)` is `hxn.Tuple<A, B, ...>`, constructed
+  with `hxn.Tuple.of(...)`, `new hxn.Tuple<A, B, ...>(...)`, or a numbered
+  record literal. It is an array-backed abstract with fixed `length`, `copy`
+  and `toArray`. `tuple[index]` reads or writes `Dynamic` and checks bounds
+  at runtime. `tuple.at(1)` and `tuple.set(1, value)` preserve the position's
+  static type and check literal positions at compile time. Typed `_0`, `_1`,
+  ... properties remain available. Each position is required, including `_0`
+  for `(T,)`; a value can be null only when that position is an `Option`.
   Elements are encoded and decoded in position order. Tuples are data
   wherever data is accepted, but `()` is not a data field.
 - A `HashSet<T>` or `BTreeSet<T>` is an `hxn.Set<T>` in Haxe. The wrapper

@@ -75,6 +75,42 @@ grep -q ' ready$' "$work/found.txt" || { echo "FAILED: doctor found nothing read
 # As a package: a program's build refers to the package and its macro, and
 # to none of the paths of its classes, headers or library.
 "$hxn" package "${packaged[@]}" --out "$work/package"
+# The package supplies the tuple type and its constructor macro on its own.
+mkdir "$work/tuple"
+cat >"$work/tuple/TupleProbe.hx" <<'EOF'
+import hxn.Tuple;
+class TupleProbe {
+	static function main() {
+		var pair:Tuple<String, Int> = Tuple.of("name", 42);
+		var copied = pair.copy();
+		copied.set(1, 7);
+		var values = pair.toArray();
+		values[0] = "changed";
+		if (pair.at(0) != "name" || pair[1] != 42 || copied.at(1) != 7 || pair.length != 2)
+			throw "tuple value changed";
+		var nested = Tuple.of(pair, Tuple.of(true), 3, "four", 5.5);
+		if (nested.length != 5 || !nested.at(1).at(0) || nested[4] != 5.5)
+			throw "tuple positions changed";
+	}
+}
+EOF
+haxe -cp "$work/package" -cp "$work/tuple" -main TupleProbe --interp
+for invalid in \
+	'var pair:hxn.Tuple<String, Int> = hxn.Tuple.of("name", "wrong");' \
+	'var pair:hxn.Tuple<String, Int> = hxn.Tuple.of("name");' \
+	'var pair = hxn.Tuple.of("name", 42); pair._0 = 7;' \
+	'var pair = hxn.Tuple.of();' \
+	'var pair = hxn.Tuple.of("name", 42); var number:Int = pair.at(0);' \
+	'var pair = hxn.Tuple.of("name", 42); pair.set(1, "wrong");' \
+	'var pair = hxn.Tuple.of("name", 42); pair.at(2);' \
+	'var pair = hxn.Tuple.of("name", 42); pair.set(-1, 0);' \
+	'var pair = hxn.Tuple.of("name", 42); var index = 1; pair.at(index);'; do
+	printf '%s\n' 'class BadTuple { static function main() {' "$invalid" '} }' >"$work/tuple/BadTuple.hx"
+	if haxe -cp "$work/package" -cp "$work/tuple" -main BadTuple --no-output >"$work/tuple/error.txt" 2>&1; then
+		echo "FAILED: the tuple type accepted $invalid" >&2
+		exit 1
+	fi
+done
 mkdir "$work/program"
 (
 	cd "$work/program"

@@ -12,7 +12,7 @@ class Main {
 		rice.quantity = 100;
 		Sys.println('rice: ${pantry.find("rice").quantity}');
 		var quantities = pantry.quantities();
-		Sys.println('shelves: ${[for (pair in quantities) '${pair._0}=${pair._1}'].join(", ")}');
+		Sys.println('shelves: ${[for (pair in quantities) '${pair[0]}=${pair[1]}'].join(", ")}');
 
 		// A missing optional return value is null, and so is an omitted optional field.
 		var flour = pantry.find("flour");

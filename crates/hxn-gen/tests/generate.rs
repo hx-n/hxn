@@ -2220,11 +2220,11 @@ fn tuples_keep_their_position_types_and_arity() {
     }
     for files in [hxn_gen::haxe_hl(&library), cpp_classes(&library)] {
         let data = text_of(&files, "Data.hx");
-        assert!(data.contains("pair:{ _0: String, _1: Int }"));
-        assert!(data.contains("flags:Array<{ _0: Bool }>"));
+        assert!(data.contains("pair:hxn.Tuple<String, Int>"));
+        assert!(data.contains("flags:Array<hxn.Tuple<Bool>>"));
         let thing = text_of(&files, "Thing.hx");
-        assert!(thing.contains("function one(value:{ _0: Bool }):{ _0: Bool }"));
-        assert!(thing.contains("({ _0: String, _1: Int }) -> { _0: Int, _1: String }"));
+        assert!(thing.contains("function one(value:hxn.Tuple<Bool>):hxn.Tuple<Bool>"));
+        assert!(thing.contains("(hxn.Tuple<String, Int>) -> hxn.Tuple<Int, String>"));
         assert!(thing.contains("var p0 = input.readInt32(); var p1 = hxn.Wire.readText(input);"));
     }
     for source in [

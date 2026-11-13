@@ -399,13 +399,8 @@ pub fn haxe_type(data: &Data) -> String {
         Data::Option(of) => format!("Null<{}>", haxe_type(of)),
         Data::List(of) => format!("Array<{}>", haxe_type(of)),
         Data::Tuple(parts) => format!(
-            "{{ {} }}",
-            parts
-                .iter()
-                .enumerate()
-                .map(|(index, part)| format!("_{index}: {}", haxe_type(part)))
-                .collect::<Vec<_>>()
-                .join(", ")
+            "hxn.Tuple<{}>",
+            parts.iter().map(haxe_type).collect::<Vec<_>>().join(", ")
         ),
         Data::Set { of, .. } => format!("hxn.Set<{}>", haxe_type(of)),
         Data::Boxed(of) => haxe_type(of),
@@ -522,11 +517,11 @@ pub fn haxe_read(data: &Data) -> String {
                 .enumerate()
                 .map(|(index, part)| format!("var p{index} = {}; ", haxe_read(part)))
                 .collect::<String>();
-            let fields = (0..parts.len())
-                .map(|index| format!("_{index}: p{index}"))
+            let values = (0..parts.len())
+                .map(|index| format!("p{index}"))
                 .collect::<Vec<_>>()
                 .join(", ");
-            format!("{{ {read}{{ {fields} }}; }}")
+            format!("{{ {read}new {}({values}); }}", haxe_type(data))
         }
         // Each read is a separate statement, so the key is read first.
         Data::Map { key, value, .. } => format!(
