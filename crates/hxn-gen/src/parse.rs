@@ -332,10 +332,13 @@ impl Scope<'_> {
 
     // `impl Fn(i32, f64) -> Result<bool, E>`, or `FnMut` or `FnOnce`.
     fn lent(&self, ty: &syn::TypeImplTrait) -> Result<Type, Error> {
-        const SHAPE: &str = "a function is lent as `impl Fn(..) -> Result<T, E>`, taking bool, i32, f64, &str, &[u8], data marked `#[hxn::data]` or an object to keep, and giving bool, i32, f64, String, Vec<u8>, data or `()`: it can fail, because the Haxe function can throw";
+        const SHAPE: &str = "a function is lent as `impl Fn(..) -> Result<T, E>`, taking bool, i32, i64, f64, &str, &[u8], data marked `#[hxn::data]` or an object to keep, and giving bool, i32, i64, f64, String, Vec<u8>, data or `()`: it can fail, because the Haxe function can throw";
         let scalar = |ty: &syn::Type| match path_name(ty).as_deref() {
             Some("bool") => Some(Type::Bool),
             Some("i32") => Some(Type::I32),
+            // Keep all 64 bits through runtimes whose dynamic numeric calls
+            // otherwise pass them as a floating-point value.
+            Some("i64") => Some(Type::Data(Data::I64)),
             Some("f64") => Some(Type::F64),
             _ => None,
         };

@@ -1211,6 +1211,33 @@
           "blocking": false
         },
         {
+          "name": "map_wide",
+          "docs": "Passes all 64 bits to `f` and returns its result.",
+          "kind": "static",
+          "params": [{ "name": "value", "type": "i64" }, { "name": "f", "type": "fn(i64) -> i64" }],
+          "returns": "i64",
+          "fallible": true,
+          "blocking": false
+        },
+        {
+          "name": "wide_from",
+          "docs": "Takes a 64-bit value from a callback with no parameters.",
+          "kind": "static",
+          "params": [{ "name": "f", "type": "fn() -> i64" }],
+          "returns": "i64",
+          "fallible": true,
+          "blocking": false
+        },
+        {
+          "name": "describe_wide",
+          "docs": "Passes borrowed text and a 64-bit value in the same callback.",
+          "kind": "static",
+          "params": [{ "name": "value", "type": "i64" }, { "name": "f", "type": "fn(str, i64) -> str" }],
+          "returns": "str",
+          "fallible": true,
+          "blocking": false
+        },
+        {
           "name": "squared",
           "docs": "The square of `value`, which may not fit in 32 bits.",
           "kind": "static",

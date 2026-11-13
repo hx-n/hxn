@@ -1007,6 +1007,54 @@ impl Mesh {
 }
 
 #[test]
+fn a_lent_function_preserves_64_bit_integers() {
+    let library = parse(
+        "wide",
+        r#"
+#[hxn::interface]
+pub struct Numbers;
+
+#[hxn::methods]
+impl Numbers {
+    pub fn map<E>(value: i64, f: impl Fn(i64) -> Result<i64, E>) -> Result<i64, E> { todo!() }
+    pub fn describe<E>(value: i64, f: impl Fn(&str, i64) -> Result<String, E>) -> Result<String, E> { todo!() }
+    pub fn mixed<E>(f: impl Fn(bool, i64, f64, i32) -> Result<i64, E>) -> Result<i64, E> { todo!() }
+}
+"#,
+    )
+    .unwrap();
+    assert_eq!(
+        library.interfaces[0].methods[0].params[1].ty,
+        Type::Lent {
+            params: vec![Type::Data(hxn_gen::Data::I64)],
+            returns: Box::new(Type::Data(hxn_gen::Data::I64)),
+        }
+    );
+    // A full-width integer uses the data wire format inside a callback,
+    // keeping it out of the runtime's numeric Dynamic conversions.
+    for adapter in [
+        hxn_gen::c_adapter(&library, "wide_core"),
+        hxn_gen::hl_adapter(&library, "wide_core"),
+    ] {
+        assert!(adapter.contains("hxn_abi::wire::i64(out, *part)"));
+        assert!(adapter.contains("input.i64()?"));
+        assert!(adapter.contains("type LentYToY = unsafe extern \"C\" fn(*mut c_void, hxn_abi::Slice<'_>, *mut hxn_abi::Buf) -> Status;"));
+    }
+    let hl = hxn_gen::hl_adapter(&library, "wide_core");
+    assert!(hl.contains("PBi_OiB_"));
+    assert!(hl.contains("box_bytes(bytes(a0)), box_i32(a0_length)"));
+    assert!(hl.contains("buffer(call(env.cast(), &mut args).cast())"));
+    for files in [hxn_gen::haxe_hl(&library), cpp_classes(&library)] {
+        let class = &files[0].text;
+        assert!(class.contains("f:(haxe.Int64) -> haxe.Int64"));
+        assert!(class.contains("f:(String, haxe.Int64) -> String"));
+        assert!(class.contains("hxn.Wire.readInt64(input)"));
+        assert!(class.contains("out.addInt64(result)"));
+        assert!(class.contains("hxn.Callback.failed(error)"));
+    }
+}
+
+#[test]
 fn says_how_a_function_is_lent() {
     let cases = [
         (

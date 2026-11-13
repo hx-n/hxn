@@ -275,6 +275,26 @@ class Generated {
 	// Haxe functions passed as callbacks, borrowed for the duration of the
 	// call.
 	static function callbacks() {
+		var wide = [haxe.Int64.make(0x12345678, 0x76543210), haxe.Int64.make(0x7fffffff, -1), haxe.Int64.make(-2147483648, 0),
+			haxe.Int64.make(-1, -1), haxe.Int64.make(0, 0)];
+		for (value in wide) {
+			check('all 64 bits reach a callback and return: $value', Numbers.mapWide(value, n -> n) == value);
+			check('a callback computes on all 64 bits: $value', Numbers.mapWide(value, n -> ~n) == ~value);
+			check('a callback gives all 64 bits: $value', Numbers.wideFrom(() -> value) == value);
+			check('text and 64 bits share a callback: $value', Numbers.describeWide(value, (text, n) -> '$text:$n') == 'wide:$value');
+		}
+		var wideError = new haxe.Exception("wide callback failed");
+		var wideCaught:Null<haxe.Exception> = null;
+		try {
+			Numbers.mapWide(wide[0], _ -> throw wideError);
+		} catch (error:haxe.Exception) {
+			wideCaught = error;
+		}
+		check("a 64-bit callback preserves the exception", wideCaught == wideError);
+		throws("a callback giving 64 bits can throw", () -> Numbers.wideFrom(() -> throw wideError), "wide callback failed");
+		var afterWide = Numbers.mapWide(wide[0], n -> n);
+		check('and leaves no failure for the next call: $afterWide expected ${wide[0]}', afterWide == wide[0]);
+
 		var counter = new Counter(3);
 		check("a function is called by the library", counter.apply(4, value -> value * 2) == 48);
 		var seen = [];

@@ -147,9 +147,9 @@ filesystem `#include "counter.h"` would then find the generated header.
 - A Haxe callback is accepted as `impl Fn(..) -> Result<T, E>`, or `FnMut` or
   `FnOnce`, with `E` a type parameter of the function used only by that
   callback.
-  Its parameters are `bool`, `i32`, `f64`, `&str`, `&[u8]`, data (by value
+  Its parameters are `bool`, `i32`, `i64`, `f64`, `&str`, `&[u8]`, data (by value
   or by `&`), or an object whose ownership passes to Haxe (`T`, or `Arc<T>`
-  of a shared interface). It returns `bool`, `i32`, `f64`, `String`,
+  of a shared interface). It returns `bool`, `i32`, `i64`, `f64`, `String`,
   `Vec<u8>`, data or `()`. When the callback fails, the library returns. A function marked `#[hxn(blocking)]` does not accept a callback.
 - A cell shared with Haxe is an `AtomicI32` or an `hxn::AtomicFlag`, never
   an `AtomicBool`. It is accepted as a reference, borrowed for the call, and

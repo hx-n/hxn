@@ -361,6 +361,12 @@ returns text or bytes cannot return null, because its wrapper uses null to
 report an exception. On HashLink the native side receives a `haxe.io.Bytes` object and
 reads its two fields; on hxcpp it receives the underlying array.
 
+A callback's `i64` is a `haxe.Int64`, as it is in an ordinary call. In a
+callback it crosses as eight serialized bytes, using the same encoding as
+an `i64` field in data. The wrapper reads and writes those bytes, so a
+runtime's dynamic numeric conversions cannot lose bits by narrowing it or
+passing it through floating point.
+
 Data is passed to a callback by value or by reference (a list also as a
 slice) and returned by value. The adapter's closure serializes each argument
 before the call and deserializes the result; the Haxe wrapper does the

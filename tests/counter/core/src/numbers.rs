@@ -42,6 +42,24 @@ impl Numbers {
         value
     }
 
+    /// Passes all 64 bits to `f` and returns its result.
+    pub fn map_wide<E>(value: i64, f: impl Fn(i64) -> Result<i64, E>) -> Result<i64, E> {
+        f(value)
+    }
+
+    /// Takes a 64-bit value from a callback with no parameters.
+    pub fn wide_from<E>(f: impl FnOnce() -> Result<i64, E>) -> Result<i64, E> {
+        f()
+    }
+
+    /// Passes borrowed text and a 64-bit value in the same callback.
+    pub fn describe_wide<E>(
+        value: i64,
+        f: impl Fn(&str, i64) -> Result<String, E>,
+    ) -> Result<String, E> {
+        f("wide", value)
+    }
+
     /// The square of `value`, which may not fit in 32 bits.
     pub fn squared(value: i32) -> i64 {
         i64::from(value) * i64::from(value)
