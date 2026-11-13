@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en" prefix="og: https://ogp.me/ns#">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#000000">
+    <meta name="description" content="Write a native library once in Rust and use it from Haxe on HashLink, Ash and hxcpp, natively and on wasm.">
+    <meta name="robots" content="index, follow, max-image-preview:large">
+    <meta name="application-name" content="hxn">
+    <title>hxn — Native Rust bindings for Haxe</title>
+    <link rel="canonical" href="https://hxn.dev/">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="hxn">
+    <meta property="og:url" content="https://hxn.dev/">
+    <meta property="og:title" content="hxn — Native Rust bindings for Haxe">
+    <meta property="og:description" content="Write a native library once in Rust and use it from Haxe on HashLink, Ash and hxcpp, natively and on wasm.">
+    <meta property="og:locale" content="en_GB">
+    <meta property="og:image" content="https://hxn.dev/logo.png">
+    <meta property="og:image:type" content="image/png">
+    <meta property="og:image:width" content="1254">
+    <meta property="og:image:height" content="1254">
+    <meta property="og:image:alt" content="The white hxn logo on a black background">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="hxn — Native Rust bindings for Haxe">
+    <meta name="twitter:description" content="Write a native library once in Rust and use it from Haxe on HashLink, Ash and hxcpp, natively and on wasm.">
+    <meta name="twitter:image" content="https://hxn.dev/logo.png">
+    <meta name="twitter:image:alt" content="The white hxn logo on a black background">
+    <link rel="icon" href="logo.png" type="image/png" sizes="1254x1254">
+    <link rel="apple-touch-icon" href="logo.png">
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "https://hxn.dev/#website",
+            "name": "hxn",
+            "url": "https://hxn.dev/",
+            "inLanguage": "en"
+          },
+          {
+            "@type": "WebPage",
+            "@id": "https://hxn.dev/#webpage",
+            "url": "https://hxn.dev/",
+            "name": "hxn — Native Rust bindings for Haxe",
+            "description": "Write a native library once in Rust and use it from Haxe on HashLink, Ash and hxcpp, natively and on wasm.",
+            "inLanguage": "en",
+            "isPartOf": { "@id": "https://hxn.dev/#website" },
+            "mainEntity": { "@id": "https://hxn.dev/#software" },
+            "primaryImageOfPage": {
+              "@type": "ImageObject",
+              "url": "https://hxn.dev/logo.png",
+              "width": 1254,
+              "height": 1254
+            }
+          },
+          {
+            "@type": "SoftwareSourceCode",
+            "@id": "https://hxn.dev/#software",
+            "name": "hxn",
+            "url": "https://hxn.dev/",
+            "description": "Write a native library once in Rust and use it from Haxe on HashLink, Ash and hxcpp, natively and on wasm.",
+            "codeRepository": "https://github.com/hx-n/hxn",
+            "programmingLanguage": ["Rust", "Haxe"],
+            "runtimePlatform": ["HashLink", "Ash", "hxcpp", "WebAssembly"],
+            "license": "https://www.apache.org/licenses/LICENSE-2.0",
+            "isAccessibleForFree": true
+          }
+        ]
+      }
+    </script>
+    <link rel="stylesheet" href="styles.css">
+    <script src="script.js" defer></script>
+  </head>
+  <body>
+    <header class="header">
+      <a class="wordmark" href="./" aria-label="hxn home">hxn<span aria-hidden="true"> /</span></a>
+      <a class="source-link" href="https://github.com/hx-n/hxn">GitHub <span aria-hidden="true">↗</span></a>
+    </header>
+
+    <main>
+      <section class="hero" aria-labelledby="tagline">
+        <div class="logo">
+          <img src="logo.png" alt="hxn" width="1254" height="1254" fetchpriority="high">
+        </div>
+        <p class="eyebrow">RUST → HAXE</p>
+        <h1 id="tagline">Native Rust bindings<br>for Haxe</h1>
+        <p class="description">Write your library once in Rust. hxn generates the Haxe classes and native glue for HashLink, Ash and hxcpp — natively and on wasm.</p>
+
+        <div class="install">
+          <div class="install-heading">
+            <h2>Install the CLI</h2>
+            <span>Latest release</span>
+          </div>
+          <div class="command-box">
+            <span class="prompt" aria-hidden="true">$</span>
+            <pre><code id="install-command">curl -fsSL https://raw.githubusercontent.com/hx-n/hxn/main/install.sh | bash</code></pre>
+            <button class="copy" type="button" aria-label="Copy install command" title="Copy install command">
+              <svg class="copy-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>
+              <svg class="check-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
+            </button>
+          </div>
+          <div class="install-note">
+            <p>macOS &amp; Linux · Windows via Git Bash</p>
+            <a href="https://github.com/hx-n/hxn/releases">Release downloads <span aria-hidden="true">↗</span></a>
+          </div>
+          <p id="copy-status" class="copy-status" role="status" aria-live="polite"></p>
+        </div>
+
+        <nav class="actions" aria-label="Get started">
+          <a class="button primary" href="#quick-start">Quick Start <span aria-hidden="true">→</span></a>
+          <a class="button secondary" href="https://github.com/hx-n/hxn/blob/main/docs/design.md">Read the docs <span aria-hidden="true">↗</span></a>
+        </nav>
+      </section>
+
+      <section id="quick-start" class="quick-start" aria-labelledby="quick-start-title">
+        <div class="section-heading">
+          <p class="eyebrow">QUICK START</p>
+          <h2 id="quick-start-title">Your first native library.</h2>
+          <p>A small Rust library, used from Haxe. Start with Rust, Haxe, and HashLink or <a href="https://github.com/hx-n/hxn#quick-setup">hxcpp from git</a> installed.</p>
+        </div>
+
+        <div class="step">
+          <h3><span class="step-number">01</span> Create a library</h3>
+          <p><code>hxn new</code> creates a Rust crate and a Haxe program, ready to run.</p>
+          <div class="code-panel">
+            <div class="code-heading"><span>Terminal</span><span>Bash</span></div>
+            <pre tabindex="0" aria-label="Create the greeter library"><code>hxn<span class="w"> </span>new<span class="w"> </span>greeter
+<span class="nb">cd</span><span class="w"> </span>greeter</code></pre>
+          </div>
+        </div>
+
+        <div class="step">
+          <h3><span class="step-number">02</span> Meet the two sides</h3>
+          <p>These are the files the command creates. Mark the Rust interface and methods; hxn generates the Haxe class and native glue.</p>
+          <div class="code-grid">
+            <div class="code-panel">
+              <div class="code-heading"><span>src/lib.rs</span><span>Rust</span></div>
+              <pre tabindex="0" aria-label="Greeter Rust library"><code><span class="sd">/// Greets people, and counts them.</span>
+<span class="cp">#[hxn::interface]</span>
+<span class="k">pub</span><span class="w"> </span><span class="k">struct</span><span class="w"> </span><span class="nc">Greeter</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nv">greeting</span><span class="p">:</span><span class="w"> </span><span class="nc">String</span><span class="p">,</span>
+<span class="w">    </span><span class="nv">greeted</span><span class="p">:</span><span class="w"> </span><span class="kt">i32</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="cp">#[hxn::methods]</span>
+<span class="k">impl</span><span class="w"> </span><span class="nc">Greeter</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">new</span><span class="p">(</span><span class="nv">greeting</span><span class="p">:</span><span class="w"> </span><span class="kp">&amp;</span><span class="kt">str</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="bp">Self</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="bp">Self</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="nv">greeting</span><span class="p">:</span><span class="w"> </span><span class="nv">greeting</span><span class="p">.</span><span class="nf">to_owned</span><span class="p">(),</span>
+<span class="w">            </span><span class="nv">greeted</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="sd">/// A greeting for `name`. Fails for an empty name.</span>
+<span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">greet</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span><span class="w"> </span><span class="bp">self</span><span class="p">,</span><span class="w"> </span><span class="nv">name</span><span class="p">:</span><span class="w"> </span><span class="kp">&amp;</span><span class="kt">str</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nc">Result</span><span class="o">&lt;</span><span class="nc">String</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;&#39;</span><span class="nv">static</span><span class="w"> </span><span class="kt">str</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="nv">name</span><span class="p">.</span><span class="nf">is_empty</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="k">return</span><span class="w"> </span><span class="nc">Err</span><span class="p">(</span><span class="s">&quot;nobody to greet&quot;</span><span class="p">);</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">        </span><span class="bp">self</span><span class="p">.</span><span class="na">greeted</span><span class="w"> </span><span class="o">+=</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span>
+<span class="w">        </span><span class="nc">Ok</span><span class="p">(</span><span class="nf">format!</span><span class="p">(</span><span class="s">&quot;</span><span class="si">{}</span><span class="s">, </span><span class="si">{name}</span><span class="s">!&quot;</span><span class="p">,</span><span class="w"> </span><span class="bp">self</span><span class="p">.</span><span class="na">greeting</span><span class="p">))</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="sd">/// How many have been greeted.</span>
+<span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">greeted</span><span class="p">(</span><span class="o">&amp;</span><span class="bp">self</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="kt">i32</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="bp">self</span><span class="p">.</span><span class="na">greeted</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span></code></pre>
+            </div>
+            <div class="code-panel">
+              <div class="code-heading"><span>haxe/Main.hx</span><span>Haxe</span></div>
+              <pre tabindex="0" aria-label="Haxe program using Greeter"><code><span class="kd">class</span><span class="w"> </span><span class="nc">Main</span><span class="w"> </span><span class="p">{</span>
+<span class="w">	</span><span class="kd">static</span><span class="w"> </span><span class="kd">function</span><span class="w"> </span><span class="nf">main</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">		</span><span class="kd">var</span><span class="w"> </span><span class="nv">greeter</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="nc">Greeter</span><span class="p">(</span><span class="s2">&quot;Hello&quot;</span><span class="p">);</span>
+<span class="w">		</span><span class="nc">Sys</span><span class="p">.</span><span class="nf">println</span><span class="p">(</span><span class="nv">greeter</span><span class="p">.</span><span class="nf">greet</span><span class="p">(</span><span class="s2">&quot;Haxe&quot;</span><span class="p">));</span>
+<span class="w">		</span><span class="nc">Sys</span><span class="p">.</span><span class="nf">println</span><span class="p">(</span><span class="nv">greeter</span><span class="p">.</span><span class="nf">greet</span><span class="p">(</span><span class="s2">&quot;Rust&quot;</span><span class="p">));</span>
+<span class="w">		</span><span class="nc">Sys</span><span class="p">.</span><span class="nf">println</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">${</span><span class="nv">greeter</span><span class="p">.</span><span class="nf">greeted</span><span class="p">()</span><span class="si">}</span><span class="s1"> greeted&#39;</span><span class="p">);</span>
+<span class="w">		</span><span class="k">try</span><span class="w"> </span><span class="p">{</span>
+<span class="w">			</span><span class="nv">greeter</span><span class="p">.</span><span class="nf">greet</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">);</span>
+<span class="w">		</span><span class="p">}</span><span class="w"> </span><span class="k">catch</span><span class="w"> </span><span class="p">(</span><span class="nv">error</span><span class="p">:</span><span class="nn">haxe</span><span class="p">.</span><span class="nc">Exception</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">			</span><span class="nc">Sys</span><span class="p">.</span><span class="nf">println</span><span class="p">(</span><span class="s1">&#39;refused: </span><span class="si">${</span><span class="nv">error</span><span class="p">.</span><span class="na">message</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">);</span>
+<span class="w">		</span><span class="p">}</span>
+<span class="w">		</span><span class="nv">greeter</span><span class="p">.</span><span class="nf">close</span><span class="p">();</span>
+<span class="w">	</span><span class="p">}</span>
+<span class="p">}</span></code></pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <h3><span class="step-number">03</span> Run it</h3>
+          <p>hxn builds the binding, compiles your Haxe program, and runs it on the target you choose. Both produce the same output.</p>
+          <div class="code-grid">
+            <div class="code-panel">
+              <div class="code-heading"><span>Terminal</span><span>Bash</span></div>
+              <pre tabindex="0" aria-label="Run on HashLink or hxcpp"><code>hxn<span class="w"> </span>run<span class="w"> </span>hl
+<span class="c1"># Or use hxcpp:</span>
+hxn<span class="w"> </span>run<span class="w"> </span>cpp</code></pre>
+            </div>
+            <div class="code-panel">
+              <div class="code-heading"><span>Output</span><span>Either runtime</span></div>
+              <pre tabindex="0" aria-label="Greeter expected output"><code>Hello, Haxe!
+Hello, Rust!
+2 greeted
+refused: nobody to greet</code></pre>
+            </div>
+          </div>
+        </div>
+        <a class="more-examples" href="https://github.com/hx-n/hxn/tree/main/examples">Explore more examples <span aria-hidden="true">→</span></a>
+      </section>
+    </main>
+
+    <footer>
+      <p>HashLink · Ash · hxcpp</p>
+      <a href="https://github.com/hx-n/hxn/blob/main/LICENSE">Open source · Apache 2.0</a>
+    </footer>
+  </body>
+</html>

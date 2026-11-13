@@ -326,6 +326,12 @@ filesystem `#include "counter.h"` would then find the generated header.
   `hxn` for Linux (static, musl), macOS and Windows, on x86-64 and ARM, and
   attaches the archives and their `SHA256SUMS` to the tag's GitHub release.
   Run by hand, it builds the archives without publishing them.
+- **`install.sh` installs a release binary**, selecting one of the workflow's
+  target triples and verifying the archive against that release's
+  `SHA256SUMS` before extracting it. It defaults to the latest release and
+  `~/.local/bin`; `HXN_VERSION` selects a tag and `HXN_INSTALL_DIR` a
+  directory. Its platform and failure paths are checked by
+  `tests/install/run.sh` with local release archives and no network access.
 
 ## Comments, commits and issues
 

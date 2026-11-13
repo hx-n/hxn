@@ -843,6 +843,33 @@ Some C is left out by design, and listed as not imported:
   with no length, or a buffer C keeps. A function that needs one is
   written in the library's own Rust beside the generated bindings.
 
+## Website
+
+`site/` is the static landing page and Quick Start, served by Cloudflare
+Workers Static Assets. `wrangler.jsonc` points at that directory; there is
+no build step or Worker script. Missing paths return 404 rather than the
+landing page. The Worker named `hxn-site` serves `hxn.dev` through a
+Custom Domain route, with its `workers.dev` address disabled. The page's
+canonical URL, social preview URLs, structured data and sitemap all use
+`https://hxn.dev/`.
+
+With Node.js 24 installed, these commands run from the repository root:
+
+```
+npx --yes wrangler@4.161.0 dev
+npx --yes wrangler@4.161.0 deploy --dry-run --outdir target/site-deploy
+npx --yes wrangler@4.161.0 login
+npx --yes wrangler@4.161.0 deploy
+```
+
+`.github/workflows/site.yml` validates the configuration on pull requests
+and deploys changes to the site on `main`, or when run by hand on `main`.
+It uses the repository secrets `CLOUDFLARE_ACCOUNT_ID` and
+`CLOUDFLARE_API_TOKEN`; use Cloudflare's Edit Cloudflare Workers token
+template, scoped to that account and the `hxn.dev` zone, to deploy the
+Worker and manage its domain. Pull requests only run the dry run, with no
+credentials.
+
 ## Runtimes
 
 | Runtime | Adapter | Threads | A panic | Notes |

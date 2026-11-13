@@ -27,6 +27,19 @@ defaults:
     shell: bash
 
 jobs:
+  installer:
+    name: installer, ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash -n install.sh tests/install/run.sh
+      - run: tests/install/run.sh
+
   rust:
     name: rust, ${{ matrix.os }}
     runs-on: ${{ matrix.os }}

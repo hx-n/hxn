@@ -24,9 +24,25 @@ haxelib git hxcpp https://github.com/HaxeFoundation/hxcpp
 cd "$(haxelib libpath hxcpp)/tools/hxcpp" && haxe compile.hxml
 ```
 
-Install the `hxn` command: download the archive for your platform from the
-[releases](https://github.com/hx-n/hxn/releases), and put the `hxn` in it on
-your `PATH`. Or build it with cargo:
+Install the `hxn` command from the latest release:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/hx-n/hxn/main/install.sh | bash
+```
+
+The script selects the macOS, Linux or Windows binary for x86-64 or ARM64,
+verifies its SHA-256 checksum, and installs it in `~/.local/bin`. Add that
+directory to your `PATH` if it is not already there. On Windows, run it in
+Git Bash, or download the zip from the
+[releases](https://github.com/hx-n/hxn/releases) and put `hxn.exe` on your
+`PATH`. Set `HXN_VERSION` to select a release tag or `HXN_INSTALL_DIR` to
+choose another directory, for example:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/hx-n/hxn/main/install.sh | HXN_VERSION=v0.2.0 HXN_INSTALL_DIR="$HOME/.local/bin" bash
+```
+
+Or build it with cargo:
 
 ```
 cargo install --git https://github.com/hx-n/hxn --tag v0.2.0 hxn-cli

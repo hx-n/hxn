@@ -1,0 +1,12 @@
+{
+  "name": "hxn-site",
+  "compatibility_date": "2026-11-13",
+  "workers_dev": false,
+  "routes": [
+    { "pattern": "hxn.dev", "custom_domain": true }
+  ],
+  "assets": {
+    "directory": "./site",
+    "html_handling": "auto-trailing-slash"
+  }
+}
