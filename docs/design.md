@@ -862,13 +862,22 @@ npx --yes wrangler@4.161.0 login
 npx --yes wrangler@4.161.0 deploy
 ```
 
-`.github/workflows/site.yml` validates the configuration on pull requests
-and deploys changes to the site on `main`, or when run by hand on `main`.
-It uses the repository secrets `CLOUDFLARE_ACCOUNT_ID` and
-`CLOUDFLARE_API_TOKEN`; use Cloudflare's Edit Cloudflare Workers token
-template, scoped to that account and the `hxn.dev` zone, to deploy the
-Worker and manage its domain. Pull requests only run the dry run, with no
-credentials.
+Cloudflare Workers Builds deploys the site directly from GitHub. Connect
+the repository under the Worker's Settings > Builds, using these settings:
+
+| Setting | Value |
+|---|---|
+| Worker name | `hxn-site` |
+| Production branch | `main` |
+| Root directory | repository root (`/`) |
+| Build command | empty |
+| Deploy command | `npx --yes wrangler@4.161.0 deploy` |
+
+The root directory contains `wrangler.jsonc`, which selects `site/` as the
+assets directory. Cloudflare manages deployment credentials through its
+Git integration. `.github/workflows/site.yml` only validates the static
+deployment on pull requests and changes on `main`, or when run by hand;
+it needs no Cloudflare credentials and does not publish the site.
 
 ## Runtimes
 
