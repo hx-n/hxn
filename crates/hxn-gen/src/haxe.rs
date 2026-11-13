@@ -721,6 +721,20 @@ fn cpp_module(library: &Library, interface: &Interface) -> String {
 
 /// The classes for HashLink, one file per interface.
 pub fn haxe_hl(library: &Library) -> Vec<File> {
+    // Each `Native` class's primitives are named after the library; see
+    // `rust::hl_adapter`.
+    let native = format!("@:hlNative(\"{}\")", library.name);
+    let prefixed = format!("@:hlNative(\"{0}\", \"{0}_\")", library.name);
+    hl_files(library)
+        .into_iter()
+        .map(|file| File {
+            path: file.path,
+            text: file.text.replace(&native, &prefixed),
+        })
+        .collect()
+}
+
+fn hl_files(library: &Library) -> Vec<File> {
     let mut files: Vec<File> = library
         .interfaces
         .iter()

@@ -390,7 +390,7 @@ fn names_follow_each_language() {
     assert!(adapter.contains(
         "pub unsafe extern \"C-unwind\" fn hxn_audio_audio_device_default_gain() -> f64"
     ));
-    assert!(adapter.contains("define_prim!(hlp_audio_device_write, hxn_audio_audio_device_write, \"PXaudio_audio_device_Bi_i\");"));
+    assert!(adapter.contains("define_prim!(hlp_audio_audio_device_write, hxn_audio_audio_device_write, \"PXaudio_audio_device_Bi_i\");"));
     assert!(adapter.contains("blocking(|| this.drain())"));
     assert!(adapter.contains("use audio_core::{AudioDevice, Mixer};"));
 
@@ -519,11 +519,9 @@ fn cells_are_lent_going_in_and_kept_by_the_library_coming_out() {
 
     let hl = hxn_gen::hl_adapter(&library, "audio_core");
     assert!(hl.contains("\"PXaudio_audio_device_RiRi_v\""));
-    assert!(
-        hl.contains(
-            "define_prim!(hlp_atomic_cell, hxn_audio_atomic_cell, \"PXaudio_atomic__Ri\");"
-        )
-    );
+    assert!(hl.contains(
+        "define_prim!(hlp_audio_atomic_cell, hxn_audio_atomic_cell, \"PXaudio_atomic__Ri\");"
+    ));
 
     let header = hxn_gen::c_header(&library);
     assert!(header.contains("hxn_status hxn_audio_audio_device_play(hxn_handle *self, int32_t *position, int32_t *cancel, hxn_buf *err);"));
@@ -557,8 +555,10 @@ fn what_a_library_holds_is_read_and_a_weighed_object_checks_it() {
     assert!(c.contains("pub extern \"C\" fn hxn_audio_memory_held() -> f64"));
     assert!(c.contains("pub extern \"C\" fn hxn_audio_memory_wanted() -> i32"));
     let hl = hxn_gen::hl_adapter(&library, "audio_core");
-    assert!(hl.contains("define_prim!(hlp_memory_held, hxn_audio_memory_held, \"P_d\");"));
-    assert!(hl.contains("define_prim!(hlp_memory_wanted, hxn_audio_memory_wanted, \"P_b\");"));
+    assert!(hl.contains("define_prim!(hlp_audio_memory_held, hxn_audio_memory_held, \"P_d\");"));
+    assert!(
+        hl.contains("define_prim!(hlp_audio_memory_wanted, hxn_audio_memory_wanted, \"P_b\");")
+    );
     let header = hxn_gen::c_header(&library);
     assert!(header.contains("double hxn_audio_memory_held(void);"));
     assert!(header.contains("int32_t hxn_audio_memory_wanted(void);"));
@@ -677,16 +677,16 @@ fn a_shared_value_is_held_through_an_arc() {
     let hl = hxn_gen::hl_adapter(&library, "audio_core");
     assert!(hl.contains("Ok(manage(Arc::new(Bus::new())))"));
     assert!(hl.contains(
-        "define_prim!(hlp_bus_same, hxn_audio_bus_same, \"PXaudio_bus_Xaudio_bus__b\");"
+        "define_prim!(hlp_audio_bus_same, hxn_audio_bus_same, \"PXaudio_bus_Xaudio_bus__b\");"
     ));
     assert!(hl.contains(
-        "define_prim!(hlp_bus_weak, hxn_audio_bus_weak, \"PXaudio_bus__Xaudio_bus_weak_\");"
+        "define_prim!(hlp_audio_bus_weak, hxn_audio_bus_weak, \"PXaudio_bus__Xaudio_bus_weak_\");"
     ));
     assert!(hl.contains(
-        "define_prim!(hlp_bus_weak_upgrade, hxn_audio_bus_weak_upgrade, \"PXaudio_bus_weak__Xaudio_bus_\");"
+        "define_prim!(hlp_audio_bus_weak_upgrade, hxn_audio_bus_weak_upgrade, \"PXaudio_bus_weak__Xaudio_bus_\");"
     ));
     assert!(hl.contains(
-        "define_prim!(hlp_bus_weak_close, hxn_audio_bus_weak_close, \"PXaudio_bus_weak__v\");"
+        "define_prim!(hlp_audio_bus_weak_close, hxn_audio_bus_weak_close, \"PXaudio_bus_weak__v\");"
     ));
 
     let header = hxn_gen::c_header(&library);
@@ -875,17 +875,19 @@ fn results_over_time_are_handles_the_library_answers_for() {
     let hl = hxn_gen::hl_adapter(&library, "fm_core");
     assert!(hl.contains("Ok(manage(AnyStream::from(this.titles())))"));
     assert!(hl.contains("\"PXfm_radio_OBi__Xfm_future_\""));
-    assert!(hl.contains("define_prim!(hlp_outbox_wait, hxn_fm_outbox_wait, \"Pi_b\");"));
-    assert!(hl.contains("define_prim!(hlp_future_wait, hxn_fm_future_wait, \"PXfm_future_i_i\");"));
+    assert!(hl.contains("define_prim!(hlp_fm_outbox_wait, hxn_fm_outbox_wait, \"Pi_b\");"));
+    assert!(
+        hl.contains("define_prim!(hlp_fm_future_wait, hxn_fm_future_wait, \"PXfm_future_i_i\");")
+    );
     assert!(hl.contains("Ok(blocking(|| this.wait_millis(milliseconds)) as i32)"));
     assert!(
-        hl.contains("define_prim!(hlp_signal_wait, hxn_fm_signal_wait, \"PXfm_signal_ii_i\");")
+        hl.contains("define_prim!(hlp_fm_signal_wait, hxn_fm_signal_wait, \"PXfm_signal_ii_i\");")
     );
     assert!(hl.contains(
-        "define_prim!(hlp_future_take_radio, hxn_fm_future_take_radio, \"PXfm_future__Xfm_radio_\");"
+        "define_prim!(hlp_fm_future_take_radio, hxn_fm_future_take_radio, \"PXfm_future__Xfm_radio_\");"
     ));
     assert!(hl.contains(
-        "define_prim!(hlp_stream_next_text, hxn_fm_stream_next_text, \"PXfm_stream__B\");"
+        "define_prim!(hlp_fm_stream_next_text, hxn_fm_stream_next_text, \"PXfm_stream__B\");"
     ));
 
     let header = hxn_gen::c_header(&library);
@@ -2810,7 +2812,7 @@ impl Thing {
     }
     assert!(
         hxn_gen::hl_adapter(&library, "thing")
-            .contains("define_prim!(hlp_thrown_take, hxn_thing_thrown_take, \"PRi_B\");")
+            .contains("define_prim!(hlp_thing_thrown_take, hxn_thing_thrown_take, \"PRi_B\");")
     );
     assert!(hxn_gen::c_header(&library).contains("int32_t hxn_thing_thrown_take(hxn_buf *out);"));
     assert!(hxn_gen::cpp_glue(&library).contains("inline Array<unsigned char> thrown_take() {"));
@@ -2957,9 +2959,9 @@ impl Thing {
     assert!(c.contains("pub unsafe extern \"C\" fn hxn_thing_future_take_point(this: RawHandle, out: *mut Buf, err: *mut Buf)"));
     assert!(c.contains("pub unsafe extern \"C\" fn hxn_thing_signal_get_mode(this: RawHandle, out: *mut i32, err: *mut Buf)"));
     assert!(hl.contains(
-        "define_prim!(hlp_future_take_point, hxn_thing_future_take_point, \"PXthing_future_Ri_B\");"
+        "define_prim!(hlp_thing_future_take_point, hxn_thing_future_take_point, \"PXthing_future_Ri_B\");"
     ));
-    assert!(hl.contains("define_prim!(hlp_stream_next_list_mode, hxn_thing_stream_next_list_mode, \"PXthing_stream_Ri_B\");"));
+    assert!(hl.contains("define_prim!(hlp_thing_stream_next_list_mode, hxn_thing_stream_next_list_mode, \"PXthing_stream_Ri_B\");"));
     // Bytes a callback returns are a `haxe.io.Bytes`, read directly.
     assert!(hl.contains("\"PPi_OiB_Ri_B\""));
     assert!(hl.contains("buffer(call(env.cast(), &mut args).cast())"));

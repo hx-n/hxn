@@ -874,6 +874,20 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
 
 /// The adapter of HashLink primitives, for an `.hdll` or a wasm side module.
 pub fn hl_adapter(library: &Library, core: &str) -> String {
+    named_after(library, hl_exports(library, core))
+}
+
+// Every primitive is named after its library, as the Haxe side's
+// `@:hlNative` prefix asks: a phone links every library and the runtime into
+// one program, where two libraries' `hlp_future_state` would collide.
+fn named_after(library: &Library, adapter: String) -> String {
+    adapter.replace(
+        "define_prim!(hlp_",
+        &format!("define_prim!(hlp_{}_", library.name),
+    )
+}
+
+fn hl_exports(library: &Library, core: &str) -> String {
     let mut out = String::from(HEADER);
     out.push_str("\n#[allow(unused_imports)]\nuse std::ffi::c_void;\n");
     out.push_str("#[allow(unused_imports)]\nuse std::ptr::null_mut;\n\n");
