@@ -1,29 +1,29 @@
 # Conventions
 
-The rules that hxn's code, its bindings and its tests follow.
-[design.md](design.md) explains the reasons; this document is the checklist.
+These rules cover hxn's code, bindings, tests and releases.
+[design.md](design.md) explains the implementation and its constraints.
 
 ## Crates
 
-- **`hxn-abi` has no dependencies and exports no symbols.** It is linked into
-  every library, once per runtime, so any symbol it exported would be defined
-  once per library in the same process. A function the host must call, such
-  as `release`, is re-exported by each library under its own name.
-- **`hxn-future` contains no `unsafe`.** It is `#![forbid(unsafe_code)]`.
-- **Only `hxn-hl` imports a runtime's symbols**, and it defines none of the
+- Every library links its own copy of `hxn-abi` for each runtime. Keep the
+  crate free of dependencies and exported symbols to prevent duplicate
+  definitions in one process. Each library re-exports host-callable
+  functions such as `release` under its own name.
+- `hxn-future` enforces safe Rust with `#![forbid(unsafe_code)]`.
+- Only `hxn-hl` imports a runtime's symbols, and it defines none of the
   runtime's. In an Ash side module that unwinds it defines the two libunwind
   functions Rust's unwinding calls, which neither the module nor Ash has.
-- **A HashLink primitive that can throw is `extern "C-unwind"`.** On Ash's
+- A HashLink primitive that can throw is `extern "C-unwind"`. On Ash's
   wasm build the throw is a wasm exception that passes through its frame.
-- **A library's core is plain Rust.** It depends on `hxn` for the marker
+- A library's core is plain Rust. It depends on `hxn` for the marker
   attributes and on `hxn-future` if it has asynchronous results, and on no
   runtime. It never selects a runtime with a cargo feature.
-- **Adapter crates are thin.** They contain only the generated adapter, and
-  no code written by the library author.
-- **`hxn-cli` writes nothing into a library's directory except its
-  manifest.** Everything else it generates goes under cargo's target
-  directory, in `hxn/<library>`.
-- **`hxn-cli` embeds every Haxe class and header of hxn's own.** A class
+- Adapter crates contain only generated adapter code. Keep library
+  implementation code in the core crate.
+- During binding builds, `hxn-cli` writes the manifest in the library's
+  directory and all other generated files under Cargo's target directory,
+  in `hxn/<library>`.
+- `hxn-cli` embeds every Haxe class and header of hxn's own. A class
   added to `haxe/` is added to its list, which a test checks.
 
 ## The C boundary
@@ -34,7 +34,7 @@ The rules that hxn's code, its bindings and its tests follow.
   through `err`. `out` is not written on failure, and `err` is not written on
   success.
 - A `bool` is an `int32_t` at the boundary.
-- Text and bytes are passed as an `hxn_slice` by value and are UTF-8.
+- Pass text and bytes as an `hxn_slice` by value. Encode text as UTF-8.
 - Returned text and bytes are an `hxn_buf`, freed by the host through the
   buffer's own `free`, exactly once.
 - A handle is an opaque `hxn_handle *`. Only the library that created it reads it.
@@ -47,7 +47,7 @@ The rules that hxn's code, its bindings and its tests follow.
 
 ## Names
 
-| Thing | Name |
+| Generated item | Name |
 |---|---|
 | exported function | `hxn_<library>_<interface>_<method>`, the interface in snake case. The `hxn_` prefix keeps an export from taking the name of a C function the library links: a library `sqlite3` with an interface `Value` would otherwise export `sqlite3_value_subtype`, which is sqlite3's own |
 | HashLink primitive resolver | `hlp_<interface>_<method>` |
@@ -74,11 +74,12 @@ An interface is not named `Atomic`, `Memory`, `Future`, `Stream`, `Signal` or
 `Outbox`: the adapters use those names for their own exports. No interface is named `<Interface>Weak` when a shared
 `<Interface>` exists, and a shared interface has no function named `same` or `weak`.
 
-A C header's name never differs from a Haxe class's name only by case. hxcpp
-generates `Counter.h` for a class `Counter`, and on a case-insensitive
-filesystem `#include "counter.h"` would then find the generated header.
+Give C headers names that remain distinct from generated Haxe headers on
+case-insensitive filesystems. hxcpp generates `Counter.h` for a class
+`Counter`, and on a case-insensitive filesystem `#include "counter.h"` would
+then find the generated header.
 
-## Rust side
+## Rust API
 
 - An interface's name is unique within a library, whatever module it is in,
   and the interface is reachable at the crate's root: one defined in a module
@@ -104,11 +105,10 @@ filesystem `#include "counter.h"` would then find the generated header.
   a `UInt` with the same bits, `u64` as a `haxe.Int64` with the same bits,
   `f32` as a `Float`. A value that does not fit, as a parameter or as a return
   value, fails the call. No type wider than 64 bits is passed.
-- **On wasm32 a size is 32 bits.** `i64` and `u64` are 64 bits there as
-  everywhere, so a quantity that can exceed 4 GiB, such as a file length,
-  an offset into a file or a count of nanoseconds, is a `u64` or an `i64`,
-  not a `usize`: a `usize` would be correct natively and wrap in the wasm
-  build of the same library.
+- Use `u64` or `i64` for quantities that can exceed 4 GiB, including file
+  lengths, offsets and nanosecond counts. These types remain 64 bits on
+  wasm32. `usize` is 32 bits there and can overflow even when the native
+  build handles the same value.
 - Plain data is a struct or an enum marked `#[hxn::data]`, `pub` and
   reachable at the crate's root, with a name that no interface uses. A struct has
   named fields, all `pub`, each a `bool`, a fixed-width number,
@@ -196,10 +196,10 @@ filesystem `#include "counter.h"` would then find the generated header.
   the amount, and its interface is marked `#[hxn::interface(weighed)]`. The
   weight is updated when the size changes. Without the mark the weight is
   counted, but creating the object does not check the meter.
-- A library that wants a collection calls `hxn::collect_soon()`. It does not
-  call the runtime, and does not assume the collection has happened.
-- Errors are a `Result` whose error implements `Display`. Do not panic to
-  report a failure: a wasm build cannot catch it.
+- Request collection with `hxn::collect_soon()`. The binding handles the
+  request at its next check; the request returns before collection occurs.
+- Report expected failures with `Result<T, E>`, where `E` implements
+  `Display`.
 - For errors that Haxe code needs to distinguish, use a `#[hxn::data]` type
   as the error: an enum with one variant per cause, or a record. Name it
   directly in the `Result`, not through a type alias. Haxe catches it as
@@ -207,51 +207,49 @@ filesystem `#include "counter.h"` would then find the generated header.
   gives `PantryException`. Do not use that class name, or `<Name>Wire` for
   a tagged enum, for anything else.
 - Mark a function that waits with `#[hxn(blocking)]`.
-- In `stepped`, `Poll::Pending` means there is more to do now, not that the
-  work is waiting on something. Work that waits uses `spawn` with `async`.
+- Return `Poll::Pending` from `stepped` when another computation step can
+  run immediately. Use `spawn` with `async` for work that waits.
 - Do not start threads or block in a library that should run on wasm. Use
   `spawn` or `stepped`.
-- Inside hxn, no library code runs while one of hxn's locks is held. A value
-  is swapped or taken out under the lock and dropped after the lock is
-  released.
-- hxn does not call a host function to report a result. It queues or sets the
-  value, and the host retrieves it.
+- Release hxn's locks before running library code. Move or swap values out
+  under the lock, then drop them after releasing it.
+- Queue results or update stored values for the host to retrieve. Delivery
+  handlers run on the host's thread.
 
 ## Bindings
 
-- **One `hxn.Inbox` per library**, shared by every future, stream and signal
-  the binding creates.
-- **Wrap a primitive in a lambda where a function value is needed.** Pass
+- Create one `hxn.Inbox` per library and share it across the binding's
+  futures, streams and signals.
+- Wrap a primitive in a lambda where a function value is needed. Pass
   `raw -> Native.take(raw)`, not `Native.take`.
-- **Wrap a callback passed to native code** so that it catches exceptions,
+- Wrap a callback passed to native code so that it catches exceptions,
   calls `hxn.Callback.failed` and returns the failure value, and make the
   native call inside `hxn.Callback.during`. The failure value is null, or
   false for a callback that returns nothing.
-- **Store a function used by later calls in a field of the Haxe object** and
+- Store a function used by later calls in a field of the Haxe object and
   pass it to each call. Native code does not root host functions.
-- **Write through.** When a set is made through the binding, also set the
-  followed signal.
-- **Every class that owns a handle has `close()` and a finalizer.** The
+- When a binding sets a Rust value, also update its followed Haxe signal.
+- Every class that owns a handle has `close()` and a finalizer. The
   finalizer only frees: it runs during a collection.
-- **One `hxn.Gc.Meter` per library**, referenced by every class of the binding
-  so that it exists whichever classes a program uses. A weighed class checks it
+- Share one `hxn.Gc.Meter` across all binding classes so that every program
+  using the library creates the meter. A weighed class checks it
   once the new object owns its value and at the start of each of its methods,
   never before the object owns its value and never in a finalizer.
-- **A binding collects through `hxn.Gc`**, not through a runtime's own call.
-- **Two objects are compared with `same`**, never with `==`, when their
+- A binding collects through `hxn.Gc`, not through a runtime's own call.
+- Two objects are compared with `same`, never with `==`, when their
   interface is shared.
-- **A return value is wrapped in a new object of its interface's class**,
+- A return value is wrapped in a new object of its interface's class,
   which becomes its owner only once the library has transferred the value.
-- **A cell the library returns has no `close()`.** The object holding it
+- A cell the library returns has no `close()`. The object holding it
   keeps the memory alive, so its address is valid for as long as it is used.
-- **A null object is passed to native code as a null handle**, even when the
+- A null object is passed to native code as a null handle, even when the
   parameter is not an `Option`. The adapter then rejects it with the same
   error on every runtime. The binding must not read the object's handle
   field itself: hxcpp does not check for null before a field access.
 - On hxcpp, a raw pointer field is `@:unreflective`, and a call that waits is
   made inside `hxn::Blocking`. Failures are thrown by `hxn::check` after the
   library has returned.
-- On HashLink, a primitive that can fail is one `prim` call and nothing else,
+- On HashLink, put a fallible primitive's entire body inside one `prim` call,
   so a throw leaves no Rust value behind, and a call that waits is made
   inside `blocking`.
 
@@ -273,7 +271,7 @@ filesystem `#include "counter.h"` would then find the generated header.
 - `tests/counter` is the fixture: one small library, hand-written bindings for
   both runtimes, and one Haxe test (`haxe/Main.hx`) that every runtime runs.
   `haxe/Generated.hx` checks the classes the generator writes.
-- **A change is run on every runtime before it is considered done:**
+- A change is run on every runtime before it is considered done:
 
   ```
   tests/counter/run.sh hl <vm>      # stock HashLink, and Ash
@@ -321,13 +319,13 @@ filesystem `#include "counter.h"` would then find the generated header.
   `[HxnPass]` on `add_blob`, and is updated with it. `extra.rs` is appended
   to the crate's `src/lib.rs` as a function written by hand beside the
   bindings.
-- **The readme's example is `examples/greeter`, which is what `hxn new`
-  creates.** A test fails when the readme differs from it.
-- **An example is a realistic library:** a crate, a Haxe program, its
-  committed manifest, and the program's expected output, which is the same
-  on every run and every runtime. It demonstrates a few features and is not
-  a test; anything that has to be checked belongs in the fixture.
-- **CI runs what a single machine cannot.** `.github/workflows/ci.yml` runs the
+- Keep the README's example identical to `examples/greeter`, the template
+  for `hxn new`. A test checks that they match.
+- Examples demonstrate features through realistic libraries. Each contains
+  a crate, a Haxe program, a committed manifest and expected output that
+  matches on every run and runtime. Put assertions and regression checks in
+  the fixture.
+- `.github/workflows/ci.yml` runs the
   unit tests on Linux, Windows and macOS, the lints and Miri on Linux, and
   the fixture's native modes and the CLI and example tests on HashLink and
   hxcpp on Linux and Windows, and the fixture and the CLI test as CPPIA
@@ -335,7 +333,7 @@ filesystem `#include "counter.h"` would then find the generated header.
   through Emscripten on Linux, and the examples in an iOS simulator on macOS.
   Windows is run nowhere else. Ash, wasm under Ash, and Android are run by
   hand, as above.
-- Run a runtime test under a timeout. A wrong wait hangs instead of failing.
+- Run runtime tests under a timeout so incorrect waits fail with a timeout.
 - Anything concurrent is run repeatedly, on more than one machine.
 - `cargo miri test -p hxn-abi` checks the unsafe core, and
   `cargo miri test -p hxn-future` finds interleavings a native run does not,
@@ -363,17 +361,17 @@ filesystem `#include "counter.h"` would then find the generated header.
 
 ## Releases
 
-- **A release is a tag `v<version>` of the workspace version**, made once CI
-  is green on its commit. `hxn new` depends on the tag of the version it was
+- Tag a release as `v<version>` using the workspace version after CI passes
+  on that commit. `hxn new` depends on the tag of the version it was
   built at, so the version is raised before the tag, together with the tag
   the examples' manifests and the readme name.
-- **The tag's message is the release notes**: a title line, then what
-  changed for a library author.
-- **`.github/workflows/release.yml` publishes it.** For the tag it builds
+- Write the release notes in the tag message: a title followed by changes
+  relevant to library authors.
+- `.github/workflows/release.yml` publishes it. For the tag it builds
   `hxn` for Linux (static, musl), macOS and Windows, on x86-64 and ARM, and
   attaches the archives and their `SHA256SUMS` to the tag's GitHub release.
   Run by hand, it builds the archives without publishing them.
-- **`install.sh` installs a release binary**, selecting one of the workflow's
+- `install.sh` installs a release binary, selecting one of the workflow's
   target triples and verifying the archive against that release's
   `SHA256SUMS` before extracting it. It defaults to the latest release and
   `~/.local/bin`; `HXN_VERSION` selects a tag and `HXN_INSTALL_DIR` a
@@ -386,11 +384,11 @@ filesystem `#include "counter.h"` would then find the generated header.
   that is not obvious. No history of what was tried, and no measurements.
 - A commit message is short: what changed, and a few sentences of why when
   that is not self-evident.
-- Detail lives in a `git-bug` issue: reproducers, measurements, alternatives
-  weighed, what is still open. A commit cites its issue in a `git-bug:`
-  trailer with the full id.
-- No planning, backlog or status documents. These two documents describe the
-  current design, not history or plans.
+- Record reproducers, measurements, considered alternatives and open
+  questions in `git-bug` issues. Cite the issue's full id in the commit's
+  `git-bug:` trailer.
+- Use `git-bug` for plans, backlog items, status and history. Keep these two
+  documents focused on the current design.
 - An issue has a kind (`bug`, `perf`, `debt`) and an area
   (`area:abi`, `area:hl`, `area:cpp`, `area:future`, `area:reactive`,
-  `area:wasm`, `area:gen`, `area:bind`, `area:cli`).
+  `area:wasm`, `area:gen`, `area:bind`, `area:cli`, `area:docs`).

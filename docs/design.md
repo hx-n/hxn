@@ -1,34 +1,33 @@
-# How hxn works, and why
+# Design
 
-hxn lets a library written in Rust be used from Haxe on several runtimes
-without the library containing any runtime-specific code. This document
-describes how each part works and why. [conventions.md](conventions.md)
-lists the rules that follow from it.
+hxn generates adapters that let Haxe programs use a Rust library on several
+runtimes. The library code is shared across runtimes; adapters handle each
+runtime's object layout, strings, garbage collection and calls. This document
+describes the implementation and its constraints.
+[conventions.md](conventions.md) lists the coding and testing rules.
 
 ## Structure
 
-HashLink, hxcpp and their wasm builds differ in object layout, garbage
-collection, strings and closures. All of them support plain C calls. So hxn
-has no shared value model. It has:
+HashLink, hxcpp and their wasm builds all support C calls. hxn uses a C ABI to
+pass values between Rust and each runtime. Runtime-specific adapters convert
+those values to the runtime's own representation.
 
-- **a runtime-neutral core** (`hxn-abi`): the few `#[repr(C)]` types passed
-  between a library and a runtime, and a safe Rust API for each;
-- **one adapter per runtime family**: HashLink primitives (`hxn-hl`, over
-  `hl_abi`) and a plain C ABI with C++ glue for hxcpp (`include/hxn.h`);
-- **Haxe classes** with the same public API on every runtime.
+- `hxn-abi` defines the `#[repr(C)]` boundary types and their safe Rust APIs.
+- `hxn-hl` implements HashLink primitives over `hl_abi`.
+- `include/hxn.h` provides the C declarations and hxcpp's C++ glue helpers.
+- Generated Haxe classes expose the same public API on every runtime.
 
-A library is one Rust codebase built once per runtime. It is split into three
-crates so that the library itself is compiled once, whichever runtime is
-being built:
+Each library has a core crate and two adapter crates. Cargo compiles the
+library's implementation separately from its runtime adapters:
 
-| Crate | What it is |
+| Crate | Purpose |
 |---|---|
-| `<name>-core` | The library. Plain Rust with no runtime dependency. |
+| `<name>-core` | The library's Rust implementation, with no runtime dependency. |
 | `<name>-c` | A thin static library exporting the plain C ABI, for hxcpp. |
 | `<name>-hl` | A thin shared library of HashLink primitives. Its static archive is also linked into an Ash wasm side module. |
 
-The core never selects a runtime with a cargo feature. A feature would compile
-every dependency twice.
+Runtime selection belongs in the adapters. Selecting a runtime with a Cargo
+feature on the core would compile every dependency twice.
 
 ## Boundary types and ownership
 
@@ -49,30 +48,28 @@ and `haxe.Int64` is that type on both. A library function may also accept or
 return a narrower integer, `isize` or `usize`, `u32`, `u64` or `f32`; its
 adapter converts the value, and a value that does not fit fails the call with
 `Status::RANGE`, before the function runs for a parameter or after it returns
-for a return value. So the boundary and the generated Haxe are the same
-whichever of these the Rust declares, except for `u32`, which Haxe sees as a
-`UInt`. Haxe has no unsigned 64-bit type: a `u64` arrives as a `haxe.Int64`
-with the same bits, and values from 2^63 up read as negative.
+for a return value. The generated Haxe uses these same boundary types for
+narrower Rust numbers; `u32` is exposed as a `UInt`. Haxe has no unsigned
+64-bit type: a `u64` arrives as a `haxe.Int64` with the same bits, and values
+from 2^63 up read as negative.
 
-**On wasm32** pointers are 32 bits, but `i64` and `u64` are still 64 bits and
-are passed exactly as they are natively. What changes is `usize` and
-`isize`, which are 32 bits inside the library: they are still passed as a
-Haxe `Int` with the same range check, but arithmetic on them in the library
-wraps at 4 GiB where a native build would not. On both wasm runtimes a
-64-bit value stays inside the wasm module; hxn never passes one to
-JavaScript, where it would be a `BigInt`.
+On wasm32, pointers, `usize` and `isize` are 32 bits. `i64` and `u64` remain
+64 bits and use the native encoding. The adapter still represents a size as a
+Haxe `Int` and checks its range, while arithmetic on sizes inside the 32-bit
+library wraps at 4 GiB. Both wasm runtimes keep 64-bit values inside the wasm
+module, avoiding a JavaScript `BigInt` conversion.
 
 Text is UTF-8 at the boundary. HashLink strings are UTF-16, so the HashLink
 adapter converts at the boundary, strictly: invalid text in either encoding is
 an error and is never replaced with a replacement character.
 
-Bytes a library writes into are a `&mut [u8]` parameter. The library is
-given the memory of the Haxe `haxe.io.Bytes` itself, not a copy, so the
-caller sees what was written: `hl.Bytes` on HashLink and the array's base on
-hxcpp, which neither collector moves. A `&mut [u8]` may not alias any other
-reference, so before making either the adapter checks that the bytes are not
-also another bytes argument of the same call, which Haxe can pass by giving
-one `Bytes` twice, and fails the call with `Status::ALIASED` if they are.
+A `&mut [u8]` parameter gives Rust direct access to the storage of a Haxe
+`haxe.io.Bytes`: `hl.Bytes` on HashLink and the array's base address on hxcpp.
+Both collectors leave that storage in place, and writes are visible to the
+Haxe caller. A `&mut [u8]` may not alias any other reference, so before making
+either the adapter checks that the bytes are not also another bytes argument
+of the same call, which Haxe can pass by giving one `Bytes` twice, and fails
+the call with `Status::ALIASED` if they are.
 
 A `Buf` carries its own `free` function, because each library is linked with
 its own allocator and memory must be freed by the allocator that allocated it.
@@ -93,26 +90,24 @@ Plain data crosses by value. A library marks it with `#[hxn::data]`:
 | `HashSet<T>`, `BTreeSet<T>` | `hxn.Set<T>`; a `BTreeSet` returns Rust's `Ord` order |
 | `Box<T>` | `T` |
 
-- **A C-like enum crosses as its integer value.** The adapter converts in
-  both directions with a `match` on the variant names, so it does not depend
-  on the enum's layout, and an integer with no matching variant fails the
-  call.
-- **Composite data crosses as bytes.** Records, tagged enums, `Option`,
-  `Vec` and maps are serialized field by field in declaration order: a
+- The adapter converts a C-like enum between variant names and declared
+  integer values with a `match` in each direction. An unknown integer fails
+  the call. This conversion is independent of Rust's enum layout.
+- The generated serializers write records, tagged enums, `Option`, `Vec`
+  and maps to bytes in declaration order: a
   tagged enum as its variant index followed by that variant's fields, an
   `Option` as a presence byte followed by the value, a list or a map as a
   count followed by the entries. A set uses a list's count and elements. An
   empty record occupies one zero byte, so the count remains bounded by the
-  bytes available. Both sides are generated from the same declaration, so
-  the encoding carries no type information. Every runtime
-  can already pass bytes, so this needs no per-runtime support, and nested
-  types need nothing extra.
-- **Data can be recursive** through a `Vec` or a `Box`, which is how a tree
-  is expressed. The generated reader for such a type is recursive, so it
-  tracks nesting depth and fails with `Status::DEPTH` beyond
+  bytes available. The Rust and Haxe serializers use the same declaration;
+  the encoding contains field values and structural markers, with no type
+  information. Each runtime's byte-buffer support transports composite and
+  nested data.
+- `Vec` and `Box` support recursive data such as trees. Generated readers
+  track nesting depth and fail with `Status::DEPTH` beyond
   `wire::Reader::DEPTH`.
-- **Tuples are array-backed abstracts.** A nonempty Rust tuple crosses as
-  `hxn.Tuple<A, B, ...>`. Construct one with `hxn.Tuple.of("name", 42)` or
+- A nonempty Rust tuple becomes `hxn.Tuple<A, B, ...>`, a Haxe abstract over
+  an array. Construct one with `hxn.Tuple.of("name", 42)` or
   `new hxn.Tuple<String, Int>("name", 42)`; numbered record literals are also
   accepted. `pair[index]` reads and writes with runtime bounds checks. Since
   positions can have different types, indexing returns `Dynamic`. For a
@@ -127,12 +122,13 @@ Plain data crosses by value. A library marks it with `#[hxn::data]`:
   Elements use the data encoding in position order, with no count or tag.
   The reader reads each element before constructing the tuple, so evaluation
   order cannot reorder the input. Tuples can nest anywhere data is accepted;
-  `()` remains a return value with no data, rather than an empty data tuple.
-- **A map may be keyed by a C-like enum.** Haxe keeps the enum type in
-  `Map<Mode, T>` and uses its integer key storage. The wire contains each
+  `()` denotes a return value with no data; tuple data requires at least one
+  element.
+- For `Map<Mode, T>` with a C-like enum key, Haxe retains the enum type and
+  uses integer key storage. The wire contains each
   key's declared discriminant, checked by Rust's enum reader, followed by
   the value. Tagged enums are not map keys.
-- **Sets have a Haxe wrapper.** `hxn.Set<T>` provides `add`, `has`, `remove`,
+- `hxn.Set<T>` provides `add`, `has`, `remove`,
   `clear`, `length`, iteration, `copy` and `toArray`. Array literals convert
   to sets, and construction and `toArray` copy the array. Its array storage
   preserves insertion order and membership checks are linear. Membership
@@ -143,21 +139,20 @@ Plain data crosses by value. A library marks it with `#[hxn::data]`:
   no order. The wrapper preserves that order, but later additions do not
   sort it. Sets, including a set of bytes, use the data encoding rather
   than a byte buffer.
-- **A reader takes exactly what was written.** Bytes that run out, a count
-  the bytes left cannot back, text that is not UTF-8 and bytes left over all
-  fail the call, with the same status as badly encoded text.
-- **Data is copied, both ways.** A function takes it by value or by
-  reference, and the reference is to the adapter's copy; what it returns is
-  written out and dropped. So there is no owner to track and no `close()`,
-  and changing a record in Haxe after passing it changes nothing in the
-  library.
-- **The Haxe class is plain Haxe**, the same file for HashLink, hxcpp and a
-  script. It is made from its fields by name, `{label: "x", enabled: true}`,
+- A reader rejects truncated data, counts that exceed the available bytes,
+  invalid UTF-8 and trailing bytes. Each fails the call with the same status
+  as malformed text.
+- Adapters copy data in both directions. A Rust function takes the
+  deserialized value or a reference to that copy; returned data is serialized
+  and then dropped. Haxe records therefore need no `close()`. Editing a Haxe
+  record after a call leaves the library's copy unchanged.
+- Generated data classes use the same Haxe file for HashLink, hxcpp and
+  CPPIA. Construct a record with named fields, `{label: "x", enabled: true}`,
   and a field that is an `Option` can be left out. A null where a value is
   needed is refused in Haxe, before anything is written. A Haxe enum
   cannot have methods, so a tagged enum's serializer is a separate
   generated class: `EventWire` for `Event`.
-- **A record field may have a Rust default.** `#[hxn(default)]` calls
+- On a record field, `#[hxn(default)]` calls
   `Default::default()` when Haxe omits the field; `#[hxn(default =
   "Item::default_unit")]` calls that public zero-argument function, whose
   path is relative to the library root. The generated Haxe field is
@@ -170,50 +165,46 @@ Plain data crosses by value. A library marks it with `#[hxn::data]`:
   default annotation. The manifest records `default: true` or the function
   path. Defaults apply to non-nullable record fields. An `Option` field
   already uses `None` when omitted; tagged enum fields remain required.
-- **Data is accepted everywhere a value is:** as a parameter or a return
-  value, carried by a future, a stream or a signal, returned from an
-  `async fn`, and as a parameter or return value of a callback. The
+- Data can be passed as function or callback parameters and return values,
+  returned from async functions, and stored in futures, streams and signals. The
   encoding is the same in every position: the adapter serializes or
   deserializes on the Rust side and the binding on the Haxe side.
-- **The cost is a copy and a pass over the fields on every call.** That suits what
-  data is for: a descriptor, a result, a short list. A large buffer is bytes,
-  and a thing with identity is an interface.
+- Serializing data copies and visits every field on each call. Use records
+  for descriptors, results and short lists; use byte buffers for large data
+  transfers and interfaces for values that require identity.
 
 ## Failures
 
-Nothing unwinds across the boundary in either direction.
+Adapters raise runtime exceptions after Rust library calls return and release
+their local values.
 
 - A library function returns a `Result`. The adapter turns `Err` into a status
   and a message, which the Haxe binding throws as a `haxe.Exception`.
-- **A `#[hxn::data]` error type is thrown as a typed exception.** If the
-  error type of the `Result` is one of the library's `#[hxn::data]` types,
-  Haxe gets an exception class named after it (`PantryException` for
-  `PantryError`) with the value in its `error` field and the error's
-  `Display` output as its message. The value is passed separately from the
-  message: the adapter attaches the serialized error to the failure, `guard`
-  and `prim` store it in a thread-local (`hxn_abi::thrown`) and throw the
-  message as usual, and the generated Haxe method catches that exception,
-  fetches the stored bytes and throws the typed exception instead. The
-  message path is therefore the same as for any other error on every
-  runtime, and native code never constructs a Haxe object. Futures work the
-  same way: the stored failure carries the bytes, and they are moved to the
-  thread-local when a Haxe thread takes the result. A `Stream<Result<T, E>>`
-  with a named `#[hxn::data]` error yields its `Ok` values as `hxn.Stream<T>`.
-  Taking its first `Err` closes the read side, drops queued values after that
-  error outside the queue lock, and refuses further sends. The adapter
-  serializes the error on the taking Haxe thread; iteration throws its typed
-  exception, and `listen` delivers it to `onError`. A channel failure from
-  `Sender::fail` retains its existing status, message and optional payload. Each failure overwrites
-  the stored value, so the bytes the binding fetches always belong to the
-  failure it just caught.
-- The runtime's own exception is raised **after** the Rust call has returned
-  and dropped everything it owned. HashLink throws by jumping past frames
-  without running destructors, and a C++ exception must not cross a Rust
-  frame, so the throw is always made by the adapter, never from inside the
-  library. Ash's wasm build throws a wasm exception, which unwinds through
-  the adapter's own frame; so a HashLink primitive that can throw is
-  `extern "C-unwind"`, which leaves it free to pass, where `extern "C"`
-  would abort the program.
+- For a `Result` with a named `#[hxn::data]` error, Haxe generates an
+  exception class such as `PantryException` for `PantryError`. Its `error`
+  field holds the data value, and its message is the error's `Display`
+  output. The adapter attaches the serialized value to the failure. `guard`
+  and `prim` store those bytes in `hxn_abi::thrown`, a thread-local, and
+  report the message through the usual exception path. The generated Haxe
+  method catches the exception, retrieves the bytes and constructs the
+  typed exception. Haxe constructs the exception object after Rust returns.
+  Each failure replaces the thread-local value, so a handler reads the
+  payload of the failure it just caught.
+- A failed future stores the error bytes with its failure. Taking the
+  result moves those bytes to the thread-local for the Haxe handler.
+- A `Stream<Result<T, E>>` with a named `#[hxn::data]` error exposes its `Ok`
+  values as `hxn.Stream<T>`. Taking the first `Err` closes the read side,
+  drops later queued values outside the queue lock and refuses further
+  sends. The adapter serializes the error on the taking Haxe thread.
+  Iteration throws the typed exception; `listen` delivers it to `onError`.
+  A channel failure from `Sender::fail` retains its status, message and
+  optional payload.
+- Rust finishes the call and drops its local values before the adapter
+  raises the runtime exception. HashLink throws by jumping past frames
+  without running destructors; C++ exceptions must stay outside Rust frames.
+  Ash's wasm exception unwinds through the adapter's own frame, so a
+  HashLink primitive that can throw uses `extern "C-unwind"`. Declaring that
+  primitive `extern "C"` would make the exception abort the program.
 - A panic is caught at the boundary and reported as `Status::PANIC`, on every
   runtime. On wasm the library unwinds with wasm exceptions: Rust's prebuilt
   standard library does for Emscripten, and an Ash side module rebuilds it
@@ -222,24 +213,20 @@ Nothing unwinds across the boundary in either direction.
   build (`unwind.rs`), throwing with the wasm `throw` instruction as Rust's
   own shim for `wasm32-unknown-unknown` does.
 
-So an error is an ordinary return value until the call has returned, which
-is why errors work the same in builds that cannot unwind.
-
 ## Handles
 
 A `Handle<T>` separates two lifetimes:
 
-- the **value** is dropped when the host calls `close()`;
-- the **allocation** is freed when the host's garbage collector finalizes the
+- the value is dropped when the host calls `close()`;
+- the allocation is freed when the host's garbage collector finalizes the
   object.
 
-So a pointer the host can still reach never dangles, and a use after close
-returns an error instead of crashing. Each handle carries a type tag, so a
-handle of the wrong type is rejected.
+The allocation remains valid while the host can reach its pointer. Access
+checks reject a closed handle or a handle with the wrong type tag.
 
-A host does not respect `&` and `&mut`: it can call from two threads, or
-re-enter from a callback. Borrows are checked at run time, and a conflicting
-borrow fails with `Busy` instead of blocking or aliasing.
+The host can call from two threads or re-enter from a callback, so the adapter
+checks shared and exclusive borrows at run time. A conflicting borrow returns
+`Busy` immediately, preventing blocking and aliased access.
 
 `T` must be `Send`, because the collector runs finalizers on whatever thread
 it runs on.
@@ -259,25 +246,23 @@ that invariant.
 | `Option` of any of these | may be absent | `null` |
 | `Vec<T>` result, `Vec<Arc<T>>` of a shared interface | new values, each passed to Haxe | an `Array` of new objects |
 
-- **A parameter is always borrowed.** Passing the same object twice with
-  conflicting borrows, for example as the receiver of a `&mut self` method and
-  as its argument, fails with "in use" like any other conflicting borrow.
-- **A return value is always owned.** There are no borrowed return values: a
-  lifetime tying one value to another cannot be expressed across the
-  boundary. A child that needs its parent holds a shared reference to it.
-- **Sharing is opt-in**: the library marks the interface shared (see below).
-  Without the mark a value has a single owner.
-- **Haxe values stay in Haxe.** A library that needs to refer to a host value
-  is given an id, and the binding keeps the table from ids to values. Rooting
-  a host value from native code has the same cycle problem as rooting a
-  function.
-- **A handle belongs to the library that created it.** Passing it to another
-  library fails the type check.
-- **A list of objects crosses as a stream that has already ended.** The
-  adapter sends each element to a new stream and returns the stream; the
-  Haxe method takes every element into an `Array` before it returns. So a
-  list uses the handles and the take function a stream of objects already
-  has, on every runtime, and no element waits on anything.
+- `&T` and `&mut T` parameters borrow the object for the call. Conflicting
+  borrows fail with "in use", including when the same object is both a
+  `&mut self` receiver and an argument. A `T` parameter transfers ownership
+  as described in the table.
+- Return values transfer ownership to Haxe. The boundary cannot express a
+  lifetime tying a borrowed result to another value. A child that needs its
+  parent must hold a shared reference to it.
+- An interface has a single owner unless the library marks it shared.
+- Haxe owns host values. When Rust needs to refer to one, the binding stores
+  the value in a table and gives Rust its id. Keeping host references in
+  native GC roots would prevent the collector from detecting cycles.
+- The library that created a handle validates its type tag. Passing the
+  handle to another library fails that check.
+- For an object list, the adapter puts the elements in a new stream and
+  closes the sender. The Haxe method drains that completed stream into an
+  `Array` before returning. This reuses the stream handle and element-take
+  functions on every runtime; all elements are ready when the call returns.
 
 ### Shared values
 
@@ -292,44 +277,39 @@ the library or any Haxe object holds a reference.
 | `T` result | a new value, wrapped in an `Arc` by the adapter | a new object |
 | `Arc<T>` result | a reference to a value the library also holds | a new object |
 
-- **Each handle is still owned by one Haxe object.** Returning the same value
-  twice gives two objects, each holding a reference, so Haxe object identity
-  is not meaningful. `same(other)` reports whether two objects refer to the
-  same value.
-- **`close()` releases one reference.** The object is closed; the value is
-  dropped when its last reference is released.
-- **`weak()` returns a weak reference**, an instance of a separate class named
+- Returning the same shared value twice creates two Haxe objects, each
+  owning a handle with one `Arc` reference. Use `same(other)` to compare the
+  underlying values' identity.
+- `close()` closes the Haxe object and releases its reference. Rust drops
+  the value when the last reference is released.
+- `weak()` returns a weak reference, an instance of a separate class named
   `<Interface>Weak`. Its `upgrade()` returns a new object holding a
   reference, or null once the value has been dropped. A child uses one to
   refer to its parent without creating a reference cycle.
-- **A shared value is never borrowed mutably.** Its functions take `&self`,
-  and mutable state is behind a cell or lock in the library, as in any Rust
-  type shared between threads. The value is `Send + Sync`.
-- **References held by Haxe objects are released by the collector**, like any
-  handle, so the timing of collection does not affect a value the library
-  also holds.
+- Shared interfaces require `Send + Sync`. Their functions take `&self` and
+  keep mutable state behind a cell or lock, following Rust's rules for types
+  shared between threads.
+- The collector releases unreachable Haxe objects' references. A reference
+  held by the library keeps the shared value alive through collection.
 
 ## Atomics
 
-A Haxe atomic integer and Rust's `AtomicI32` have the same 4-byte layout, and
-each runtime's atomic operations work on a plain address. So a cell is shared
-by passing its address: each side uses its own atomic operations on it, from
-any thread, with no call across the boundary.
+Haxe atomic integers and Rust's `AtomicI32` share a 4-byte layout. Passing a
+cell's address lets each side use its own atomic operations from any thread,
+without a cross-runtime call.
 
 | In Rust | Meaning | In Haxe |
 |---|---|---|
 | `&AtomicI32`, `&AtomicFlag` parameter | a cell borrowed for the call | `hxn.AtomicInt`, `hxn.AtomicBool` |
 | `Arc<AtomicI32>`, `Arc<AtomicFlag>` result | a cell owned by the library | the same, backed by the library's memory |
 
-- **A borrowed cell** is allocated by Haxe. Rust uses it only for the
-  duration of the call, as the borrow expresses, so nothing has to keep
-  Haxe's memory alive afterwards. The typical use is a cancellation flag for
-  a call in progress.
-- **A library-owned cell** is allocated in the library. The Haxe object holds
-  the reference the library returned, which keeps the memory alive for as
-  long as the object is reachable; it has no `close()`, so the memory cannot
-  be freed while the address is in use.
-- **A flag is an integer that is 0 or 1.** Rust's `AtomicBool` is one byte and
+- Haxe allocates borrowed cells and keeps them alive for the call. Rust's
+  borrow ends when the call returns. A cancellation flag for a call in
+  progress can use this storage.
+- Rust allocates library-owned cells. The Haxe object holds the returned
+  reference for as long as the object is reachable. These objects have no
+  `close()`, keeping the cell's address valid throughout use.
+- A flag is an integer that is 0 or 1. Rust's `AtomicBool` is one byte and
   Haxe has no 1-byte atomic, so a flag passed across the boundary is an
   `hxn::AtomicFlag`.
 - `hxn.AtomicInt` has the same operations as `haxe.atomic.AtomicInt`. On
@@ -342,42 +322,42 @@ A native value is released by `close()`, or by the collector once its object
 is unreachable. A collector runs when the memory it manages has grown, and an
 object that owns a handle counts as a few words of that memory however much
 native memory the value holds. A program can drop gigabytes of native memory
-without triggering a collection. hxn compensates in three ways, none of which
-has native code call the runtime.
+without triggering a collection. hxn provides explicit collection, native
+memory accounting and collection requests through the binding:
 
-| | Rust | Haxe |
+| Operation | Rust | Haxe |
 |---|---|---|
 | force a collection | | `hxn.Gc.collect()` |
 | report a value's native memory | an `hxn::Weight` kept in the value | `hxn.Gc.budget` |
 | request a collection | `hxn::collect_soon()` | honoured at the next check |
 
-- **`hxn.Gc.collect()`** calls each runtime's own collection function. It
+- `hxn.Gc.collect()` calls each runtime's own collection function. It
   returns false on a runtime where a collection cannot be forced.
-- **A weight is counted while its value is alive.** A `Weight` adds to a total
+- A weight is counted while its value is alive. A `Weight` adds to a total
   when created, updates it on `set`, and subtracts from it when dropped, at
   `close()` or finalization. The total is per library, because each library has its own
   copy of `hxn-abi`.
-- **The binding polls; the library never calls the binding.** Each library's
-  classes share one `hxn.Gc.Meter`, which reads the total. An interface
+- Each library's Haxe classes share one `hxn.Gc.Meter`, which polls the
+  library's native-memory total. An interface
   marked `#[hxn::interface(weighed)]` checks the meter whenever one of its
   objects is created and before each of its methods runs, since an earlier
   call may have grown what it holds; every delivery checks it too. A check triggers a
   collection when the total exceeds `hxn.Gc.budget`, and then not again until
   the total exceeds twice what remained, so a program whose live values
   exceed the budget does not collect on every allocation.
-- **A request sets a flag.** `collect_soon()` can be called from any thread;
-  the next check clears the flag and collects.
-- **hxn implements the policy itself on every runtime.** hxcpp can be told
-  about memory it does not manage, but releases must be reported too; a
-  finalizer is not allowed to make that call, and a release reported later is
-  missed by the threshold hxcpp computes during that same collection.
-- **`hxn.Loop.exit` ends an hxcpp program without running the C runtime's
-  destructors.** hxcpp keeps zeroing memory on its own threads after a
+- `collect_soon()` sets a flag from any thread. The next meter check clears
+  the flag and collects.
+- hxn applies this collection policy on every runtime. hxcpp's external
+  memory accounting requires reports for allocations and releases. Finalizers
+  cannot report releases, and deferred reports arrive after hxcpp computes
+  the threshold for that collection.
+- `hxn.Loop.exit` ends an hxcpp program without running the C runtime's
+  destructors. hxcpp keeps zeroing memory on its own threads after a
   collection, and `exit` destroys a lock those threads take when they
   finish, so on Windows a program that exits shortly after a collection
   crashes. A meter triggers a collection when a library's memory exceeds its
-  budget, at a time the program does not choose, so hxn provides an exit
-  that does not depend on that timing. On other runtimes it calls
+  budget. `hxn.Loop.exit` remains safe when that collection occurs shortly
+  before program exit. On other runtimes it calls
   `Sys.exit`. The crash is in hxcpp 4.3.2 and in hxcpp's git history before
   HaxeFoundation/hxcpp#1298 (commit `0e9183de`), which made that lock a
   `std::mutex`; it does not occur from that commit on. It was reported as
@@ -388,33 +368,29 @@ has native code call the runtime.
 
 ## Calling a Haxe function
 
-An exception cannot be thrown through native code, a Haxe function cannot be
-called from a thread the runtime does not know about, and native code should
-not keep a host function alive. Three approaches follow.
+The binding invokes Haxe callbacks during the native call, on the runtime
+thread that made the call. A wrapper catches each Haxe exception before
+control returns to Rust.
 
-**Borrowed for the call.** A callback passed to a native call is called during
-that call, on the calling thread. The binding wraps it: the wrapper catches an
-exception, stores it (`hxn.Callback.failed`), and returns a value that tells
-the library the callback failed. The library stops and returns, and the
-binding rethrows the original exception (`hxn.Callback.during`). The exception
-is caught on the Haxe side, so native code needs no exception handling and the
-mechanism is the same on every runtime.
+The wrapper stores the exception with `hxn.Callback.failed` and returns a
+failure value to Rust. The library stops and returns, and the binding rethrows
+the original exception (`hxn.Callback.during`). Both adapters use this protocol
+to keep Haxe exceptions on the Haxe side of the call.
 
-In Rust the library accepts such a callback as `impl Fn(..) -> Result<T, E>`,
-generic in `E`. It returns a `Result` because the Haxe function can throw,
-which the library sees as an `Err` to return. The error is a type parameter so
-the library depends on no hxn type and can be tested with any error type; the
-adapter instantiates it with its own.
+Rust functions accept callbacks as `impl Fn(..) -> Result<T, E>`, generic in
+`E`. A Haxe exception becomes an `Err` for the library to return. The adapter
+supplies the callback's error type, while core tests can use any error type.
 
 A callback can have numbers, bools, text, bytes and data as parameters and
 return value, and objects as parameters. Text and bytes are passed to it as
 borrowed `&str` and `&[u8]`; the host copies them during the call. They are
 returned as `String` and `Vec<u8>`: the host copies the result into a buffer
-with its own `free`, which the library reads and then frees, so nothing owned
-by the collector is referenced after the callback returns. A callback that
-returns text or bytes cannot return null, because its wrapper uses null to
-report an exception. On HashLink the native side receives a `haxe.io.Bytes` object and
-reads its two fields; on hxcpp it receives the underlying array.
+with its own `free`. Rust reads and frees that copy after the callback
+returns; the host retains ownership of the collector-managed storage. A
+callback that returns text or bytes cannot return null, because its wrapper
+uses null to report an exception. On HashLink the native side receives a
+`haxe.io.Bytes` object and reads its two fields; on hxcpp it receives the
+underlying array.
 
 A callback's `i64` is a `haxe.Int64`, as it is in an ordinary call. In a
 callback it crosses as eight serialized bytes, using the same encoding as
@@ -436,60 +412,49 @@ an owner whatever that function does. HashLink calls a closure with untyped
 arguments, so there the pointer is passed as bytes and a primitive of the
 interface converts it back to a typed object.
 
-**Stored across calls.** A function needed by later calls is stored in a field
-of the Haxe object and passed to each call that uses it. Native code holds no
-reference to it.
-
-**Not rooted in native code.** A GC root held by native code is invisible to
-the collector, so a function that can reach the object that roots it is never
-collected. Event handlers usually reference their emitter. Keeping the
-function on the Haxe side leaves every reference visible to the collector, so
-such cycles are collected normally.
+Haxe objects store functions needed across calls in fields and pass them to
+each native call that uses them. The collector can trace those references and
+collect cycles, including an event handler that refers to its emitter. A
+native GC root would keep such a cycle alive because the collector cannot
+trace references through native storage.
 
 ## Futures, streams and signals
 
 `hxn-future` provides three types of asynchronous result, each with a Haxe
 class.
 
-| | Rust | Haxe |
+| Result | Rust | Haxe |
 |---|---|---|
 | one result, later | `pending()` returns a `Completer` and a `Future` | `hxn.Future`: `await()`, `then()` |
 | many results, in order | `channel()` returns a `Sender` and a `Stream` | `hxn.Stream`: an iterator, `listen()` |
 | a value that changes | `signal()` returns a `Source` and a `Signal` | `hxn.Signal`, through `Reactive.follow` |
 
-Two rules hold for all three.
+Futures, streams and signals store their results in Rust until a Haxe thread
+retrieves them. Producer threads settle futures, send stream items and update
+signals through Rust-owned storage. They use no runtime objects and need no
+collector registration. The Haxe thread retrieves the values and runs their
+registered handlers. This delivery protocol also works on wasm.
 
-**The result stays in Rust until a Haxe thread takes it.** Settling, sending
-or setting does not touch any runtime. The thread that does it does not need
-to be registered with a collector, and no runtime object has to be kept alive
-meanwhile.
+A future is settled once; later attempts to settle it return `false`. If every
+producer is dropped, the future is rejected as cancelled and wakes its
+waiters. A stream ends when every sender is dropped, or with an error that the
+reader receives after the items sent before it. A sender or source detects
+that its reader is gone when `send` or `set` returns `false`.
 
-**The library never calls the host to report a result.** It queues or sets a
-value; the host takes each result on its own thread and does what it wants
-with it. This is what makes events work from any thread and on wasm.
-
-A future is settled once; later attempts to settle it return `false`. If
-everything that could settle it is dropped, it is rejected as cancelled, so a
-waiter is never left waiting on a future nothing can settle. A stream ends
-when every sender is dropped, or with an error that the reader receives after
-the items sent before it. A sender or source detects that its reader is gone
-when `send` or `set` returns `false`.
-
-A stream delivers every item, in order. A signal delivers only the latest
-value. Use a stream for events and a signal for state.
+Use a stream when consumers need every item in order, and a signal when they
+need the latest state.
 
 A function exposes one by returning `Future<T>`, `Stream<T>` or `Signal<T>`,
 and the Haxe method returns the class of the same name. The generated adapter
-returns each as a type-erased handle. So a library has one set of exports to
-wait on and watch a future, whatever its value type and whichever function
-returned it, plus one take export for each value type its futures carry. A future or stream can carry a number, a bool,
-text, bytes, data or an object; bytes and objects taken from one are owned by
-the Haxe side. It can also carry `()`, which Haxe sees as `hxn.Unit`, to
-signal completion or an event with no payload. A signal carries a number, a
-bool, text or data, but not a single-owner value, because it is read
-repeatedly. Data is serialized when a Haxe thread takes it, by the take function
-generated for that type; the library's future holds the library's own Rust
-type.
+returns each as a type-erased handle. All futures in a library share one set
+of wait/watch exports, with a separate take export for each value type. A
+future or stream can carry a number, a bool, text, bytes, data or an object;
+bytes and objects taken from one are owned by the Haxe side. It can also carry
+`()`, which Haxe sees as `hxn.Unit`, to signal completion or an event with no
+payload. A signal carries a number, a bool, text or data, but not a
+single-owner value, because it is read repeatedly. Data is serialized when a
+Haxe thread takes it, by the take function generated for that type; the
+library's future holds the library's own Rust type.
 
 A future or stream can also carry a list of objects, `Vec<T>` or
 `Vec<Arc<T>>` of a shared interface. Haxe receives `Array<T>`. The Rust
@@ -527,9 +492,8 @@ host can yield and poll again.
 `spawn` and `stepped` run the first step before returning, so work that
 completes immediately does not wait for a worker or a waiter.
 
-An `hxn_future::Future` can itself be awaited, and that is the source of
-wakeups: settling it wakes the task awaiting it. A waiting task uses no CPU
-on either scheduler.
+Settling an `hxn_future::Future` wakes the task awaiting it. Both schedulers
+suspend waiting tasks until a wakeup, using no CPU while they wait.
 
 `stepped` is for work that is all computation, split so a single thread can
 interleave it with other work: `Poll::Pending` from a step means there is
@@ -539,16 +503,15 @@ it produces reaches Haxe as the future's, stream's or signal's value.
 
 ## Delivery
 
-Every result a library produces reaches the app through a single queue.
+Each library uses one queue to notify Haxe of changes to watched results.
 
-- **Outbox (Rust).** A future, stream or signal the host is watching adds
-  itself to the library's queue when it has something new, at most once until
-  the host has read it. Only watched values are queued.
-- **Inbox (Haxe).** `hxn.Inbox`, one per library, drains that queue and calls
-  the watchers of each entry, in the order the library produced them, in one
-  batch. `Future.then`, `Stream.listen` and `Reactive.follow` register
+- Rust queues a watched future, stream or signal's identifier when its
+  result changes. Each identifier is queued at most once until Haxe reads
+  it; unwatched results produce no queue entries.
+- `hxn.Inbox`, one per library, drains the queue and calls each entry's
+  watchers in production order, as one batch. `Future.then`, `Stream.listen` and `Reactive.follow` register
   watchers.
-- **Loop.** `hxn.Loop` decides when delivery happens. By default it runs from
+- `hxn.Loop` schedules delivery. By default it runs from
   the Haxe event loop of the thread that first requested delivery. An app
   with its own main loop sets `Loop.manual` and calls `Loop.sync()` where it
   wants deliveries, for instance once per frame; the Haxe event loop is then
@@ -557,14 +520,13 @@ Every result a library produces reaches the app through a single queue.
 A single queue preserves order across futures, streams and signals, lets the
 app choose when delivery happens, and needs only one wait for all of them.
 
-**Changes made together arrive together.** A library that sets several
-signals as one change does it inside `hxn_future::together(|| { … })`. The
-entries the scope's changes would add are held back until it returns and
-then added at once, and the host does not read a signal's value while any
-scope is running. An inbox takes every entry before it runs effects, so
-effects never see one of those values changed and another not. Scopes on
-different threads run one at a time, and the library's own reads of a
-signal never wait: only the host's do.
+Wrap related signal updates in `hxn_future::together(|| { … })` to deliver
+them as one change. The entries the scope's changes would add are held back
+until it returns and then added at once, and the host does not read a signal's
+value while any scope is running. An inbox takes every entry before it runs
+effects, so effects never see one of those values changed and another not.
+Scopes on different threads run one at a time, and the library's own reads of
+a signal never wait: only the host's do.
 
 ## Reactivity
 
@@ -584,31 +546,30 @@ new values.
 mechanisms keep the two sides consistent:
 
 - a delivery is one batch, so effects rerun once however many values arrived;
-- a binding **writes through**: a set made through the binding also sets the
-  followed signal, so code sees its own writes immediately;
-- the graph is **pluggable**: `Inbox.follow` takes the sink as a parameter, so
-  an app with its own reactive system can feed its own signals.
+- a binding updates the followed Haxe signal when it sets the Rust value,
+  making the change immediately visible to Haxe code;
+- `Inbox.follow` accepts a sink function, allowing an app to update signals
+  in its own reactive system.
 
 ## Generation
 
 `hxn-gen` parses a library's source for the items marked `#[hxn::interface]`,
-`#[hxn::methods]` and `#[hxn::function]` and generates the manifest, both Rust adapters, the C
-header, the hxcpp glue and the Haxe classes. It starts at the crate's `lib.rs`
-and follows every module declaration from there, so a library can use any
-normal crate layout. Names are unique across the library, not per module: the
-adapters refer to each interface at the crate's root.
+`#[hxn::methods]` and `#[hxn::function]` and generates the manifest, both Rust
+adapters, the C header, the hxcpp glue and the Haxe classes. It starts at the
+crate's `lib.rs` and follows every module declaration from there, so a library
+can use any normal crate layout. Names are unique across the whole library.
+Adapters refer to each interface at the crate's root.
 
-The attributes expand to nothing. A macro expanding inside the library cannot
-write files or add code to the separate adapter crates, so the generator
-parses the source instead, and the attributes exist only so that the markers
-compile.
+The generator reads the marked items from source and writes the files for both
+adapter crates. Attribute macros remove the marker notes and retain the Rust
+items. Macro expansion inside the library cannot add code to the separate
+adapter crates or reliably write their files.
 
-A marked function outside an `impl` has no receiver type, and Haxe has no
-free functions, so it becomes a static method of a class: by default the
-class named after the library, which is an interface's class when the names
-match and otherwise a class generated for the purpose. Such a class has no
-handle and no `close`; the adapters contain only its functions, which they
-call by a path from the crate's root.
+A marked function outside an `impl` becomes a static Haxe method. By default,
+the generator puts the method in the class named after the library. It uses an
+existing interface class when the names match, or generates a class for the
+functions. A function-only class needs no handle or `close`; the adapters call
+its functions through paths from the crate's root.
 
 A generated Haxe class is a plain class with the library's public API, the
 same on both runtimes, that calls native functions. On HashLink each class
@@ -622,11 +583,11 @@ change to the library's ABI.
 
 ## The `hxn` command
 
-`hxn` wraps the generator with the rest of the build, so that a library is a
-single crate and its author writes no adapter crate, build script or compiler
-flags.
+`hxn` runs generation and builds the runtime adapters for a library defined in
+a single Rust crate. It supplies the adapter crates, build scripts and
+compiler arguments.
 
-| | |
+| Command or option | Behavior |
 |---|---|
 | `hxn new <name>` | creates a library as a copy of `examples/greeter`: a crate, and a Haxe program that uses it |
 | `hxn build <hl\|cpp>` | generates the binding for a runtime and builds it |
@@ -640,40 +601,35 @@ flags.
 | `--target <triple>` on `build cpp` or `package` | cross-compiles the hxcpp binding |
 | `cppia` in place of `hl` or `cpp` | builds for hxcpp and a host executable that contains the binding, and runs the program as a script |
 
-- **The adapter crates are generated, not stored in the library.** A build
-  generates the runtime's adapter as a crate under cargo's target directory,
-  with a path dependency on the library, and builds it there. The only file
-  added to the library's directory is its manifest.
-- **The adapter uses the same hxn source as the library.** The command asks
-  cargo where the library's `hxn` dependency comes from (a path, a git
-  repository or a registry) and takes `hxn-abi` and `hxn-hl` from the same
-  source. Two different copies of `hxn-abi` would have incompatible handles.
-- **The command builds only libraries on its own version.** The adapters it
-  generates are written against the `hxn` crates of that version, so a
-  build stops when the library's `hxn` is another version, and says which
-  tag to depend on or which command to install.
-- **The adapter's lock file follows the library's.** It is copied from the
-  library's `Cargo.lock` on the first build and again whenever that file
-  changes, so the adapter builds with the versions the library resolved.
-- **The command embeds hxn's Haxe classes and C header** and writes them next
-  to the generated ones, so a library needs nothing installed except the
-  command.
-- **The compiler arguments are written to a file** that `haxe` accepts: the
-  class paths, and for hxcpp the header and library paths. `run` passes the
-  same arguments directly.
-- **On Windows a HashLink library is linked against the VM's own library.**
+- A build creates the runtime's adapter crate under Cargo's target
+  directory, adds a path dependency on the library and builds the adapter
+  there. It writes the API manifest in the library's directory.
+- The command uses Cargo metadata to locate the library's `hxn` dependency
+  in a path, git repository or registry. It takes `hxn-abi` and `hxn-hl`
+  from that same source to keep their handle types compatible.
+- Before building, the command compares its version with the library's
+  `hxn` version. A mismatch stops the build and reports the dependency tag
+  or command version to install. Generated adapters require the matching
+  version of the `hxn` crates.
+- The first adapter build copies the library's `Cargo.lock`. Later builds
+  copy it again when the library's lock file changes, preserving the
+  library's resolved dependency versions.
+- The command embeds hxn's Haxe support classes and C header and writes
+  them alongside the generated binding. The command supplies these support
+  files during each build.
+- The command writes Haxe class paths and hxcpp header/library paths to a
+  compiler argument file. `run` passes the same arguments directly to Haxe.
+- On Windows a HashLink library is linked against the VM's own library.
   Its adapter's build script links `libhl.lib` and searches for it in
   `HXN_HL_DIR`, which the command sets to the VM's directory. A library
   linked into an hxcpp program on Windows is built with the static C runtime
   that hxcpp uses, the program links the system libraries that Rust's
   standard library needs, and hxcpp is told to build 64-bit for the host,
   which is not its default.
-- **Program-specific settings are specified by the crate**, under
-  `[package.metadata.hxn]`: the program's directory and main class, and
-  `haxe-flags`, extra compiler arguments such as a `-lib` or a `-D`. The VM
-  is the user's choice, so it is given on the command line or in `HXN_VM`,
-  followed by any options.
-- **A wasm build uses the same adapter, compiled for another target.** For
+- Set the program directory, main class and extra `haxe-flags` under
+  `[package.metadata.hxn]`. Flags can include `-lib` and `-D`. Select the
+  VM and its options on the command line or through `HXN_VM`.
+- A wasm build uses the same adapter, compiled for another target. For
   HashLink it is built as a static archive for `wasm32-wasip1` and linked
   into a module that exports the primitives' resolvers and imports functions
   the program provides; Ash builds the program and loads the module from the
@@ -686,44 +642,40 @@ flags.
   used: it unwinds with wasm exceptions, as hxcpp's Emscripten build does,
   so a panic is caught there as it is natively.
 
-- **`check` runs the same program on every runtime.** It runs the library's
-  Haxe program on each runtime given, or on HashLink and hxcpp if none is,
-  and passes only if every run succeeds and all outputs are identical: a
-  binding behaves the same whichever runtime calls it, so the program's
-  output is the same too. Before building anything it compares the committed
-  manifest with one generated from the source, and stops if they differ,
-  because a build would overwrite the evidence that the API changed.
-- **`doctor` reports missing prerequisites before a build fails on them.** A
-  target is ready when cargo, haxe and the target's own tools are installed:
+- `check` runs the library's Haxe program on the requested runtimes,
+  defaulting to HashLink and hxcpp. It requires every run to succeed and all
+  outputs to match. Before building, it compares the committed manifest with
+  the current source and stops on a difference, preserving the API change
+  for review.
+- `doctor` checks Cargo, Haxe and the tools required by each target:
   a HashLink VM, hxcpp, and for wasm either a nightly toolchain with Rust's
   source and Ash, or Rust's Emscripten target, the Emscripten SDK and an
-  hxcpp that builds for it with wasm exceptions. It mentions optional tools that would make
-  builds faster, and does not require any of them. It lists targets with a
-  `std` archive in the active rustc sysroot, so custom toolchains need no
-  rustup installation. Empty target directories and core-only installations
-  are not reported as installed standard libraries. An inventory that could
-  not be read is reported as unavailable, rather than empty.
+  hxcpp that builds for it with wasm exceptions. It also lists optional
+  tools that can speed up builds. To find installed standard libraries,
+  `doctor` looks for `std` archives in the active rustc sysroot. This works
+  with custom toolchains independently of rustup. It excludes empty target
+  directories and core-only installations and reports an unreadable
+  inventory as unavailable.
   `doctor --target <triple>` checks cargo and that target's standard library
   for a Rust static binding, and its exit status reflects that check instead
   of whether a local HashLink or hxcpp program can run. A missing built-in
-  target names the `rustup target add` command; an unknown name instead
-  points to `rustc --print target-list`. A binding needs `std`, not only
-  `core`. This check does not establish that a library's own dependencies or
-  the Haxe app have their platform tools and SDKs installed.
-- **A script calls a library through its host.** A CPPIA script cannot call
-  C++ or hold a pointer, so no part of the binding is compiled into it. The
-  host is an hxcpp program built to run scripts, containing the library's
-  classes, the same ones any hxcpp program uses, and hxn's own. The generator
+  target produces a `rustup target add` command; an unknown name produces a
+  `rustc --print target-list` hint. Bindings require `std`. Dependencies of
+  the library and the Haxe app may require additional platform tools and
+  SDKs beyond this check.
+- A CPPIA script calls the binding through an hxcpp host. The host contains
+  the library's generated classes and hxn's support classes. The script uses
+  class declarations because CPPIA cannot call C++ or hold native pointers. The generator
   also writes a declaration of each class, an `extern class` with the public
   methods and no implementation, and a script is compiled against those
   declarations and against the list of classes its host contains. For
   `cppia` the command builds such a host, compiles the library's Haxe program
   as a script and has the host run it; the host passes the arguments after
   the script's name to the script as its program arguments.
-- **A package lets a Haxe program use the library without its Rust source.**
-  It is a directory that is also a haxelib:
+- `package` creates a haxelib directory containing the built library and its
+  bindings:
 
-  | | |
+  | Path | Contents |
   |---|---|
   | `<library>.hxn.json` | the manifest |
   | `hxn/` | hxn's own Haxe classes |
@@ -735,22 +687,22 @@ flags.
 
   Only `native/` differs between machines, so packaging again on another
   machine, with `--wasm` or with `--target`, adds a directory to it.
-- **`--target` cross-compiles the hxcpp binding.** The binding is a static
+- `--target` cross-compiles the hxcpp binding. The binding is a static
   library that is only linked when the program is, so cross-compiling needs
-  the Rust target installed and no linker or SDK for the target. This is
-  how a package gets libraries for iOS (`aarch64-apple-ios`), Android
+  the Rust target installed. The linker and SDK are needed later, when
+  linking the application. A package can include libraries for iOS (`aarch64-apple-ios`), Android
   (`aarch64-linux-android`) or another desktop platform. An `.hdll` is a
   shared library, linked at build time against the system it runs on, so it
   has to be built on that system. `run` and `check` reject `--target`,
   since the result cannot be executed locally.
-- **`haxelib.json` is filled in from the crate's metadata.** Name, version
+- `haxelib.json` is filled in from the crate's metadata. Name, version
   and description come from the crate, `url` from `repository`, `license`
   from the crate's SPDX expression mapped to one of the names haxelib
   accepts, and `tags` from `keywords`. `contributors` (haxelib account
   names) and `releasenote` have no Cargo equivalent and are set under
   `[package.metadata.hxn]`. `package` prints the fields `haxelib submit`
   still requires.
-- **`hxn.Bind.lib("<library>")` configures a compile to use a package.** It
+- `hxn.Bind.lib("<library>")` configures a compile to use a package. It
   is a macro that runs before typing, called from a package's
   `extraParams.hxml`, so a program's build specifies only `-lib <library>`
   and no paths. It locates the package by finding its manifest on the class
@@ -767,24 +719,22 @@ flags.
   `-D hxn_triple=<triple>`. A compile for `cppia` gets only `binding/cppia`;
   an hxcpp compile with `-D scriptable`, which builds a host, keeps every
   class of the binding and of hxn whether or not the host uses it.
-- **The macro selects classes; it does not generate them.** A library's Haxe
-  classes and the adapter they call are generated by the same run of the
-  generator, so their names and signatures cannot disagree. Generating
-  classes at compile time from the manifest would need a second emitter,
-  possibly of a different version than the one that generated the package's
-  adapter.
+- The generator produces a library's Haxe classes and adapters together,
+  keeping their names and signatures consistent. `hxn.Bind.lib` selects
+  those packaged classes during compilation. Generating them again from the
+  manifest would require a second emitter whose version could differ from
+  the package's adapter generator.
 
 A library that keeps its adapter crates in its own repository, as the fixture
 in `tests/counter` does, gives each one a build script that calls `hxn-gen`.
 
 ## Binding a C library
 
-`hxn import` turns a C library into an hxn library: a Rust crate with a safe
-API marked with hxn's attributes. The Haxe bindings then come from that
-crate as they do for any other library, and Rust programs can use the crate
-directly. `hxn-c` does the work in three steps:
+`hxn import` creates a Rust crate with safe wrappers around a C library's API
+and marks those wrappers for hxn generation. Both Rust programs and the
+generated Haxe classes use this crate. `hxn-c` imports it in three steps:
 
-1. **Header to WebIDL.** clang reads the header and writes its AST as JSON
+1. clang reads the header and writes its AST as JSON
    (`-ast-dump=json`), so hxn needs clang installed but does not link
    libclang. Only declarations in the header itself are imported; included
    headers are read to resolve typedefs. The importer maps what it can:
@@ -846,9 +796,8 @@ directly. `hxn-c` does the work in three steps:
      one does not load. For each library given to `--link` that the C
      compiler finds as a file, `nm` lists what it defines, and a function it
      does not define is listed as not imported.
-2. **The WebIDL is reviewed and edited.** A header cannot record which
-   `int` is a status code, who frees a returned pointer, or which pointer
-   may be null. That is added as extended attributes: `[HxnStatus]` makes a
+2. Review the generated WebIDL and add ownership, nullability and status
+   information through extended attributes: `[HxnStatus]` makes a
    non-zero return value an exception, `[HxnFree=f]` names the function
    that frees an object or returned text, `[HxnOut]` and `[HxnNull]` mark
    outputs, `[HxnBorrowed]` a returned object the caller must not free,
@@ -859,8 +808,7 @@ directly. `hxn-c` does the work in three steps:
    passed the same value for (see
    `hxn-c`'s `idl` module for the full list). The file is committed. `hxn-c` reads only
    this subset of WebIDL, and reports the line of anything else.
-3. **WebIDL to Rust.** Each build generates `src/bindings.rs` from the
-   WebIDL again: `extern "C"` declarations, and safe wrappers over them. An
+3. Each build regenerates `src/bindings.rs` from the reviewed WebIDL: `extern "C"` declarations, and safe wrappers over them. An
    object owns its C pointer and frees it in `Drop`, unless it is borrowed.
    An object C writes through a pointer is owned before the status is
    checked, so it is freed even when the call fails. Because a C library is
@@ -876,9 +824,8 @@ directly. `hxn-c` does the work in three steps:
    `[HxnStop]` to C, or does nothing when C cannot be told to stop. Once C
    returns, the panic is resumed or the Haxe function's failure returned,
    ahead of anything the call itself reports.
-   A callback C keeps cannot be a Haxe function, because native code does
-   not keep a host function alive or call one after the call returns. The
-   function that registers it returns a `Stream` instead. Its trampoline
+   For a retained C callback, the registration function returns a `Stream`.
+   The generated trampoline
    copies what C passes, sends it to the stream, and returns `[HxnStop]` to
    C on every call; the program reads the calls on its own thread. With more
    than one value, each call is a record, `<Callback>Event`. The stream's
@@ -890,49 +837,45 @@ directly. `hxn-c` does the work in three steps:
    and the earlier stream ends when the object is freed.
 
 The crate's `build.rs` compiles the C sources given to `--source` with the
-`cc` crate, or links the libraries given to `--link`. A static library does
-not carry the system libraries it links to the program's link, so for
-hxcpp the build reads them from cargo's messages (`linked_libs` and
-`linked_paths` of each build script) into `link.xml`, which the generated
-glue includes and a package carries beside the archive. This applies to any
-library whose dependencies link a system library, not only to imported
-ones.
+`cc` crate, or links the libraries given to `--link`. For hxcpp, the build
+reads system-library dependencies from Cargo's `linked_libs` and
+`linked_paths` messages and writes them to `link.xml`. The generated glue
+includes this file, and packages keep it beside the archive. A static archive
+requires these separate link settings for its system-library dependencies. The
+same process applies to imported libraries and other crates that link system
+libraries.
 
-The glue the hxcpp build compiles against is in headers, and hxcpp decides
-whether to recompile a file by its own timestamp alone. So the generated
-build XML lists `hxn.h` and the library's two headers as dependencies of
-every file: a change to the glue recompiles what includes it, instead of
-linking objects built against the old one. For `cpp --wasm`, hxn
-tells `cc` to compile with `emcc`. `hl --wasm` is not supported, because
-compiling C for `wasm32-wasip1` needs the WASI SDK.
+The generated build XML lists `hxn.h` and the library's two glue headers as
+dependencies of every compiled file. Header changes therefore recompile the
+affected objects, compensating for hxcpp's timestamp-only rebuild check. For
+`cpp --wasm`, hxn tells `cc` to compile with `emcc`. `hl --wasm` is not
+supported, because compiling C for `wasm32-wasip1` needs the WASI SDK.
 
-`hxn import` reads C only. A C++ library is bound through a C API over it,
-which the library's author provides: hxn does not generate one, since how
-classes, overloads, templates and exceptions map onto C is the author's
-decision.
+For a C++ library, provide a C API that specifies how its classes, overloads,
+templates and exceptions are exposed. `hxn import` reads that C API; the
+library author defines the C++ conversion.
 
-Some C is left out by design, and listed as not imported:
+The importer lists these unsupported declarations as not imported:
 
-- **An object passed to a callback.** C owns it and may free it once the
-  callback returns, and a Haxe object for it could be kept past that. A
-  lent function is given objects to keep, which this is not.
-- **A callback whose user data is neither first nor last**, or that takes
+- Objects passed to callbacks remain owned by C, which may free them when
+  the callback returns. A Haxe function could retain an object beyond that
+  lifetime, so these arguments cannot use hxn's ownership-transfer protocol.
+- A callback whose user data is neither first nor last, or that takes
   other untyped pointers, as `sqlite3_trace_v2`'s does: what those point to
   depends on the other arguments.
-- **Variadic functions and `va_list`.**
-- **Pointers whose meaning the header does not give**, such as a `void *`
+- Variadic functions and functions that use `va_list` are unsupported.
+- Pointers whose meaning the header does not give, such as a `void *`
   with no length, or a buffer C keeps. A function that needs one is
   written in the library's own Rust beside the generated bindings.
 
 ## Website
 
 `site/` is the static landing page and Quick Start, served by Cloudflare
-Workers Static Assets. `wrangler.jsonc` points at that directory; there is
-no build step or Worker script. Missing paths return 404 rather than the
-landing page. The Worker named `hxn-site` serves `hxn.dev` through a
-Custom Domain route, with its `workers.dev` address disabled. The page's
-canonical URL, social preview URLs, structured data and sitemap all use
-`https://hxn.dev/`.
+Workers Static Assets. `wrangler.jsonc` points at that directory; there is no
+build step or Worker script. Missing paths return 404. The Worker named
+`hxn-site` serves `hxn.dev` through a Custom Domain route, with its
+`workers.dev` address disabled. The page's canonical URL, social preview URLs,
+structured data and sitemap all use `https://hxn.dev/`.
 
 `site/og-hero.png` is a browser capture of the hero, framed at 1200 by
 630 CSS pixels and saved at twice that resolution. Open Graph, Twitter
@@ -969,17 +912,17 @@ it needs no Cloudflare credentials and does not publish the site.
 | Runtime | Adapter | Threads | A panic | Notes |
 |---|---|---|---|---|
 | HashLink | `-hl` as an `.hdll` | yes | becomes a thrown error | |
-| Ash, native | the same `.hdll` | yes; cooperative in its interpreter mode | becomes a thrown error | Tested in its hybrid, JIT and interpreter modes. |
+| Ash, native | `-hl` as an `.hdll` | yes; cooperative in its interpreter mode | becomes a thrown error | Tested in its hybrid, JIT and interpreter modes. |
 | Ash, wasm | `-hl` as a side module | Haxe threads as fibers; no Rust threads | becomes a thrown error | The module uses the program's allocator. |
 | hxcpp | `-c` with C++ glue | yes | becomes a thrown error | |
 | CPPIA | none of its own: a script runs in an hxcpp host that contains the binding | yes | becomes a thrown error | The host is built with `-D scriptable` and dead-code elimination off. |
-| hxcpp through Emscripten | the same | none | becomes a thrown error | Rust's prebuilt standard library unwinds with wasm exceptions, which hxcpp from git also uses; hxcpp 4.3.2 uses JavaScript exceptions and does not link with it. hxcpp's collector does not complete a forced collection there, so `hxn.Gc.collect()` does nothing and a meter only counts. |
-| hxcpp on iOS | the same, cross-compiled with `--target` | yes | not tested | hxcpp produces a static library for an app to link, and merges the Rust library into it. Tested with the examples in a simulator only, not on a device. |
-| hxcpp on Android | the same, cross-compiled with `--target` | yes | not tested | hxcpp produces a shared library for Java to load, with the Rust library linked in. Program output goes to logcat. Tested with the examples on an emulator only. |
+| hxcpp through Emscripten | `-c` with C++ glue | none | becomes a thrown error | Rust's prebuilt standard library unwinds with wasm exceptions, which hxcpp from git also uses; hxcpp 4.3.2 uses JavaScript exceptions and does not link with it. hxcpp's collector does not complete a forced collection there, so `hxn.Gc.collect()` does nothing and a meter only counts. |
+| hxcpp on iOS | `-c` with C++ glue, cross-compiled with `--target` | yes | not tested | hxcpp produces a static library for an app to link, and merges the Rust library into it. Tested with the examples in a simulator only, not on a device. |
+| hxcpp on Android | `-c` with C++ glue, cross-compiled with `--target` | yes | not tested | hxcpp produces a shared library for Java to load, with the Rust library linked in. Program output goes to logcat. Tested with the examples on an emulator only. |
 
-The manifest format is partly based on Rayzor's plugin ABI, but there is no
+Rayzor's plugin ABI informed part of the manifest format. hxn currently has no
 Rayzor adapter.
 
-On a runtime without threads, nothing in hxn blocks or starts a thread: waits
-return after a time slice, work is queued on the calling thread, and delivery
-polls once per event loop iteration.
+On runtimes without threads, hxn queues work on the calling thread. Waits
+return after a time slice, and delivery polls once per event-loop iteration.
+These builds use neither blocking waits nor spawned threads.

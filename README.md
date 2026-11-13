@@ -4,10 +4,9 @@
 
 # hxn
 
-Write a native library once in Rust and use it from Haxe on HashLink, Ash and
-hxcpp, natively and on wasm. The library stays plain Rust: you annotate the
-types and methods to expose, and hxn generates the Haxe classes and the native
-glue for each target.
+Use the same Rust library from Haxe on HashLink, Ash and hxcpp, natively and
+on wasm. Annotate the Rust types and methods to expose; hxn generates the Haxe
+classes and native adapters for each target.
 
 [docs/design.md](docs/design.md) describes how it works, and
 [docs/conventions.md](docs/conventions.md) lists the rules it follows.
@@ -42,23 +41,23 @@ choose another directory, for example:
 curl -fsSL https://raw.githubusercontent.com/hx-n/hxn/main/install.sh | HXN_VERSION=v0.2.0 HXN_INSTALL_DIR="$HOME/.local/bin" bash
 ```
 
-Or build it with cargo:
+To build the command from source, use Cargo:
 
 ```
 cargo install --git https://github.com/hx-n/hxn --tag v0.2.0 hxn-cli
 ```
 
-Then create a library with it:
+Create a library with `hxn new`:
 
 ```
 hxn new greeter
 cd greeter
 ```
 
-The library is in `src/lib.rs`. It is ordinary Rust: `#[hxn::interface]`
-exposes a struct to Haxe as a class, and `#[hxn::methods]` exposes its public
-functions as that class's public Haxe methods. A function outside an `impl`
-is marked `#[hxn::function]` and becomes a static method.
+Write the library in `src/lib.rs`. `#[hxn::interface]` exposes a Rust struct
+to Haxe as a class, and `#[hxn::methods]` exposes its public functions as that
+class's public Haxe methods. A function outside an `impl` is marked
+`#[hxn::function]` and becomes a static method.
 
 ```rust
 /// Greets people, and counts them.
@@ -93,7 +92,7 @@ impl Greeter {
 }
 ```
 
-`haxe/Main.hx` uses the generated class like any other:
+Use the generated class from `haxe/Main.hx`:
 
 ```haxe
 class Main {
@@ -145,8 +144,8 @@ name, and passes only if their output is identical. `hxn doctor` lists the
 targets your machine can build for and what is missing for the others.
 
 `hxn package` builds the library for both runtimes and collects the Haxe
-classes, the headers and the native libraries into one directory, for a Haxe
-project that does not have the Rust source. That directory is a haxelib:
+classes, headers and native libraries into a haxelib directory. Haxe projects
+can compile against this package without the library's Rust source:
 
 ```
 hxn package --release --out ../greeter-haxelib
@@ -183,31 +182,31 @@ releasenote = "First release."
 
 ## Binding a C library
 
-`hxn import` creates a Rust library crate for an existing C library, which
-hxn then binds like any other. It needs clang, which reads the header.
+`hxn import` uses clang to read a C header and generate a Rust library crate.
+The hxn generator then creates Haxe bindings from that crate.
 
 ```
 hxn import vendor/tally.h --source vendor/tally.c
 cd tally
 ```
 
-The crate's API is in `tally.webidl`, generated from the header. Review it
-and add what a header cannot express: `[HxnStatus]` on a function whose `int`
+The crate's API is in `tally.webidl`, generated from the header. Review it and
+add what a header cannot express: `[HxnStatus]` on a function whose `int`
 return value is a status code, `[HxnFree=function]` where returned text or an
 object must be freed. Each `hxn build` regenerates `src/bindings.rs` from it.
 A C callback the library calls during the call is passed a Haxe function; one
 it keeps to call later, such as the one `sqlite3_update_hook` registers, is
-returned as a stream of its calls.
-Use `--link <library>` instead of `--source` to link a library that is
-already built. See "Binding a C library" in
-[docs/design.md](docs/design.md) for what is mapped and what is not.
+returned as a stream of its calls. Use `--link <library>` instead of
+`--source` to link a library that is already built. See "Binding a C library"
+in [docs/design.md](docs/design.md) for supported declarations and import
+restrictions.
 
 ## Examples
 
-[examples/](examples) contains this library and six more. Each is a crate
-and a Haxe program, and runs from a checkout:
+[examples/](examples) contains `greeter` and six other libraries. Each example
+has a Rust crate and a Haxe program that you can run from a checkout:
 
-| Example | What it shows |
+| Example | Features |
 |---|---|
 | [greeter](examples/greeter) | A struct exposed as a Haxe class, string parameters and return values, and an error thrown as an exception. |
 | [picture](examples/picture) | A Haxe callback called by the library, a byte array return value, and an object passed as a parameter to another object's method. |
@@ -227,4 +226,4 @@ To work on hxn itself, see [AGENTS.md](AGENTS.md).
 
 ## License
 
-Apache-2.0. See [LICENSE](LICENSE).
+Licensed under Apache-2.0. See [LICENSE](LICENSE).
