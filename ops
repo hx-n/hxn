@@ -1,1 +1,1 @@
-{"author":{"id":"585844baa6074d44d241f46aa7c9f21ff46653adf617d7f070fbfe327626c989"},"ops":[{"type":3,"timestamp":1794596311,"nonce":"eSpWxTBmaEUles1uDv+JmSy+Hso=","message":"Committed as 7d7dae2: bounded-round cooperative tests, an effective slice-budget check, full Miri CI coverage and updated conventions. Full macOS Miri and the focused Linux Miri checks pass. Not pushed.","files":null}]}
+{"author":{"id":"585844baa6074d44d241f46aa7c9f21ff46653adf617d7f070fbfe327626c989"},"ops":[{"type":4,"timestamp":1794596312,"nonce":"uEdTGXLD6GfXhSOgyF18PmDEb0M=","status":2}]}
