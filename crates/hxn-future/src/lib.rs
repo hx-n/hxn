@@ -748,6 +748,18 @@ mod tests {
         }
     }
 
+    // Zero-timeout waits run one round, regardless of how long a step takes.
+    fn finish_queued<T>(future: &Future<T>) {
+        for _ in 0..32 {
+            let state = future.shared.wait_driving(Some(Duration::ZERO));
+            if state != State::Pending {
+                assert_eq!(state, State::Resolved);
+                return;
+            }
+        }
+        panic!("queued work did not finish within the round limit");
+    }
+
     #[test]
     fn waiting_drives_queued_work_a_round_at_a_time() {
         let future = queued(counting(3));
@@ -769,15 +781,22 @@ mod tests {
     }
 
     #[test]
-    fn a_wait_without_limit_finishes_short_work_and_gives_up_on_long() {
-        let short = queued(counting(500));
+    fn a_wait_without_limit_yields_after_its_slice() {
+        let short = queued(counting(1));
         assert_eq!(short.shared.wait_driving(None), State::Resolved);
+        assert_eq!(short.take(), Ok(1));
 
-        let endless = queued(|| Poll::<Result<(), Failure>>::Pending);
+        let polls = Arc::new(AtomicUsize::new(0));
+        let seen = polls.clone();
+        let endless = queued(move || {
+            assert_eq!(seen.fetch_add(1, Ordering::SeqCst), 0);
+            std::thread::sleep(local::SLICE);
+            Poll::<Result<(), Failure>>::Pending
+        });
         let started = Instant::now();
         assert_eq!(endless.shared.wait_driving(None), State::Pending);
         assert!(started.elapsed() >= local::SLICE);
-        assert!(started.elapsed() < Duration::from_secs(2));
+        assert_eq!(polls.load(Ordering::SeqCst), 1);
     }
 
     #[test]
@@ -793,7 +812,7 @@ mod tests {
         };
         let first = record("a", 2);
         let second = record("b", 3);
-        assert_eq!(second.shared.wait_driving(None), State::Resolved);
+        finish_queued(&second);
         assert_eq!(first.state(), State::Resolved);
         assert_eq!(*order.lock().unwrap(), ["a", "b", "a", "b", "b"]);
     }
@@ -814,7 +833,7 @@ mod tests {
                 _ => Poll::Ready(future.take()),
             },
         });
-        assert_eq!(outer.shared.wait_driving(None), State::Resolved);
+        finish_queued(&outer);
         assert_eq!(outer.take(), Ok(2));
     }
 
@@ -860,7 +879,7 @@ mod tests {
             let second = queued_async(queued(counting(4))).await?;
             Ok(first + second)
         });
-        assert_eq!(sum.shared.wait_driving(None), State::Resolved);
+        finish_queued(&sum);
         assert_eq!(sum.take(), Ok(7));
         assert!(!pump());
     }

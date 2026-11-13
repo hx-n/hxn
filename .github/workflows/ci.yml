@@ -75,14 +75,8 @@ jobs:
           components: miri, rust-src
       - uses: Swatinem/rust-cache@v2
       - run: cargo miri test -p hxn-abi
-      # Less the tests that count on what fits in a slice of time, which
-      # Miri runs too slowly for. The workers live as long as the process.
-      - run: >
-          cargo miri test -p hxn-future --
-          --skip a_step_may_queue_work_and_may_not_drive_it
-          --skip a_wait_without_limit_finishes_short_work_and_gives_up_on_long
-          --skip queued_work_takes_turns
-          --skip queued_async_and_stepped_work_share_the_queue
+      # The workers live as long as the process.
+      - run: cargo miri test -p hxn-future
         env:
           MIRIFLAGS: -Zmiri-ignore-leaks
 

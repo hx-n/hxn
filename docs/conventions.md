@@ -331,9 +331,12 @@ filesystem `#include "counter.h"` would then find the generated header.
 - Anything concurrent is run repeatedly, on more than one machine.
 - `cargo miri test -p hxn-abi` checks the unsafe core, and
   `cargo miri test -p hxn-future` finds interleavings a native run does not,
-  more so with `-Zmiri-many-seeds`. Under Miri, tests that depend on how much
-  work fits in a time slice are skipped, because Miri runs too slowly for
-  them.
+  more so with `-Zmiri-many-seeds`. Queued completion and fairness tests
+  advance a bounded number of one-round waits, so they do not depend on how
+  much work fits in a time slice. The budget test uses up a slice in one
+  step and checks that the wait returns before another round. These checks
+  also run under Miri. Its future suite uses `-Zmiri-ignore-leaks` because
+  the worker pool lives as long as the process.
 - A test that depends on a runtime's limitations documents this next to the
   check it skips, with the reason.
 - The fixture's JSON manifest is committed, and a test fails when it is out
