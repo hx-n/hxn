@@ -136,6 +136,16 @@ filesystem `#include "counter.h"` would then find the generated header.
   returned `BTreeSet` is in Rust's `Ord` order; a `HashSet` has no promised
   order. Adding elements in Haxe does not sort the set. Sets are data
   everywhere data is accepted, and a set of `u8` is `hxn.Set<Int>`, not `Bytes`.
+- A non-nullable record field can use `#[hxn(default)]`, requiring its Rust
+  type to implement `Default`, or `#[hxn(default = "Item::default_unit")]`.
+  The custom function is public, takes no arguments, returns the field's
+  type, and its path is relative to the library root. Haxe may omit the field
+  or set it to null to request its Rust default; zero, false and empty values
+  override the default. The Haxe input stays unchanged, and Rust returns
+  materialized fields. A default adds a presence byte to that field's wire
+  encoding and is recorded in the manifest; regenerate both sides together.
+  `Option` fields already default to `None` and do not accept this annotation.
+  Tagged enum fields do not have defaults.
 - An empty data record occupies one zero byte, including inside a collection.
   This lets the reader bound every collection count by the available bytes.
 - Recursive data goes through a `Vec` or a `Box` and may nest at most

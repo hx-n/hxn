@@ -2,8 +2,8 @@ class Main {
 	static function main() {
 		var pantry = new Pantry();
 
-		// A record is constructed from named fields. `note` is omitted.
-		pantry.stock({name: "eggs", quantity: 12, unit: Unit.Each});
+		// Rust fills the omitted unit with Item::default_unit; note is null.
+		pantry.stock({name: "eggs", quantity: 12});
 		pantry.stock({name: "flour", quantity: 2, unit: Unit.Kilo, note: "wholemeal"});
 		var rice:Item = {name: "rice", quantity: 1, unit: Unit.Kilo};
 		Sys.println('${pantry.stock(rice)} items stocked');

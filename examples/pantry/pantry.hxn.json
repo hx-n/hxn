@@ -15,7 +15,7 @@
       "fields": [
         { "name": "name", "type": "str" },
         { "name": "quantity", "type": "i32" },
-        { "name": "unit", "type": "Unit" },
+        { "name": "unit", "type": "Unit", "default": "Item::default_unit" },
         { "name": "note", "type": "option<str>" }
       ]
     }

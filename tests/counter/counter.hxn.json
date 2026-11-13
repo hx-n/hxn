@@ -75,6 +75,19 @@
         { "name": "nested", "type": "tuple<tuple<bool, u8>, tuple<str, f64>>" },
         { "name": "listed", "type": "list<tuple<bool>>" }
       ]
+    },
+    {
+      "name": "Defaults",
+      "docs": "Fields whose omitted values are constructed by Rust.",
+      "fields": [
+        { "name": "name", "type": "str" },
+        { "name": "retries", "type": "i32", "default": true },
+        { "name": "enabled", "type": "bool", "default": true },
+        { "name": "tags", "type": "list<str>", "default": true },
+        { "name": "limit", "type": "u8", "default": "Defaults::limit" },
+        { "name": "origin", "type": "Point", "default": "Defaults::origin" },
+        { "name": "note", "type": "option<str>" }
+      ]
     }
   ],
   "tagged": [
@@ -1349,6 +1362,55 @@
       "name": "Shapes",
       "docs": "Static functions over data types, with no instance.",
       "methods": [
+        {
+          "name": "defaults",
+          "kind": "static",
+          "params": [{ "name": "value", "type": "Defaults" }],
+          "returns": "Defaults",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "default_list",
+          "kind": "static",
+          "params": [{ "name": "values", "type": "list<Defaults>" }],
+          "returns": "list<Defaults>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "default_origins",
+          "kind": "static",
+          "params": [],
+          "returns": "i32",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "default_async",
+          "kind": "static",
+          "params": [{ "name": "value", "type": "Defaults" }],
+          "returns": "future<Defaults>",
+          "async": true,
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "default_signal",
+          "kind": "static",
+          "params": [],
+          "returns": "signal<Defaults>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "mapped_defaults",
+          "kind": "static",
+          "params": [{ "name": "f", "type": "fn(Defaults) -> Defaults" }],
+          "returns": "Defaults",
+          "fallible": true,
+          "blocking": false
+        },
         {
           "name": "tuple_data",
           "kind": "static",

@@ -157,6 +157,19 @@ Plain data crosses by value. A library marks it with `#[hxn::data]`:
   needed is refused in Haxe, before anything is written. A Haxe enum
   cannot have methods, so a tagged enum's serializer is a separate
   generated class: `EventWire` for `Event`.
+- **A record field may have a Rust default.** `#[hxn(default)]` calls
+  `Default::default()` when Haxe omits the field; `#[hxn(default =
+  "Item::default_unit")]` calls that public zero-argument function, whose
+  path is relative to the library root. The generated Haxe field is
+  nullable and starts as null. Null requests the default on every crossing
+  into Rust; false, zero and empty collections are explicit values. Defaults
+  are constructed lazily by the adapter, without changing the Haxe input.
+  Rust always writes the actual value back, so returned fields are filled.
+  Each defaulted field adds a presence byte before its usual encoding;
+  bindings and adapters must be regenerated together after changing a
+  default annotation. The manifest records `default: true` or the function
+  path. Defaults apply to non-nullable record fields. An `Option` field
+  already uses `None` when omitted; tagged enum fields remain required.
 - **Data is accepted everywhere a value is:** as a parameter or a return
   value, carried by a future, a stream or a signal, returned from an
   `async fn`, and as a parameter or return value of a callback. The

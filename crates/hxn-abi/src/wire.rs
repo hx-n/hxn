@@ -10,6 +10,7 @@
 //! | text, bytes | a length as an `i32`, then that many bytes; text is UTF-8 |
 //! | an `Option` | one byte, 0 or 1, then the value if 1 |
 //! | a list or set | a count as an `i32`, then each item |
+//! | a defaulted record field | a presence byte, then the value if present; Rust fills absent values |
 //! | a record | its fields in declaration order, or one zero byte if empty |
 //! | a tagged enum | the variant's index, starting at 0, as an `i32`, then its fields |
 //! | a map | a count as an `i32`, then each key and its value |

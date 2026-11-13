@@ -31,6 +31,16 @@ pub struct Field {
     pub name: String,
     pub docs: Vec<String>,
     pub ty: Data,
+    /// An omitted record field is filled on the Rust side.
+    pub default: Option<FieldDefault>,
+}
+
+/// How an omitted record field is constructed in the library.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum FieldDefault {
+    Trait,
+    /// A public, zero-argument function path relative to the library root.
+    Function(String),
 }
 
 /// A C-like enum: a Haxe `enum abstract` over `Int`.

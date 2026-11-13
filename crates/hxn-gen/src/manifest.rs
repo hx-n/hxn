@@ -1,7 +1,9 @@
 //! The manifest: a library's API, in a form that is committed and reviewed.
 //! A change to it is a change to the library's ABI.
 
-use crate::model::{Enumeration, Interface, Library, Method, Receiver, Record, Tagged};
+use crate::model::{
+    Enumeration, FieldDefault, Interface, Library, Method, Receiver, Record, Tagged,
+};
 
 fn quoted(text: &str) -> String {
     let mut out = String::from("\"");
@@ -140,8 +142,13 @@ fn record(record: &Record) -> String {
         .fields
         .iter()
         .map(|field| {
+            let default = match &field.default {
+                None => String::new(),
+                Some(FieldDefault::Trait) => String::from(", \"default\": true"),
+                Some(FieldDefault::Function(path)) => format!(", \"default\": {}", quoted(path)),
+            };
             format!(
-                "        {{ \"name\": {}, \"type\": {} }}",
+                "        {{ \"name\": {}, \"type\": {}{default} }}",
                 quoted(&field.name),
                 quoted(&field.ty.name())
             )

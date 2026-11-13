@@ -45,6 +45,34 @@ class Generated {
 		throws("a number that names none is refused", () -> Shapes.louder((77 : Mode)), "number out of range");
 		check("an enum that may be missing", Shapes.modeOf(9) == Mode.Loud && Shapes.modeOf(4) == null);
 
+		var before = Shapes.defaultOrigins();
+		var omitted:Defaults = {name: "omitted"};
+		check("default fields start absent in Haxe", omitted.retries == null && omitted.enabled == null && omitted.origin == null);
+		var defaults = Shapes.defaults(omitted);
+		check("Rust fills omitted scalar and collection fields", defaults.retries == 0 && defaults.enabled == false && defaults.tags.length == 0);
+		check("custom Rust functions fill omitted fields", defaults.limit == 7 && defaults.origin.x == 3 && defaults.origin.y == -2 && defaults.note == null);
+		check("defaulting does not mutate the input", omitted.origin == null && Shapes.defaultOrigins() == before + 1);
+		var again = Shapes.defaults(defaults);
+		check("returned defaults are present on the next call", again.origin.x == 3 && Shapes.defaultOrigins() == before + 1);
+		var provided = Shapes.defaults({name: "provided", retries: 0, enabled: false, tags: [], limit: 0, origin: {x: 0, y: 0}, note: "kept"});
+		check("false, zero and empty values override defaults", provided.limit == 0 && provided.origin.x == 0 && provided.note == "kept" && Shapes.defaultOrigins() == before + 1);
+		defaults.origin = null;
+		defaults.limit = null;
+		defaults = Shapes.defaults(defaults);
+		check("null requests the Rust default again", defaults.limit == 7 && defaults.origin.y == -2 && Shapes.defaultOrigins() == before + 2);
+		var list = Shapes.defaultList([{name: "first"}, {name: "second"}]);
+		list[0].tags.push("one");
+		check("nested default values have independent storage", list.length == 2 && list[1].tags.length == 0 && list[1].origin.x == 3);
+		check("a future carries materialized defaults", Shapes.defaultAsync({name: "async"}).await().limit == 7);
+		check("a signal carries explicit defaultable fields", Shapes.defaultSignal().peek().limit == 8);
+		var called = Shapes.mappedDefaults(value -> {
+			check("a callback receives present fields", value.retries == 4 && value.limit == 9 && value.origin.y == 6);
+			return {name: "from callback"};
+		});
+		check("a callback result is defaulted in Rust", called.name == "from callback" && called.limit == 7 && called.origin.x == 3);
+		throws("defaultable fields retain range checks", () -> Shapes.defaults({name: "bad", limit: 256}), "number out of range");
+		throws("required fields remain required at runtime", () -> Shapes.defaults({name: null}), "null where text is needed");
+
 		var made:hxn.Tuple<String, Int> = hxn.Tuple.of("pair", 42);
 		check("a tuple constructor infers each position", made.at(0) == "pair" && made.at(1) == 42 && made.length == 2);
 		var explicit = new hxn.Tuple<String, Int>("typed", 7);

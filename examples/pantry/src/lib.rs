@@ -18,9 +18,16 @@ pub enum Unit {
 pub struct Item {
     pub name: String,
     pub quantity: i32,
+    #[hxn(default = "Item::default_unit")]
     pub unit: Unit,
     /// An optional field can be omitted in Haxe.
     pub note: Option<String>,
+}
+
+impl Item {
+    pub fn default_unit() -> Unit {
+        Unit::Each
+    }
 }
 
 /// The error type of `take`. A tagged enum becomes a Haxe enum with the same

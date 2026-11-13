@@ -67,12 +67,84 @@ pub struct TupleData {
     pub listed: Vec<(bool,)>,
 }
 
+/// Fields whose omitted values are constructed by Rust.
+#[hxn::data]
+#[derive(Clone)]
+pub struct Defaults {
+    pub name: String,
+    #[hxn(default)]
+    pub retries: i32,
+    #[hxn(default)]
+    pub enabled: bool,
+    #[hxn(default)]
+    pub tags: Vec<String>,
+    #[hxn(default = "Defaults::limit")]
+    pub limit: u8,
+    #[hxn(default = "Defaults::origin")]
+    pub origin: Point,
+    pub note: Option<String>,
+}
+
+static DEFAULT_ORIGINS: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
+
+impl Defaults {
+    pub fn limit() -> u8 {
+        7
+    }
+
+    pub fn origin() -> Point {
+        DEFAULT_ORIGINS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        Point { x: 3.0, y: -2.0 }
+    }
+}
+
 /// Static functions over data types, with no instance.
 #[hxn::interface]
 pub struct Shapes;
 
 #[hxn::methods]
 impl Shapes {
+    pub fn defaults(value: Defaults) -> Defaults {
+        value
+    }
+
+    pub fn default_list(values: Vec<Defaults>) -> Vec<Defaults> {
+        values
+    }
+
+    pub fn default_origins() -> i32 {
+        DEFAULT_ORIGINS.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    pub async fn default_async(value: Defaults) -> Defaults {
+        value
+    }
+
+    pub fn default_signal() -> Signal<Defaults> {
+        let (_source, value) = hxn_future::signal(Defaults {
+            name: String::from("signal"),
+            retries: 2,
+            enabled: true,
+            tags: vec![String::from("ready")],
+            limit: 8,
+            origin: Point { x: 0.0, y: 1.0 },
+            note: None,
+        });
+        value
+    }
+
+    pub fn mapped_defaults<E>(f: impl Fn(Defaults) -> Result<Defaults, E>) -> Result<Defaults, E> {
+        f(Defaults {
+            name: String::from("callback"),
+            retries: 4,
+            enabled: true,
+            tags: vec![],
+            limit: 9,
+            origin: Point { x: 5.0, y: 6.0 },
+            note: None,
+        })
+    }
+
     pub fn tuple_data(value: TupleData) -> TupleData {
         value
     }

@@ -33,7 +33,10 @@ pub fn function(_arguments: TokenStream, item: TokenStream) -> TokenStream {
 
 /// Marks a struct or an enum as plain data, which is passed by value. A
 /// struct's public fields become the fields of a Haxe class. A C-like enum
-/// becomes a Haxe `enum abstract` with the same names.
+/// becomes a Haxe `enum abstract` with the same names. A non-nullable record
+/// field may use `#[hxn(default)]` or `#[hxn(default = "function_path")]`;
+/// Rust fills omitted fields with `Default::default()` or that public
+/// zero-argument function, whose path is relative to the library root.
 #[proc_macro_attribute]
 pub fn data(_arguments: TokenStream, item: TokenStream) -> TokenStream {
     without_notes(item)

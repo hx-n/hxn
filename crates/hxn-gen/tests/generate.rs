@@ -2188,6 +2188,128 @@ fn text_of(files: &[hxn_gen::File], path: &str) -> String {
 }
 
 #[test]
+fn record_defaults_are_materialized_in_rust() {
+    let library = parse(
+        "thing",
+        r#"
+#[hxn::data] pub struct Options {
+    pub name: String,
+    #[hxn(default)] pub retries: i32,
+    #[hxn(default)] pub enabled: bool,
+    #[hxn(default)] pub tags: Vec<String>,
+    #[hxn(default = "defaults::point")] pub origin: Point,
+    pub note: Option<String>,
+}
+#[hxn::data] pub struct Point { pub x: f64, pub y: f64 }
+#[hxn::interface] pub struct Thing;
+#[hxn::methods] impl Thing {
+    pub fn values(value: Options) -> Options { todo!() }
+}
+"#,
+    )
+    .unwrap();
+    let defaults = &library.records[0].fields;
+    assert_eq!(defaults[0].default, None);
+    assert_eq!(defaults[1].default, Some(hxn_gen::FieldDefault::Trait));
+    assert_eq!(
+        defaults[4].default,
+        Some(hxn_gen::FieldDefault::Function("defaults::point".into()))
+    );
+    for adapter in [
+        hxn_gen::c_adapter(&library, "thing_core"),
+        hxn_gen::hl_adapter(&library, "thing_core"),
+    ] {
+        assert!(adapter.contains(
+            "retries: if input.bool()? { input.i32()? } else { std::default::Default::default() }"
+        ));
+        assert!(adapter.contains("origin: if input.bool()? { hxn_read_point(input)? } else { hxn_library::defaults::point() }"));
+        assert!(
+            adapter.contains("hxn_abi::wire::bool(out, true); hxn_abi::wire::i32(out, *part);")
+        );
+    }
+    for files in [
+        hxn_gen::haxe_hl(&library),
+        cpp_classes(&library),
+        hxn_gen::haxe_cppia(&library),
+    ] {
+        let options = text_of(&files, "Options.hx");
+        assert!(options.contains("public var retries:Null<Int> = null;"));
+        assert!(options.contains("public var enabled:Null<Bool> = null;"));
+        assert!(options.contains("public var tags:Null<Array<String>> = null;"));
+        assert!(options.contains("public var origin:Null<Point> = null;"));
+        assert!(options.contains("public var name:String;"));
+        assert!(options.contains("if (retries == null)"));
+        assert!(options.contains("var retries:Null<Int> = (input.readByte() == 0 ? null : input.readInt32() : Null<Int>);"));
+    }
+    let manifest = hxn_gen::manifest(&library);
+    assert!(manifest.contains(r#"{ "name": "retries", "type": "i32", "default": true }"#));
+    assert!(
+        manifest.contains(r#"{ "name": "origin", "type": "Point", "default": "defaults::point" }"#)
+    );
+    assert!(manifest.contains(r#"{ "name": "note", "type": "option<str>" }"#));
+}
+
+#[test]
+fn invalid_record_defaults_are_refused_at_the_field() {
+    let cases = [
+        ("#[hxn(default, default)] pub x: i32", "only one default"),
+        (
+            "#[hxn(default)] #[hxn(default)] pub x: i32",
+            "only one default",
+        ),
+        ("#[hxn(default)] #[hxn()] pub x: i32", "expected `default`"),
+        ("#[hxn()] pub x: i32", "expected `default`"),
+        ("#[hxn(unknown)] pub x: i32", "expected `default`"),
+        ("#[hxn(default = 7)] pub x: i32", "expected string literal"),
+        (
+            "#[hxn(default = \"make()\")] pub x: i32",
+            "unexpected token",
+        ),
+        (
+            "#[hxn(default = \"crate::make\")] pub x: i32",
+            "relative to the library root",
+        ),
+        (
+            "#[hxn(default = \"::std::default::Default::default\")] pub x: i32",
+            "relative to the library root",
+        ),
+        (
+            "#[hxn(default = \"make::<i32>\")] pub x: i32",
+            "relative to the library root",
+        ),
+        (
+            "#[hxn(default)] pub x: Option<String>",
+            "Option field already uses None",
+        ),
+        (
+            "#[hxn(default)] pub x: Box<Option<String>>",
+            "Option field already uses None",
+        ),
+    ];
+    for (field, expected) in cases {
+        let error = parse(
+            "thing",
+            &format!("#[hxn::data]\npub struct Options {{\n{field}\n}}"),
+        )
+        .unwrap_err();
+        assert_eq!(error.line, 3, "{field}");
+        assert!(
+            error.message.contains(expected),
+            "{field}: {}",
+            error.message
+        );
+    }
+    for variant in ["One(#[hxn(default)] i32)", "One { #[hxn(default)] x: i32 }"] {
+        let error = parse(
+            "thing",
+            &format!("#[hxn::data] pub enum Event {{ {variant} }}"),
+        )
+        .unwrap_err();
+        assert!(error.message.contains("not an enum variant field"));
+    }
+}
+
+#[test]
 fn tuples_keep_their_position_types_and_arity() {
     let library = parse("thing", r#"
 #[hxn::data] pub struct Data { pub pair: (String, i32), pub flags: Vec<(bool,)> }

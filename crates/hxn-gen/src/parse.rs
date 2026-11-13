@@ -8,8 +8,8 @@ use syn::spanned::Spanned;
 use syn::{Attribute, FnArg, ImplItem, Item, Meta, ReturnType, Visibility};
 
 use crate::model::{
-    Case, Data, Enumeration, Error, Field, Interface, Library, Method, Number, Param, Receiver,
-    Record, Tagged, Type, Variant,
+    Case, Data, Enumeration, Error, Field, FieldDefault, Interface, Library, Method, Number, Param,
+    Receiver, Record, Tagged, Type, Variant,
 };
 use crate::names::{exception_class, pascal, wire_class};
 
@@ -1320,6 +1320,75 @@ fn field_data(ty: &syn::Type, known: Known) -> Result<Data, Error> {
     Ok(data)
 }
 
+fn field_default(field: &syn::Field) -> Result<Option<FieldDefault>, Error> {
+    let mut default = None;
+    for attribute in field.attrs.iter().filter(|a| a.path().is_ident("hxn")) {
+        if matches!(&attribute.meta, Meta::List(list) if list.tokens.is_empty()) {
+            return error(
+                attribute.span(),
+                "expected `default` or `default = \"function_path\"`",
+            );
+        }
+        attribute
+            .parse_nested_meta(|note| {
+                if !note.path.is_ident("default") {
+                    return Err(note.error("expected `default` or `default = \"function_path\"`"));
+                }
+                if default.is_some() {
+                    return Err(note.error("a field has only one default"));
+                }
+                default = Some(if note.input.peek(syn::Token![=]) {
+                    let text: syn::LitStr = note.value()?.parse()?;
+                    let path: syn::Path = text.parse()?;
+                    if path.leading_colon.is_some()
+                        || path.segments.iter().any(|segment| {
+                            !segment.arguments.is_none()
+                                || matches!(
+                                    segment.ident.to_string().as_str(),
+                                    "crate" | "self" | "super" | "Self"
+                                )
+                        })
+                    {
+                        return Err(
+                            note.error("a default function is a path relative to the library root")
+                        );
+                    }
+                    FieldDefault::Function(
+                        path.segments
+                            .iter()
+                            .map(|part| part.ident.to_string())
+                            .collect::<Vec<_>>()
+                            .join("::"),
+                    )
+                } else {
+                    FieldDefault::Trait
+                });
+                Ok(())
+            })
+            .map_err(|failure| Error {
+                file: None,
+                line: failure.span().start().line,
+                message: failure.to_string(),
+            })?;
+        if default.is_none() {
+            return error(
+                attribute.span(),
+                "expected `default` or `default = \"function_path\"`",
+            );
+        }
+    }
+    Ok(default)
+}
+
+// A Box has the same Haxe representation as its contents.
+fn nullable_data(data: &Data) -> bool {
+    match data {
+        Data::Option(_) => true,
+        Data::Boxed(inner) => nullable_data(inner),
+        _ => false,
+    }
+}
+
 // The variants of a tagged enum.
 fn cases(item: &syn::ItemEnum, known: Known) -> Result<Vec<Case>, Error> {
     let mut cases = Vec::new();
@@ -1339,10 +1408,17 @@ fn cases(item: &syn::ItemEnum, known: Known) -> Result<Vec<Case>, Error> {
                 None if count == 1 => String::from("value"),
                 None => format!("value{index}"),
             };
+            if field_default(field)?.is_some() {
+                return error(
+                    field.span(),
+                    "a default belongs to a record field, not an enum variant field",
+                );
+            }
             fields.push(Field {
                 name,
                 docs: docs(&field.attrs),
                 ty: field_data(&field.ty, known)?,
+                default: None,
             });
         }
         cases.push(Case {
@@ -1414,10 +1490,18 @@ fn data_items(
                         );
                     }
                     let ty = field_data(&field.ty, known)?;
+                    let default = field_default(field)?;
+                    if default.is_some() && nullable_data(&ty) {
+                        return error(
+                            field.span(),
+                            "an Option field already uses None when omitted; a default requires a non-nullable field",
+                        );
+                    }
                     fields.push(Field {
                         name,
                         docs: docs(&field.attrs),
                         ty,
+                        default,
                     });
                 }
                 records.push(Record {
