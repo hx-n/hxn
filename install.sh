@@ -65,7 +65,8 @@ main() {
 
     local temporary
     temporary=$(mktemp -d "${TMPDIR:-/tmp}/hxn-install.XXXXXXXX")
-    trap 'rm -rf -- "$temporary"' EXIT
+    # Capture the quoted path while main's locals are still in scope.
+    trap "$(printf 'rm -rf -- %q' "$temporary")" EXIT
     trap 'exit 130' INT
     trap 'exit 143' TERM
 

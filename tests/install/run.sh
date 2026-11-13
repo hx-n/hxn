@@ -30,7 +30,7 @@ with tempfile.TemporaryDirectory(prefix='hxn-installer-test-') as temporary:
     fixtures = root / 'releases'
     fixtures.mkdir()
     downloads = root / 'downloads.log'
-    scratch = root / 'scratch'
+    scratch = root / "scratch with spaces and 'quotes'"
     scratch.mkdir()
     (tools / 'uname').write_text('''#!/bin/bash
 case "$1" in
