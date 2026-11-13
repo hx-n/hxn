@@ -78,7 +78,7 @@ dependencies = [
 [[package]]
 name = "hl_abi"
 version = "0.1.0"
-source = "git+https://github.com/rayzor-blade/hl_abi#2046a265f45ebe7a1093e59074d8eced2b0c0376"
+source = "git+https://github.com/rayzor-blade/hl_abi#f38e06df4c7f7d7e79348df345c71ea70770a82d"
 
 [[package]]
 name = "hxn"
