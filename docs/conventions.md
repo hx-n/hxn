@@ -57,7 +57,7 @@ The rules that hxn's code, its bindings and its tests follow.
 | release function for any handle | `hxn_<library>_release` |
 | the library's queue of ready results | `hxn_<library>_outbox_wait`, `hxn_<library>_outbox_next` |
 | waiting on and watching a future, stream or signal | `hxn_<library>_future_wait`, `_future_state`, `_future_watch`; the same for `stream` and `signal` |
-| taking the value one carries | `hxn_<library>_future_take_<kind>`, `hxn_<library>_stream_next_<kind>`, `hxn_<library>_signal_get_<kind>`; the kind is `unit`, `bool`, `int`, `long`, `float`, `text`, `bytes`, the name of a narrower number type, or the snake-case name of an interface or data type, prefixed with `option_`, `list_`, `map_`, `set_` or `sorted_set_` for those wrappers. Two carried types that map to the same name are rejected |
+| taking the value one carries | `hxn_<library>_future_take_<kind>`, `hxn_<library>_stream_next_<kind>`, `hxn_<library>_signal_get_<kind>`; the kind is `unit`, `bool`, `int`, `long`, `float`, `text`, `bytes`, the name of a narrower number type, or the snake-case name of an interface or data type, prefixed with `option_`, `list_`, `map_`, `set_` or `sorted_set_` for those wrappers, and with `tuple_<arity>_` followed by each element kind for a tuple. Two carried types that map to the same name are rejected |
 | fetching the typed error of the last failure | `hxn_<library>_thrown_take`, generated only when a function has a `#[hxn::data]` error type |
 | exception class for a typed error | Haxe class `<Name>Exception`, with a trailing `Error` removed from the name first |
 | serializer for a tagged enum | Haxe class `<Name>Wire` |
@@ -112,13 +112,18 @@ filesystem `#include "counter.h"` would then find the generated header.
 - Plain data is a struct or an enum marked `#[hxn::data]`, `pub` and
   reachable at the crate's root, with a name that no interface uses. A struct has
   named fields, all `pub`, each a `bool`, a fixed-width number,
-  `String`, `Vec<u8>`, other data, or an `Option`, `Vec`, `Box`, `HashMap`,
+  `String`, `Vec<u8>`, other data, a nonempty tuple, or an `Option`, `Vec`, `Box`, `HashMap`,
   `BTreeMap`, `HashSet` or `BTreeSet` of these. Map keys are `String`, an
   integer of at most 32 bits, or a C-like enum. An enum is either C-like
   (no variant has fields; explicit discriminants are allowed) or tagged
   (some variants have fields, named or unnamed; no explicit discriminants).
   Data is accepted by value or by `&`, a list also as `&[T]`, and returned
   by value. `Option`, `Vec`, maps and sets of data are accepted wherever data is.
+- A nonempty Rust tuple `(A, B, ...)` is a typed Haxe anonymous record
+  `{ _0: A, _1: B, ... }`. Each position is required, including `_0` for
+  `(T,)`; its value can be null only when that position is an `Option`.
+  Elements are encoded and decoded in position order. Tuples are data
+  wherever data is accepted, but `()` is not a data field.
 - A `HashSet<T>` or `BTreeSet<T>` is an `hxn.Set<T>` in Haxe. The wrapper
   accepts array literals and provides membership, insertion, removal and
   iteration. Haxe membership uses `==` unless constructed with an equality

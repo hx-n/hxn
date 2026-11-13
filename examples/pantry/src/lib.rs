@@ -87,6 +87,14 @@ impl Pantry {
         self.items.iter().find(|item| item.name == name).cloned()
     }
 
+    /// Stocked names and quantities, in shelf order.
+    pub fn quantities(&self) -> Vec<(String, i32)> {
+        self.items
+            .iter()
+            .map(|item| (item.name.clone(), item.quantity))
+            .collect()
+    }
+
     /// Requested names that are not stocked, returned once each in order.
     pub fn missing(
         &self,

@@ -72,6 +72,15 @@
           "blocking": false
         },
         {
+          "name": "quantities",
+          "docs": "Stocked names and quantities, in shelf order.",
+          "kind": "method",
+          "params": [],
+          "returns": "list<tuple<str, i32>>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
           "name": "missing",
           "docs": "Requested names that are not stocked, returned once each in order.",
           "kind": "method",

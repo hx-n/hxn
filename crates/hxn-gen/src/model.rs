@@ -91,6 +91,8 @@ pub enum Data {
     Tagged(String),
     Option(Box<Data>),
     List(Box<Data>),
+    /// A nonempty Rust tuple: a typed Haxe record with `_0`, `_1`, ... fields.
+    Tuple(Vec<Data>),
     /// A Rust set, represented as `hxn.Set` in Haxe. A sorted set writes its
     /// elements in Rust's `Ord` order.
     Set {
@@ -119,6 +121,7 @@ impl Data {
             | Self::Tagged(_)
             | Self::Option(_)
             | Self::List(_)
+            | Self::Tuple(_)
             | Self::Set { .. }
             | Self::Map { .. } => Some(Type::Bytes),
             _ => None,
@@ -138,6 +141,10 @@ impl Data {
             Self::Enum(name) | Self::Record(name) | Self::Tagged(name) => name.clone(),
             Self::Option(of) => format!("option<{}>", of.name()),
             Self::List(of) => format!("list<{}>", of.name()),
+            Self::Tuple(parts) => format!(
+                "tuple<{}>",
+                parts.iter().map(Self::name).collect::<Vec<_>>().join(", ")
+            ),
             Self::Set { of, sorted } => format!(
                 "{}<{}>",
                 if *sorted { "sorted_set" } else { "set" },
@@ -162,6 +169,11 @@ impl Data {
             Self::Enum(name) | Self::Record(name) | Self::Tagged(name) => crate::names::snake(name),
             Self::Option(of) => format!("option_{}", of.symbol()),
             Self::List(of) => format!("list_{}", of.symbol()),
+            Self::Tuple(parts) => format!(
+                "tuple_{}_{}",
+                parts.len(),
+                parts.iter().map(Self::symbol).collect::<Vec<_>>().join("_")
+            ),
             Self::Set { of, sorted } => format!(
                 "{}_{}",
                 if *sorted { "sorted_set" } else { "set" },

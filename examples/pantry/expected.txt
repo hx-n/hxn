@@ -1,5 +1,6 @@
 3 items stocked
 rice: 1
+shelves: eggs=12, flour=2, rice=1
 flour: 2, wholemeal
 eggs note: null, salt: null
 low on flour and rice

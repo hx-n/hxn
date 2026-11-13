@@ -88,6 +88,7 @@ Plain data crosses by value. A library marks it with `#[hxn::data]`:
 | a C-like enum (no variant has fields) | an `enum abstract` over `Int` with the same values |
 | a tagged enum (some variants have fields) | an `enum` with the same constructors |
 | `Option<T>`, `Vec<T>` | `Null<T>`, `Array<T>` |
+| a nonempty tuple `(A, B, ...)` | a typed anonymous record `{ _0: A, _1: B, ... }` |
 | `HashMap<K, V>`, `BTreeMap<K, V>` | `Map<K, V>`; keys are `String`, `Int` or a C-like enum |
 | `HashSet<T>`, `BTreeSet<T>` | `hxn.Set<T>`; a `BTreeSet` returns Rust's `Ord` order |
 | `Box<T>` | `T` |
@@ -110,6 +111,13 @@ Plain data crosses by value. A library marks it with `#[hxn::data]`:
   is expressed. The generated reader for such a type is recursive, so it
   tracks nesting depth and fails with `Status::DEPTH` beyond
   `wire::Reader::DEPTH`.
+- **Tuples keep each position's type.** A nonempty Rust tuple crosses as a
+  Haxe anonymous record with `_0`, `_1`, and subsequent fields. A one-element
+  tuple `(T,)` still has an `_0` field. Its elements use the data encoding,
+  in position order, with no count or tag. The Haxe reader reads each element
+  before constructing the record, so evaluation order cannot reorder the
+  input. Tuples can nest anywhere data is accepted; `()` remains a return
+  value that carries no data, rather than an empty data tuple.
 - **A map may be keyed by a C-like enum.** Haxe keeps the enum type in
   `Map<Mode, T>` and uses its integer key storage. The wire contains each
   key's declared discriminant, checked by Rust's enum reader, followed by

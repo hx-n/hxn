@@ -2188,6 +2188,59 @@ fn text_of(files: &[hxn_gen::File], path: &str) -> String {
 }
 
 #[test]
+fn tuples_keep_their_position_types_and_arity() {
+    let library = parse("thing", r#"
+#[hxn::data] pub struct Data { pub pair: (String, i32), pub flags: Vec<(bool,)> }
+#[hxn::interface] pub struct Thing;
+#[hxn::methods] impl Thing {
+    pub fn values(value: &Data) -> (String, i32) { todo!() }
+    pub fn one(value: (bool,)) -> (bool,) { todo!() }
+    pub fn first() -> Future<((bool,), i32)> { todo!() }
+    pub fn second() -> Future<(bool, (i32,))> { todo!() }
+    pub fn callback<E>(f: impl Fn((String, i32)) -> Result<(i32, String), E>) -> (i32, String) { todo!() }
+}
+"#).unwrap();
+    assert_eq!(
+        library.interfaces[0].methods[0].returns_name(),
+        "tuple<str, i32>"
+    );
+    assert_eq!(
+        library.interfaces[0].methods[1].params[0].type_name(),
+        "tuple<bool>"
+    );
+    for adapter in [
+        hxn_gen::c_adapter(&library, "thing_core"),
+        hxn_gen::hl_adapter(&library, "thing_core"),
+    ] {
+        assert!(adapter.contains("(String, i32,)"));
+        assert!(adapter.contains("(input.bool()?,)"));
+        assert!(adapter.contains("input.items(1)?"));
+        assert!(adapter.contains("future_take_tuple_2_tuple_1_bool_int"));
+        assert!(adapter.contains("future_take_tuple_2_bool_tuple_1_int"));
+    }
+    for files in [hxn_gen::haxe_hl(&library), cpp_classes(&library)] {
+        let data = text_of(&files, "Data.hx");
+        assert!(data.contains("pair:{ _0: String, _1: Int }"));
+        assert!(data.contains("flags:Array<{ _0: Bool }>"));
+        let thing = text_of(&files, "Thing.hx");
+        assert!(thing.contains("function one(value:{ _0: Bool }):{ _0: Bool }"));
+        assert!(thing.contains("({ _0: String, _1: Int }) -> { _0: Int, _1: String }"));
+        assert!(thing.contains("var p0 = input.readInt32(); var p1 = hxn.Wire.readText(input);"));
+    }
+    for source in [
+        "#[hxn::data] pub struct Bad { pub value: () }",
+        "#[hxn::data] pub struct Bad { pub value: (Thing,) }",
+    ] {
+        let error = parse(
+            "thing",
+            &format!("#[hxn::interface] pub struct Thing; {source}"),
+        )
+        .unwrap_err();
+        assert!(error.message.contains("a nonempty tuple"));
+    }
+}
+
+#[test]
 fn empty_records_consume_one_byte_inside_collections() {
     let library = parse(
         "thing",

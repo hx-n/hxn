@@ -45,6 +45,7 @@ fn least(data: &Data) -> usize {
         Data::Bool | Data::Option(_) | Data::Record(_) => 1,
         Data::I64 | Data::F64 | Data::Number(Number::U64 | Number::F32) => 8,
         Data::Boxed(of) => least(of),
+        Data::Tuple(parts) => parts.iter().map(least).sum(),
         _ => 4,
     }
 }
@@ -62,6 +63,10 @@ pub fn rust_type(data: &Data) -> String {
         Data::Enum(name) | Data::Record(name) | Data::Tagged(name) => name.clone(),
         Data::Option(of) => format!("Option<{}>", rust_type(of)),
         Data::List(of) => format!("Vec<{}>", rust_type(of)),
+        Data::Tuple(parts) => format!(
+            "({},)",
+            parts.iter().map(rust_type).collect::<Vec<_>>().join(", ")
+        ),
         Data::Set { of, sorted } => format!(
             "std::collections::{}<{}>",
             if *sorted { "BTreeSet" } else { "HashSet" },
@@ -105,6 +110,10 @@ pub fn rust_read(data: &Data) -> String {
         Data::Enum(name) => format!("{}(input.i32()?)?", reader(name)),
         Data::Record(name) | Data::Tagged(name) => format!("{}(input)?", reader(name)),
         Data::Boxed(of) => format!("Box::new({})", rust_read(of)),
+        Data::Tuple(parts) => format!(
+            "({},)",
+            parts.iter().map(rust_read).collect::<Vec<_>>().join(", ")
+        ),
         Data::Map { key, value, .. } => format!(
             "{{ let count = input.items({})?; let mut items: {} = Default::default(); for _ in 0..count {{ let key = {}; let value = {}; items.insert(key, value); }} items }}",
             least(key) + least(value),
@@ -153,6 +162,20 @@ pub fn rust_write(data: &Data, value: &str) -> String {
         // Bound to a name first, so that what is written is a reference to
         // the inner value, not to the box.
         Data::Boxed(of) => format!("{{ let inner = &**{value}; {} }}", rust_write(of, "inner")),
+        Data::Tuple(parts) => {
+            let written = parts
+                .iter()
+                .enumerate()
+                .map(|(index, part)| {
+                    format!(
+                        "{{ let part = &tuple.{index}; {} }}",
+                        rust_write(part, "part")
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(" ");
+            format!("{{ let tuple = {value}; {written} }}")
+        }
         Data::Map {
             key, value: held, ..
         } => format!(
@@ -375,6 +398,15 @@ pub fn haxe_type(data: &Data) -> String {
         Data::Enum(name) | Data::Record(name) | Data::Tagged(name) => name.clone(),
         Data::Option(of) => format!("Null<{}>", haxe_type(of)),
         Data::List(of) => format!("Array<{}>", haxe_type(of)),
+        Data::Tuple(parts) => format!(
+            "{{ {} }}",
+            parts
+                .iter()
+                .enumerate()
+                .map(|(index, part)| format!("_{index}: {}", haxe_type(part)))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
         Data::Set { of, .. } => format!("hxn.Set<{}>", haxe_type(of)),
         Data::Boxed(of) => haxe_type(of),
         Data::Map { key, value, .. } => format!("Map<{}, {}>", haxe_type(key), haxe_type(value)),
@@ -404,6 +436,16 @@ pub fn haxe_write(data: &Data, value: &str, out: &str, depth: usize) -> Vec<Stri
             format!("{}.write({value}, {out});", wire_class(name)),
         ],
         Data::Boxed(of) => haxe_write(of, value, out, depth),
+        Data::Tuple(parts) => {
+            let mut lines = vec![
+                format!("if ({value} == null)"),
+                String::from("\tthrow new haxe.Exception(\"null where a tuple is needed\");"),
+            ];
+            for (index, part) in parts.iter().enumerate() {
+                lines.extend(haxe_write(part, &format!("{value}._{index}"), out, depth));
+            }
+            lines
+        }
         Data::Map {
             key, value: held, ..
         } => {
@@ -473,6 +515,19 @@ pub fn haxe_read(data: &Data) -> String {
         Data::Record(name) => format!("{name}.hxnRead(input)"),
         Data::Tagged(name) => format!("{}.read(input)", wire_class(name)),
         Data::Boxed(of) => haxe_read(of),
+        Data::Tuple(parts) => {
+            // Read in order, before constructing the anonymous record.
+            let read = parts
+                .iter()
+                .enumerate()
+                .map(|(index, part)| format!("var p{index} = {}; ", haxe_read(part)))
+                .collect::<String>();
+            let fields = (0..parts.len())
+                .map(|index| format!("_{index}: p{index}"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("{{ {read}{{ {fields} }}; }}")
+        }
         // Each read is a separate statement, so the key is read first.
         Data::Map { key, value, .. } => format!(
             "{{ var made = new {}(); for (_ in 0...input.readInt32()) {{ var key = {}; var value = {}; made.set(key, value); }} made; }}",

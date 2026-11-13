@@ -2,7 +2,7 @@
 //! are defined in a separate file.
 
 use crate::Counter;
-use hxn_future::{Future, Signal};
+use hxn_future::{Future, Signal, Stream};
 
 /// A loudness level. Two discriminants are explicit and the third is
 /// implicit.
@@ -59,12 +59,72 @@ pub struct Choices {
     pub groups: Vec<std::collections::BTreeSet<i32>>,
 }
 
+/// Tuple fields, including a nested pair and a list of one-element tuples.
+#[hxn::data]
+pub struct TupleData {
+    pub pair: (String, i32),
+    pub nested: ((bool, u8), (String, f64)),
+    pub listed: Vec<(bool,)>,
+}
+
 /// Static functions over data types, with no instance.
 #[hxn::interface]
 pub struct Shapes;
 
 #[hxn::methods]
 impl Shapes {
+    pub fn tuple_data(value: TupleData) -> TupleData {
+        value
+    }
+
+    pub fn tuple_one(value: (bool,)) -> (bool,) {
+        value
+    }
+
+    pub fn tuple_values(values: &[(String, u8)]) -> Vec<(String, u8)> {
+        values.to_vec()
+    }
+
+    pub fn tuple_optional(value: Option<(Mode, Point)>) -> Option<(Mode, Point)> {
+        value
+    }
+
+    pub fn tuple_bytes(value: (i64, Vec<u8>, Mode, u8)) -> (i64, Vec<u8>, Mode, u8) {
+        value
+    }
+
+    pub fn tuple_set(
+        values: std::collections::BTreeSet<(i32, String)>,
+    ) -> std::collections::BTreeSet<(i32, String)> {
+        values
+    }
+
+    pub fn tuple_later(value: (i64, Option<Mode>)) -> Future<(i64, Option<Mode>)> {
+        hxn_future::spawn_blocking(move || Ok::<_, hxn_future::Failure>(value))
+    }
+
+    pub async fn tuple_async(value: (String, u8)) -> (u8, String) {
+        (value.1, value.0)
+    }
+
+    pub fn tuple_signal() -> Signal<(bool, String)> {
+        let (_source, value) = hxn_future::signal((true, String::from("ready")));
+        value
+    }
+
+    pub fn tuple_stream() -> Stream<(bool,)> {
+        let (sender, stream) = hxn_future::channel();
+        sender.send((true,));
+        sender.send((false,));
+        stream
+    }
+
+    pub fn mapped_tuple<E>(
+        f: impl Fn((String, i64)) -> Result<(i64, String), E>,
+    ) -> Result<(i64, String), E> {
+        f((String::from("naïve ☃"), 0x1234_5678_7654_3210))
+    }
+
     /// A string showing the struct as the library received it. Takes the
     /// struct by reference.
     pub fn describe(settings: &Settings) -> String {

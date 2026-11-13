@@ -25,7 +25,7 @@ pub use blob::Blob;
 pub use events::{CountError, Event, Events, Refusal, Trouble};
 // Functions defined in submodules are re-exported at the root as well.
 pub use numbers::{Numbers, halve};
-pub use shapes::{Choices, Empty, Mode, Point, Settings, Shapes};
+pub use shapes::{Choices, Empty, Mode, Point, Settings, Shapes, TupleData};
 
 static LIVE: AtomicI32 = AtomicI32::new(0);
 

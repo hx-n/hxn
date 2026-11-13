@@ -230,6 +230,18 @@ fn set(ty: &syn::Type) -> Option<(&syn::Type, bool)> {
 // Plain data, given the names of the library's data types. `None` for a type
 // that is not data.
 fn data_of(ty: &syn::Type, known: Known) -> Option<Data> {
+    if let syn::Type::Tuple(tuple) = ty {
+        return if tuple.elems.is_empty() {
+            None
+        } else {
+            tuple
+                .elems
+                .iter()
+                .map(|ty| data_of(ty, known))
+                .collect::<Option<Vec<_>>>()
+                .map(Data::Tuple)
+        };
+    }
     if let Some(inner) = optional(ty) {
         return Some(Data::Option(Box::new(data_of(inner, known)?)));
     }
@@ -1296,7 +1308,7 @@ fn field_data(ty: &syn::Type, known: Known) -> Result<Data, Error> {
     let Some(data) = data_of(ty, known) else {
         return error(
             ty.span(),
-            "a field of data is one of bool, a number, String, Vec<u8>, other data, or an Option, Vec, Box, HashMap, BTreeMap, HashSet or BTreeSet of these, a map keyed by String, a whole number of at most 32 bits or a C-like enum",
+            "a field of data is one of bool, a number, String, Vec<u8>, other data, a nonempty tuple, or an Option, Vec, Box, HashMap, BTreeMap, HashSet or BTreeSet of these, a map keyed by String, a whole number of at most 32 bits or a C-like enum",
         );
     };
     if matches!(data, Data::Number(Number::Isize | Number::Usize)) {

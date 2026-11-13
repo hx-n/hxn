@@ -11,6 +11,8 @@ class Main {
 		// It was passed by copy: changing this object does not change the library's copy.
 		rice.quantity = 100;
 		Sys.println('rice: ${pantry.find("rice").quantity}');
+		var quantities = pantry.quantities();
+		Sys.println('shelves: ${[for (pair in quantities) '${pair._0}=${pair._1}'].join(", ")}');
 
 		// A missing optional return value is null, and so is an omitted optional field.
 		var flour = pantry.find("flour");

@@ -66,6 +66,15 @@
         { "name": "selected", "type": "set<Mode>" },
         { "name": "groups", "type": "list<sorted_set<i32>>" }
       ]
+    },
+    {
+      "name": "TupleData",
+      "docs": "Tuple fields, including a nested pair and a list of one-element tuples.",
+      "fields": [
+        { "name": "pair", "type": "tuple<str, i32>" },
+        { "name": "nested", "type": "tuple<tuple<bool, u8>, tuple<str, f64>>" },
+        { "name": "listed", "type": "list<tuple<bool>>" }
+      ]
     }
   ],
   "tagged": [
@@ -1340,6 +1349,95 @@
       "name": "Shapes",
       "docs": "Static functions over data types, with no instance.",
       "methods": [
+        {
+          "name": "tuple_data",
+          "kind": "static",
+          "params": [{ "name": "value", "type": "TupleData" }],
+          "returns": "TupleData",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "tuple_one",
+          "kind": "static",
+          "params": [{ "name": "value", "type": "tuple<bool>" }],
+          "returns": "tuple<bool>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "tuple_values",
+          "kind": "static",
+          "params": [{ "name": "values", "type": "list<tuple<str, u8>>" }],
+          "returns": "list<tuple<str, u8>>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "tuple_optional",
+          "kind": "static",
+          "params": [{ "name": "value", "type": "option<tuple<Mode, Point>>" }],
+          "returns": "option<tuple<Mode, Point>>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "tuple_bytes",
+          "kind": "static",
+          "params": [{ "name": "value", "type": "tuple<i64, bytes, Mode, u8>" }],
+          "returns": "tuple<i64, bytes, Mode, u8>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "tuple_set",
+          "kind": "static",
+          "params": [{ "name": "values", "type": "sorted_set<tuple<i32, str>>" }],
+          "returns": "sorted_set<tuple<i32, str>>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "tuple_later",
+          "kind": "static",
+          "params": [{ "name": "value", "type": "tuple<i64, option<Mode>>" }],
+          "returns": "future<tuple<i64, option<Mode>>>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "tuple_async",
+          "kind": "static",
+          "params": [{ "name": "value", "type": "tuple<str, u8>" }],
+          "returns": "future<tuple<u8, str>>",
+          "async": true,
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "tuple_signal",
+          "kind": "static",
+          "params": [],
+          "returns": "signal<tuple<bool, str>>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "tuple_stream",
+          "kind": "static",
+          "params": [],
+          "returns": "stream<tuple<bool>>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "mapped_tuple",
+          "kind": "static",
+          "params": [{ "name": "f", "type": "fn(tuple<str, i64>) -> tuple<i64, str>" }],
+          "returns": "tuple<i64, str>",
+          "fallible": true,
+          "blocking": false
+        },
         {
           "name": "describe",
           "docs": "A string showing the struct as the library received it. Takes the\nstruct by reference.",
