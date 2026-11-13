@@ -49,8 +49,8 @@ for the area you are changing:
 ## Documents, comments, commits and issues
 
 - **Keep the documentation current.** When an approach or a rule changes,
-  update the relevant page under `docs/design/` or `docs/conventions/` in
-  the same commit. Keep the indexes current when adding or moving pages.
+  update the relevant guide under `docs/` in the same commit. Keep the
+  indexes current when adding or moving pages.
   These pages describe the current design, not its history.
 - **No planning, backlog or status documents.** History, measurements,
   alternatives weighed and open questions go in `git-bug` issues. Look at

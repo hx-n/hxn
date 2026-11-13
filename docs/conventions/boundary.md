@@ -2,57 +2,45 @@
 
 [Design](../design.md) · [Conventions](../conventions.md)
 
-## The C boundary
+## C ABI
 
-- An exported function returns an `hxn_status`. Zero is success, negative
-  values are hxn's, positive values are the library's.
-- A result is written through a final `out` parameter, and an error message
-  through `err`. `out` is not written on failure, and `err` is not written on
-  success.
-- A `bool` is an `int32_t` at the boundary.
-- Pass text and bytes as an `hxn_slice` by value. Encode text as UTF-8.
-- Returned text and bytes are an `hxn_buf`, freed by the host through the
-  buffer's own `free`, exactly once.
-- A handle is an opaque `hxn_handle *`. Only the library that created it reads it.
-- A callback is `{call, env, drop}`. `call` takes `env` as its first
-  parameter, returns an `hxn_status` and writes its result through a final
-  `out` parameter. It must return normally.
-- Waits take a timeout in milliseconds; a negative value means no timeout.
-- Versions and ids the host sees are non-negative `int32_t`; `-1` means
-  "closed" or "nothing".
+- Return `hxn_status`: zero succeeds, negative codes belong to hxn, positive
+  codes to the library. Write final `out` only on success and `err` only on failure.
+- `bool` is `int32_t`; text/bytes use by-value `hxn_slice`, with UTF-8 text.
+  Returned `hxn_buf` is freed exactly once through its own `free`.
+- Handles are opaque `hxn_handle *`, read only by their originating library.
+- Callbacks are `{call, env, drop}`. `call` takes `env` first, returns status
+  and writes a final `out`. It returns normally.
+- Timeouts are milliseconds; negative means unlimited. Host-visible ids and
+  versions are non-negative `int32_t`; `-1` means closed or absent.
 
 ## Names
 
-| Generated item | Name |
+In this table, `P` means `hxn_<library>_`; interfaces use snake case in exports.
+
+| Item | Name |
 |---|---|
-| exported function | `hxn_<library>_<interface>_<method>`, the interface in snake case. The `hxn_` prefix keeps an export from taking the name of a C function the library links: a library `sqlite3` with an interface `Value` would otherwise export `sqlite3_value_subtype`, which is sqlite3's own |
-| HashLink primitive resolver | `hlp_<interface>_<method>` |
-| HashLink abstract | `<library>_<interface>` |
-| a shared interface's built-in functions | `hxn_<library>_<interface>_same`, `_weak`, `_weak_upgrade`, `_weak_close` |
-| weak reference to a shared interface | Haxe class `<Interface>Weak`, HashLink abstract `<library>_<interface>_weak` |
-| release function for any handle | `hxn_<library>_release` |
-| the library's queue of ready results | `hxn_<library>_outbox_wait`, `hxn_<library>_outbox_next` |
-| waiting on and watching a future, stream or signal | `hxn_<library>_future_wait`, `_future_state`, `_future_watch`; the same for `stream` and `signal` |
-| taking the value one carries | `hxn_<library>_future_take_<kind>`, `hxn_<library>_stream_next_<kind>`, `hxn_<library>_signal_get_<kind>`; the kind is `unit`, `bool`, `int`, `long`, `float`, `text`, `bytes`, the name of a narrower number type, or the snake-case name of an interface or data type, prefixed with `option_`, `list_`, `map_`, `set_` or `sorted_set_` for those wrappers, and with `tuple_<arity>_` followed by each element kind for a tuple, and `result_` followed by the value kind and error kind for a fallible stream. Two carried types that map to the same name are rejected |
-| fetching the typed error of the last failure | `hxn_<library>_thrown_take`, generated only when a function has a `#[hxn::data]` error type |
-| exception class for a typed error | Haxe class `<Name>Exception`, with a trailing `Error` removed from the name first |
-| serializer for a tagged enum | Haxe class `<Name>Wire` |
-| native memory held by a library's values, in bytes | `hxn_<library>_memory_held` |
-| whether the library requested a collection | `hxn_<library>_memory_wanted` |
-| C header | `<library>_abi.h` |
-| hxcpp glue header | `<library>_glue.h`, namespace `<library>_glue` |
-| hxcpp extern class declaring the glue | `Hxn<Library>Native`, each function under its glue name |
-| Haxe method | the Rust name in camel case |
-| a function outside an `impl` | `<library>_<class>_<function>`, named as a method of that class would be |
-| Haxe class a binding needs in addition to the library's own | `Hxn<Library><Role>`: `HxnCounterMemory` |
+| Method or free function | `P<interface>_<method>` or `P<class>_<function>` |
+| Shared operations | `P<interface>_same`, `_weak`, `_weak_upgrade`, `_weak_close` |
+| Release | `Prelease` |
+| Outbox | `Poutbox_wait`, `Poutbox_next` |
+| Async operations | `P<future/stream/signal>_wait`, `_state`, `_watch` |
+| Typed reads | `Pfuture_take_<kind>`, `Pstream_next_<kind>`, `Psignal_get_<kind>` |
+| Typed data error | `Pthrown_take`, generated only for data errors. |
+| Memory accounting | `Pmemory_held`, `Pmemory_wanted` |
+| HashLink resolver / abstract | `hlp_<interface>_<method>` / `<library>_<interface>` |
+| Weak class / abstract | `<Interface>Weak` / `<library>_<interface>_weak` |
+| Typed exception / enum serializer | `<Name>Exception` (strip trailing `Error`) / `<Name>Wire` |
+| C / glue headers | `<library>_abi.h` / `<library>_glue.h`, namespace `<library>_glue` |
+| hxcpp extern / support class | `Hxn<Library>Native` / `Hxn<Library><Role>` |
+| Haxe method | Rust name in camel case. |
 
-An interface is not named `Atomic`, `Memory`, `Future`, `Stream`, `Signal` or
-`Outbox`: the adapters use those names for their own exports. No interface is named `<Interface>Weak` when a shared
-`<Interface>` exists, and a shared interface has no function named `same` or `weak`.
+Kinds name scalars or snake-case types. Wrappers add `option_`, `list_`,
+`map_`, `set_`, `sorted_set_`, `tuple_<arity>_<element kinds>` or
+`result_<value kind>_<error kind>`. Reject collisions.
 
-Give C headers names that remain distinct from generated Haxe headers on
-case-insensitive filesystems. hxcpp generates `Counter.h` for a class
-`Counter`, and on a case-insensitive filesystem `#include "counter.h"` would
-then find the generated header.
-
-See also: [Boundary types and failures](../design/boundary.md).
+Reserve `Atomic`, `Memory`, `Future`, `Stream`, `Signal`, `Outbox`, generated
+exception/serializer names and `<Interface>Weak`. Shared interfaces reserve
+`same` and `weak`. Keep `hxn_` on exports to avoid C library symbol collisions;
+keep C header names distinct from generated Haxe headers on case-insensitive
+filesystems.

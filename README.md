@@ -8,9 +8,8 @@ Use the same Rust library from Haxe on HashLink, Ash and hxcpp, natively and
 on wasm. Annotate the Rust types and methods to expose; hxn generates the Haxe
 classes and native adapters for each target.
 
-[Design](docs/design.md) links to guides on the architecture, bindings and
-tools. [Conventions](docs/conventions.md) covers API rules, testing and
-contribution workflow.
+See [CLI usage](docs/cli.md), [packaging](docs/packaging.md),
+[design](docs/design.md) and [conventions](docs/conventions.md).
 
 ## Quick setup
 
