@@ -787,6 +787,10 @@ mod tests {
         let found = resolvers(&adapter);
         assert_eq!(found.len(), adapter.matches("define_prim!").count());
         assert!(found.iter().all(|name| name.starts_with("hlp_")));
-        assert!(found.contains(&"hlp_greeter_new") && found.contains(&"hlp_greeter_greeted"));
+        // Named after the library, then the interface.
+        assert!(
+            found.contains(&"hlp_greeter_greeter_new")
+                && found.contains(&"hlp_greeter_greeter_greeted")
+        );
     }
 }
