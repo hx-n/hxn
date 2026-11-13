@@ -853,6 +853,10 @@ Custom Domain route, with its `workers.dev` address disabled. The page's
 canonical URL, social preview URLs, structured data and sitemap all use
 `https://hxn.dev/`.
 
+`site/og-hero.png` is a browser capture of the hero, framed at 1200 by
+630 CSS pixels and saved at twice that resolution. Open Graph, Twitter
+cards and the page's structured data use it as the preview image.
+
 With Node.js 24 installed, these commands run from the repository root:
 
 ```
