@@ -282,6 +282,44 @@ fn an_interface_taken_by_value_is_moved_out_of_its_handle() {
     );
 }
 
+// The generated classes share Haxe's top-level package, so none takes the
+// name of one of its types.
+#[test]
+fn no_class_shadows_a_haxe_type() {
+    let cases = [
+        (
+            "math",
+            "#[hxn::function]\npub fn twice(x: i32) -> i32 { x * 2 }\n",
+        ),
+        (
+            "lib",
+            "#[hxn::interface]\npub struct Map;\n\n#[hxn::methods]\nimpl Map {}\n",
+        ),
+        (
+            "lib",
+            "#[hxn::function(class = \"String\")]\npub fn twice(x: i32) -> i32 { x * 2 }\n",
+        ),
+        (
+            "lib",
+            "#[hxn::data]\npub struct Date {\n    pub day: i32,\n}\n",
+        ),
+    ];
+    for (library, source) in cases {
+        let error = parse(library, source).unwrap_err();
+        assert!(
+            error.message.contains("a type of Haxe's top-level package"),
+            "{source}: {}",
+            error.message
+        );
+    }
+    // The class can be named instead.
+    parse(
+        "math",
+        "#[hxn::function(class = \"Maths\")]\npub fn twice(x: i32) -> i32 { x * 2 }\n",
+    )
+    .unwrap();
+}
+
 #[test]
 fn says_where_and_why_something_cannot_cross() {
     let cases = [

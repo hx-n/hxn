@@ -12,6 +12,9 @@
   or `class = "Name"`, including an existing interface. It is public and
   reachable at the crate root. Its name is unique
   within that class and cannot be `new`.
+- No interface, data type or class is named like a type of Haxe's top-level
+  package (`Math`, `String`, `Map`, `Date`, ...), which the generated classes
+  share. A library named `math` puts its functions on `class = "Name"`.
 
 ## Values
 

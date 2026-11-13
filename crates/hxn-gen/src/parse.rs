@@ -1254,6 +1254,57 @@ fn located<T>(result: Result<T, Error>, source: &Source) -> Result<T, Error> {
 // Names the adapters use for their own exports.
 const RESERVED: [&str; 6] = ["Atomic", "Memory", "Future", "Stream", "Signal", "Outbox"];
 
+// The types of Haxe's top-level package. The generated classes are in it too,
+// so one of these names would shadow Haxe's type for the program and for the
+// generated code, which uses `String`, `Map` and the rest.
+const HAXE_TYPES: [&str; 34] = [
+    "Any",
+    "Array",
+    "ArrayAccess",
+    "Bool",
+    "Class",
+    "Date",
+    "DateTools",
+    "Dynamic",
+    "EReg",
+    "Enum",
+    "EnumValue",
+    "Float",
+    "Int",
+    "IntIterator",
+    "Iterable",
+    "Iterator",
+    "KeyValueIterable",
+    "KeyValueIterator",
+    "Lambda",
+    "List",
+    "Map",
+    "Math",
+    "Null",
+    "Reflect",
+    "Std",
+    "String",
+    "StringBuf",
+    "StringTools",
+    "Sys",
+    "Type",
+    "UInt",
+    "UnicodeString",
+    "Void",
+    "Xml",
+];
+
+// Why `name` cannot name a Haxe class the binding makes, if it cannot.
+fn unusable(name: &str) -> Option<&'static str> {
+    if RESERVED.contains(&name) {
+        Some("is a name the adapters use")
+    } else if HAXE_TYPES.contains(&name) {
+        Some("is a type of Haxe's top-level package, which the generated classes share")
+    } else {
+        None
+    }
+}
+
 // The names of the library's data types, used to resolve a signature's
 // types.
 #[derive(Clone, Copy)]
@@ -1286,10 +1337,10 @@ fn data_name(
         return error(generics.span(), "generic data cannot cross");
     }
     let name = item.to_string();
-    if RESERVED.contains(&name.as_str()) {
+    if let Some(why) = unusable(&name) {
         return error(
             item.span(),
-            format!("`{name}` is a name the adapters use; call the data something else"),
+            format!("`{name}` {why}; call the data something else"),
         );
     }
     if taken.contains(&name) {
@@ -1592,10 +1643,10 @@ fn interfaces_of(items: &[Item], interfaces: &mut Vec<Interface>) -> Result<(), 
             return error(item.generics.span(), "a generic struct cannot cross");
         }
         let name = item.ident.to_string();
-        if RESERVED.contains(&name.as_str()) {
+        if let Some(why) = unusable(&name) {
             return error(
                 item.ident.span(),
-                format!("`{name}` is a name the adapters use; call the interface something else"),
+                format!("`{name}` {why}; call the interface something else"),
             );
         }
         // Names are unique across the library, whatever module an item is in.
@@ -1752,10 +1803,12 @@ fn functions_of(
             return error(name.span(), "a function exposed to Haxe has to be `pub`");
         }
         let class = class.unwrap_or_else(|| pascal(library));
-        if RESERVED.contains(&class.as_str()) {
+        if let Some(why) = unusable(&class) {
             return error(
                 name.span(),
-                format!("`{class}` is a name the adapters use; put the function on another class"),
+                format!(
+                    "`{class}` {why}; put the function on another class with `#[hxn::function(class = \"Name\")]`"
+                ),
             );
         }
         if name == "new" {
