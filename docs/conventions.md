@@ -279,6 +279,12 @@ filesystem `#include "counter.h"` would then find the generated header.
   what it prints with its `expected.txt`. Both take `hl <vm>`, `cpp`,
   `cppia`, `wasm <ash>` and `emcc`, and a VM is named with its options, so
   `hl "ash --mode jit"` runs Ash's JIT.
+- `hxn doctor` lists installed standard libraries from the active rustc
+  sysroot. `doctor --target <triple>` succeeds only when cargo and that
+  target's `std` archive are present; it does not require a local VM or Haxe.
+  Unreadable inventories, unsupported target names, and missing standard
+  libraries are distinct diagnostics. The CLI test checks the host target
+  and rejects an unknown target and an ignored `--wasm` option.
 - `tests/mobile/run.sh` runs each example on mobile toolchains: `ios-sim`
   in an iOS simulator, `android` on a device or emulator reachable by `adb`.
   It packages each library with `--target`, compiles the program against

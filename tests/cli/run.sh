@@ -71,6 +71,21 @@ grep -q 'is not what the source gives' "$work/refused.txt" || { cat "$work/refus
 cp "$work/manifest" greeter.hxn.json
 "$hxn" doctor --vm "${2:-hl}" | tr -d '\r' | tee "$work/found.txt"
 grep -q ' ready$' "$work/found.txt" || { echo "FAILED: doctor found nothing ready" >&2; exit 1; }
+host="$(rustc -vV | sed -n 's/^host: //p')"
+[ -n "$host" ] || { echo "FAILED: rustc did not report its host target" >&2; exit 1; }
+grep -Fqx "  $host" "$work/found.txt" || { echo "FAILED: doctor did not list the host's Rust standard library" >&2; exit 1; }
+"$hxn" doctor --target "$host" --vm "${2:-hl}" | tr -d '\r' >"$work/binding-target.txt"
+grep -Fq "cpp --target $host ready" "$work/binding-target.txt" || { echo "FAILED: doctor did not check the requested binding target" >&2; exit 1; }
+if "$hxn" doctor --target hxn-not-a-rust-target >"$work/unknown-target.txt" 2>&1; then
+	echo "FAILED: doctor accepted an unknown Rust target" >&2
+	exit 1
+fi
+grep -q 'is not a target listed by rustc' "$work/unknown-target.txt" || { cat "$work/unknown-target.txt" >&2; exit 1; }
+if "$hxn" doctor --target "$host" --wasm >"$work/doctor-wasm.txt" 2>&1; then
+	echo "FAILED: doctor silently ignored --wasm" >&2
+	exit 1
+fi
+grep -q 'do not pass --wasm' "$work/doctor-wasm.txt" || { cat "$work/doctor-wasm.txt" >&2; exit 1; }
 
 # As a package: a program's build refers to the package and its macro, and
 # to none of the paths of its classes, headers or library.

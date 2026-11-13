@@ -16,8 +16,11 @@ pub struct Found {
     /// Whether the source of Rust's standard library is installed. An Ash
     /// wasm build rebuilds it.
     pub source: bool,
-    /// Whether Rust's prebuilt standard library for Emscripten is installed.
-    pub emscripten_std: bool,
+    /// Targets with a standard-library archive in the active rustc sysroot.
+    /// `None` means the installation could not be inspected.
+    pub rust_targets: Option<Vec<String>>,
+    /// Built-in target names reported by the active rustc.
+    pub supported_targets: Option<Vec<String>>,
     pub haxe: Option<String>,
     /// The HashLink VM, and the command name used to look for it.
     pub vm: Option<String>,
@@ -57,6 +60,45 @@ fn first_line(command: &mut Command) -> Option<String> {
     printed(command).map(|text| text.lines().next().unwrap_or_default().trim().to_owned())
 }
 
+// A static binding needs std, not just an empty target directory or core.
+fn standard_libraries(root: &Path) -> std::io::Result<Vec<String>> {
+    let mut targets = Vec::new();
+    for entry in std::fs::read_dir(root)? {
+        let entry = entry?;
+        if !entry.path().is_dir() {
+            continue;
+        }
+        let libraries = match std::fs::read_dir(entry.path().join("lib")) {
+            Ok(libraries) => libraries,
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory
+                ) =>
+            {
+                continue;
+            }
+            Err(error) => return Err(error),
+        };
+        for library in libraries {
+            let library = library?;
+            let name = library.file_name();
+            let name = name.to_string_lossy();
+            if (name == "libstd.rlib"
+                || name == "std.rlib"
+                || ((name.starts_with("libstd-") || name.starts_with("std-"))
+                    && name.ends_with(".rlib")))
+                && library.path().is_file()
+            {
+                targets.push(entry.file_name().to_string_lossy().into_owned());
+                break;
+            }
+        }
+    }
+    targets.sort();
+    Ok(targets)
+}
+
 /// Detects every tool. `vm` is the HashLink VM command given with `--vm` or
 /// `HXN_VM`.
 pub fn find(vm: &str) -> Found {
@@ -69,7 +111,11 @@ pub fn find(vm: &str) -> Found {
             .is_some_and(|root| root.join(part).is_dir())
     };
     let source = installed("src/rust/library");
-    let emscripten_std = installed("wasm32-unknown-emscripten/lib");
+    let rust_targets = sysroot
+        .as_ref()
+        .and_then(|root| standard_libraries(root).ok());
+    let supported_targets = printed(Command::new("rustc").args(["--print", "target-list"]))
+        .map(|targets| targets.lines().map(str::to_owned).collect());
     let program = vm.split_whitespace().next().unwrap_or("hl");
     let hxcpp = first_line(Command::new("haxelib").args(["libpath", "hxcpp"]))
         .filter(|path| Path::new(path).is_dir());
@@ -77,7 +123,8 @@ pub fn find(vm: &str) -> Found {
         cargo: first_line(Command::new("cargo").arg("--version")),
         nightly: release.contains("nightly") || release.contains("dev"),
         source,
-        emscripten_std,
+        rust_targets,
+        supported_targets,
         haxe: first_line(Command::new("haxe").arg("--version"))
             .map(|version| format!("haxe {version}")),
         vm: on_path(program).then(|| {
@@ -107,6 +154,52 @@ pub fn find(vm: &str) -> Found {
 }
 
 impl Found {
+    fn standard_library_missing(&self, triple: &str) -> Option<String> {
+        match &self.rust_targets {
+            Some(targets) if targets.iter().any(|target| target == triple) => None,
+            None => Some(String::from(
+                "could not inspect Rust's standard libraries (`rustc --print sysroot`)",
+            )),
+            Some(_) => match &self.supported_targets {
+                Some(targets) if targets.iter().any(|target| target == triple) => Some(format!(
+                    "Rust's standard library for {triple} (`rustup target add {triple}` if supplied by the toolchain; hxn requires std, not only core)"
+                )),
+                Some(_) => Some(format!(
+                    "`{triple}` is not a target listed by rustc (`rustc --print target-list`)"
+                )),
+                None => Some(String::from(
+                    "could not inspect Rust's supported targets (`rustc --print target-list`)",
+                )),
+            },
+        }
+    }
+
+    /// The prerequisites for building the Rust static binding for `triple`.
+    /// The Haxe application and the library's own dependencies are separate.
+    pub fn binding_missing(&self, triple: &str) -> Vec<String> {
+        let mut missing = Vec::new();
+        if self.cargo.is_none() {
+            missing.push(String::from("cargo (https://rustup.rs)"));
+        }
+        missing.extend(self.standard_library_missing(triple));
+        missing
+    }
+
+    pub fn binding_report(&self, triple: &str) -> String {
+        let missing = self.binding_missing(triple);
+        let mut out = format!("Rust binding target:\n  cpp --target {triple}");
+        if missing.is_empty() {
+            out.push_str(" ready\n");
+        } else {
+            out.push_str(" needs:\n");
+            for item in missing {
+                out.push_str(&format!("    - {item}\n"));
+            }
+        }
+        out.push_str("  This checks the Rust binding. The library's own dependencies and the Haxe app may need additional platform tools and SDKs.\n");
+        out
+    }
+
     // The Rust components an Ash wasm build requires that are missing.
     fn wasm_missing(&self) -> Vec<String> {
         let mut missing = Vec::new();
@@ -165,10 +258,8 @@ impl Found {
                 "hxcpp from git, whose Emscripten build uses wasm exceptions as Rust's does: `haxelib git hxcpp https://github.com/HaxeFoundation/hxcpp`",
             ));
         }
-        if !self.emscripten_std {
-            cpp_wasm.push(String::from(
-                "Rust's standard library for Emscripten (`rustup target add wasm32-unknown-emscripten`)",
-            ));
+        if let Some(missing) = self.standard_library_missing("wasm32-unknown-emscripten") {
+            cpp_wasm.push(missing);
         }
         if !self.emcc {
             cpp_wasm.push(String::from("`emcc`, from the Emscripten SDK, on PATH"));
@@ -213,6 +304,16 @@ impl Found {
         for tool in found.into_iter().flatten() {
             out.push_str(&format!("  {tool}\n"));
         }
+        out.push_str("\nRust standard libraries (active toolchain):\n");
+        match &self.rust_targets {
+            Some(targets) if targets.is_empty() => out.push_str("  none found\n"),
+            Some(targets) => {
+                for target in targets {
+                    out.push_str(&format!("  {target}\n"));
+                }
+            }
+            None => out.push_str("  unavailable: could not inspect rustc's sysroot\n"),
+        }
         out.push_str("\nTargets:\n");
         for (name, missing) in self.targets() {
             if missing.is_empty() {
@@ -252,6 +353,84 @@ impl Found {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn installed_targets_have_std_archives_not_only_directories_or_core() {
+        let root = std::env::temp_dir().join(format!("hxn-doctor-targets-{}", std::process::id()));
+        for (target, archive) in [
+            ("z-host", "libstd-123.rlib"),
+            ("a-cross", "std-456.rlib"),
+            ("core-only", "libcore-123.rlib"),
+            ("metadata-only", "libstd-123.rmeta"),
+            ("dynamic-only", "libstd-123.so"),
+        ] {
+            let lib = root.join(target).join("lib");
+            std::fs::create_dir_all(&lib).unwrap();
+            std::fs::write(lib.join(archive), []).unwrap();
+        }
+        std::fs::create_dir_all(root.join("empty/lib")).unwrap();
+        std::fs::create_dir_all(root.join("src/rust/library")).unwrap();
+        assert_eq!(standard_libraries(&root).unwrap(), ["a-cross", "z-host"]);
+        std::fs::remove_dir_all(&root).unwrap();
+        assert!(standard_libraries(&root).is_err());
+    }
+
+    #[test]
+    fn a_binding_target_needs_cargo_and_its_std_without_a_host_vm_or_haxe() {
+        let found = Found {
+            cargo: Some(String::from("cargo nightly")),
+            rust_targets: Some(vec![String::from("aarch64-apple-ios")]),
+            supported_targets: Some(vec![
+                String::from("aarch64-apple-ios"),
+                String::from("aarch64-linux-android"),
+            ]),
+            ..Found::default()
+        };
+        assert!(found.binding_missing("aarch64-apple-ios").is_empty());
+        assert!(!found.ready("cpp") && !found.ready("hl"));
+        assert!(
+            found
+                .binding_report("aarch64-apple-ios")
+                .contains("cpp --target aarch64-apple-ios ready")
+        );
+        let missing = found.binding_report("aarch64-linux-android");
+        assert!(missing.contains("rustup target add aarch64-linux-android"));
+        assert!(missing.contains("hxn requires std, not only core"));
+        let unknown = found.binding_report("not-a-target");
+        assert!(unknown.contains("is not a target listed by rustc"));
+        assert!(!unknown.contains("rustup target add"));
+        let no_cargo = Found {
+            cargo: None,
+            ..found
+        };
+        assert_eq!(
+            no_cargo.binding_missing("aarch64-apple-ios"),
+            ["cargo (https://rustup.rs)"]
+        );
+    }
+
+    #[test]
+    fn an_unavailable_inventory_is_not_reported_as_a_missing_target() {
+        let found = Found::default();
+        assert!(
+            found
+                .report()
+                .contains("unavailable: could not inspect rustc's sysroot")
+        );
+        let report = found.binding_report("aarch64-apple-ios");
+        assert!(report.contains("could not inspect Rust's standard libraries"));
+        assert!(!report.contains("rustup target add"));
+        let empty = Found {
+            rust_targets: Some(Vec::new()),
+            ..Found::default()
+        };
+        assert!(empty.report().contains("  none found"));
+        assert!(
+            empty
+                .binding_report("unknown")
+                .contains("could not inspect Rust's supported targets")
+        );
+    }
 
     #[test]
     fn an_hxcpp_is_old_when_its_collector_has_the_old_lock() {
@@ -302,7 +481,7 @@ mod tests {
         let all = Found {
             nightly: true,
             source: true,
-            emscripten_std: true,
+            rust_targets: Some(vec![String::from("wasm32-unknown-emscripten")]),
             hxcpp_wasm_exceptions: true,
             ash: true,
             emcc: true,

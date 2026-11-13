@@ -56,9 +56,10 @@ is compiled as a script and run by that host.
       running, it fails if the committed manifest does not match the
       source.
 
-  hxn doctor [--vm <command>]
+  hxn doctor [--vm <command>] [--target <triple>]
       Reports which tools are installed, which targets are ready, and what
-      each other target still needs.
+      each other target still needs. Lists installed Rust standard libraries.
+      --target checks prerequisites for building that Rust static binding.
 
   hxn version
       Prints this program's version, the tag `hxn new` depends on.
@@ -71,11 +72,12 @@ is compiled as a script and run by that host.
       another machine, or with --wasm or --target, adds to the same
       directory.
 
---target cross-compiles the `cpp` binding for a Rust target triple, such as
-`aarch64-apple-ios` or `aarch64-linux-android`. It needs that target
-installed (`rustup target add <triple>`) and nothing else, because the
-binding is a static library that is linked with the program. An .hdll is
-linked when it is built, so it has to be built on the platform it runs on.
+On build cpp or package, --target cross-compiles the Rust static binding
+for a target triple, such as `aarch64-apple-ios` or `aarch64-linux-android`.
+It needs the target's standard library (`rustup target add <triple>`).
+The library's dependencies and the Haxe app may need platform tools and SDKs.
+On doctor, --target checks the Rust binding's prerequisites without building.
+An .hdll is linked when it is built, so it has to be built on its platform.
 
 With --wasm the binding and the program are built for wasm. `hl --wasm` is
 built and run by Ash. Set --vm or HXN_VM if its command is not `ash`.
@@ -688,9 +690,24 @@ Not imported (listed at the end of {name}.webidl):"
         }
         "doctor" => {
             let arguments = arguments(given)?;
+            if !arguments.positional.is_empty() || !arguments.rest.is_empty() {
+                return Err(String::from(
+                    "doctor takes no runtime or program arguments; use --target <triple> to check a Rust binding target",
+                ));
+            }
+            if arguments.wasm {
+                return Err(String::from(
+                    "doctor reports both wasm runtimes; do not pass --wasm",
+                ));
+            }
             let found = doctor::find(&vm_command(&arguments, "hl"));
-            print!("{}", found.report());
-            Ok(u8::from(!(found.ready("hl") || found.ready("cpp"))))
+            if let Some(triple) = arguments.cross {
+                print!("{}", found.binding_report(triple));
+                Ok(u8::from(!found.binding_missing(triple).is_empty()))
+            } else {
+                print!("{}", found.report());
+                Ok(u8::from(!(found.ready("hl") || found.ready("cpp"))))
+            }
         }
         "help" | "--help" | "-h" => {
             println!("{USAGE}");

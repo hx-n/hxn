@@ -614,7 +614,7 @@ flags.
 | `hxn run <hl\|cpp>` | builds, then compiles and runs the library's Haxe program |
 | `hxn package [hl] [cpp]` | builds for both runtimes, or the ones named, and collects what a Haxe program needs into one directory |
 | `hxn check [hl] [cpp] [cppia]` | runs the program on each runtime and checks that the outputs match |
-| `hxn doctor` | reports which targets can be built and what the others are missing |
+| `hxn doctor [--target <triple>]` | reports tools, runtime prerequisites and installed Rust standard libraries; checks a requested binding target |
 | `hxn import <header.h>` | creates a Rust library crate for a C library, from its header |
 | `hxn version` | prints the version, which is the tag `hxn new` depends on |
 | `--wasm` on any of these | does the same for the runtime's wasm form |
@@ -679,7 +679,18 @@ flags.
   a HashLink VM, hxcpp, and for wasm either a nightly toolchain with Rust's
   source and Ash, or Rust's Emscripten target, the Emscripten SDK and an
   hxcpp that builds for it with wasm exceptions. It mentions optional tools that would make
-  builds faster, and does not require any of them.
+  builds faster, and does not require any of them. It lists targets with a
+  `std` archive in the active rustc sysroot, so custom toolchains need no
+  rustup installation. Empty target directories and core-only installations
+  are not reported as installed standard libraries. An inventory that could
+  not be read is reported as unavailable, rather than empty.
+  `doctor --target <triple>` checks cargo and that target's standard library
+  for a Rust static binding, and its exit status reflects that check instead
+  of whether a local HashLink or hxcpp program can run. A missing built-in
+  target names the `rustup target add` command; an unknown name instead
+  points to `rustc --print target-list`. A binding needs `std`, not only
+  `core`. This check does not establish that a library's own dependencies or
+  the Haxe app have their platform tools and SDKs installed.
 - **A script calls a library through its host.** A CPPIA script cannot call
   C++ or hold a pointer, so no part of the binding is compiled into it. The
   host is an hxcpp program built to run scripts, containing the library's
