@@ -2,7 +2,7 @@
 //! are defined in a separate file.
 
 use crate::Counter;
-use hxn_future::Future;
+use hxn_future::{Future, Signal};
 
 /// A loudness level. Two discriminants are explicit and the third is
 /// implicit.
@@ -45,6 +45,18 @@ pub struct Settings {
     pub tags: Vec<String>,
     pub payload: Vec<u8>,
     pub grid: Vec<Vec<i32>>,
+}
+
+/// A data value whose encoding still occupies one byte.
+#[hxn::data]
+#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Empty {}
+
+/// Sets nested in a record and a list.
+#[hxn::data]
+pub struct Choices {
+    pub selected: std::collections::HashSet<Mode>,
+    pub groups: Vec<std::collections::BTreeSet<i32>>,
 }
 
 /// Static functions over data types, with no instance.
@@ -109,6 +121,58 @@ impl Shapes {
         [Mode::Quiet, Mode::Loud, Mode::Off]
             .into_iter()
             .find(|mode| *mode as i32 == number)
+    }
+
+    /// Returns its own copy of the choices.
+    pub fn choices(choices: Choices) -> Choices {
+        choices
+    }
+
+    /// Empty records are valid elements of a list and of a set.
+    pub fn empty_values(values: Vec<Empty>) -> Vec<Empty> {
+        values
+    }
+
+    pub fn empty_set(
+        values: std::collections::HashSet<Empty>,
+    ) -> std::collections::BTreeSet<Empty> {
+        values.into_iter().collect()
+    }
+
+    /// Removes duplicates and returns the values in order.
+    pub fn unique_values(
+        values: &std::collections::HashSet<i32>,
+    ) -> std::collections::BTreeSet<i32> {
+        values.iter().copied().collect()
+    }
+
+    /// A set of bytes is a set of numbers, rather than a byte buffer.
+    pub fn unique_bytes(values: std::collections::BTreeSet<u8>) -> std::collections::BTreeSet<u8> {
+        values
+    }
+
+    /// A set transferred when an asynchronous result is taken.
+    pub fn set_later(
+        values: &std::collections::BTreeSet<Mode>,
+    ) -> Future<std::collections::HashSet<Mode>> {
+        let values: std::collections::HashSet<_> = values.iter().copied().collect();
+        hxn_future::spawn_blocking(move || Ok::<_, hxn_future::Failure>(values))
+    }
+
+    /// A set held as a signal's final value.
+    pub fn set_signal() -> Signal<std::collections::BTreeSet<i32>> {
+        let (_source, value) = hxn_future::signal(std::collections::BTreeSet::from([3, 1]));
+        value
+    }
+
+    /// A Haxe function receives and returns set elements as arrays.
+    pub fn mapped_set<E>(
+        f: impl Fn(std::collections::HashSet<String>) -> Result<std::collections::BTreeSet<String>, E>,
+    ) -> Result<std::collections::BTreeSet<String>, E> {
+        f(std::collections::HashSet::from([
+            String::from("naïve ☃"),
+            String::from("alpha"),
+        ]))
     }
 
     /// Scales a table keyed by the library's enum.

@@ -72,6 +72,15 @@
           "blocking": false
         },
         {
+          "name": "missing",
+          "docs": "Requested names that are not stocked, returned once each in order.",
+          "kind": "method",
+          "params": [{ "name": "wanted", "type": "set<str>" }],
+          "returns": "sorted_set<str>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
           "name": "shortages",
           "docs": "Quantities still needed to reach a target for each unit.",
           "kind": "method",

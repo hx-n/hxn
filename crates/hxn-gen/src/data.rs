@@ -62,6 +62,11 @@ pub fn rust_type(data: &Data) -> String {
         Data::Enum(name) | Data::Record(name) | Data::Tagged(name) => name.clone(),
         Data::Option(of) => format!("Option<{}>", rust_type(of)),
         Data::List(of) => format!("Vec<{}>", rust_type(of)),
+        Data::Set { of, sorted } => format!(
+            "std::collections::{}<{}>",
+            if *sorted { "BTreeSet" } else { "HashSet" },
+            rust_type(of)
+        ),
         Data::Boxed(of) => format!("Box<{}>", rust_type(of)),
         Data::Map { key, value, sorted } => format!(
             "std::collections::{}<{}, {}>",
@@ -116,6 +121,12 @@ pub fn rust_read(data: &Data) -> String {
             least(of),
             rust_read(of)
         ),
+        Data::Set { of, .. } => format!(
+            "{{ let count = input.items({})?; let mut items: {} = Default::default(); for _ in 0..count {{ items.insert({}); }} items }}",
+            least(of),
+            rust_type(data),
+            rust_read(of)
+        ),
     }
 }
 
@@ -155,7 +166,7 @@ pub fn rust_write(data: &Data, value: &str) -> String {
         ),
         // Bound to a name first: `value` may be `&a.b`, and a method call
         // would bind tighter than the `&`.
-        Data::List(of) => format!(
+        Data::List(of) | Data::Set { of, .. } => format!(
             "{{ let items = {value}; {wire}::count(out, items.len())?; for item in items.iter() {{ {} }} }}",
             rust_write(of, "item")
         ),
@@ -191,7 +202,7 @@ pub fn rust_codec(library: &Library) -> String {
             .iter()
             .map(|field| format!("\n        {}: {},", field.name, rust_read(&field.ty)))
             .collect();
-        let written: String = record
+        let mut written: String = record
             .fields
             .iter()
             .map(|field| {
@@ -202,8 +213,16 @@ pub fn rust_codec(library: &Library) -> String {
                 )
             })
             .collect();
+        // Every record consumes at least one byte, including an empty one,
+        // so collection counts can be bounded by the bytes remaining.
+        let padding = if record.fields.is_empty() {
+            written.push_str("\n    hxn_abi::wire::bool(out, false);");
+            "\n    if input.bool()? { return Err(Fault::Encoding); }"
+        } else {
+            ""
+        };
         out.push_str(&format!(
-            "\n#[allow(dead_code)]\nfn {reader}(input: &mut hxn_abi::wire::Reader) -> Result<{name}, Fault> {{\n    input.enter()?;\n    let value = {name} {{{read}\n    }};\n    input.leave();\n    Ok(value)\n}}\n\n#[allow(dead_code, unused_variables)]\nfn {writer}(value: &{name}, out: &mut Vec<u8>) -> Result<(), Fault> {{{written}\n    Ok(())\n}}\n",
+            "\n#[allow(dead_code)]\nfn {reader}(input: &mut hxn_abi::wire::Reader) -> Result<{name}, Fault> {{\n    input.enter()?;{padding}\n    let value = {name} {{{read}\n    }};\n    input.leave();\n    Ok(value)\n}}\n\n#[allow(dead_code, unused_variables)]\nfn {writer}(value: &{name}, out: &mut Vec<u8>) -> Result<(), Fault> {{{written}\n    Ok(())\n}}\n",
             reader = reader(name),
             writer = writer(name),
         ));
@@ -356,6 +375,7 @@ pub fn haxe_type(data: &Data) -> String {
         Data::Enum(name) | Data::Record(name) | Data::Tagged(name) => name.clone(),
         Data::Option(of) => format!("Null<{}>", haxe_type(of)),
         Data::List(of) => format!("Array<{}>", haxe_type(of)),
+        Data::Set { of, .. } => format!("hxn.Set<{}>", haxe_type(of)),
         Data::Boxed(of) => haxe_type(of),
         Data::Map { key, value, .. } => format!("Map<{}, {}>", haxe_type(key), haxe_type(value)),
     }
@@ -414,11 +434,16 @@ pub fn haxe_write(data: &Data, value: &str, out: &str, depth: usize) -> Vec<Stri
             lines.push(String::from("}"));
             lines
         }
-        Data::List(of) => {
+        Data::List(of) | Data::Set { of, .. } => {
             let item = format!("item{depth}");
+            let kind = if matches!(data, Data::Set { .. }) {
+                "set"
+            } else {
+                "list"
+            };
             let mut lines = vec![
                 format!("if ({value} == null)"),
-                String::from("\tthrow new haxe.Exception(\"null where a list is needed\");"),
+                format!("\tthrow new haxe.Exception(\"null where a {kind} is needed\");"),
                 format!("{out}.addInt32({value}.length);"),
                 format!("for ({item} in {value}) {{"),
             ];
@@ -461,6 +486,11 @@ pub fn haxe_read(data: &Data) -> String {
             haxe_type(data)
         ),
         Data::List(of) => format!("[for (_ in 0...input.readInt32()) {}]", haxe_read(of)),
+        Data::Set { of, .. } => format!(
+            "new hxn.Set<{}>([for (_ in 0...input.readInt32()) {}])",
+            haxe_type(of),
+            haxe_read(of)
+        ),
     }
 }
 
@@ -485,6 +515,9 @@ fn record_file(record: &Record) -> File {
         ));
     }
     out.push_str("\n\t/** Writes the fields in order, as the library reads them. **/\n\t@:noCompletion public function hxnWrite(out:haxe.io.BytesBuffer):Void {\n");
+    if record.fields.is_empty() {
+        out.push_str("\t\tout.addByte(0);\n");
+    }
     for field in &record.fields {
         for line in haxe_write(&field.ty, &camel(&field.name), "out", 0) {
             out.push_str(&format!("\t\t{line}\n"));
@@ -494,6 +527,9 @@ fn record_file(record: &Record) -> File {
     out.push_str(&format!(
         "\t@:noCompletion public static function hxnRead(input:haxe.io.BytesInput):{name} {{\n"
     ));
+    if record.fields.is_empty() {
+        out.push_str("\t\tif (input.readByte() != 0)\n\t\t\tthrow new haxe.Exception(\"invalid empty record\");\n");
+    }
     for field in &record.fields {
         out.push_str(&format!(
             "\t\tvar {}:{} = {};\n",

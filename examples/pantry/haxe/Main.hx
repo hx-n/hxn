@@ -21,6 +21,12 @@ class Main {
 		var low = pantry.low(Unit.Kilo, 5);
 		Sys.println('low on ${[for (item in low) item.name].join(" and ")}');
 
+		// Sets provide membership and insertion; the Rust result is sorted.
+		var wanted = new hxn.Set(["rice", "salt"]);
+		wanted.add("salt");
+		wanted.add("oil");
+		Sys.println('to buy: ${pantry.missing(wanted).toArray().join(" and ")}');
+
 		// An enum stays typed when it is used as a map key.
 		var missing = pantry.shortages([Unit.Each => 15, Unit.Kilo => 5, Unit.Litre => 1]);
 		Sys.println('short by unit: ${missing.get(Unit.Each)} each, ${missing.get(Unit.Kilo)} kilo, ${missing.get(Unit.Litre)} litre');

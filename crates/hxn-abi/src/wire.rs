@@ -9,8 +9,8 @@
 //! | an `f64`, an `f32` | eight, little-endian, as an `f64` |
 //! | text, bytes | a length as an `i32`, then that many bytes; text is UTF-8 |
 //! | an `Option` | one byte, 0 or 1, then the value if 1 |
-//! | a list | a count as an `i32`, then each item |
-//! | a record | its fields, in the order declared |
+//! | a list or set | a count as an `i32`, then each item |
+//! | a record | its fields in declaration order, or one zero byte if empty |
 //! | a tagged enum | the variant's index, starting at 0, as an `i32`, then its fields |
 //! | a map | a count as an `i32`, then each key and its value |
 //!

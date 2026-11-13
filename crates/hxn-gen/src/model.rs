@@ -91,6 +91,12 @@ pub enum Data {
     Tagged(String),
     Option(Box<Data>),
     List(Box<Data>),
+    /// A Rust set, represented as `hxn.Set` in Haxe. A sorted set writes its
+    /// elements in Rust's `Ord` order.
+    Set {
+        of: Box<Data>,
+        sorted: bool,
+    },
     /// `Box<T>`, treated as `T` everywhere except in Rust: how a recursive
     /// type is declared.
     Boxed(Box<Data>),
@@ -113,6 +119,7 @@ impl Data {
             | Self::Tagged(_)
             | Self::Option(_)
             | Self::List(_)
+            | Self::Set { .. }
             | Self::Map { .. } => Some(Type::Bytes),
             _ => None,
         }
@@ -131,6 +138,11 @@ impl Data {
             Self::Enum(name) | Self::Record(name) | Self::Tagged(name) => name.clone(),
             Self::Option(of) => format!("option<{}>", of.name()),
             Self::List(of) => format!("list<{}>", of.name()),
+            Self::Set { of, sorted } => format!(
+                "{}<{}>",
+                if *sorted { "sorted_set" } else { "set" },
+                of.name()
+            ),
             Self::Boxed(of) => of.name(),
             Self::Map { key, value, .. } => format!("map<{}, {}>", key.name(), value.name()),
         }
@@ -150,6 +162,11 @@ impl Data {
             Self::Enum(name) | Self::Record(name) | Self::Tagged(name) => crate::names::snake(name),
             Self::Option(of) => format!("option_{}", of.symbol()),
             Self::List(of) => format!("list_{}", of.symbol()),
+            Self::Set { of, sorted } => format!(
+                "{}_{}",
+                if *sorted { "sorted_set" } else { "set" },
+                of.symbol()
+            ),
             Self::Boxed(of) => format!("box_{}", of.symbol()),
             Self::Map { key, value, .. } => format!("map_{}_{}", key.symbol(), value.symbol()),
         }

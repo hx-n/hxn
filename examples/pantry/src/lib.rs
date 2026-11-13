@@ -87,6 +87,18 @@ impl Pantry {
         self.items.iter().find(|item| item.name == name).cloned()
     }
 
+    /// Requested names that are not stocked, returned once each in order.
+    pub fn missing(
+        &self,
+        wanted: &std::collections::HashSet<String>,
+    ) -> std::collections::BTreeSet<String> {
+        wanted
+            .iter()
+            .filter(|name| !self.items.iter().any(|item| item.name == **name))
+            .cloned()
+            .collect()
+    }
+
     /// Quantities still needed to reach a target for each unit.
     pub fn shortages(
         &self,

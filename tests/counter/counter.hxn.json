@@ -51,6 +51,21 @@
         { "name": "payload", "type": "bytes" },
         { "name": "grid", "type": "list<list<i32>>" }
       ]
+    },
+    {
+      "name": "Empty",
+      "docs": "A data value whose encoding still occupies one byte.",
+      "fields": [
+
+      ]
+    },
+    {
+      "name": "Choices",
+      "docs": "Sets nested in a record and a list.",
+      "fields": [
+        { "name": "selected", "type": "set<Mode>" },
+        { "name": "groups", "type": "list<sorted_set<i32>>" }
+      ]
     }
   ],
   "tagged": [
@@ -1368,6 +1383,77 @@
           "params": [{ "name": "number", "type": "i32" }],
           "returns": "option<Mode>",
           "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "choices",
+          "docs": "Returns its own copy of the choices.",
+          "kind": "static",
+          "params": [{ "name": "choices", "type": "Choices" }],
+          "returns": "Choices",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "empty_values",
+          "docs": "Empty records are valid elements of a list and of a set.",
+          "kind": "static",
+          "params": [{ "name": "values", "type": "list<Empty>" }],
+          "returns": "list<Empty>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "empty_set",
+          "kind": "static",
+          "params": [{ "name": "values", "type": "set<Empty>" }],
+          "returns": "sorted_set<Empty>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "unique_values",
+          "docs": "Removes duplicates and returns the values in order.",
+          "kind": "static",
+          "params": [{ "name": "values", "type": "set<i32>" }],
+          "returns": "sorted_set<i32>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "unique_bytes",
+          "docs": "A set of bytes is a set of numbers, rather than a byte buffer.",
+          "kind": "static",
+          "params": [{ "name": "values", "type": "sorted_set<u8>" }],
+          "returns": "sorted_set<u8>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "set_later",
+          "docs": "A set transferred when an asynchronous result is taken.",
+          "kind": "static",
+          "params": [{ "name": "values", "type": "sorted_set<Mode>" }],
+          "returns": "future<set<Mode>>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "set_signal",
+          "docs": "A set held as a signal's final value.",
+          "kind": "static",
+          "params": [],
+          "returns": "signal<sorted_set<i32>>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "mapped_set",
+          "docs": "A Haxe function receives and returns set elements as arrays.",
+          "kind": "static",
+          "params": [{ "name": "f", "type": "fn(set<str>) -> sorted_set<str>" }],
+          "returns": "sorted_set<str>",
+          "fallible": true,
           "blocking": false
         },
         {

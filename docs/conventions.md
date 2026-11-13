@@ -57,7 +57,7 @@ The rules that hxn's code, its bindings and its tests follow.
 | release function for any handle | `hxn_<library>_release` |
 | the library's queue of ready results | `hxn_<library>_outbox_wait`, `hxn_<library>_outbox_next` |
 | waiting on and watching a future, stream or signal | `hxn_<library>_future_wait`, `_future_state`, `_future_watch`; the same for `stream` and `signal` |
-| taking the value one carries | `hxn_<library>_future_take_<kind>`, `hxn_<library>_stream_next_<kind>`, `hxn_<library>_signal_get_<kind>`; the kind is `unit`, `bool`, `int`, `long`, `float`, `text`, `bytes`, the name of a narrower number type, or the snake-case name of an interface or data type, prefixed with `option_`, `list_` or `map_` for those wrappers. Two carried types that map to the same name are rejected |
+| taking the value one carries | `hxn_<library>_future_take_<kind>`, `hxn_<library>_stream_next_<kind>`, `hxn_<library>_signal_get_<kind>`; the kind is `unit`, `bool`, `int`, `long`, `float`, `text`, `bytes`, the name of a narrower number type, or the snake-case name of an interface or data type, prefixed with `option_`, `list_`, `map_`, `set_` or `sorted_set_` for those wrappers. Two carried types that map to the same name are rejected |
 | fetching the typed error of the last failure | `hxn_<library>_thrown_take`, generated only when a function has a `#[hxn::data]` error type |
 | exception class for a typed error | Haxe class `<Name>Exception`, with a trailing `Error` removed from the name first |
 | serializer for a tagged enum | Haxe class `<Name>Wire` |
@@ -112,13 +112,22 @@ filesystem `#include "counter.h"` would then find the generated header.
 - Plain data is a struct or an enum marked `#[hxn::data]`, `pub` and
   reachable at the crate's root, with a name that no interface uses. A struct has
   named fields, all `pub`, each a `bool`, a fixed-width number,
-  `String`, `Vec<u8>`, other data, or an `Option`, `Vec`, `Box`, `HashMap`
-  or `BTreeMap` of these. Map keys are `String`, an integer of at most 32
-  bits, or a C-like enum. An enum is either C-like (no variant has fields; explicit
-  discriminants are allowed) or tagged (some variants have fields, named or
-  unnamed; no explicit discriminants). Data is accepted by value or by `&`, a
-  list also as `&[T]`, and returned by value. `Option`, `Vec` and maps of
-  data are accepted wherever data is.
+  `String`, `Vec<u8>`, other data, or an `Option`, `Vec`, `Box`, `HashMap`,
+  `BTreeMap`, `HashSet` or `BTreeSet` of these. Map keys are `String`, an
+  integer of at most 32 bits, or a C-like enum. An enum is either C-like
+  (no variant has fields; explicit discriminants are allowed) or tagged
+  (some variants have fields, named or unnamed; no explicit discriminants).
+  Data is accepted by value or by `&`, a list also as `&[T]`, and returned
+  by value. `Option`, `Vec`, maps and sets of data are accepted wherever data is.
+- A `HashSet<T>` or `BTreeSet<T>` is an `hxn.Set<T>` in Haxe. The wrapper
+  accepts array literals and provides membership, insertion, removal and
+  iteration. Haxe membership uses `==` unless constructed with an equality
+  function; Rust applies its own `Eq + Hash` or `Ord` on every call. A
+  returned `BTreeSet` is in Rust's `Ord` order; a `HashSet` has no promised
+  order. Adding elements in Haxe does not sort the set. Sets are data
+  everywhere data is accepted, and a set of `u8` is `hxn.Set<Int>`, not `Bytes`.
+- An empty data record occupies one zero byte, including inside a collection.
+  This lets the reader bound every collection count by the available bytes.
 - Recursive data goes through a `Vec` or a `Box` and may nest at most
   `hxn_abi::wire::Reader::DEPTH` levels. Use a `Vec` for a long sequence,
   not a chain of boxes.

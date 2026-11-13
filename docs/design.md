@@ -89,6 +89,7 @@ Plain data crosses by value. A library marks it with `#[hxn::data]`:
 | a tagged enum (some variants have fields) | an `enum` with the same constructors |
 | `Option<T>`, `Vec<T>` | `Null<T>`, `Array<T>` |
 | `HashMap<K, V>`, `BTreeMap<K, V>` | `Map<K, V>`; keys are `String`, `Int` or a C-like enum |
+| `HashSet<T>`, `BTreeSet<T>` | `hxn.Set<T>`; a `BTreeSet` returns Rust's `Ord` order |
 | `Box<T>` | `T` |
 
 - **A C-like enum crosses as its integer value.** The adapter converts in
@@ -99,8 +100,10 @@ Plain data crosses by value. A library marks it with `#[hxn::data]`:
   `Vec` and maps are serialized field by field in declaration order: a
   tagged enum as its variant index followed by that variant's fields, an
   `Option` as a presence byte followed by the value, a list or a map as a
-  count followed by the entries. Both sides are generated from the same
-  declaration, so the encoding carries no type information. Every runtime
+  count followed by the entries. A set uses a list's count and elements. An
+  empty record occupies one zero byte, so the count remains bounded by the
+  bytes available. Both sides are generated from the same declaration, so
+  the encoding carries no type information. Every runtime
   can already pass bytes, so this needs no per-runtime support, and nested
   types need nothing extra.
 - **Data can be recursive** through a `Vec` or a `Box`, which is how a tree
@@ -111,6 +114,17 @@ Plain data crosses by value. A library marks it with `#[hxn::data]`:
   `Map<Mode, T>` and uses its integer key storage. The wire contains each
   key's declared discriminant, checked by Rust's enum reader, followed by
   the value. Tagged enums are not map keys.
+- **Sets have a Haxe wrapper.** `hxn.Set<T>` provides `add`, `has`, `remove`,
+  `clear`, `length`, iteration, `copy` and `toArray`. Array literals convert
+  to sets, and construction and `toArray` copy the array. Its array storage
+  preserves insertion order and membership checks are linear. Membership
+  uses Haxe `==` by default, including object identity; an optional equality
+  function compares data values differently. Rust applies its own `Eq + Hash`
+  or `Ord` when reading elements, so it may remove more duplicates. A
+  `BTreeSet` writes elements in Rust's `Ord` order, and a `HashSet` promises
+  no order. The wrapper preserves that order, but later additions do not
+  sort it. Sets, including a set of bytes, use the data encoding rather
+  than a byte buffer.
 - **A reader takes exactly what was written.** Bytes that run out, a count
   the bytes left cannot back, text that is not UTF-8 and bytes left over all
   fail the call, with the same status as badly encoded text.

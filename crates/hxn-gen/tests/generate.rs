@@ -2187,9 +2187,94 @@ fn text_of(files: &[hxn_gen::File], path: &str) -> String {
         .clone()
 }
 
-// A tagged enum is a Haxe enum with the same cases, serialized as the
-// variant's index and then its fields. A box is its inner value, and a map
-// is a Haxe `Map`.
+#[test]
+fn empty_records_consume_one_byte_inside_collections() {
+    let library = parse(
+        "thing",
+        r#"
+#[hxn::data] pub struct Empty {}
+#[hxn::interface] pub struct Thing;
+#[hxn::methods] impl Thing {
+    pub fn values(values: Vec<Empty>) -> BTreeSet<Empty> { todo!() }
+}
+"#,
+    )
+    .unwrap();
+    for adapter in [
+        hxn_gen::c_adapter(&library, "thing_core"),
+        hxn_gen::hl_adapter(&library, "thing_core"),
+    ] {
+        assert!(adapter.contains("if input.bool()? { return Err(Fault::Encoding); }"));
+        assert!(adapter.contains("hxn_abi::wire::bool(out, false);"));
+        assert!(adapter.contains("input.items(1)?"));
+    }
+    let files = hxn_gen::haxe_hl(&library);
+    let empty = &files
+        .iter()
+        .find(|file| file.path == "Empty.hx")
+        .unwrap()
+        .text;
+    assert!(empty.contains("out.addByte(0);"));
+    assert!(empty.contains("if (input.readByte() != 0)"));
+}
+
+#[test]
+fn sets_cross_as_wrappers_with_rust_collection_semantics() {
+    let library = parse(
+        "thing",
+        r#"
+#[hxn::data]
+pub enum Mode { Off, Quiet, Loud }
+#[hxn::data]
+pub struct Choices { pub selected: HashSet<Mode>, pub groups: Vec<BTreeSet<i32>> }
+#[hxn::interface]
+pub struct Thing;
+#[hxn::methods]
+impl Thing {
+    pub fn echo(value: Choices) -> Choices { todo!() }
+    pub fn unique(value: &HashSet<i32>) -> BTreeSet<i32> { todo!() }
+    pub fn unordered() -> Future<HashSet<i32>> { todo!() }
+    pub fn ordered() -> Future<BTreeSet<i32>> { todo!() }
+    pub fn bytes(value: BTreeSet<u8>) -> HashSet<u8> { todo!() }
+}
+"#,
+    )
+    .unwrap();
+    let methods = &library.interfaces[0].methods;
+    assert_eq!(methods[1].params[0].type_name(), "set<i32>");
+    assert_eq!(methods[1].returns_name(), "sorted_set<i32>");
+    assert_eq!(methods[4].params[0].type_name(), "sorted_set<u8>");
+    for adapter in [
+        hxn_gen::c_adapter(&library, "thing_core"),
+        hxn_gen::hl_adapter(&library, "thing_core"),
+    ] {
+        assert!(adapter.contains("std::collections::HashSet<Mode>"));
+        assert!(adapter.contains("std::collections::BTreeSet<i32>"));
+        assert!(adapter.contains("items.insert(input.i32()?)"));
+        assert!(adapter.contains("hxn_thing_future_take_set_int"));
+        assert!(adapter.contains("hxn_thing_future_take_sorted_set_int"));
+    }
+    for files in [hxn_gen::haxe_hl(&library), cpp_classes(&library)] {
+        let choices = &files
+            .iter()
+            .find(|file| file.path == "Choices.hx")
+            .unwrap()
+            .text;
+        assert!(choices.contains("selected:hxn.Set<Mode>"));
+        assert!(choices.contains("groups:Array<hxn.Set<Int>>"));
+        let thing = &files
+            .iter()
+            .find(|file| file.path == "Thing.hx")
+            .unwrap()
+            .text;
+        assert!(thing.contains("function unique(value:hxn.Set<Int>):hxn.Set<Int>"));
+        assert!(thing.contains("function unordered():hxn.Future<hxn.Set<Int>>"));
+        assert!(thing.contains("function bytes(value:hxn.Set<Int>):hxn.Set<Int>"));
+    }
+    let error = parse("thing", "#[hxn::interface] pub struct Thing; #[hxn::methods] impl Thing { pub fn invalid(value: HashSet<Thing>) {} }").unwrap_err();
+    assert!(error.message.contains("a parameter is one of"));
+}
+
 #[test]
 fn a_map_keeps_its_enum_key_type() {
     let source = r#"
@@ -2246,6 +2331,9 @@ impl Thing {
     );
 }
 
+// A tagged enum is a Haxe enum with the same cases, serialized as the
+// variant's index and then its fields. A box is its inner value, and a map
+// is a Haxe `Map`.
 #[test]
 fn an_enum_whose_variants_hold_values_is_a_haxe_enum() {
     let source = r#"

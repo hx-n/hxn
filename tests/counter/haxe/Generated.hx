@@ -45,6 +45,46 @@ class Generated {
 		throws("a number that names none is refused", () -> Shapes.louder((77 : Mode)), "number out of range");
 		check("an enum that may be missing", Shapes.modeOf(9) == Mode.Loud && Shapes.modeOf(4) == null);
 
+		var input = [3, 1, 3];
+		var local:hxn.Set<Int> = input;
+		input.push(9);
+		check("sets copy and deduplicate array inputs", local.length == 2 && !local.has(9));
+		check("set insertion reports membership", local.add(2) && !local.add(2) && local.has(2));
+		check("set iteration preserves insertion order", [for (value in local) value].join(",") == "3,1,2");
+		var detached = local.toArray();
+		detached.push(8);
+		check("set arrays are independent copies", !local.has(8));
+		var copied = local.copy();
+		check("set removal reports absence", copied.remove(1) && !copied.remove(1) && local.has(1));
+		copied.clear();
+		check("clearing a set leaves its copy alone", copied.length == 0 && local.length == 3);
+		var records = new hxn.Set<Point>([{x: 1, y: 2}, {x: 1, y: 2}], (a, b) -> a.x == b.x && a.y == b.y);
+		check("set membership can compare data values", records.length == 1 && records.has({x: 1, y: 2}));
+		check("a copied set keeps its comparison", !records.copy().add({x: 1, y: 2}));
+		check("a set wrapper is accepted by Rust", Shapes.uniqueValues(local).toArray().join(",") == "1,2,3");
+		throws("a null set is refused", () -> Shapes.uniqueValues(null), "null where a set is needed");
+
+		check("empty records remain distinct list elements", Shapes.emptyValues([{}, {}]).length == 2);
+		check("and collapse to one set element", Shapes.emptySet([{}, {}]).length == 1 && Shapes.emptySet([]).length == 0);
+		var choices = Shapes.choices({selected: [Mode.Quiet, Mode.Quiet, Mode.Loud], groups: [[3, 1, 3], [], [2, -1]]});
+		check("sets nested in data keep their element types", choices.selected.length == 2 && choices.selected.has(Mode.Quiet)
+			&& choices.selected.has(Mode.Loud) && choices.groups[0].toArray().join(",") == "1,3" && choices.groups[1].length == 0
+			&& choices.groups[2].toArray().join(",") == "-1,2");
+		check("sets remove duplicate elements and preserve sorted order", Shapes.uniqueValues([3, -1, 3, 2, -1]).toArray().join(",") == "-1,2,3");
+		check("sets can be empty", Shapes.uniqueValues([]).length == 0);
+		check("a set of bytes contains numbers", Shapes.uniqueBytes([255, 0, 255, 1]).toArray().join(",") == "0,1,255");
+		throws("set elements keep their range checks", () -> Shapes.uniqueBytes([256]), "number out of range");
+		var set = Shapes.setLater([Mode.Loud, Mode.Quiet, Mode.Loud]).await();
+		check("a future carries a set of enums", set.length == 2 && set.has(Mode.Loud) && set.has(Mode.Quiet));
+		check("a signal carries a sorted set", Shapes.setSignal().peek().toArray().join(",") == "1,3");
+		var mappedSet = Shapes.mappedSet(elements -> {
+			check("a callback receives set elements", elements.length == 2 && elements.has("naïve ☃") && elements.has("alpha"));
+			return ["naïve ☃", "alpha", "alpha"];
+		});
+		check("a callback returns a sorted set", mappedSet.toArray().join("|") == "alpha|naïve ☃");
+		throws("a set callback can fail", () -> Shapes.mappedSet(_ -> throw new haxe.Exception("set refused")), "set refused");
+		check("a failed set callback leaves the next call usable", Shapes.mappedSet(_ -> []).length == 0);
+
 		var modes = Shapes.scaledModes([Mode.Quiet => 2, Mode.Loud => 3, Mode.Off => 0], 4);
 		check("a map keeps its enum keys", modes.get(Mode.Quiet) == 8 && modes.get(Mode.Loud) == 12 && modes.get(Mode.Off) == 0);
 		check("an empty map of enum keys", Lambda.count(Shapes.scaledModes([], 2)) == 0);

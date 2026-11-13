@@ -206,6 +206,27 @@ fn mapped(ty: &syn::Type) -> Option<(&syn::Type, &syn::Type, bool)> {
     }
 }
 
+// Unwraps a set to its element and whether it is ordered.
+fn set(ty: &syn::Type) -> Option<(&syn::Type, bool)> {
+    let syn::Type::Path(path) = ty else {
+        return None;
+    };
+    let segment = path.path.segments.last()?;
+    let sorted = match segment.ident.to_string().as_str() {
+        "HashSet" => false,
+        "BTreeSet" => true,
+        _ => return None,
+    };
+    let syn::PathArguments::AngleBracketed(arguments) = &segment.arguments else {
+        return None;
+    };
+    let mut types = arguments.args.iter();
+    match (types.next(), types.next()) {
+        (Some(syn::GenericArgument::Type(of)), None) => Some((of, sorted)),
+        _ => None,
+    }
+}
+
 // Plain data, given the names of the library's data types. `None` for a type
 // that is not data.
 fn data_of(ty: &syn::Type, known: Known) -> Option<Data> {
@@ -220,6 +241,12 @@ fn data_of(ty: &syn::Type, known: Known) -> Option<Data> {
     }
     if let Some(inner) = wrapped(ty, "Box") {
         return Some(Data::Boxed(Box::new(data_of(inner, known)?)));
+    }
+    if let Some((of, sorted)) = set(ty) {
+        return Some(Data::Set {
+            of: Box::new(data_of(of, known)?),
+            sorted,
+        });
     }
     if let Some((key, value, sorted)) = mapped(ty) {
         // The key types a Haxe `Map` supports.
@@ -1269,7 +1296,7 @@ fn field_data(ty: &syn::Type, known: Known) -> Result<Data, Error> {
     let Some(data) = data_of(ty, known) else {
         return error(
             ty.span(),
-            "a field of data is one of bool, a number, String, Vec<u8>, other data, or an Option, Vec, Box, HashMap or BTreeMap of these, a map keyed by String, a whole number of at most 32 bits or a C-like enum",
+            "a field of data is one of bool, a number, String, Vec<u8>, other data, or an Option, Vec, Box, HashMap, BTreeMap, HashSet or BTreeSet of these, a map keyed by String, a whole number of at most 32 bits or a C-like enum",
         );
     };
     if matches!(data, Data::Number(Number::Isize | Number::Usize)) {
