@@ -2188,6 +2188,115 @@ fn text_of(files: &[hxn_gen::File], path: &str) -> String {
 }
 
 #[test]
+fn streams_carry_typed_terminal_errors() {
+    let library = parse(
+        "thing",
+        r#"
+#[hxn::data] pub enum FeedError { Stopped(String) }
+#[hxn::data] pub struct OtherError { pub code: i32 }
+#[hxn::interface] pub struct Thing;
+#[hxn::interface] pub struct Counter;
+#[hxn::interface(shared)] pub struct Pot;
+#[hxn::methods] impl Thing {
+    pub fn feed() -> Stream<Result<i32, FeedError>> { todo!() }
+    pub fn other() -> Stream<Result<i32, OtherError>> { todo!() }
+    pub fn plain() -> Stream<i32> { todo!() }
+    pub fn bytes() -> Stream<Result<Vec<u8>, FeedError>> { todo!() }
+    pub fn unit() -> Stream<Result<(), FeedError>> { todo!() }
+    pub fn objects() -> Stream<Result<Counter, FeedError>> { todo!() }
+    pub fn batches() -> Stream<Result<Vec<Counter>, FeedError>> { todo!() }
+    pub fn optional() -> Stream<Result<Option<Counter>, FeedError>> { todo!() }
+    pub fn shared() -> Stream<Result<Arc<Pot>, FeedError>> { todo!() }
+    pub fn startup() -> Result<Stream<Result<i32, FeedError>>, OtherError> { todo!() }
+}
+"#,
+    )
+    .unwrap();
+    assert_eq!(
+        library
+            .errors()
+            .iter()
+            .map(|error| error.name())
+            .collect::<Vec<_>>(),
+        ["FeedError", "OtherError"]
+    );
+    let manifest = hxn_gen::manifest(&library);
+    assert!(manifest.contains("stream<result<i32, FeedError>>"));
+    for adapter in [
+        hxn_gen::c_adapter(&library, "thing_core"),
+        hxn_gen::hl_adapter(&library, "thing_core"),
+    ] {
+        assert!(adapter.contains("this.next_result::<i32, FeedError>(hxn_thrown_feed_error)"));
+        assert!(adapter.contains("this.next_result::<Arc<Pot>, FeedError>(hxn_thrown_feed_error)"));
+        assert!(adapter.contains("stream_next_result_int_feed_error"));
+        assert!(adapter.contains("stream_next_result_int_other_error"));
+        assert!(adapter.contains("stream_next_int"));
+        assert!(adapter.contains("stream_next_counter"));
+    }
+    for files in [
+        hxn_gen::haxe_hl(&library),
+        cpp_classes(&library),
+        hxn_gen::haxe_cppia(&library),
+    ] {
+        let thing = text_of(&files, "Thing.hx");
+        assert!(thing.contains("function feed():hxn.Stream<Int>"));
+        assert!(thing.contains("function unit():hxn.Stream<hxn.Unit>"));
+        assert!(thing.contains("function batches():hxn.Stream<Array<Counter>>"));
+        assert!(thing.contains("function optional():hxn.Stream<Null<Counter>>"));
+        assert!(thing.contains("function shared():hxn.Stream<Pot>"));
+        assert!(files.iter().any(|file| file.path == "FeedException.hx"));
+    }
+    for files in [hxn_gen::haxe_hl(&library), cpp_classes(&library)] {
+        let stream = text_of(&files, "HxnThingStream.hx");
+        assert!(stream.contains("ofResultIntFeedError"));
+        assert!(stream.contains("catch (error:haxe.Exception) throw HxnThingThrown.typed(error)"));
+        assert!(stream.contains("ofCounter"));
+    }
+    for (source, expected) in [
+        ("Stream<Result<i32, String>>", "a stream Result error names"),
+        (
+            "Stream<Result<i32, Option<FeedError>>>",
+            "a stream Result error names",
+        ),
+        (
+            "Stream<Result<Result<i32, FeedError>, FeedError>>",
+            "a stream carries",
+        ),
+        (
+            "Future<Result<i32, FeedError>>",
+            "a carried Result is supported by Stream",
+        ),
+        (
+            "Signal<Result<i32, FeedError>>",
+            "a carried Result is supported by Stream",
+        ),
+    ] {
+        let source = format!(
+            "#[hxn::data] pub enum FeedError {{ Stopped }} #[hxn::interface] pub struct Thing; #[hxn::methods] impl Thing {{ pub fn bad() -> {source} {{ todo!() }} }}"
+        );
+        let error = parse("thing", &source).unwrap_err();
+        assert!(
+            error.message.contains(expected),
+            "{source}: {}",
+            error.message
+        );
+    }
+    let clash = parse(
+        "thing",
+        r#"
+#[hxn::data] pub enum FeedError { Stopped }
+#[hxn::interface] pub struct ResultIntFeedError;
+#[hxn::methods] impl ResultIntFeedError {
+    pub fn first() -> Stream<Result<i32, FeedError>> { todo!() }
+    pub fn second() -> Stream<ResultIntFeedError> { todo!() }
+}
+"#,
+    )
+    .unwrap_err();
+    assert!(clash.message.contains("taken by calls of one name"));
+}
+
+#[test]
 fn record_defaults_are_materialized_in_rust() {
     let library = parse(
         "thing",

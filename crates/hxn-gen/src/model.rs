@@ -428,6 +428,11 @@ pub enum Type {
     Stream(Box<Type>),
     /// `Signal<T>`, a value that changes over time. Return type only.
     Signal(Box<Type>),
+    /// A stream item whose error ends the stream as a typed exception.
+    Fallible {
+        value: Box<Type>,
+        error: Data,
+    },
     /// A Haxe callback, borrowed for the duration of the call:
     /// `impl Fn(..) -> Result<T, E>`. Parameter type only.
     Lent {
@@ -463,6 +468,12 @@ impl Library {
         let mut out: Vec<&Data> = Vec::new();
         for method in self.interfaces.iter().flat_map(|i| &i.methods) {
             if let Some(error) = &method.error
+                && !out.contains(&error)
+            {
+                out.push(error);
+            }
+            if let Type::Stream(carried) = &method.returns
+                && let Type::Fallible { error, .. } = &**carried
                 && !out.contains(&error)
             {
                 out.push(error);
@@ -504,6 +515,9 @@ impl Type {
             Self::AtomicBool => String::from("atomic_flag"),
             Self::Future(of) => format!("future<{}>", of.name()),
             Self::Stream(of) => format!("stream<{}>", of.name()),
+            Self::Fallible { value, error } => {
+                format!("result<{}, {}>", value.name(), error.name())
+            }
             Self::Signal(of) => format!("signal<{}>", of.name()),
             Self::Lent { params, returns } => {
                 let taken: Vec<String> = params.iter().map(Self::name).collect();

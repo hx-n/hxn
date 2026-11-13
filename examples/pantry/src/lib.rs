@@ -2,6 +2,8 @@
 //! interface, which is held by reference. A `#[hxn::data]` error type is
 //! passed the same way.
 
+use hxn_future::{Stream, channel};
+
 /// The unit a quantity is counted in. A C-like enum: Haxe gets the same
 /// names, with integer values.
 #[hxn::data]
@@ -87,6 +89,20 @@ impl Pantry {
         }
         item.quantity -= amount;
         Ok(item.clone())
+    }
+
+    /// Takes an order in sequence, stopping at its first error.
+    pub fn take_many(&mut self, wanted: Vec<(String, i32)>) -> Stream<Result<Item, PantryError>> {
+        let (sender, stream) = channel();
+        for (name, amount) in wanted {
+            let item = self.take(&name, amount);
+            let failed = item.is_err();
+            sender.send(item);
+            if failed {
+                break;
+            }
+        }
+        stream
     }
 
     /// Returns the item with that name, or `None` if there is none.

@@ -197,7 +197,13 @@ Nothing unwinds across the boundary in either direction.
   message path is therefore the same as for any other error on every
   runtime, and native code never constructs a Haxe object. Futures work the
   same way: the stored failure carries the bytes, and they are moved to the
-  thread-local when a Haxe thread takes the result. Each failure overwrites
+  thread-local when a Haxe thread takes the result. A `Stream<Result<T, E>>`
+  with a named `#[hxn::data]` error yields its `Ok` values as `hxn.Stream<T>`.
+  Taking its first `Err` closes the read side, drops queued values after that
+  error outside the queue lock, and refuses further sends. The adapter
+  serializes the error on the taking Haxe thread; iteration throws its typed
+  exception, and `listen` delivers it to `onError`. A channel failure from
+  `Sender::fail` retains its existing status, message and optional payload. Each failure overwrites
   the stored value, so the bytes the binding fetches always belong to the
   failure it just caught.
 - The runtime's own exception is raised **after** the Rust call has returned

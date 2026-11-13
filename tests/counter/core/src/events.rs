@@ -7,7 +7,7 @@ use std::task::Poll;
 
 use hxn_future::{Failure, Signal, Stream, channel, signal, stepped};
 
-use crate::{Mode, Point, millis, square_later};
+use crate::{Counter, Mode, Point, millis, square_later};
 
 /// An event: a tagged enum whose variants carry different fields.
 #[hxn::data]
@@ -206,6 +206,67 @@ impl Events {
     /// A future that resolves to an optional number.
     pub async fn maybe_later(value: i32) -> Option<i32> {
         (value >= 0).then_some(value)
+    }
+
+    /// A stream whose typed error follows its preceding values.
+    pub fn checked_feed(fail: bool) -> Stream<Result<i32, CountError>> {
+        let (sender, stream) = channel();
+        sender.send(Ok(1));
+        sender.send(Ok(2));
+        if fail {
+            sender.send(Err(CountError::Unknown(String::from("stream ☃"))));
+        }
+        sender.send(Ok(99));
+        stream
+    }
+
+    pub fn checked_points() -> Stream<Result<Point, Refusal>> {
+        let (sender, stream) = channel();
+        sender.send(Ok(Point { x: 3.0, y: 4.0 }));
+        sender.send(Err(Refusal {
+            code: 8,
+            reason: String::from("stream refused"),
+        }));
+        stream
+    }
+
+    pub fn checked_ticks() -> Stream<Result<(), Trouble>> {
+        let (sender, stream) = channel();
+        sender.send(Ok(()));
+        sender.send(Err(Trouble::Major));
+        stream
+    }
+
+    pub fn checked_bytes() -> Stream<Result<Vec<u8>, CountError>> {
+        let (sender, stream) = channel();
+        sender.send(Ok(b"hello".to_vec()));
+        sender.send(Err(CountError::Empty));
+        stream
+    }
+
+    pub fn checked_objects() -> Stream<Result<Counter, CountError>> {
+        let (sender, stream) = channel();
+        sender.send(Ok(Counter::new(7)));
+        sender.send(Err(CountError::Empty));
+        sender.send(Ok(Counter::new(9)));
+        stream
+    }
+
+    pub fn checked_optional() -> Stream<Result<Option<Counter>, CountError>> {
+        let (sender, stream) = channel();
+        sender.send(Ok(None));
+        sender.send(Ok(Some(Counter::new(8))));
+        sender.send(Err(CountError::Empty));
+        stream
+    }
+
+    pub fn checked_batches() -> Stream<Result<Vec<Counter>, CountError>> {
+        let (sender, stream) = channel();
+        sender.send(Ok(vec![Counter::new(5), Counter::new(6)]));
+        sender.send(Ok(vec![]));
+        sender.send(Err(CountError::Empty));
+        sender.send(Ok(vec![Counter::new(99)]));
+        stream
     }
 
     /// A stream of the first `count` events of `history`.

@@ -195,6 +195,7 @@ name = "pantry"
 version = "0.1.0"
 dependencies = [
  "hxn",
+ "hxn-future",
 ]
 
 [[package]]

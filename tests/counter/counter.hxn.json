@@ -1150,6 +1150,63 @@
           "blocking": false
         },
         {
+          "name": "checked_feed",
+          "docs": "A stream whose typed error follows its preceding values.",
+          "kind": "static",
+          "params": [{ "name": "fail", "type": "bool" }],
+          "returns": "stream<result<i32, CountError>>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "checked_points",
+          "kind": "static",
+          "params": [],
+          "returns": "stream<result<Point, Refusal>>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "checked_ticks",
+          "kind": "static",
+          "params": [],
+          "returns": "stream<result<void, Trouble>>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "checked_bytes",
+          "kind": "static",
+          "params": [],
+          "returns": "stream<result<bytes, CountError>>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "checked_objects",
+          "kind": "static",
+          "params": [],
+          "returns": "stream<result<Counter, CountError>>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "checked_optional",
+          "kind": "static",
+          "params": [],
+          "returns": "stream<result<Counter?, CountError>>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "checked_batches",
+          "kind": "static",
+          "params": [],
+          "returns": "stream<result<list<Counter>, CountError>>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
           "name": "feed",
           "docs": "A stream of the first `count` events of `history`.",
           "kind": "static",

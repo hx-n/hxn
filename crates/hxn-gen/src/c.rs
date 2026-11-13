@@ -35,7 +35,8 @@ fn declaration(library: &Library, interface: &Interface, method: &Method) -> Str
             | Type::Stream(_)
             | Type::Signal(_)
             | Type::List { .. }
-            | Type::Data(_) => {
+            | Type::Data(_)
+            | Type::Fallible { .. } => {
                 unreachable!("not a parameter type")
             }
         };
@@ -47,7 +48,11 @@ fn declaration(library: &Library, interface: &Interface, method: &Method) -> Str
         Type::I64 => params.push(String::from("int64_t *out")),
         Type::F64 => params.push(String::from("double *out")),
         Type::Str | Type::Bytes => params.push(String::from("hxn_buf *out")),
-        Type::Lent { .. } | Type::List { .. } | Type::Data(_) | Type::BytesMut => {
+        Type::Lent { .. }
+        | Type::List { .. }
+        | Type::Data(_)
+        | Type::Fallible { .. }
+        | Type::BytesMut => {
             unreachable!("not a result type")
         }
         Type::Handle { .. }
@@ -190,7 +195,8 @@ fn glue(library: &Library, interface: &Interface, method: &Method) -> String {
             | Type::Stream(_)
             | Type::Signal(_)
             | Type::List { .. }
-            | Type::Data(_) => {
+            | Type::Data(_)
+            | Type::Fallible { .. } => {
                 unreachable!("not a parameter type")
             }
         }
@@ -206,7 +212,11 @@ fn glue(library: &Library, interface: &Interface, method: &Method) -> String {
             Some("hxn_buf out = HXN_BUF_EMPTY;"),
             Some("hxn::take_string(out)"),
         ),
-        Type::Lent { .. } | Type::List { .. } | Type::Data(_) | Type::BytesMut => {
+        Type::Lent { .. }
+        | Type::List { .. }
+        | Type::Data(_)
+        | Type::Fallible { .. }
+        | Type::BytesMut => {
             unreachable!("not a result type")
         }
         Type::Bytes => (

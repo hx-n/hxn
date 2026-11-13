@@ -661,6 +661,29 @@ impl Scope<'_> {
             let Some(carried) = wrapped(ty, name) else {
                 continue;
             };
+            if let Some(value) = wrapped_first(carried, "Result") {
+                if name != "Stream" {
+                    return error(
+                        carried.span(),
+                        "a carried Result is supported by Stream; use async fn for a future with a typed error",
+                    );
+                }
+                let Some(error_type) = failing_type(carried)
+                    .and_then(|ty| data_of(ty, self.known))
+                    .filter(|data| {
+                        matches!(data, Data::Enum(_) | Data::Record(_) | Data::Tagged(_))
+                    })
+                else {
+                    return error(
+                        carried.span(),
+                        "a stream Result error names a type marked `#[hxn::data]`",
+                    );
+                };
+                return Ok(Some(Type::Stream(Box::new(Type::Fallible {
+                    value: Box::new(self.carried(name, value)?),
+                    error: error_type,
+                }))));
+            }
             return Ok(Some(make(Box::new(self.carried(name, carried)?))));
         }
         Ok(None)
@@ -1080,7 +1103,11 @@ fn failing(output: &ReturnType) -> Option<&syn::Type> {
     let ReturnType::Type(_, ty) = output else {
         return None;
     };
-    let syn::Type::Path(path) = &**ty else {
+    failing_type(ty)
+}
+
+fn failing_type(ty: &syn::Type) -> Option<&syn::Type> {
+    let syn::Type::Path(path) = ty else {
         return None;
     };
     let segment = path.path.segments.last()?;

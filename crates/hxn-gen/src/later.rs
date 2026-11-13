@@ -75,7 +75,7 @@ pub fn used(library: &Library) -> Vec<(Kind, Vec<Type>)> {
             out[index].1.push(carried.clone());
         }
         // Taking a batch uses the same stream exports as a direct object list.
-        if let Type::List { interface } = carried {
+        if let Type::List { interface } = value_type(carried) {
             add(
                 out,
                 Kind::Stream,
@@ -95,8 +95,28 @@ pub fn used(library: &Library) -> Vec<(Kind, Vec<Type>)> {
     out
 }
 
-fn interface(carried: &Type) -> Option<&str> {
+// A fallible stream's Haxe value excludes its terminal error.
+fn value_type(carried: &Type) -> &Type {
     match carried {
+        Type::Fallible { value, .. } => value,
+        other => other,
+    }
+}
+
+fn take_call(library: &Library, kind: Kind, carried: &Type) -> String {
+    match carried {
+        Type::Fallible { error, .. } => format!(
+            "this.next_result::<{}, {}>({})",
+            rust_type(library, carried),
+            data::rust_type(error),
+            data::thrower(error)
+        ),
+        _ => format!("this.{}::<{}>()", kind.take(), rust_type(library, carried)),
+    }
+}
+
+fn interface(carried: &Type) -> Option<&str> {
+    match value_type(carried) {
         Type::Handle { interface, .. } => Some(interface),
         _ => None,
     }
@@ -104,7 +124,10 @@ fn interface(carried: &Type) -> Option<&str> {
 
 // A carried type's name within a symbol: `int`, `text`, `counter`.
 fn suffix(carried: &Type) -> String {
-    match carried {
+    if let Type::Fallible { value, error } = carried {
+        return format!("result_{}_{}", suffix(value), error.symbol());
+    }
+    match value_type(carried) {
         Type::Void => String::from("unit"),
         Type::Bool => String::from("bool"),
         Type::I32 => String::from("int"),
@@ -151,7 +174,7 @@ pub fn clash(library: &Library) -> Option<String> {
 
 // The wire type of a carried value: the type itself, or its data's wire type.
 fn crossed(carried: &Type) -> Type {
-    match carried {
+    match value_type(carried) {
         Type::Data(data) => data.crosses().unwrap_or(Type::Bytes),
         other => other.clone(),
     }
@@ -159,7 +182,10 @@ fn crossed(carried: &Type) -> Type {
 
 // A carried type's name within a Haxe name: `Int`, `Text`, `Counter`.
 fn title(carried: &Type) -> String {
-    match carried {
+    if let Type::Fallible { value, error } = carried {
+        return format!("Result{}{}", title(value), pascal(&error.symbol()));
+    }
+    match value_type(carried) {
         Type::Void => String::from("Unit"),
         Type::Bool => String::from("Bool"),
         Type::I32 => String::from("Int"),
@@ -184,7 +210,7 @@ fn title(carried: &Type) -> String {
 }
 
 fn haxe_type(carried: &Type) -> String {
-    match carried {
+    match value_type(carried) {
         Type::Void => String::from("hxn.Unit"),
         Type::Bool => String::from("Bool"),
         Type::I32 => String::from("Int"),
@@ -210,7 +236,7 @@ fn haxe_type(carried: &Type) -> String {
 
 // The Rust type a library's own future, stream or signal carries.
 fn rust_type(library: &Library, carried: &Type) -> String {
-    match carried {
+    match value_type(carried) {
         Type::Void => String::from("()"),
         Type::Bool => String::from("bool"),
         Type::I32 => String::from("i32"),
@@ -362,8 +388,8 @@ pub fn c_adapter(library: &Library) -> String {
         }
         for carried in carried {
             // The erased handle's take method already returns a `Result`.
-            let value = format!("this.{}::<{}>()", kind.take(), rust_type(library, carried));
-            let (ty, result) = match carried {
+            let value = take_call(library, *kind, carried);
+            let (ty, result) = match value_type(carried) {
                 // A unit value is passed as an int that is always 1: taking
                 // it reports that the work is done, or fails.
                 Type::Void => ("i32", format!("{value}.map(|()| 1)")),
@@ -455,8 +481,8 @@ pub fn hl_adapter(library: &Library) -> String {
             ));
         }
         for carried in carried {
-            let value = format!("this.{}::<{}>()", kind.take(), rust_type(library, carried));
-            let (ty, letter, result) = match carried {
+            let value = take_call(library, *kind, carried);
+            let (ty, letter, result) = match value_type(carried) {
                 Type::Void => ("bool", String::from("b"), format!("{value}.map(|()| true)")),
                 Type::Bool => ("bool", String::from("b"), value),
                 Type::I32 => ("i32", String::from("i"), value),
@@ -502,7 +528,7 @@ pub fn hl_adapter(library: &Library) -> String {
                         "X{}_",
                         abstract_name(library, interface(carried).expect("an interface"))
                     ),
-                    if matches!(carried, Type::Handle { nullable: true, .. }) {
+                    if matches!(value_type(carried), Type::Handle { nullable: true, .. }) {
                         format!("Ok({value}?.map_or(null_mut(), manage))")
                     } else {
                         format!("Ok(manage({value}?))")
@@ -695,7 +721,7 @@ fn hl_file(library: &Library, kind: Kind, carried: &[Type]) -> File {
     ));
     for (index, carried) in carried.iter().enumerate() {
         let take = format!("Native.{local}_{}_{}(raw)", kind.take(), suffix(carried));
-        let take = match carried {
+        let take = match value_type(carried) {
             Type::Void => format!("{{\n\t\t\t{take};\n\t\t\thxn.Unit.Nothing;\n\t\t}}"),
             Type::Bytes => format!(
                 "{{\n\t\t\tvar outLength = 0;\n\t\t\tvar data = Native.{local}_{}_{}(raw, outLength);\n\t\t\t@:privateAccess new haxe.io.Bytes(data, outLength);\n\t\t}}",
@@ -732,7 +758,7 @@ fn hl_file(library: &Library, kind: Kind, carried: &[Type]) -> File {
         };
         // A failure with one of the library's error types is thrown as its
         // typed exception.
-        let take = if kind == Kind::Future && !library.errors().is_empty() {
+        let take = if kind != Kind::Signal && !library.errors().is_empty() {
             format!(
                 "try {take} catch (error:haxe.Exception) throw {}.typed(error)",
                 thrown_class(library)
@@ -795,7 +821,7 @@ fn cpp_file(library: &Library, kind: Kind, carried: &[Type]) -> File {
     for carried in carried {
         let title = title(carried);
         let call = format!("{native}.{local}_{}_{}(raw)", kind.take(), suffix(carried));
-        match carried {
+        match value_type(carried) {
             Type::List { interface } => {
                 let stream = class(library, Kind::Stream);
                 out.push_str(&format!(
@@ -832,7 +858,7 @@ fn cpp_file(library: &Library, kind: Kind, carried: &[Type]) -> File {
         }
         // A failure with one of the library's error types is thrown as its
         // typed exception.
-        let take = if kind == Kind::Future && !library.errors().is_empty() {
+        let take = if kind != Kind::Signal && !library.errors().is_empty() {
             format!(
                 "() -> try take{title}() catch (error:haxe.Exception) throw {}.typed(error)",
                 thrown_class(library)

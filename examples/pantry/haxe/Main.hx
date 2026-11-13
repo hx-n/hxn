@@ -55,6 +55,13 @@ class Main {
 				Sys.println('  ${refused.message}');
 			}
 		}
+		// Earlier items arrive before the stream's typed failure.
+		try {
+			for (item in pantry.takeMany([hxn.Tuple.of("rice", 1), hxn.Tuple.of("salt", 1)]))
+				Sys.println('packed: ${item.name}, ${item.quantity} left');
+		} catch (error:PantryException) {
+			Sys.println('order stopped: ${error.message}');
+		}
 		pantry.close();
 	}
 }

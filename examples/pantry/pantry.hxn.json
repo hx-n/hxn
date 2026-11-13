@@ -63,6 +63,15 @@
           "blocking": false
         },
         {
+          "name": "take_many",
+          "docs": "Takes an order in sequence, stopping at its first error.",
+          "kind": "mutating",
+          "params": [{ "name": "wanted", "type": "list<tuple<str, i32>>" }],
+          "returns": "stream<result<Item, PantryError>>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
           "name": "find",
           "docs": "Returns the item with that name, or `None` if there is none.",
           "kind": "method",

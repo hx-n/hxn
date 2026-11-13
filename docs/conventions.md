@@ -57,7 +57,7 @@ The rules that hxn's code, its bindings and its tests follow.
 | release function for any handle | `hxn_<library>_release` |
 | the library's queue of ready results | `hxn_<library>_outbox_wait`, `hxn_<library>_outbox_next` |
 | waiting on and watching a future, stream or signal | `hxn_<library>_future_wait`, `_future_state`, `_future_watch`; the same for `stream` and `signal` |
-| taking the value one carries | `hxn_<library>_future_take_<kind>`, `hxn_<library>_stream_next_<kind>`, `hxn_<library>_signal_get_<kind>`; the kind is `unit`, `bool`, `int`, `long`, `float`, `text`, `bytes`, the name of a narrower number type, or the snake-case name of an interface or data type, prefixed with `option_`, `list_`, `map_`, `set_` or `sorted_set_` for those wrappers, and with `tuple_<arity>_` followed by each element kind for a tuple. Two carried types that map to the same name are rejected |
+| taking the value one carries | `hxn_<library>_future_take_<kind>`, `hxn_<library>_stream_next_<kind>`, `hxn_<library>_signal_get_<kind>`; the kind is `unit`, `bool`, `int`, `long`, `float`, `text`, `bytes`, the name of a narrower number type, or the snake-case name of an interface or data type, prefixed with `option_`, `list_`, `map_`, `set_` or `sorted_set_` for those wrappers, and with `tuple_<arity>_` followed by each element kind for a tuple, and `result_` followed by the value kind and error kind for a fallible stream. Two carried types that map to the same name are rejected |
 | fetching the typed error of the last failure | `hxn_<library>_thrown_take`, generated only when a function has a `#[hxn::data]` error type |
 | exception class for a typed error | Haxe class `<Name>Exception`, with a trailing `Error` removed from the name first |
 | serializer for a tagged enum | Haxe class `<Name>Wire` |
@@ -169,6 +169,14 @@ filesystem `#include "counter.h"` would then find the generated header.
   also carry `Vec<u8>`, an interface, a shared one as `Arc<T>`, an `Option`
   or `Vec` of either, or `()`. A list is taken as a Haxe `Array` of owned
   objects; a signal never carries objects.
+- A typed stream failure is `Stream<Result<T, E>>`, where `T` is a supported
+  stream value and `E` names a `#[hxn::data]` type implementing `Display`.
+  Haxe sees `hxn.Stream<T>`. Its first `Err` is terminal: earlier values are
+  delivered, later queued values are dropped and further sends are refused.
+  Iteration throws the generated exception; `listen` sends it to `onError`
+  instead of `onEnd`. A plain `Stream<T>` still uses `Sender::fail` for an
+  untyped channel failure. Only streams carry `Result` items; a fallible
+  future is written as an `async fn` returning `Result<T, E>`.
 - An `async fn` is exposed as a function returning a future of its return
   value. Its receiver is `self` or, for a shared interface, `&self`; its
   parameters are numbers, `bool`, `&str` and `&[u8]`, which are copied, and

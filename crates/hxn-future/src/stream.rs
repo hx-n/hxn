@@ -203,16 +203,22 @@ impl<T> Stream<T> {
             End::Failed(failure) => Err(failure),
         }
     }
+
+    fn cancel(&self) {
+        let mut queue = self.shared.lock();
+        queue.unread = true;
+        let unread = std::mem::take(&mut queue.items);
+        let end = std::mem::replace(&mut queue.end, End::Closed);
+        drop(queue);
+        self.shared.changed.notify_all();
+        // Dropped outside the lock, like every other library value.
+        drop((unread, end));
+    }
 }
 
 impl<T> Drop for Stream<T> {
     fn drop(&mut self) {
-        let mut queue = self.shared.lock();
-        queue.unread = true;
-        let unread = std::mem::take(&mut queue.items);
-        drop(queue);
-        // Dropped outside the lock, like every other library value.
-        drop(unread);
+        self.cancel();
     }
 }
 
@@ -259,7 +265,7 @@ impl<T: Send + 'static> Erased for Stream<T> {
 }
 
 /// A type-erased stream, which is what a host holds. Only
-/// [`next`](Self::next) needs the concrete type.
+/// [`next`](Self::next) and [`next_result`](Self::next_result) need concrete item types.
 pub struct AnyStream(Box<dyn Erased>);
 
 impl<T: Send + 'static> From<Stream<T>> for AnyStream {
@@ -300,11 +306,162 @@ impl AnyStream {
             None => Err(Fault::InvalidHandle.into()),
         }
     }
+
+    /// Takes an `Ok` item, or ends a stream at its first `Err`. Queued
+    /// items after the error are dropped and further sends are refused.
+    /// The error converter runs after the queue is unlocked and closed.
+    pub fn next_result<T: Send + 'static, E: Send + 'static>(
+        &self,
+        failure: impl FnOnce(E) -> Failure,
+    ) -> Result<T, Failure> {
+        let stream = self
+            .0
+            .as_any()
+            .downcast_ref::<Stream<Result<T, E>>>()
+            .ok_or(Fault::InvalidHandle)?;
+        match stream.take()?.ok_or(Fault::Closed)? {
+            Ok(value) => Ok(value),
+            Err(error) => {
+                stream.cancel();
+                Err(failure(error))
+            }
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn result_items_end_on_the_first_error() {
+        let (sender, stream) = channel::<Result<i32, String>>();
+        let stream = AnyStream::from(stream);
+        assert_eq!(
+            stream
+                .next_result::<i32, String>(Failure::from)
+                .unwrap_err()
+                .status,
+            Status::PENDING
+        );
+        sender.send(Ok(1));
+        sender.send(Ok(2));
+        sender.send(Err(String::from("typed")));
+        sender.send(Ok(3));
+        assert_eq!(
+            stream
+                .next_result::<bool, String>(Failure::from)
+                .unwrap_err()
+                .status,
+            Status::INVALID_HANDLE
+        );
+        assert_eq!(stream.next_result::<i32, String>(Failure::from), Ok(1));
+        assert_eq!(stream.next_result::<i32, String>(Failure::from), Ok(2));
+        let error = stream
+            .next_result::<i32, String>(|error| {
+                assert!(!sender.send(Ok(9)));
+                Failure::new(Status::ERROR, error).with_value(vec![7])
+            })
+            .unwrap_err();
+        assert_eq!(error.message, "typed");
+        assert_eq!(error.value, [7]);
+        assert_eq!(stream.flow(), Flow::Ended);
+        assert_eq!(
+            stream
+                .next_result::<i32, String>(|_| panic!("converted twice"))
+                .unwrap_err()
+                .status,
+            Status::CLOSED
+        );
+        assert!(!sender.fail("later"));
+    }
+
+    #[test]
+    fn cancelling_a_result_stream_drops_values_outside_the_lock() {
+        struct Reenter(Option<Box<dyn FnOnce() + Send>>);
+        impl Drop for Reenter {
+            fn drop(&mut self) {
+                if let Some(drop) = self.0.take() {
+                    drop();
+                }
+            }
+        }
+        let (sender, stream) = channel::<Result<Reenter, &'static str>>();
+        let dropped = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let seen = dropped.clone();
+        let reenter = sender.clone();
+        sender.send(Err("stop"));
+        sender.send(Ok(Reenter(Some(Box::new(move || {
+            assert!(!reenter.close());
+            seen.store(true, std::sync::atomic::Ordering::SeqCst);
+        })))));
+        let stream = AnyStream::from(stream);
+        let result = stream.next_result::<Reenter, &'static str>(|error| {
+            assert!(dropped.load(std::sync::atomic::Ordering::SeqCst));
+            Failure::from(error)
+        });
+        assert!(matches!(
+            result,
+            Err(Failure {
+                status: Status::ERROR,
+                ..
+            })
+        ));
+        assert_eq!(stream.flow(), Flow::Ended);
+    }
+
+    #[test]
+    fn result_stream_cancellation_releases_concurrent_sends() {
+        use std::sync::Barrier;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        struct CountDrop(Arc<AtomicUsize>);
+        impl Drop for CountDrop {
+            fn drop(&mut self) {
+                self.0.fetch_add(1, Ordering::SeqCst);
+            }
+        }
+        let (sender, stream) = channel::<Result<CountDrop, &'static str>>();
+        let dropped = Arc::new(AtomicUsize::new(0));
+        let start = Arc::new(Barrier::new(5));
+        sender.send(Err("stop"));
+        let stream = AnyStream::from(stream);
+        std::thread::scope(|scope| {
+            for _ in 0..4 {
+                let (sender, dropped, start) = (sender.clone(), dropped.clone(), start.clone());
+                scope.spawn(move || {
+                    start.wait();
+                    for _ in 0..16 {
+                        sender.send(Ok(CountDrop(dropped.clone())));
+                    }
+                });
+            }
+            start.wait();
+            assert!(
+                stream
+                    .next_result::<CountDrop, &'static str>(Failure::from)
+                    .is_err()
+            );
+        });
+        assert_eq!(dropped.load(Ordering::SeqCst), 64);
+        assert_eq!(stream.flow(), Flow::Ended);
+        assert!(!sender.close());
+    }
+
+    #[test]
+    fn result_streams_preserve_channel_failures() {
+        let (sender, stream) = channel::<Result<i32, String>>();
+        let expected = Failure::new(Status::RANGE, "channel").with_value(vec![1, 2]);
+        sender.send(Ok(4));
+        sender.fail(expected.clone());
+        let stream = AnyStream::from(stream);
+        assert_eq!(stream.next_result::<i32, String>(Failure::from), Ok(4));
+        assert_eq!(
+            stream.next_result::<i32, String>(|_| panic!("converted a channel failure")),
+            Err(expected)
+        );
+        assert_eq!(stream.flow(), Flow::Ended);
+    }
 
     #[test]
     fn items_come_out_in_order_and_then_the_end() {

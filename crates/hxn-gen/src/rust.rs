@@ -411,7 +411,8 @@ fn c_method(library: &Library, interface: &Interface, method: &Method) -> String
             | Type::Signal(_)
             | Type::Lent { .. }
             | Type::List { .. }
-            | Type::Data(_) => {
+            | Type::Data(_)
+            | Type::Fallible { .. } => {
                 unreachable!("not a parameter type")
             }
         };
@@ -446,7 +447,11 @@ fn c_method(library: &Library, interface: &Interface, method: &Method) -> String
             format!("Ok({})", widened(method.returns_number, &call)),
         ),
         Type::Str | Type::Bytes => (Some("Buf"), format!("Ok(Buf::from({call}))")),
-        Type::Lent { .. } | Type::List { .. } | Type::Data(_) | Type::BytesMut => {
+        Type::Lent { .. }
+        | Type::List { .. }
+        | Type::Data(_)
+        | Type::Fallible { .. }
+        | Type::BytesMut => {
             unreachable!("not a result type")
         }
         Type::Handle { .. } => (
@@ -639,7 +644,11 @@ fn hl_letter(library: &Library, ty: &Type) -> String {
         // bytes are VM bytes with their length written to a separate
         // parameter.
         Type::Str | Type::Bytes => String::from("B"),
-        Type::Lent { .. } | Type::List { .. } | Type::Data(_) | Type::BytesMut => {
+        Type::Lent { .. }
+        | Type::List { .. }
+        | Type::Data(_)
+        | Type::Fallible { .. }
+        | Type::BytesMut => {
             unreachable!("not a result type")
         }
         Type::Handle { interface, .. } => format!("X{}_", abstract_name(library, interface)),
@@ -776,7 +785,8 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
             | Type::Signal(_)
             | Type::Lent { .. }
             | Type::List { .. }
-            | Type::Data(_) => {
+            | Type::Data(_)
+            | Type::Fallible { .. } => {
                 unreachable!("not a parameter type")
             }
         }
@@ -821,7 +831,11 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
             format!("Ok({})", widened(method.returns_number, &call)),
         ),
         Type::Str => ("*mut vbyte", format!("Ok(utf16(&{call}))")),
-        Type::Lent { .. } | Type::List { .. } | Type::Data(_) | Type::BytesMut => {
+        Type::Lent { .. }
+        | Type::List { .. }
+        | Type::Data(_)
+        | Type::Fallible { .. }
+        | Type::BytesMut => {
             unreachable!("not a result type")
         }
         Type::Handle { .. } => ("*mut Managed", handed(library, method, &call, "manage")),

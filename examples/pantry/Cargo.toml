@@ -8,3 +8,4 @@ publish = false
 # In a library of your own, this comes from the repository:
 # hxn = { git = "https://github.com/hx-n/hxn", tag = "v0.2.0" }
 hxn = { path = "../../crates/hxn" }
+hxn-future = { path = "../../crates/hxn-future" }

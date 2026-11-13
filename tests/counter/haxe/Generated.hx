@@ -782,6 +782,32 @@ class Generated {
 		var fed = [for (event in Events.feed(5)) Events.depth(event)].join(",");
 		check('a stream carries enums that hold values: $fed', fed == "0,0,0,0,1");
 
+		var checked = Events.checkedFeed(true);
+		var received:Array<Int> = [];
+		var streamError:CountException = null;
+		try {
+			for (item in checked) received.push(item);
+		} catch (error:CountException) { streamError = error; }
+		check("stream values precede their typed error", received.join(",") == "1,2" && streamError != null
+			&& streamError.error.match(Unknown("stream ☃")) && streamError.message == "unknown: stream ☃");
+		check("a typed stream error ends the stream", !checked.hasNext());
+		throws("a typed stream error is consumed once", () -> checked.next(), "closed");
+		check("a fallible stream can end successfully", [for (value in Events.checkedFeed(false)) value].join(",") == "1,2,99");
+		var points = Events.checkedPoints();
+		check("a fallible stream carries records", points.hasNext() && points.next().y == 4);
+		var pointError:RefusalException = null;
+		try { points.next(); } catch (error:RefusalException) { pointError = error; }
+		check("a stream error can be a record", pointError != null && pointError.error.code == 8 && pointError.error.reason == "stream refused" && !points.hasNext());
+		var ticks = Events.checkedTicks();
+		check("a fallible stream carries unit", ticks.next() == hxn.Unit.Nothing);
+		var tickError:TroubleException = null;
+		try { ticks.next(); } catch (error:TroubleException) { tickError = error; }
+		check("a stream error can be a C-like enum", tickError != null && tickError.error == Trouble.Major && !ticks.hasNext());
+		var chunks = Events.checkedBytes();
+		check("a fallible stream carries bytes", chunks.next().toString() == "hello");
+		try { chunks.next(); } catch (error:CountException) { check("a bytes stream has a typed error", error.error.match(Empty)); }
+		check("a bytes stream ends after its error", !chunks.hasNext());
+
 		hxn.Loop.manual = true;
 		var mode = Events.modeNow();
 		var moving = Events.placeNow(4);
@@ -795,6 +821,16 @@ class Generated {
 		check("a signal carries an enum", mode.peek() == Mode.Off);
 		check("and a record", moving.peek().x == 4 && moving.peek().y == 1);
 		check("a continuation is given the library's own error", failed != null && failed.error.match(Empty));
+		var delivered:Array<Int> = [];
+		var deliveredError:CountException = null;
+		var ended = false;
+		Events.checkedFeed(true).listen(item -> delivered.push(item), () -> ended = true,
+			error -> deliveredError = Std.downcast(error, CountException));
+		waited = 0;
+		while (deliveredError == null && waited++ < 5000) { hxn.Loop.sync(); Sys.sleep(0.001); }
+		check("listen delivers values then the typed failure", delivered.join(",") == "1,2" && deliveredError != null
+			&& deliveredError.error.match(Unknown("stream ☃")) && !ended);
+
 		hxn.Loop.manual = false;
 
 		var modes = Events.eachPoint([{x: 1, y: 0}, {x: -1, y: 0}], point -> point.x > 0 ? Mode.Loud : Mode.Quiet);
@@ -866,7 +902,32 @@ class Generated {
 		#end
 	}
 
+	static function typedStreamObjects() {
+		var live = Counter.live();
+		var objects = Events.checkedObjects();
+		var owned = objects.next();
+		check("a fallible stream transfers object ownership", owned.add(0) == 7 && Counter.live() == live + 2);
+		try { objects.next(); } catch (error:CountException) {}
+		check("objects queued after an error are dropped", !objects.hasNext() && Counter.live() == live + 1);
+		owned.close();
+		var nullable = Events.checkedOptional();
+		check("an Ok null is an item, not the end", nullable.hasNext() && nullable.next() == null && nullable.hasNext());
+		owned = nullable.next();
+		check("a fallible stream carries optional objects", owned.add(0) == 8);
+		owned.close();
+		try { nullable.next(); } catch (error:CountException) {}
+		var batches = Events.checkedBatches();
+		var batch = batches.next();
+		check("a fallible stream carries batches of objects", batch.length == 2 && batch[0].add(0) == 5 && batch[1].add(0) == 6);
+		for (item in batch) item.close();
+		check("an empty batch is still an item", batches.next().length == 0);
+		try { batches.next(); } catch (error:CountException) {}
+		check("batches after an error are dropped", !batches.hasNext() && Counter.live() == live);
+
+	}
+
 	static function main() {
+		typedStreamObjects();
 		var counter = new Counter(40);
 		check("an int in and out", counter.add(2) == 42);
 		check("text in and out", counter.label("naïve ☃ 𝄞") == "naïve ☃ 𝄞=42");

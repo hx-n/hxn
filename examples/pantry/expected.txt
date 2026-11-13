@@ -12,3 +12,5 @@ only 10 of eggs
   there are only 10 of eggs
 no salt at all
   nothing called salt
+packed: rice, 0 left
+order stopped: nothing called salt
