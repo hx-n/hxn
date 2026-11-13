@@ -3,6 +3,7 @@ rice: 1
 flour: 2, wholemeal
 eggs note: null, salt: null
 low on flour and rice
+short by unit: 3 each, 2 kilo, 1 litre
 refused: air has nothing to stock
 eggs left: 10
 only 10 of eggs

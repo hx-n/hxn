@@ -229,6 +229,7 @@ fn data_of(ty: &syn::Type, known: Known) -> Option<Data> {
                 Data::Text
                     | Data::I32
                     | Data::Number(Number::I8 | Number::I16 | Number::U8 | Number::U16)
+                    | Data::Enum(_)
             )
         })?;
         return Some(Data::Map {
@@ -1268,7 +1269,7 @@ fn field_data(ty: &syn::Type, known: Known) -> Result<Data, Error> {
     let Some(data) = data_of(ty, known) else {
         return error(
             ty.span(),
-            "a field of data is one of bool, a number, String, Vec<u8>, other data, or an Option, Vec, Box, HashMap or BTreeMap of these, a map keyed by String or a whole number of at most 32 bits",
+            "a field of data is one of bool, a number, String, Vec<u8>, other data, or an Option, Vec, Box, HashMap or BTreeMap of these, a map keyed by String, a whole number of at most 32 bits or a C-like enum",
         );
     };
     if matches!(data, Data::Number(Number::Isize | Number::Usize)) {

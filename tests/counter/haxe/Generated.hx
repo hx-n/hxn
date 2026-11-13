@@ -45,6 +45,20 @@ class Generated {
 		throws("a number that names none is refused", () -> Shapes.louder((77 : Mode)), "number out of range");
 		check("an enum that may be missing", Shapes.modeOf(9) == Mode.Loud && Shapes.modeOf(4) == null);
 
+		var modes = Shapes.scaledModes([Mode.Quiet => 2, Mode.Loud => 3, Mode.Off => 0], 4);
+		check("a map keeps its enum keys", modes.get(Mode.Quiet) == 8 && modes.get(Mode.Loud) == 12 && modes.get(Mode.Off) == 0);
+		check("an empty map of enum keys", Lambda.count(Shapes.scaledModes([], 2)) == 0);
+		var laterModes = Shapes.modesLater(modes).await();
+		check("enum keys in a future", laterModes.get(Mode.Quiet) == 8 && laterModes.get(Mode.Loud) == 12);
+		var mappedModes = Shapes.mappedModes(table -> {
+			check("enum keys reach a callback", table.get(Mode.Quiet) == 2 && table.get(Mode.Loud) == 3);
+			table.set(Mode.Off, 7);
+			return table;
+		});
+		check("and come back", mappedModes.get(Mode.Off) == 7 && mappedModes.get(Mode.Loud) == 3);
+		throws("an invalid enum key is refused", () -> Shapes.scaledModes([(77 : Mode) => 1], 1), "number out of range");
+		check("a refused enum key leaves the next call usable", Shapes.scaledModes([Mode.Off => 3], 2).get(Mode.Off) == 6);
+
 		var mid = Shapes.midpoint({x: 1, y: 2}, {x: 3, y: -4});
 		check("a record in, by value and by reference, and one out", mid.x == 2 && mid.y == -1);
 

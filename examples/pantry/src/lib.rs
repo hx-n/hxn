@@ -5,7 +5,7 @@
 /// The unit a quantity is counted in. A C-like enum: Haxe gets the same
 /// names, with integer values.
 #[hxn::data]
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Unit {
     Each,
     Kilo,
@@ -85,6 +85,25 @@ impl Pantry {
     /// Returns the item with that name, or `None` if there is none.
     pub fn find(&self, name: &str) -> Option<Item> {
         self.items.iter().find(|item| item.name == name).cloned()
+    }
+
+    /// Quantities still needed to reach a target for each unit.
+    pub fn shortages(
+        &self,
+        wanted: &std::collections::BTreeMap<Unit, i32>,
+    ) -> std::collections::BTreeMap<Unit, i32> {
+        wanted
+            .iter()
+            .map(|(unit, wanted)| {
+                let stocked: i32 = self
+                    .items
+                    .iter()
+                    .filter(|item| item.unit == *unit)
+                    .map(|item| item.quantity)
+                    .sum();
+                (*unit, (wanted - stocked).max(0))
+            })
+            .collect()
     }
 
     /// Returns the items counted in `unit` whose quantity is less than

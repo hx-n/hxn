@@ -1371,6 +1371,33 @@
           "blocking": false
         },
         {
+          "name": "scaled_modes",
+          "docs": "Scales a table keyed by the library's enum.",
+          "kind": "static",
+          "params": [{ "name": "values", "type": "map<Mode, i32>" }, { "name": "factor", "type": "i32" }],
+          "returns": "map<Mode, i32>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "modes_later",
+          "docs": "The same table through an asynchronous result.",
+          "kind": "static",
+          "params": [{ "name": "values", "type": "map<Mode, i32>" }],
+          "returns": "future<map<Mode, i32>>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "mapped_modes",
+          "docs": "A table passed to and returned from a lent Haxe function.",
+          "kind": "static",
+          "params": [{ "name": "f", "type": "fn(map<Mode, i32>) -> map<Mode, i32>" }],
+          "returns": "map<Mode, i32>",
+          "fallible": true,
+          "blocking": false
+        },
+        {
           "name": "midpoint",
           "docs": "The midpoint of two points, one taken by value and one by reference.",
           "kind": "static",

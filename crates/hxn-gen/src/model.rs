@@ -95,7 +95,7 @@ pub enum Data {
     /// type is declared.
     Boxed(Box<Data>),
     /// A `HashMap`, or a `BTreeMap` when `sorted`: a Haxe `Map`. A key is
-    /// text or an integer of at most 32 bits.
+    /// text, an integer of at most 32 bits, or a C-like enum.
     Map {
         key: Box<Data>,
         value: Box<Data>,

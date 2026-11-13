@@ -2147,7 +2147,7 @@ impl Thing {
         ),
         (
             "#[hxn::data]\npub enum Keyed { One(HashMap<bool, i32>) }",
-            "a map keyed by String or a whole number",
+            "a map keyed by",
         ),
         (
             "#[hxn::data]\npub enum Event { One(i32) }\n#[hxn::data]\npub struct EventWire { pub x: i32 }",
@@ -2190,6 +2190,62 @@ fn text_of(files: &[hxn_gen::File], path: &str) -> String {
 // A tagged enum is a Haxe enum with the same cases, serialized as the
 // variant's index and then its fields. A box is its inner value, and a map
 // is a Haxe `Map`.
+#[test]
+fn a_map_keeps_its_enum_key_type() {
+    let source = r#"
+#[hxn::data]
+pub enum Mode { Quiet = -7, Loud = 9, Off = 42 }
+#[hxn::data]
+pub struct Table { pub counts: HashMap<Mode, i32>, pub nested: BTreeMap<Mode, Vec<String>> }
+#[hxn::interface]
+pub struct Thing;
+#[hxn::methods]
+impl Thing {
+    pub fn echo(table: Table) -> Table { todo!() }
+    pub fn totals(counts: &HashMap<Mode, i32>) -> BTreeMap<Mode, i32> { todo!() }
+    pub fn later() -> Future<HashMap<Mode, i32>> { todo!() }
+}
+"#;
+    let library = parse("thing", source).unwrap();
+    assert!(
+        matches!(&library.records[0].fields[0].ty, hxn_gen::Data::Map { key, .. } if **key == hxn_gen::Data::Enum(String::from("Mode")))
+    );
+    for adapter in [
+        hxn_gen::c_adapter(&library, "thing_core"),
+        hxn_gen::hl_adapter(&library, "thing_core"),
+    ] {
+        assert!(adapter.contains("std::collections::HashMap<Mode, i32>"));
+        assert!(adapter.contains("std::collections::BTreeMap<Mode, Vec<String>>"));
+        assert!(adapter.contains("read_mode(input.i32()?)?"));
+        assert!(adapter.contains("write_mode(key)"));
+    }
+    for files in [hxn_gen::haxe_hl(&library), cpp_classes(&library)] {
+        let table = &files
+            .iter()
+            .find(|file| file.path == "Table.hx")
+            .unwrap()
+            .text;
+        assert!(table.contains("counts:Map<Mode, Int>"));
+        assert!(table.contains("nested:Map<Mode, Array<String>>"));
+        assert!(table.contains("new Map<Mode, Int>()"));
+        let thing = &files
+            .iter()
+            .find(|file| file.path == "Thing.hx")
+            .unwrap()
+            .text;
+        assert!(thing.contains("function totals(counts:Map<Mode, Int>):Map<Mode, Int>"));
+        assert!(thing.contains("function later():hxn.Future<Map<Mode, Int>>"));
+    }
+    assert!(hxn_gen::manifest(&library).contains("map<Mode, i32>"));
+    let tagged = source.replace("Quiet = -7, Loud = 9, Off = 42", "Quiet(i32), Loud, Off");
+    assert!(
+        parse("thing", &tagged)
+            .unwrap_err()
+            .message
+            .contains("a map keyed by")
+    );
+}
+
 #[test]
 fn an_enum_whose_variants_hold_values_is_a_haxe_enum() {
     let source = r#"

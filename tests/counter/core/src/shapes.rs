@@ -2,11 +2,12 @@
 //! are defined in a separate file.
 
 use crate::Counter;
+use hxn_future::Future;
 
 /// A loudness level. Two discriminants are explicit and the third is
 /// implicit.
 #[hxn::data]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Mode {
     Quiet = 3,
     /// The loudest level.
@@ -108,6 +109,38 @@ impl Shapes {
         [Mode::Quiet, Mode::Loud, Mode::Off]
             .into_iter()
             .find(|mode| *mode as i32 == number)
+    }
+
+    /// Scales a table keyed by the library's enum.
+    pub fn scaled_modes(
+        values: &std::collections::HashMap<Mode, i32>,
+        factor: i32,
+    ) -> std::collections::BTreeMap<Mode, i32> {
+        values
+            .iter()
+            .map(|(mode, value)| (*mode, value * factor))
+            .collect()
+    }
+
+    /// The same table through an asynchronous result.
+    pub fn modes_later(
+        values: &std::collections::BTreeMap<Mode, i32>,
+    ) -> Future<std::collections::HashMap<Mode, i32>> {
+        let values: std::collections::HashMap<_, _> =
+            values.iter().map(|(mode, value)| (*mode, *value)).collect();
+        hxn_future::spawn_blocking(move || Ok::<_, hxn_future::Failure>(values))
+    }
+
+    /// A table passed to and returned from a lent Haxe function.
+    pub fn mapped_modes<E>(
+        f: impl Fn(
+            std::collections::HashMap<Mode, i32>,
+        ) -> Result<std::collections::BTreeMap<Mode, i32>, E>,
+    ) -> Result<std::collections::BTreeMap<Mode, i32>, E> {
+        f(std::collections::HashMap::from([
+            (Mode::Quiet, 2),
+            (Mode::Loud, 3),
+        ]))
     }
 
     /// The midpoint of two points, one taken by value and one by reference.

@@ -72,6 +72,15 @@
           "blocking": false
         },
         {
+          "name": "shortages",
+          "docs": "Quantities still needed to reach a target for each unit.",
+          "kind": "method",
+          "params": [{ "name": "wanted", "type": "map<Unit, i32>" }],
+          "returns": "map<Unit, i32>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
           "name": "low",
           "docs": "Returns the items counted in `unit` whose quantity is less than\n`below`.",
           "kind": "method",

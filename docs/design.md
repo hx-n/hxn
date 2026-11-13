@@ -88,7 +88,7 @@ Plain data crosses by value. A library marks it with `#[hxn::data]`:
 | a C-like enum (no variant has fields) | an `enum abstract` over `Int` with the same values |
 | a tagged enum (some variants have fields) | an `enum` with the same constructors |
 | `Option<T>`, `Vec<T>` | `Null<T>`, `Array<T>` |
-| `HashMap<K, V>`, `BTreeMap<K, V>` | `Map<K, V>`; keys are `String` or `Int` |
+| `HashMap<K, V>`, `BTreeMap<K, V>` | `Map<K, V>`; keys are `String`, `Int` or a C-like enum |
 | `Box<T>` | `T` |
 
 - **A C-like enum crosses as its integer value.** The adapter converts in
@@ -107,6 +107,10 @@ Plain data crosses by value. A library marks it with `#[hxn::data]`:
   is expressed. The generated reader for such a type is recursive, so it
   tracks nesting depth and fails with `Status::DEPTH` beyond
   `wire::Reader::DEPTH`.
+- **A map may be keyed by a C-like enum.** Haxe keeps the enum type in
+  `Map<Mode, T>` and uses its integer key storage. The wire contains each
+  key's declared discriminant, checked by Rust's enum reader, followed by
+  the value. Tagged enums are not map keys.
 - **A reader takes exactly what was written.** Bytes that run out, a count
   the bytes left cannot back, text that is not UTF-8 and bytes left over all
   fail the call, with the same status as badly encoded text.

@@ -113,8 +113,8 @@ filesystem `#include "counter.h"` would then find the generated header.
   reachable at the crate's root, with a name that no interface uses. A struct has
   named fields, all `pub`, each a `bool`, a fixed-width number,
   `String`, `Vec<u8>`, other data, or an `Option`, `Vec`, `Box`, `HashMap`
-  or `BTreeMap` of these. Map keys are `String` or an integer of at most 32
-  bits. An enum is either C-like (no variant has fields; explicit
+  or `BTreeMap` of these. Map keys are `String`, an integer of at most 32
+  bits, or a C-like enum. An enum is either C-like (no variant has fields; explicit
   discriminants are allowed) or tagged (some variants have fields, named or
   unnamed; no explicit discriminants). Data is accepted by value or by `&`, a
   list also as `&[T]`, and returned by value. `Option`, `Vec` and maps of
