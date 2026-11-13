@@ -37,6 +37,7 @@ fn haxe_type(ty: &Type) -> String {
         Type::Signal(of) => format!("hxn.Signal<{}>", haxe_type(of)),
         Type::Lent { params, returns } => lent::haxe_type(params, returns),
         Type::Data(data) => data::haxe_type(data),
+        Type::List { interface } => format!("Array<{interface}>"),
         Type::AtomicInt => String::from("hxn.AtomicInt"),
         Type::AtomicBool => String::from("hxn.AtomicBool"),
         Type::Handle {
@@ -201,7 +202,12 @@ fn hl_native(library: &Library, interface: &Interface, method: &Method) -> Strin
                 "{name}:{}",
                 lent::haxe_native_type(lent::Host::Hl, taken, returns)
             )),
-            Type::Void | Type::Future(_) | Type::Stream(_) | Type::Signal(_) | Type::Data(_) => {
+            Type::Void
+            | Type::Future(_)
+            | Type::Stream(_)
+            | Type::Signal(_)
+            | Type::List { .. }
+            | Type::Data(_) => {
                 unreachable!("not a parameter type")
             }
         }
@@ -217,7 +223,9 @@ fn hl_native(library: &Library, interface: &Interface, method: &Method) -> Strin
         Type::I64 => (String::from("hl.I64"), "\n\t\treturn 0;"),
         Type::F64 => (String::from("Float"), "\n\t\treturn 0.;"),
         Type::Str | Type::Bytes => (String::from("hl.Bytes"), "\n\t\treturn null;"),
-        Type::Lent { .. } | Type::Data(_) | Type::BytesMut => unreachable!("not a result type"),
+        Type::Lent { .. } | Type::List { .. } | Type::Data(_) | Type::BytesMut => {
+            unreachable!("not a result type")
+        }
         Type::Handle { interface: of, .. } => (hl_raw(of, &interface.name), "\n\t\treturn null;"),
         Type::AtomicInt | Type::AtomicBool => (String::from("CellRaw"), "\n\t\treturn null;"),
         Type::Future(_) | Type::Stream(_) | Type::Signal(_) => {
@@ -941,7 +949,12 @@ fn cpp_native(library: &Library, interface: &Interface, method: &Method) -> Stri
                 params: taken,
                 returns,
             } => lent::haxe_native_type(lent::Host::Cpp, taken, returns),
-            Type::Void | Type::Future(_) | Type::Stream(_) | Type::Signal(_) | Type::Data(_) => {
+            Type::Void
+            | Type::Future(_)
+            | Type::Stream(_)
+            | Type::Signal(_)
+            | Type::List { .. }
+            | Type::Data(_) => {
                 unreachable!("not a parameter type")
             }
         };

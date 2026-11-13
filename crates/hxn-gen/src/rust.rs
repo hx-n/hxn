@@ -331,13 +331,16 @@ fn apart_checks(method: &Method, addresses: impl Fn(&str) -> String) -> Vec<Stri
     out
 }
 
-// A call that returns a list of objects, as the stream of them that has
-// ended.
+// A list of objects crosses as a stream that has already ended.
+pub(crate) fn list_stream(value: &str) -> String {
+    format!(
+        "{{\n                let (sender, stream) = hxn_future::channel();\n                for item in {value} {{\n                    sender.send(item);\n                }}\n                stream\n            }}"
+    )
+}
+
 fn listed(method: &Method, call: String) -> String {
     if method.returns_list {
-        format!(
-            "{{\n                let (sender, stream) = hxn_future::channel();\n                for item in {call} {{\n                    sender.send(item);\n                }}\n                stream\n            }}"
-        )
+        list_stream(&call)
     } else {
         call
     }
@@ -407,6 +410,7 @@ fn c_method(library: &Library, interface: &Interface, method: &Method) -> String
             | Type::Stream(_)
             | Type::Signal(_)
             | Type::Lent { .. }
+            | Type::List { .. }
             | Type::Data(_) => {
                 unreachable!("not a parameter type")
             }
@@ -442,7 +446,9 @@ fn c_method(library: &Library, interface: &Interface, method: &Method) -> String
             format!("Ok({})", widened(method.returns_number, &call)),
         ),
         Type::Str | Type::Bytes => (Some("Buf"), format!("Ok(Buf::from({call}))")),
-        Type::Lent { .. } | Type::Data(_) | Type::BytesMut => unreachable!("not a result type"),
+        Type::Lent { .. } | Type::List { .. } | Type::Data(_) | Type::BytesMut => {
+            unreachable!("not a result type")
+        }
         Type::Handle { .. } => (
             Some("RawHandle"),
             handed(library, method, &call, "Handle::into_raw"),
@@ -633,7 +639,9 @@ fn hl_letter(library: &Library, ty: &Type) -> String {
         // bytes are VM bytes with their length written to a separate
         // parameter.
         Type::Str | Type::Bytes => String::from("B"),
-        Type::Lent { .. } | Type::Data(_) | Type::BytesMut => unreachable!("not a result type"),
+        Type::Lent { .. } | Type::List { .. } | Type::Data(_) | Type::BytesMut => {
+            unreachable!("not a result type")
+        }
         Type::Handle { interface, .. } => format!("X{}_", abstract_name(library, interface)),
         Type::AtomicInt | Type::AtomicBool => format!("X{}_", cell_abstract(library)),
         Type::Future(_) | Type::Stream(_) | Type::Signal(_) => {
@@ -767,6 +775,7 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
             | Type::Stream(_)
             | Type::Signal(_)
             | Type::Lent { .. }
+            | Type::List { .. }
             | Type::Data(_) => {
                 unreachable!("not a parameter type")
             }
@@ -812,7 +821,9 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
             format!("Ok({})", widened(method.returns_number, &call)),
         ),
         Type::Str => ("*mut vbyte", format!("Ok(utf16(&{call}))")),
-        Type::Lent { .. } | Type::Data(_) | Type::BytesMut => unreachable!("not a result type"),
+        Type::Lent { .. } | Type::List { .. } | Type::Data(_) | Type::BytesMut => {
+            unreachable!("not a result type")
+        }
         Type::Handle { .. } => ("*mut Managed", handed(library, method, &call, "manage")),
         Type::Future(_) | Type::Stream(_) | Type::Signal(_) => {
             let (kind, _) = later::of(&method.returns).expect("a result over time");

@@ -63,11 +63,7 @@ pub fn of(ty: &Type) -> Option<(Kind, &Type)> {
 /// Each kind the library returns, with every type that kind carries anywhere
 /// in the API, in order of first use.
 pub fn used(library: &Library) -> Vec<(Kind, Vec<Type>)> {
-    let mut out: Vec<(Kind, Vec<Type>)> = Vec::new();
-    for method in library.interfaces.iter().flat_map(|i| &i.methods) {
-        let Some((kind, carried)) = of(&method.returns) else {
-            continue;
-        };
+    fn add(out: &mut Vec<(Kind, Vec<Type>)>, kind: Kind, carried: &Type) {
         let index = match out.iter().position(|(known, _)| *known == kind) {
             Some(index) => index,
             None => {
@@ -77,6 +73,23 @@ pub fn used(library: &Library) -> Vec<(Kind, Vec<Type>)> {
         };
         if !out[index].1.contains(carried) {
             out[index].1.push(carried.clone());
+        }
+        // Taking a batch uses the same stream exports as a direct object list.
+        if let Type::List { interface } = carried {
+            add(
+                out,
+                Kind::Stream,
+                &Type::Handle {
+                    interface: interface.clone(),
+                    nullable: false,
+                },
+            );
+        }
+    }
+    let mut out = Vec::new();
+    for method in library.interfaces.iter().flat_map(|i| &i.methods) {
+        if let Some((kind, carried)) = of(&method.returns) {
+            add(&mut out, kind, carried);
         }
     }
     out
@@ -109,6 +122,7 @@ fn suffix(carried: &Type) -> String {
                 snake(interface)
             }
         }
+        Type::List { interface } => format!("list_{}", snake(interface)),
         Type::Data(data) => data.symbol(),
         _ => unreachable!("not carried by a result over time"),
     }
@@ -163,6 +177,7 @@ fn title(carried: &Type) -> String {
                 interface.clone()
             }
         }
+        Type::List { interface } => format!("List{interface}"),
         Type::Data(data) => pascal(&data.symbol()),
         _ => unreachable!("not carried by a result over time"),
     }
@@ -187,6 +202,7 @@ fn haxe_type(carried: &Type) -> String {
                 interface.clone()
             }
         }
+        Type::List { interface } => format!("Array<{interface}>"),
         Type::Data(data) => data::haxe_type(data),
         _ => unreachable!("not carried by a result over time"),
     }
@@ -212,6 +228,7 @@ fn rust_type(library: &Library, carried: &Type) -> String {
                 held(library, interface)
             }
         }
+        Type::List { interface } => format!("Vec<{}>", held(library, interface)),
         Type::Data(data) => data::rust_type(data),
         _ => unreachable!("not carried by a result over time"),
     }
@@ -356,6 +373,13 @@ pub fn c_adapter(library: &Library) -> String {
                 Type::F64 => ("f64", value),
                 Type::Str | Type::Bytes => ("Buf", format!("Ok(Buf::from({value}?))")),
                 Type::Data(data) => c_data(data, &format!("{value}?")),
+                Type::List { .. } => (
+                    "RawHandle",
+                    format!(
+                        "let stream = {}; Ok(Handle::into_raw(AnyStream::from(stream)))",
+                        crate::rust::list_stream(&format!("{value}?"))
+                    ),
+                ),
                 Type::Handle { nullable: true, .. } => (
                     "RawHandle",
                     format!("Ok({value}?.map_or(null_mut(), Handle::into_raw))"),
@@ -464,6 +488,14 @@ pub fn hl_adapter(library: &Library) -> String {
                     ("f64", result) => ("f64", String::from("d"), result),
                     (_, result) => ("i32", String::from("i"), result),
                 },
+                Type::List { .. } => (
+                    "*mut Managed",
+                    format!("X{}_", handle_abstract(library, Kind::Stream)),
+                    format!(
+                        "let stream = {}; Ok(manage(AnyStream::from(stream)))",
+                        crate::rust::list_stream(&format!("{value}?"))
+                    ),
+                ),
                 _ => (
                     "*mut Managed",
                     format!(
@@ -636,6 +668,10 @@ fn hl_file(library: &Library, kind: Kind, carried: &[Type]) -> File {
             Type::I64 => (String::from("hl.I64"), "0"),
             Type::F64 => (String::from("Float"), "0."),
             Type::Str | Type::Bytes => (String::from("hl.Bytes"), "null"),
+            Type::List { .. } => {
+                let stream = class(library, Kind::Stream);
+                (format!("{stream}.{stream}Raw"), "null")
+            }
             _ => {
                 let interface = interface(carried).expect("an interface");
                 (format!("{interface}.{interface}Raw"), "null")
@@ -667,6 +703,10 @@ fn hl_file(library: &Library, kind: Kind, carried: &[Type]) -> File {
                 suffix(carried)
             ),
             Type::Str => format!("@:privateAccess String.fromUCS2({take})"),
+            Type::List { interface } => {
+                let stream = class(library, Kind::Stream);
+                format!("[for (item in {stream}.of{interface}({take})) item]")
+            }
             Type::Handle {
                 interface,
                 nullable: false,
@@ -756,6 +796,12 @@ fn cpp_file(library: &Library, kind: Kind, carried: &[Type]) -> File {
         let title = title(carried);
         let call = format!("{native}.{local}_{}_{}(raw)", kind.take(), suffix(carried));
         match carried {
+            Type::List { interface } => {
+                let stream = class(library, Kind::Stream);
+                out.push_str(&format!(
+                    "\n\tfunction take{title}():Array<{interface}> {{\n\t\tvar made = {stream}.adopt();\n\t\tmade.raw = {call};\n\t\tmade.own();\n\t\treturn [for (item in made.of{interface}()) item];\n\t}}\n"
+                ));
+            }
             Type::Handle {
                 interface,
                 nullable,
@@ -875,7 +921,7 @@ pub fn cpp_natives(library: &Library) -> String {
         }
         for carried in carried {
             let returns = match &crossed(carried) {
-                Type::Handle { .. } => String::from("Handle"),
+                Type::Handle { .. } | Type::List { .. } => String::from("Handle"),
                 Type::Void => String::from("Bool"),
                 Type::I64 => String::from("cpp.Int64"),
                 Type::Bytes => String::from("haxe.io.BytesData"),

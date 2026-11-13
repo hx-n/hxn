@@ -468,6 +468,55 @@ impl Later {
         spawn_blocking(move || Ok::<_, Overflow>(Arc::new(Pot::new(start))))
     }
 
+    /// A batch created on a worker and transferred when the future is taken.
+    pub fn counter_batch(count: i32) -> Future<Vec<Counter>> {
+        spawn_blocking(move || Ok::<_, Failure>((1..=count).map(Counter::new).collect()))
+    }
+
+    /// A batch returned by an async function, or a failure before it is made.
+    pub async fn batch_later(count: i32, fail: bool) -> Result<Vec<Counter>, &'static str> {
+        let _ = square_later(1, millis(1)).await;
+        if fail {
+            return Err("batch refused");
+        }
+        Ok((1..=count).map(Counter::new).collect())
+    }
+
+    /// Two references to the same shared value in one asynchronous batch.
+    pub fn pot_batch(value: i32) -> Future<Vec<Arc<Pot>>> {
+        spawn_blocking(move || {
+            let pot = Arc::new(Pot::new(value));
+            Ok::<_, Failure>(vec![Arc::clone(&pot), pot])
+        })
+    }
+
+    /// Batches in order, including an empty one, followed by a failure.
+    pub fn counter_batches() -> Stream<Vec<Counter>> {
+        let (sender, stream) = channel();
+        let mut next = 0;
+        drop(stepped(move || {
+            if next == 3 {
+                sender.fail("batches ended");
+                return Poll::Ready(Ok::<_, Failure>(()));
+            }
+            let batch = (1..=next).map(Counter::new).collect();
+            if !sender.send(batch) {
+                return Poll::Ready(Ok::<_, Failure>(()));
+            }
+            next += 1;
+            Poll::Pending
+        }));
+        stream
+    }
+
+    /// A stream batch whose elements share one value.
+    pub fn pot_batches(value: i32) -> Stream<Vec<Arc<Pot>>> {
+        let (sender, stream) = channel();
+        let pot = Arc::new(Pot::new(value));
+        sender.send(vec![Arc::clone(&pot), pot]);
+        stream
+    }
+
     /// A future that is never settled.
     pub fn abandoned() -> Future<i32> {
         abandoned()

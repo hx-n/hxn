@@ -184,6 +184,86 @@ fn a_future_or_a_stream_may_carry_no_object() {
 }
 
 #[test]
+fn futures_and_streams_carry_lists_of_owned_objects() {
+    let source = r#"
+#[hxn::interface]
+pub struct Thing;
+#[hxn::interface(shared)]
+pub struct Band;
+#[hxn::methods]
+impl Thing {
+    pub fn batch() -> Future<Vec<Thing>> { todo!() }
+    pub async fn later() -> Vec<Thing> { todo!() }
+    pub fn groups() -> Stream<Vec<Arc<Band>>> { todo!() }
+}
+"#;
+    let library = parse("thing", source).unwrap();
+    let methods = &library.interfaces[0].methods;
+    let list = Type::List {
+        interface: String::from("Thing"),
+    };
+    assert_eq!(methods[0].returns, Type::Future(Box::new(list.clone())));
+    assert_eq!(methods[1].returns, Type::Future(Box::new(list)));
+    assert_eq!(methods[0].returns_name(), "future<list<Thing>>");
+    assert_eq!(methods[2].returns_name(), "stream<list<Band>>");
+    let c = hxn_gen::c_adapter(&library, "thing_core");
+    let hl = hxn_gen::hl_adapter(&library, "thing_core");
+    for adapter in [&c, &hl] {
+        assert!(adapter.contains("this.take::<Vec<Thing>>()?"));
+        assert!(adapter.contains("this.next::<Vec<Arc<Band>>>()?"));
+        assert!(adapter.contains("AnyStream::from(stream)"));
+        // These element take calls are required even when no method returns
+        // a stream of individual objects.
+        assert!(adapter.contains("fn hxn_thing_stream_next_thing("));
+        assert!(adapter.contains("fn hxn_thing_stream_next_band("));
+    }
+    assert!(hl.contains("PXthing_future__Xthing_stream_"));
+    assert!(
+        hxn_gen::c_header(&library)
+            .contains("hxn_thing_future_take_list_thing(hxn_handle *self, hxn_handle **out")
+    );
+    for files in [hxn_gen::haxe_hl(&library), cpp_classes(&library)] {
+        let thing = &files
+            .iter()
+            .find(|file| file.path == "Thing.hx")
+            .unwrap()
+            .text;
+        assert!(thing.contains("function batch():hxn.Future<Array<Thing>>"));
+        assert!(thing.contains("function groups():hxn.Stream<Array<Band>>"));
+        let future = &files
+            .iter()
+            .find(|file| file.path == "HxnThingFuture.hx")
+            .unwrap()
+            .text;
+        assert!(future.contains("ofListThing"));
+        assert!(future.contains("for (item in "));
+        assert!(files.iter().any(|file| file.path == "HxnThingStream.hx"));
+    }
+    for (ty, expected) in [
+        ("Signal<Vec<Thing>>", "a signal carries"),
+        (
+            "Future<Vec<Band>>",
+            "shared interface is listed in its `Arc`",
+        ),
+        ("Future<Vec<Arc<Thing>>>", "needs `Thing` marked"),
+        ("Future<Vec<Option<Thing>>>", "a future carries"),
+    ] {
+        let error = parse("thing", &source.replace("Future<Vec<Thing>>", ty)).unwrap_err();
+        assert!(error.message.contains(expected), "{ty}: {}", error.message);
+    }
+    // A user interface must not share a take name with a batch type.
+    let collision = format!(
+        "{source}\n#[hxn::interface]\npub struct ListThing;\n#[hxn::methods]\nimpl ListThing {{ pub fn one() -> Future<ListThing> {{ todo!() }} }}"
+    );
+    assert!(
+        parse("thing", &collision)
+            .unwrap_err()
+            .message
+            .contains("calls of one name")
+    );
+}
+
+#[test]
 fn an_interface_taken_by_value_is_moved_out_of_its_handle() {
     let source = "#[hxn::interface]\npub struct Thing;\n\n#[hxn::methods]\nimpl Thing {\n    pub fn eat(&self, value: Thing, maybe: Option<Thing>) {}\n}\n";
     let library = parse("thing", source).unwrap();
@@ -883,7 +963,7 @@ fn says_what_a_result_over_time_cannot_carry() {
             "a signal carries one of",
         ),
         (
-            "pub fn all(&self) -> Stream<Vec<Thing>> { todo!() }",
+            "pub fn all(&self) -> Stream<Vec<Option<Thing>>> { todo!() }",
             "a stream carries one of",
         ),
         (

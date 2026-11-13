@@ -550,6 +550,52 @@
           "blocking": false
         },
         {
+          "name": "counter_batch",
+          "docs": "A batch created on a worker and transferred when the future is taken.",
+          "kind": "static",
+          "params": [{ "name": "count", "type": "i32" }],
+          "returns": "future<list<Counter>>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "batch_later",
+          "docs": "A batch returned by an async function, or a failure before it is made.",
+          "kind": "static",
+          "params": [{ "name": "count", "type": "i32" }, { "name": "fail", "type": "bool" }],
+          "returns": "future<list<Counter>>",
+          "async": true,
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "pot_batch",
+          "docs": "Two references to the same shared value in one asynchronous batch.",
+          "kind": "static",
+          "params": [{ "name": "value", "type": "i32" }],
+          "returns": "future<list<Pot>>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "counter_batches",
+          "docs": "Batches in order, including an empty one, followed by a failure.",
+          "kind": "static",
+          "params": [],
+          "returns": "stream<list<Counter>>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "pot_batches",
+          "docs": "A stream batch whose elements share one value.",
+          "kind": "static",
+          "params": [{ "name": "value", "type": "i32" }],
+          "returns": "stream<list<Pot>>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
           "name": "abandoned",
           "docs": "A future that is never settled.",
           "kind": "static",

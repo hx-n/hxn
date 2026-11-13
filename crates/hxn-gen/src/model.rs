@@ -372,6 +372,11 @@ pub enum Type {
         interface: String,
         nullable: bool,
     },
+    /// A list of owned objects carried by a future or stream. It crosses
+    /// as an ended stream, drained into a Haxe array when the value is taken.
+    List {
+        interface: String,
+    },
     /// An atomic cell both sides read and write: `&AtomicI32` as a parameter,
     /// borrowed for the call, and `Arc<AtomicI32>` as a return value, owned
     /// by the library.
@@ -466,6 +471,7 @@ impl Type {
                 format!("fn({}) -> {}", taken.join(", "), returns.name())
             }
             Self::Data(data) => data.name(),
+            Self::List { interface } => format!("list<{interface}>"),
             Self::Handle {
                 interface,
                 nullable,

@@ -656,6 +656,11 @@ impl Scope<'_> {
         if let Some(data) = data_of(carried, self.known).filter(|data| data.crosses().is_some()) {
             return Ok(Type::Data(data));
         }
+        if name != "Signal"
+            && let Some(Type::Handle { interface, .. }) = self.listed(carried)?
+        {
+            return Ok(Type::List { interface });
+        }
         // A signal is read any number of times, which a value with a single
         // owner cannot be. A future or a stream may carry no object.
         let (carried, nullable) = match optional(carried) {
@@ -699,7 +704,7 @@ impl Scope<'_> {
             None => error(
                 ty.span(),
                 format!(
-                    "a {} carries one of (), bool, a number, String, Vec<u8>, data marked `#[hxn::data]` or an Option or Vec of data, or an interface or an Option of one",
+                    "a {} carries one of (), bool, a number, String, Vec<u8>, data marked `#[hxn::data]` or an Option or Vec of data, or an interface or an Option or Vec of one",
                     name.to_lowercase()
                 ),
             ),

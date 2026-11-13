@@ -436,6 +436,15 @@ repeatedly. Data is serialized when a Haxe thread takes it, by the take function
 generated for that type; the library's future holds the library's own Rust
 type.
 
+A future or stream can also carry a list of objects, `Vec<T>` or
+`Vec<Arc<T>>` of a shared interface. Haxe receives `Array<T>`. The Rust
+result keeps the vector until it is taken; the take call transfers its
+values into an ended stream, and the Haxe wrapper drains that stream into
+the array before delivering it. The element take exports are generated even
+when no function returns a stream of individual objects. Until an element
+is taken it remains owned by Rust, so dropping an untaken result releases
+its values without creating host objects.
+
 An `async fn` is exposed as a function that returns a future of its return
 value; the error of a `Result` fails the future, as a typed exception if the
 error type is `#[hxn::data]`.

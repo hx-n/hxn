@@ -30,7 +30,12 @@ fn declaration(library: &Library, interface: &Interface, method: &Method) -> Str
             Type::AtomicInt | Type::AtomicBool => "int32_t *",
             // Borrowed for the call, so its `drop` is null.
             Type::Lent { .. } => "hxn_callback ",
-            Type::Void | Type::Future(_) | Type::Stream(_) | Type::Signal(_) | Type::Data(_) => {
+            Type::Void
+            | Type::Future(_)
+            | Type::Stream(_)
+            | Type::Signal(_)
+            | Type::List { .. }
+            | Type::Data(_) => {
                 unreachable!("not a parameter type")
             }
         };
@@ -42,7 +47,9 @@ fn declaration(library: &Library, interface: &Interface, method: &Method) -> Str
         Type::I64 => params.push(String::from("int64_t *out")),
         Type::F64 => params.push(String::from("double *out")),
         Type::Str | Type::Bytes => params.push(String::from("hxn_buf *out")),
-        Type::Lent { .. } | Type::Data(_) | Type::BytesMut => unreachable!("not a result type"),
+        Type::Lent { .. } | Type::List { .. } | Type::Data(_) | Type::BytesMut => {
+            unreachable!("not a result type")
+        }
         Type::Handle { .. }
         | Type::AtomicInt
         | Type::AtomicBool
@@ -178,7 +185,12 @@ fn glue(library: &Library, interface: &Interface, method: &Method) -> String {
                 ));
                 arguments.push(format!("{name}_lent"));
             }
-            Type::Void | Type::Future(_) | Type::Stream(_) | Type::Signal(_) | Type::Data(_) => {
+            Type::Void
+            | Type::Future(_)
+            | Type::Stream(_)
+            | Type::Signal(_)
+            | Type::List { .. }
+            | Type::Data(_) => {
                 unreachable!("not a parameter type")
             }
         }
@@ -194,7 +206,9 @@ fn glue(library: &Library, interface: &Interface, method: &Method) -> String {
             Some("hxn_buf out = HXN_BUF_EMPTY;"),
             Some("hxn::take_string(out)"),
         ),
-        Type::Lent { .. } | Type::Data(_) | Type::BytesMut => unreachable!("not a result type"),
+        Type::Lent { .. } | Type::List { .. } | Type::Data(_) | Type::BytesMut => {
+            unreachable!("not a result type")
+        }
         Type::Bytes => (
             "Array<unsigned char>",
             Some("hxn_buf out = HXN_BUF_EMPTY;"),

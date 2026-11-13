@@ -408,6 +408,41 @@ class Generated {
 		var summed = Later.totalLater(one, two);
 		throws("an async function that takes an object by value closes it at once", () -> one.add(1), "closed");
 		check("and the work owns it", summed.await() == 7 && Later.totalLater(new Counter(1), null).await() == 1 && Counter.live() == before);
+		var batch = Later.counterBatch(3).await();
+		check("a future transfers a batch in order", [for (counter in batch) counter.add(0)].join(",") == "1,2,3"
+			&& Counter.live() == before + 3);
+		for (counter in batch)
+			counter.close();
+		check("an empty future batch", Later.counterBatch(0).await().length == 0);
+		var asyncBatch = Later.batchLater(2, false).await();
+		check("an async function returns a batch", [for (counter in asyncBatch) counter.add(1)].join(",") == "2,3");
+		for (counter in asyncBatch)
+			counter.close();
+		throws("a batch future can fail", () -> Later.batchLater(2, true).await(), "batch refused");
+		check("owned batch values are released", Counter.live() == before);
+		var potsBefore = Pot.live();
+		var sharedBatch = Later.potBatch(7).await();
+		check("a future batch preserves shared identity", sharedBatch.length == 2 && sharedBatch[0].same(sharedBatch[1]) && Pot.live() == potsBefore + 1);
+		sharedBatch[0].close();
+		check("each batch element owns a share", sharedBatch[1].add(1) == 8);
+		sharedBatch[1].close();
+		var batchSizes = [];
+		throws("a stream of batches fails after its batches", () -> {
+			for (batch in Later.counterBatches()) {
+				batchSizes.push(batch.length);
+				check("a stream batch keeps its order", [for (counter in batch) counter.add(0)].join(",") == (batch.length == 0 ? "" : batch.length == 1 ? "1" : "1,2"));
+				for (counter in batch)
+					counter.close();
+			}
+		}, "batches ended");
+		check("including an empty batch", batchSizes.join(",") == "0,1,2" && Counter.live() == before);
+		for (batch in Later.potBatches(9)) {
+			check("a stream batch preserves shared identity", batch.length == 2 && batch[0].same(batch[1]));
+			for (pot in batch)
+				pot.close();
+		}
+		check("shared batches are released", Pot.live() == potsBefore);
+
 		var kept = new Pot(1);
 		var adding = kept.addLater(2, 20);
 		kept.close();
@@ -445,6 +480,21 @@ class Generated {
 		// Delivered when the app calls `Loop.sync`, to all of these in one
 		// batch.
 		hxn.Loop.manual = true;
+		var deliveredBatch = -1;
+		Later.counterBatch(2).then(batch -> {
+			deliveredBatch = 0;
+			for (counter in batch) {
+				deliveredBatch += counter.add(0);
+				counter.close();
+			}
+		});
+		var listenedBatches = [];
+		var batchesFailed = "";
+		Later.counterBatches().listen(batch -> {
+			listenedBatches.push(batch.length);
+			for (counter in batch)
+				counter.close();
+		}, () -> {}, error -> batchesFailed = error.message);
 		var squared = -1;
 		Later.square(6, 1).then(value -> squared = value);
 		var refused = "";
@@ -459,10 +509,13 @@ class Generated {
 		var odometer = Later.odometer(7);
 		var far = haxe.Int64.make(256, 7);
 		var waited = 0;
-		while ((squared < 0 || refused == "" || !ended || ramp.peek() != 50 || label.peek() != "3" || odometer.peek() != far) && waited++ < 5000) {
+		while ((deliveredBatch < 0 || batchesFailed == "" || squared < 0 || refused == "" || !ended || ramp.peek() != 50 || label.peek() != "3" || odometer.peek() != far) && waited++ < 5000) {
 			hxn.Loop.sync();
 			Sys.sleep(0.001);
 		}
+		check("a continuation gets the complete owned batch", deliveredBatch == 3);
+		check("a listener gets batches before failure", listenedBatches.join(",") == "0,1,2" && batchesFailed.indexOf("batches ended") >= 0);
+		check("delivered batch objects are released", Counter.live() == before);
 		check("a continuation is called with the value", squared == 36);
 		check('or with the failure: $refused', refused.indexOf("counter overflow") >= 0);
 		check('a listener gets every item and the end: $items', items.join(",") == "1,2,3" && ended);

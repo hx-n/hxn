@@ -138,7 +138,8 @@ filesystem `#include "counter.h"` would then find the generated header.
   `Signal<T>` of `hxn-future`, by a function that itself returns immediately.
   It carries `bool`, a number, `String` or data; a future or a stream may
   also carry `Vec<u8>`, an interface, a shared one as `Arc<T>`, an `Option`
-  of either, or `()`.
+  or `Vec` of either, or `()`. A list is taken as a Haxe `Array` of owned
+  objects; a signal never carries objects.
 - An `async fn` is exposed as a function returning a future of its return
   value. Its receiver is `self` or, for a shared interface, `&self`; its
   parameters are numbers, `bool`, `&str` and `&[u8]`, which are copied, and
