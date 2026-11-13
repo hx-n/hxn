@@ -36,8 +36,9 @@ In this table, `P` means `hxn_<library>_`; interfaces use snake case in exports.
 | Haxe method | Rust name in camel case. |
 
 Every HashLink primitive, the library-wide ones included (`<library>_future_state`,
-`<library>_outbox_wait`), starts with the library's name. A phone links every
-library and the runtime into one program, where unprefixed resolvers collide.
+`<library>_outbox_wait`), starts with the library's name. On a mobile device
+every library and the runtime are linked into one program, where unprefixed
+resolvers collide.
 
 Kinds name scalars or snake-case types. Wrappers add `option_`, `list_`,
 `map_`, `set_`, `sorted_set_`, `tuple_<arity>_<element kinds>` or

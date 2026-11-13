@@ -757,20 +757,20 @@ mod tests {
             cross: None,
         };
         // A cross-compiled build uses the installed standard library.
-        let phone = Target {
+        let mobile = Target {
             runtime: Runtime::Cpp,
             wasm: false,
             cross: Some("aarch64-apple-ios"),
         };
-        assert_eq!(phone.name(), "cpp-aarch64-apple-ios");
+        assert_eq!(mobile.name(), "cpp-aarch64-apple-ios");
         assert_eq!(
-            (phone.triple(), phone.rustflags()),
+            (mobile.triple(), mobile.rustflags()),
             (Some("aarch64-apple-ios"), None)
         );
-        assert_eq!(artifact("greeter", phone), "libgreeter_cpp.a");
+        assert_eq!(artifact("greeter", mobile), "libgreeter_cpp.a");
         let windows = Target {
             cross: Some("x86_64-pc-windows-msvc"),
-            ..phone
+            ..mobile
         };
         assert_eq!(artifact("greeter", windows), "greeter_cpp.lib");
         assert!(windows.rustflags().is_some());

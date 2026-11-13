@@ -878,8 +878,9 @@ pub fn hl_adapter(library: &Library, core: &str) -> String {
 }
 
 // Every primitive is named after its library, as the Haxe side's
-// `@:hlNative` prefix asks: a phone links every library and the runtime into
-// one program, where two libraries' `hlp_future_state` would collide.
+// `@:hlNative` prefix asks: on a mobile device every library and the runtime
+// are linked into one program, where two libraries' `hlp_future_state` would
+// collide.
 fn named_after(library: &Library, adapter: String) -> String {
     adapter.replace(
         "define_prim!(hlp_",
