@@ -943,12 +943,18 @@ mod tests {
         drop(source);
         assert_eq!([outbox::next(), outbox::next()], [stream, value]);
 
+        // The close waits for the short wait to have returned, so that wait
+        // sees nothing however the two threads are scheduled.
+        let (go, gate) = std::sync::mpsc::channel::<()>();
+        let sender = &sender;
         std::thread::scope(|scope| {
-            scope.spawn(|| {
+            scope.spawn(move || {
+                gate.recv().unwrap();
                 std::thread::sleep(Duration::from_millis(20));
                 sender.close();
             });
             assert!(!outbox::wait_millis(1));
+            go.send(()).unwrap();
             assert!(outbox::wait_millis(-1));
         });
         assert_eq!([outbox::next(), outbox::next()], [stream, -1]);
