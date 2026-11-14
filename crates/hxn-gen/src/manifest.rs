@@ -203,6 +203,9 @@ pub fn manifest(library: &Library) -> String {
     let mut out = String::from("{\n");
     out.push_str("  \"hxn\": 1,\n");
     out.push_str(&format!("  \"library\": {},\n", quoted(&library.name)));
+    if let Some(package) = &library.package {
+        out.push_str(&format!("  \"package\": {},\n", quoted(package)));
+    }
     // Data sections are written only when the library has data types.
     if !library.enums.is_empty() {
         let enums: Vec<String> = library.enums.iter().map(enumeration).collect();

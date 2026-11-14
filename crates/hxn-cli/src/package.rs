@@ -22,24 +22,18 @@ use crate::make::{self, Built, Runtime, Target, write};
 use crate::project::Project;
 use crate::support;
 
-// Copies the files of `from` into `to` and deletes every other file in `to`.
+// Copies the files under `from` into `to` and deletes every other file
+// under `to`.
 fn mirror(from: &Path, to: &Path) -> Result<(), String> {
-    let failed = |path: &Path, error: std::io::Error| format!("{}: {error}", path.display());
-    std::fs::create_dir_all(to).map_err(|error| failed(to, error))?;
-    let mut kept = Vec::new();
-    for entry in std::fs::read_dir(from).map_err(|error| failed(from, error))? {
-        let entry = entry.map_err(|error| failed(from, error))?;
-        let text = std::fs::read_to_string(entry.path()).map_err(|e| failed(&entry.path(), e))?;
-        write(&to.join(entry.file_name()), &text)?;
-        kept.push(entry.file_name());
+    std::fs::create_dir_all(to).map_err(|error| format!("{}: {error}", to.display()))?;
+    let kept = make::files_under(from)?;
+    for file in &kept {
+        let path = from.join(file);
+        let text = std::fs::read_to_string(&path)
+            .map_err(|error| format!("{}: {error}", path.display()))?;
+        write(&to.join(file), &text)?;
     }
-    for entry in std::fs::read_dir(to).map_err(|error| failed(to, error))? {
-        let entry = entry.map_err(|error| failed(to, error))?;
-        if !kept.contains(&entry.file_name()) {
-            std::fs::remove_file(entry.path()).map_err(|error| failed(&entry.path(), error))?;
-        }
-    }
-    Ok(())
+    make::keep_only(to, &kept)
 }
 
 // The file name of a built library in a package. `hxn.Bind` looks for it
@@ -176,6 +170,17 @@ mod tests {
             std::fs::read_to_string(to.join("Kept.hx")).unwrap(),
             "class Kept { var one:Int; }"
         );
+
+        // A class moved into a package is in its directory, and the
+        // directory goes once the package is no longer declared.
+        std::fs::create_dir_all(from.join("sound/devices")).unwrap();
+        std::fs::rename(from.join("Kept.hx"), from.join("sound/devices/Kept.hx")).unwrap();
+        mirror(&from, &to).unwrap();
+        assert!(to.join("sound/devices/Kept.hx").is_file() && !to.join("Kept.hx").exists());
+        std::fs::rename(from.join("sound/devices/Kept.hx"), from.join("Kept.hx")).unwrap();
+        std::fs::remove_dir_all(from.join("sound")).unwrap();
+        mirror(&from, &to).unwrap();
+        assert!(to.join("Kept.hx").is_file() && !to.join("sound").exists());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

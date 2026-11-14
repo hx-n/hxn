@@ -3055,3 +3055,109 @@ impl Thing {
         clash.message
     );
 }
+
+#[test]
+fn a_declared_package_holds_every_class() {
+    let source = "hxn::package!(\"sound.devices\");\n\n#[hxn::data]\npub enum Mode { Quiet, Loud }\n\n#[hxn::interface]\npub struct Player;\n\n#[hxn::methods]\nimpl Player {\n    pub fn new(mode: Mode) -> Self { Player }\n}\n";
+    let library = parse("sound", source).unwrap();
+    assert_eq!(library.package.as_deref(), Some("sound.devices"));
+    for files in [
+        hxn_gen::haxe_hl(&library),
+        hxn_gen::haxe_cpp(&library),
+        hxn_gen::haxe_cppia(&library),
+    ] {
+        assert!(!files.is_empty());
+        for file in files {
+            assert!(file.path.starts_with("sound/devices/"), "{}", file.path);
+            let first = file
+                .text
+                .lines()
+                .find(|line| !line.starts_with("//") && !line.is_empty());
+            assert_eq!(first, Some("package sound.devices;"), "{}", file.path);
+        }
+    }
+    assert!(hxn_gen::manifest(&library).contains("\"package\": \"sound.devices\""));
+    // Without one, the classes are in the top-level package.
+    let top = parse(
+        "sound",
+        &source.replace("hxn::package!(\"sound.devices\");", ""),
+    )
+    .unwrap();
+    assert!(top.package.is_none() && !hxn_gen::manifest(&top).contains("\"package\""));
+    assert!(
+        hxn_gen::haxe_hl(&top)
+            .iter()
+            .all(|file| !file.path.contains('/'))
+    );
+
+    for (declared, why) in [
+        ("hxn::package!(\"Sound\");", "not a Haxe package name"),
+        ("hxn::package!(\"hxn.sound\");", "not a Haxe package name"),
+        (
+            "hxn::package!(sound);",
+            "takes the package's name as a string",
+        ),
+        (
+            "hxn::package!(\"a\");\nhxn::package!(\"b\");",
+            "declared twice",
+        ),
+    ] {
+        let error = parse(
+            "sound",
+            &format!("{declared}\n{source}").replace("hxn::package!(\"sound.devices\");", ""),
+        )
+        .unwrap_err();
+        assert!(error.message.contains(why), "{declared}: {}", error.message);
+    }
+}
+
+#[test]
+fn a_file_the_build_script_writes_is_read_from_out_dir() {
+    let dir = std::env::temp_dir().join(format!("hxn-out-dir-{}", std::process::id()));
+    let out = dir.join("out");
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::create_dir_all(&out).unwrap();
+    std::fs::write(
+        dir.join("src/lib.rs"),
+        "hxn::package!(\"window\");\n\ninclude!(concat!(env!(\"OUT_DIR\"), \"/window.rs\"));\n\n// Another include is not the API.\nconst TABLE: &[u8] = include_bytes!(\"lib.rs\");\n",
+    )
+    .unwrap();
+    std::fs::write(
+        out.join("window.rs"),
+        "#[hxn::interface]\npub struct Window;\n\n#[hxn::methods]\nimpl Window {\n    pub fn valid(&self) -> bool { true }\n}\n",
+    )
+    .unwrap();
+
+    let mut asked = 0;
+    let (library, files) =
+        hxn_gen::parse_crate_with("window", &dir.join("src/lib.rs"), &mut || {
+            asked += 1;
+            Ok(out.clone())
+        })
+        .unwrap();
+    assert_eq!(asked, 1);
+    assert_eq!(library.interfaces[0].name, "Window");
+    assert_eq!(library.package.as_deref(), Some("window"));
+    assert_eq!(files.last().unwrap(), &out.join("window.rs"));
+
+    // Without a way to find OUT_DIR, the include is an error that names it.
+    let error = hxn_gen::parse_crate("window", &dir.join("src/lib.rs")).unwrap_err();
+    assert_eq!(error.line, 3);
+    assert!(
+        error
+            .message
+            .contains("`window.rs` is included from the build script's OUT_DIR")
+    );
+
+    // A library with no such include never asks.
+    std::fs::write(
+        dir.join("src/lib.rs"),
+        "#[hxn::interface]\npub struct Window;\n",
+    )
+    .unwrap();
+    hxn_gen::parse_crate_with("window", &dir.join("src/lib.rs"), &mut || {
+        panic!("asked for OUT_DIR")
+    })
+    .unwrap();
+    std::fs::remove_dir_all(&dir).unwrap();
+}

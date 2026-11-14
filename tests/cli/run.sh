@@ -197,6 +197,31 @@ if [ "$(grep '^Howdy' "$work/out.txt")" != "Howdy, one and two" ]; then
 	echo "FAILED: the settings or the arguments did not reach the program" >&2
 	exit 1
 fi
+# Part of the API can come from the build script: hxn runs it before reading
+# the source, and reads the file the source includes from OUT_DIR.
+cat >build.rs <<'EOF'
+fn main() {
+    let out = std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
+    std::fs::write(
+        out.join("written.rs"),
+        "#[hxn::function(class = \"Written\")]\npub fn answer() -> i32 {\n    42\n}\n",
+    )
+    .unwrap();
+}
+EOF
+echo 'include!(concat!(env!("OUT_DIR"), "/written.rs"));' >>src/lib.rs
+cat >haxe/Other.hx <<'EOF'
+class Other {
+	static function main() {
+		Sys.println('written: ${Written.answer()}');
+	}
+}
+EOF
+"$hxn" run "${arguments[@]}" | tr -d '\r' | tee "$work/out.txt"
+if [ "$(grep '^written' "$work/out.txt")" != "written: 42" ]; then
+	echo "FAILED: the function the build script wrote is not in the binding" >&2
+	exit 1
+fi
 # haxelib.json fields the crate provides go into the package, and the ones
 # it does not provide are reported.
 cat >>Cargo.toml <<'EOF'

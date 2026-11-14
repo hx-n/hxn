@@ -1,5 +1,9 @@
 //! A Haxe callback called by the library, bytes as a return value, and one
 //! object passed as a parameter to another object's method.
+//!
+//! Its Haxe classes are in the package `picture`.
+
+hxn::package!("picture");
 
 /// A greyscale picture.
 #[hxn::interface]

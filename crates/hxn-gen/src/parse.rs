@@ -1155,16 +1155,64 @@ fn path_attribute(attributes: &[Attribute]) -> Option<String> {
         })
 }
 
+// A file of items written by the library's build script and included from
+// its source with `include!(concat!(env!("OUT_DIR"), "/name.rs"))`.
+struct Generated {
+    // The file's path under `OUT_DIR`, without the leading `/`.
+    name: String,
+    line: usize,
+}
+
+// The file an `include!` names, if it is one in `OUT_DIR`.
+fn generated(item: &syn::ItemMacro) -> Option<Generated> {
+    if !item.mac.path.is_ident("include") {
+        return None;
+    }
+    let syn::Expr::Macro(concat) = item.mac.parse_body::<syn::Expr>().ok()? else {
+        return None;
+    };
+    if !concat.mac.path.is_ident("concat") {
+        return None;
+    }
+    let parts = concat
+        .mac
+        .parse_body_with(syn::punctuated::Punctuated::<syn::Expr, syn::Token![,]>::parse_terminated)
+        .ok()?;
+    let mut parts = parts.into_iter();
+    let (Some(syn::Expr::Macro(env)), Some(syn::Expr::Lit(name)), None) =
+        (parts.next(), parts.next(), parts.next())
+    else {
+        return None;
+    };
+    let variable = env.mac.parse_body::<syn::LitStr>().ok()?;
+    let syn::Lit::Str(name) = name.lit else {
+        return None;
+    };
+    (env.mac.path.is_ident("env") && variable.value() == "OUT_DIR").then(|| Generated {
+        name: name.value().trim_start_matches(['/', '\\']).to_owned(),
+        line: item.mac.path.span().start().line,
+    })
+}
+
 // Flattens a file's items: items of inline modules are added to the rest,
-// and a module defined in another file is recorded. `dir` is the directory
-// of this level's module files.
-fn flatten(items: Vec<Item>, dir: &Path, out: &mut Vec<Item>, outside: &mut Vec<Outside>) {
+// and a module defined in another file, or a file included from `OUT_DIR`,
+// is recorded. `dir` is the directory of this level's module files.
+fn flatten(
+    items: Vec<Item>,
+    dir: &Path,
+    out: &mut Vec<Item>,
+    outside: &mut Vec<Outside>,
+    included: &mut Vec<Generated>,
+) {
     for item in items {
         match item {
+            Item::Macro(item) if generated(&item).is_some() => {
+                included.extend(generated(&item));
+            }
             Item::Mod(module) => {
                 let name = module.ident.to_string();
                 match module.content {
-                    Some((_, inner)) => flatten(inner, &dir.join(&name), out, outside),
+                    Some((_, inner)) => flatten(inner, &dir.join(&name), out, outside, included),
                     None => outside.push(Outside {
                         line: module.ident.span().start().line,
                         path: path_attribute(&module.attrs),
@@ -1186,13 +1234,30 @@ fn parse_text(text: &str, file: Option<&Path>) -> Result<syn::File, Error> {
     })
 }
 
+// Where the library's build script writes, asked for once and only if the
+// source includes a file from there.
+struct OutDir<'a> {
+    find: &'a mut dyn FnMut() -> Result<PathBuf, String>,
+    found: Option<PathBuf>,
+}
+
+impl OutDir<'_> {
+    fn get(&mut self) -> Result<PathBuf, String> {
+        if self.found.is_none() {
+            self.found = Some((self.find)()?);
+        }
+        Ok(self.found.clone().unwrap_or_default())
+    }
+}
+
 // Reads the file at `path`, whose submodules' files are in `dir`, and then
-// those submodules.
+// those submodules and the files it includes from `OUT_DIR`.
 fn load(
     path: &Path,
     dir: &Path,
     sources: &mut Vec<Source>,
     files: &mut Vec<PathBuf>,
+    out_dir: &mut OutDir,
 ) -> Result<(), Error> {
     let name = path.display().to_string();
     let text = std::fs::read_to_string(path).map_err(|error| Error {
@@ -1204,11 +1269,24 @@ fn load(
     files.push(path.to_owned());
     let mut items = Vec::new();
     let mut outside = Vec::new();
-    flatten(file.items, dir, &mut items, &mut outside);
+    let mut included = Vec::new();
+    flatten(file.items, dir, &mut items, &mut outside, &mut included);
     sources.push(Source {
         file: Some(name.clone()),
         items,
     });
+    for generated in included {
+        let found = out_dir.get().map_err(|why| Error {
+            file: Some(name.clone()),
+            line: generated.line,
+            message: format!(
+                "`{}` is included from the build script's OUT_DIR, which is not known: {why}",
+                generated.name
+            ),
+        })?;
+        // Its modules are declared as if from the including file.
+        load(&found.join(&generated.name), dir, sources, files, out_dir)?;
+    }
     let beside = path.parent().unwrap_or(Path::new(""));
     for module in outside {
         // A file named after its module keeps its submodules in a directory
@@ -1236,7 +1314,7 @@ fn load(
                 ),
             });
         };
-        load(&file, &dir, sources, files)?;
+        load(&file, &dir, sources, files, out_dir)?;
     }
     Ok(())
 }
@@ -1254,8 +1332,8 @@ fn located<T>(result: Result<T, Error>, source: &Source) -> Result<T, Error> {
 // Names the adapters use for their own exports.
 const RESERVED: [&str; 6] = ["Atomic", "Memory", "Future", "Stream", "Signal", "Outbox"];
 
-// The types of Haxe's top-level package. The generated classes are in it too,
-// so one of these names would shadow Haxe's type for the program and for the
+// The types of Haxe's top-level package. A generated class of the same name
+// would shadow Haxe's type in its package, for the program and for the
 // generated code, which uses `String`, `Map` and the rest.
 const HAXE_TYPES: [&str; 34] = [
     "Any",
@@ -1925,6 +2003,7 @@ fn build(name: &str, sources: &[Source]) -> Result<Library, Error> {
         records,
         enums,
         tagged,
+        package: package_of(sources)?,
     };
     // An error's exception is a class named after it.
     for error in library.errors() {
@@ -1950,13 +2029,82 @@ fn build(name: &str, sources: &[Source]) -> Result<Library, Error> {
     Ok(library)
 }
 
+// Whether `text` can name a Haxe package: dotted segments, each starting
+// with a lowercase letter or an underscore, and not hxn's own.
+fn package_name(text: &str) -> bool {
+    let segment = |part: &str| {
+        let mut characters = part.chars();
+        characters
+            .next()
+            .is_some_and(|first| first.is_ascii_lowercase() || first == '_')
+            && characters.all(|rest| rest.is_ascii_alphanumeric() || rest == '_')
+    };
+    text.split('.').all(segment) && text.split('.').next() != Some("hxn")
+}
+
+// The package `hxn::package!("...")` names, if the library declares one.
+fn package_of(sources: &[Source]) -> Result<Option<String>, Error> {
+    let mut found: Option<String> = None;
+    for source in sources {
+        for item in &source.items {
+            let Item::Macro(item) = item else { continue };
+            let path: Vec<_> = item
+                .mac
+                .path
+                .segments
+                .iter()
+                .map(|segment| segment.ident.to_string())
+                .collect();
+            if path != ["hxn", "package"] {
+                continue;
+            }
+            let span = item.mac.span();
+            let declared = located(
+                item.mac
+                    .parse_body::<syn::LitStr>()
+                    .map_err(|_| Error {
+                        file: None,
+                        line: span.start().line,
+                        message: String::from(
+                            "`hxn::package!` takes the package's name as a string: `hxn::package!(\"window\");`",
+                        ),
+                    }),
+                source,
+            )?
+            .value();
+            if !package_name(&declared) {
+                return located(
+                    error(
+                        span,
+                        format!(
+                            "`{declared}` is not a Haxe package name: dotted parts that each start with a lowercase letter, and not `hxn`"
+                        ),
+                    ),
+                    source,
+                );
+            }
+            if found.is_some() {
+                return located(error(span, "the package is declared twice"), source);
+            }
+            found = Some(declared);
+        }
+    }
+    Ok(found)
+}
+
 /// Parses the marked items of `source`, the text of one Rust file, as the
 /// API of the library `name`. Modules defined in other files are not read:
 /// [`parse_crate`] reads a library from its files.
 pub fn parse(name: &str, source: &str) -> Result<Library, Error> {
     let file = parse_text(source, None)?;
     let mut items = Vec::new();
-    flatten(file.items, Path::new(""), &mut items, &mut Vec::new());
+    flatten(
+        file.items,
+        Path::new(""),
+        &mut items,
+        &mut Vec::new(),
+        &mut Vec::new(),
+    );
     build(name, &[Source { file: None, items }])
 }
 
@@ -1967,9 +2115,29 @@ pub fn parse(name: &str, source: &str) -> Result<Library, Error> {
 /// The adapters refer to an interface by its path at the crate's root, so one
 /// defined in a module must be re-exported there.
 pub fn parse_crate(name: &str, root: &Path) -> Result<(Library, Vec<PathBuf>), Error> {
+    parse_crate_with(name, root, &mut || {
+        Err(String::from(
+            "read the library with `hxn build`, which runs its build script first",
+        ))
+    })
+}
+
+/// Reads the library as [`parse_crate`] does, and also a file its source
+/// includes from its build script's output,
+/// `include!(concat!(env!("OUT_DIR"), "/name.rs"))`. `out_dir` gives that
+/// directory; it is called once, and only if the source includes such a file.
+pub fn parse_crate_with(
+    name: &str,
+    root: &Path,
+    out_dir: &mut dyn FnMut() -> Result<PathBuf, String>,
+) -> Result<(Library, Vec<PathBuf>), Error> {
     let mut sources = Vec::new();
     let mut files = Vec::new();
     let dir = root.parent().unwrap_or(Path::new(""));
-    load(root, dir, &mut sources, &mut files)?;
+    let mut out_dir = OutDir {
+        find: out_dir,
+        found: None,
+    };
+    load(root, dir, &mut sources, &mut files, &mut out_dir)?;
     Ok((build(name, &sources)?, files))
 }

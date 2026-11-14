@@ -13,8 +13,15 @@
   reachable at the crate root. Its name is unique
   within that class and cannot be `new`.
 - No interface, data type or class is named like a type of Haxe's top-level
-  package (`Math`, `String`, `Map`, `Date`, ...), which the generated classes
-  share. A library named `math` puts its functions on `class = "Name"`.
+  package (`Math`, `String`, `Map`, `Date`, ...), which the generated code
+  refers to. A library named `math` puts its functions on `class = "Name"`.
+- `hxn::package!("name")` puts the generated Haxe classes in the package
+  `name`. Declare it once in the crate. Each dot-separated part of the name
+  starts with a lowercase letter or an underscore, and the package cannot
+  be `hxn`.
+- The build script can write part of the API. The library includes the
+  file it writes with `include!(concat!(env!("OUT_DIR"), "/name.rs"))`, and
+  `hxn build` runs the build script before it reads the library's source.
 
 ## Values
 

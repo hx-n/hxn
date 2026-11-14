@@ -15,6 +15,9 @@ pub struct Library {
     pub enums: Vec<Enumeration>,
     /// The `#[hxn::data]` tagged enums (at least one variant has fields).
     pub tagged: Vec<Tagged>,
+    /// The Haxe package of its classes, from `hxn::package!("...")`, or
+    /// `None` for the top-level package.
+    pub package: Option<String>,
 }
 
 /// A struct whose public fields are all plain data. It becomes a Haxe class

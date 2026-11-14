@@ -419,8 +419,7 @@ fn check(project: &Project, arguments: &Arguments) -> Result<u8, String> {
     // manifest.
     let committed = project.dir.join(format!("{name}.hxn.json"));
     if let Ok(committed) = std::fs::read_to_string(&committed) {
-        let (library, _) =
-            hxn_gen::parse_crate(name, &project.source).map_err(|error| error.to_string())?;
+        let library = make::parse(project)?;
         if hxn_gen::manifest(&library) != committed {
             return Err(format!(
                 "{name}.hxn.json is not what the source gives: the library's API changed. Run `hxn build` to regenerate it, then review and commit the change"

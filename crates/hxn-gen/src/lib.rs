@@ -37,5 +37,5 @@ pub use model::{
     Case, Data, Enumeration, Error, Field, FieldDefault, Interface, Library, Method, Number, Param,
     Receiver, Record, Tagged, Type, Variant,
 };
-pub use parse::{parse, parse_crate};
+pub use parse::{parse, parse_crate, parse_crate_with};
 pub use rust::{c_adapter, hl_adapter};

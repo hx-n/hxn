@@ -1,3 +1,5 @@
+import picture.Picture;
+
 class Main {
 	static function main() {
 		// The library calls each callback once for every pixel.

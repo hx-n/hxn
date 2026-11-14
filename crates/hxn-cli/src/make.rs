@@ -301,6 +301,55 @@ fn linked_by(cargo: &mut Command) -> Result<Linked, String> {
     Ok(Linked::read(&String::from_utf8_lossy(&output.stdout)))
 }
 
+// The `out_dir` of the build script of the package `id`, from cargo's
+// messages.
+fn out_dir_in(messages: &str, id: &str) -> Option<PathBuf> {
+    messages
+        .lines()
+        .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
+        .filter(|message| message["reason"] == "build-script-executed")
+        .find(|message| message["package_id"] == id)
+        .and_then(|message| message["out_dir"].as_str().map(PathBuf::from))
+}
+
+/// The library's parsed API. A file its source includes from the build
+/// script's `OUT_DIR` is read after `cargo check` has run that script, for
+/// the host.
+pub fn parse(project: &Project) -> Result<hxn_gen::Library, String> {
+    let manifest = project.dir.join("Cargo.toml");
+    let mut out_dir = || -> Result<PathBuf, String> {
+        let id = printed(
+            Command::new("cargo")
+                .arg("pkgid")
+                .arg("--manifest-path")
+                .arg(&manifest)
+                .args(["-p", &project.package]),
+        )
+        .ok_or_else(|| format!("`cargo pkgid -p {}` failed", project.package))?;
+        let output = Command::new("cargo")
+            .arg("check")
+            .arg("--manifest-path")
+            .arg(&manifest)
+            .args(["-p", &project.package, "--message-format=json"])
+            .arg("--target-dir")
+            .arg(&project.target)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::inherit())
+            .output()
+            .map_err(|error| format!("running cargo: {error}"))?;
+        if !output.status.success() {
+            return Err(String::from(
+                "`cargo check`, which runs the build script, failed",
+            ));
+        }
+        out_dir_in(&String::from_utf8_lossy(&output.stdout), id.trim())
+            .ok_or_else(|| format!("`{}` has no build script that cargo ran", project.package))
+    };
+    hxn_gen::parse_crate_with(&project.library, &project.source, &mut out_dir)
+        .map(|(library, _)| library)
+        .map_err(|error| error.to_string())
+}
+
 pub fn text(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }
@@ -432,12 +481,58 @@ fn classes_in(dir: &Path, classes: &[hxn_gen::File]) -> Result<(), String> {
     for class in classes {
         write(&dir.join(&class.path), &class.text)?;
     }
-    for entry in std::fs::read_dir(dir).map_err(|error| format!("{}: {error}", dir.display()))? {
-        let entry = entry.map_err(|error| error.to_string())?;
-        let file = entry.file_name().to_string_lossy().into_owned();
-        if !classes.iter().any(|class| class.path == file) {
-            std::fs::remove_file(entry.path())
-                .map_err(|error| format!("{}: {error}", entry.path().display()))?;
+    let kept: Vec<PathBuf> = classes
+        .iter()
+        .map(|class| PathBuf::from(&class.path))
+        .collect();
+    keep_only(dir, &kept)
+}
+
+/// The files under `dir`, as paths relative to it, in any order. A class in
+/// a package is in a directory of its own.
+pub fn files_under(dir: &Path) -> Result<Vec<PathBuf>, String> {
+    let mut found = Vec::new();
+    let mut pending = vec![PathBuf::new()];
+    while let Some(relative) = pending.pop() {
+        let at = dir.join(&relative);
+        for entry in std::fs::read_dir(&at).map_err(|error| format!("{}: {error}", at.display()))? {
+            let entry = entry.map_err(|error| format!("{}: {error}", at.display()))?;
+            let path = relative.join(entry.file_name());
+            if entry.path().is_dir() {
+                pending.push(path);
+            } else {
+                found.push(path);
+            }
+        }
+    }
+    Ok(found)
+}
+
+/// Deletes every file under `dir` that is not one of `kept`, relative paths,
+/// and then every directory left empty.
+pub fn keep_only(dir: &Path, kept: &[PathBuf]) -> Result<(), String> {
+    for file in files_under(dir)? {
+        if !kept.contains(&file) {
+            let path = dir.join(&file);
+            std::fs::remove_file(&path).map_err(|error| format!("{}: {error}", path.display()))?;
+        }
+    }
+    // Deepest first, so a directory's own subdirectories have gone.
+    let mut dirs: Vec<PathBuf> = Vec::new();
+    let mut pending = vec![dir.to_owned()];
+    while let Some(at) = pending.pop() {
+        for entry in std::fs::read_dir(&at).map_err(|error| format!("{}: {error}", at.display()))? {
+            let entry = entry.map_err(|error| format!("{}: {error}", at.display()))?;
+            if entry.path().is_dir() {
+                pending.push(entry.path());
+                dirs.push(entry.path());
+            }
+        }
+    }
+    dirs.sort_by_key(|path| std::cmp::Reverse(path.components().count()));
+    for path in dirs {
+        if std::fs::read_dir(&path).is_ok_and(|mut entries| entries.next().is_none()) {
+            std::fs::remove_dir(&path).map_err(|error| format!("{}: {error}", path.display()))?;
         }
     }
     Ok(())
@@ -483,8 +578,7 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
     if let Some(webidl) = &project.webidl {
         crate::import::sync(name, webidl, &project.bindings)?;
     }
-    let (library, _) =
-        hxn_gen::parse_crate(name, &project.source).map_err(|error| error.to_string())?;
+    let library = parse(project)?;
     if library.interfaces.is_empty() {
         return Err(format!(
             "{}: nothing is marked `#[hxn::interface]` or `#[hxn::function]`",
@@ -755,6 +849,20 @@ mod tests {
                 .xml(false)
                 .contains("<target id=\"haxe\">\n</target>")
         );
+    }
+
+    #[test]
+    fn the_build_script_output_is_found_for_its_package() {
+        let messages = concat!(
+            "{\"reason\":\"build-script-executed\",\"package_id\":\"path+file:///w/other#0.1.0\",\"out_dir\":\"/t/other/out\"}\n",
+            "{\"reason\":\"compiler-artifact\",\"package_id\":\"path+file:///w/window#0.1.0\"}\n",
+            "{\"reason\":\"build-script-executed\",\"package_id\":\"path+file:///w/window#0.1.0\",\"out_dir\":\"/t/window/out\"}\n",
+        );
+        assert_eq!(
+            out_dir_in(messages, "path+file:///w/window#0.1.0"),
+            Some(PathBuf::from("/t/window/out"))
+        );
+        assert_eq!(out_dir_in(messages, "path+file:///w/none#0.1.0"), None);
     }
 
     #[test]

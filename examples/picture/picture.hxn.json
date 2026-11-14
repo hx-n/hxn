@@ -1,6 +1,7 @@
 {
   "hxn": 1,
   "library": "picture",
+  "package": "picture",
   "interfaces": [
     {
       "name": "Picture",
