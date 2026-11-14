@@ -420,7 +420,9 @@ fn check(project: &Project, arguments: &Arguments) -> Result<u8, String> {
     let committed = project.dir.join(format!("{name}.hxn.json"));
     if let Ok(committed) = std::fs::read_to_string(&committed) {
         let library = make::parse(project)?;
-        if hxn_gen::manifest(&library) != committed {
+        // Compared without carriage returns: git may check the file out
+        // with Windows line endings.
+        if hxn_gen::manifest(&library) != committed.replace("\r\n", "\n") {
             return Err(format!(
                 "{name}.hxn.json is not what the source gives: the library's API changed. Run `hxn build` to regenerate it, then review and commit the change"
             ));

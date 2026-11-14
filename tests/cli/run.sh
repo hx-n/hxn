@@ -68,6 +68,10 @@ if "$hxn" check "${arguments[@]}" >/dev/null 2>"$work/refused.txt"; then
 	exit 1
 fi
 grep -q 'is not what the source gives' "$work/refused.txt" || { cat "$work/refused.txt" >&2; exit 1; }
+# Windows line endings, as git may check the manifest out, are the same
+# manifest.
+sed 's/$/\r/' "$work/manifest" >greeter.hxn.json
+"$hxn" check "${arguments[@]}" >/dev/null || { echo "FAILED: check refused a manifest with Windows line endings" >&2; exit 1; }
 cp "$work/manifest" greeter.hxn.json
 "$hxn" doctor --vm "${2:-hl}" | tr -d '\r' | tee "$work/found.txt"
 grep -q ' ready$' "$work/found.txt" || { echo "FAILED: doctor found nothing ready" >&2; exit 1; }
