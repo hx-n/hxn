@@ -22,9 +22,9 @@ using haxe.macro.ExprTools;
 
 	A declaration's types are `Bool`, `Int`, `Float`, `haxe.Int64`, `String`,
 	`haxe.io.Bytes`, `hxn.Handle`, `hxn.AtomicInt` or `hxn.AtomicBool`, `Void`
-	for a result, and
-	for a lent function a function type of those: the binding's guard, which
-	reports a failure by returning `false` or `null`.
+	for a result, and for a lent function a function type of those: the
+	binding's guard, which reports a failure by returning `false` or `null`.
+	A bytes result is never null unless it is declared `Null<haxe.io.Bytes>`.
 
 	Each runtime's implementation is a class in `hxn.native`: `HashLink` and
 	`Hxcpp`.
@@ -85,12 +85,23 @@ class Native {
 		return out;
 	}
 
+	// The type a declaration's argument or result has, through `Null<T>`.
 	public static function kind(type:Null<ComplexType>):String {
 		return switch type {
 			case null: "Void";
 			case TFunction(_, _): "function";
 			case TParent(inner): kind(inner);
+			case TPath({pack: [], name: "Null", params: [TPType(inner)]}): kind(inner);
 			case other: other.toString();
+		}
+	}
+
+	// Whether a result is declared `Null<T>`: bytes that may be none.
+	public static function nullable(type:Null<ComplexType>):Bool {
+		return switch type {
+			case TParent(inner): nullable(inner);
+			case TPath({pack: [], name: "Null", params: [TPType(_)]}): true;
+			case _: false;
 		}
 	}
 

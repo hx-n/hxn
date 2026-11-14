@@ -121,9 +121,10 @@ import hxn.Native;
 			case "String" | "Bool" | "Int" | "Float" | "haxe.Int64": macro return $made;
 			// Null when the library returned none, as `thrown_take` does.
 			case "haxe.io.Bytes":
+				var none = Native.nullable(ret) ? macro null : macro haxe.io.Bytes.alloc(0);
 				macro {
 					var data = $made;
-					return data == null ? null : haxe.io.Bytes.ofData(data);
+					return data == null ? $none : haxe.io.Bytes.ofData(data);
 				};
 			case "hxn.Handle": macro return hxnOwn($made);
 			// The library owns the cell; the returned atomic keeps its owner.

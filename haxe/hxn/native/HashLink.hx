@@ -92,11 +92,12 @@ import hxn.Native;
 				// Where the library writes how many bytes it returned.
 				args.push({name: "out", type: Native.type("hl.Ref<Int>")});
 				var counted = Native.call("", name, passed.concat([macro outLength]));
-				// Null when the library returned none, as `thrown_take` does.
+				// Native code may give empty bytes as a null pointer.
+				var none = Native.nullable(ret) ? macro null : macro haxe.io.Bytes.alloc(0);
 				macro {
 					var outLength = 0;
 					var data = $counted;
-					return data == null ? null : @:privateAccess new haxe.io.Bytes(data, outLength);
+					return data == null ? $none : @:privateAccess new haxe.io.Bytes(data, outLength);
 				};
 			case "hxn.Handle": macro return $made;
 			// The library owns the cell; the returned atomic keeps its owner.

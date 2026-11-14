@@ -2768,6 +2768,11 @@ impl Thing {
             .contains("define_prim!(hlp_thing_thrown_take, hxn_thing_thrown_take, \"PRi_B\");")
     );
     assert!(hxn_gen::c_header(&library).contains("int32_t hxn_thing_thrown_take(hxn_buf *out);"));
+    // The one bytes result that may be none.
+    assert!(
+        text_of(&classes(&library), "HxnThingNative.hx")
+            .contains("static function thrown_take():Null<haxe.io.Bytes>;")
+    );
     assert!(hxn_gen::cpp_glue(&library).contains("inline Array<unsigned char> thrown_take() {"));
 
     let files = classes(&library);

@@ -242,7 +242,9 @@ fn natives(library: &Library) -> String {
         }
     }
     if !library.errors().is_empty() {
-        out.push_str(&declaration("thrown_take", &[], &Type::Bytes, &[]));
+        // Null when the failure was not data; other bytes results are never
+        // null.
+        out.push_str("\tstatic function thrown_take():Null<haxe.io.Bytes>;\n");
     }
     out.push_str("}\n");
     out
