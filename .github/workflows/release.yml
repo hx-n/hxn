@@ -1,9 +1,9 @@
 name: release
 
-# Builds the `hxn` command for each platform and, for a version tag, publishes
-# the archives as the tag's GitHub release, with the tag's message as its
-# notes. Run by hand, it builds the archives and keeps them as the run's
-# artifacts without publishing anything.
+# Builds the `hxn` command for each platform and the `hxn` haxelib and, for a
+# version tag, publishes the archives as the tag's GitHub release, with the
+# tag's message as its notes, and submits the haxelib. Run by hand, it builds
+# them and keeps them as the run's artifacts without publishing anything.
 on:
   push:
     tags: ["v*"]
@@ -69,8 +69,29 @@ jobs:
           name: ${{ matrix.target }}
           path: dist/*
 
+  # hxn's Haxe classes, which every packaged hxn library depends on.
+  haxelib:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the version
+        run: |
+          version="$(jq -r .version haxelib.json)"
+          crate="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
+          [ "$version" = "$crate" ] || { echo "::error::haxelib.json is $version, the crates are $crate"; exit 1; }
+          if [[ "$GITHUB_REF" == refs/tags/v* ]] && [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::haxelib.json is $version, the tag is $GITHUB_REF_NAME"
+            exit 1
+          fi
+          echo "ZIP=hxn-haxelib-$version.zip" >> "$GITHUB_ENV"
+      - run: zip -qr "$ZIP" haxelib.json haxe README.md LICENSE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: haxelib
+          path: ${{ env.ZIP }}
+
   publish:
-    needs: build
+    needs: [build, haxelib]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
@@ -91,3 +112,10 @@ jobs:
           gh release create "$GITHUB_REF_NAME" --verify-tag \
             --title "hxn ${GITHUB_REF_NAME#v}" --notes-file ../notes.md \
             hxn-* SHA256SUMS
+      - uses: krdlab/setup-haxe@v1
+        with:
+          haxe-version: 4.3.6
+      - name: Submit the haxelib
+        env:
+          HAXELIB_PASSWORD: ${{ secrets.HAXELIB_PASSWORD }}
+        run: haxelib submit dist/hxn-haxelib-*.zip darmie "$HAXELIB_PASSWORD" --never < /dev/null
