@@ -580,10 +580,10 @@ pub fn haxe_guard(host: Host, name: &str, params: &[Type], returns: &Type) -> St
         .enumerate()
         .map(|(n, ty)| match (host, ty) {
             (Host::Hl, Type::Handle { interface, .. }) => {
-                format!("\n\t\t\tvar o{n} = {interface}.adoptLent(a{n});")
+                format!("\n\t\t\tvar o{n} = {interface}.hxnAdoptLent(a{n});")
             }
             (Host::Cpp, Type::Handle { interface, .. }) => format!(
-                "\n\t\t\tvar o{n} = {interface}.adopt();\n\t\t\to{n}.raw = a{n}.raw;\n\t\t\to{n}.own();"
+                "\n\t\t\tvar o{n} = {interface}.hxnAdopt();\n\t\t\to{n}.hxnRaw = a{n}.raw;\n\t\t\to{n}.hxnOwn();"
             ),
             _ => String::new(),
         })

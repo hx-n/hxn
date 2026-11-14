@@ -720,11 +720,11 @@ fn hl_file(library: &Library, kind: Kind, carried: &[Type]) -> File {
         kind.title()
     ));
     for (index, carried) in carried.iter().enumerate() {
-        let take = format!("Native.{local}_{}_{}(raw)", kind.take(), suffix(carried));
+        let take = format!("Native.{local}_{}_{}(hxnRaw)", kind.take(), suffix(carried));
         let take = match value_type(carried) {
             Type::Void => format!("{{\n\t\t\t{take};\n\t\t\thxn.Unit.Nothing;\n\t\t}}"),
             Type::Bytes => format!(
-                "{{\n\t\t\tvar outLength = 0;\n\t\t\tvar data = Native.{local}_{}_{}(raw, outLength);\n\t\t\t@:privateAccess new haxe.io.Bytes(data, outLength);\n\t\t}}",
+                "{{\n\t\t\tvar outLength = 0;\n\t\t\tvar data = Native.{local}_{}_{}(hxnRaw, outLength);\n\t\t\t@:privateAccess new haxe.io.Bytes(data, outLength);\n\t\t}}",
                 kind.take(),
                 suffix(carried)
             ),
@@ -736,15 +736,15 @@ fn hl_file(library: &Library, kind: Kind, carried: &[Type]) -> File {
             Type::Handle {
                 interface,
                 nullable: false,
-            } => format!("{interface}.adopt({take})"),
+            } => format!("{interface}.hxnAdopt({take})"),
             Type::Handle {
                 interface,
                 nullable: true,
             } => format!(
-                "{{\n\t\t\tvar made = {take};\n\t\t\tmade == null ? null : {interface}.adopt(made);\n\t\t}}"
+                "{{\n\t\t\tvar made = {take};\n\t\t\tmade == null ? null : {interface}.hxnAdopt(made);\n\t\t}}"
             ),
             Type::Data(data) if crossed(carried) == Type::Bytes => format!(
-                "{{\n\t\t\tvar outLength = 0;\n\t\t\tvar data = Native.{local}_{}_{}(raw, outLength);\n\t\t\tvar input = new haxe.io.BytesInput(@:privateAccess new haxe.io.Bytes(data, outLength));\n\t\t\t{};\n\t\t}}",
+                "{{\n\t\t\tvar outLength = 0;\n\t\t\tvar data = Native.{local}_{}_{}(hxnRaw, outLength);\n\t\t\tvar input = new haxe.io.BytesInput(@:privateAccess new haxe.io.Bytes(data, outLength));\n\t\t\t{};\n\t\t}}",
                 kind.take(),
                 suffix(carried),
                 data::haxe_read(data)
@@ -770,20 +770,20 @@ fn hl_file(library: &Library, kind: Kind, carried: &[Type]) -> File {
         // needed.
         let parts = match kind {
             Kind::Future => format!(
-                "() -> Native.future_watch(raw), () -> Native.future_state(raw), limit -> Native.future_wait(raw, limit), () -> {take}"
+                "() -> Native.future_watch(hxnRaw), () -> Native.future_state(hxnRaw), limit -> Native.future_wait(hxnRaw, limit), () -> {take}"
             ),
             Kind::Stream => format!(
-                "() -> Native.stream_watch(raw), limit -> Native.stream_wait(raw, limit), () -> {take}"
+                "() -> Native.stream_watch(hxnRaw), limit -> Native.stream_wait(hxnRaw, limit), () -> {take}"
             ),
             Kind::Signal => format!(
-                "() -> Native.signal_watch(raw), (seen, limit) -> Native.signal_wait(raw, seen, limit), () -> {take}"
+                "() -> Native.signal_watch(hxnRaw), (seen, limit) -> Native.signal_wait(hxnRaw, seen, limit), () -> {take}"
             ),
         };
         if index != 0 {
             out.push('\n');
         }
         out.push_str(&format!(
-            "\tpublic static function {}(raw:{raw}):hxn.{}<{}>\n\t\treturn {};\n",
+            "\tpublic static function {}(hxnRaw:{raw}):hxn.{}<{}>\n\t\treturn {};\n",
             maker(carried),
             kind.title(),
             haxe_type(carried),
@@ -802,7 +802,7 @@ fn cpp_file(library: &Library, kind: Kind, carried: &[Type]) -> File {
     let local = kind.name();
     let native = native_class(library);
     let mut out = format!(
-        "{HEADER}/** Owns a {local} the library returned, and makes the `hxn.{title}` over it. **/\n@:noCompletion class {name} {{\n\t@:unreflective public var raw:cpp.RawPointer<cpp.Void>;\n\n\t// Runs inside a collection: it may free, and may not touch the Haxe heap.\n\tstatic function finalize(self:{name}):Void {{\n\t\t{native}.release(self.raw);\n\t}}\n\n\tpublic static function adopt():{name}\n\t\treturn Type.createEmptyInstance({name});\n\n\tpublic function own():Void\n\t\tcpp.vm.Gc.setFinalizer(this, cpp.Function.fromStaticFunction(finalize));\n",
+        "{HEADER}/** Owns a {local} the library returned, and makes the `hxn.{title}` over it. **/\n@:noCompletion class {name} {{\n\t@:unreflective public var hxnRaw:cpp.RawPointer<cpp.Void>;\n\n\t// Runs inside a collection: it may free, and may not touch the Haxe heap.\n\tstatic function hxnFinalize(self:{name}):Void {{\n\t\t{native}.release(self.hxnRaw);\n\t}}\n\n\tpublic static function hxnAdopt():{name}\n\t\treturn Type.createEmptyInstance({name});\n\n\tpublic function hxnOwn():Void\n\t\tcpp.vm.Gc.setFinalizer(this, cpp.Function.fromStaticFunction(hxnFinalize));\n",
         title = kind.title(),
     );
     for (call, params, _, _) in calls(kind) {
@@ -810,7 +810,7 @@ fn cpp_file(library: &Library, kind: Kind, carried: &[Type]) -> File {
         let declared: Vec<String> = names.iter().map(|n| format!("{n}:Int")).collect();
         let passed: String = names.iter().map(|n| format!(", {n}")).collect();
         out.push_str(&format!(
-            "\n\tfunction {call}({}):Int\n\t\treturn {native}.{local}_{call}(raw{passed});\n",
+            "\n\tfunction {call}({}):Int\n\t\treturn {native}.{local}_{call}(hxnRaw{passed});\n",
             declared.join(", ")
         ));
     }
@@ -820,22 +820,26 @@ fn cpp_file(library: &Library, kind: Kind, carried: &[Type]) -> File {
     };
     for carried in carried {
         let title = title(carried);
-        let call = format!("{native}.{local}_{}_{}(raw)", kind.take(), suffix(carried));
+        let call = format!(
+            "{native}.{local}_{}_{}(hxnRaw)",
+            kind.take(),
+            suffix(carried)
+        );
         match value_type(carried) {
             Type::List { interface } => {
                 let stream = class(library, Kind::Stream);
                 out.push_str(&format!(
-                    "\n\tfunction take{title}():Array<{interface}> {{\n\t\tvar made = {stream}.adopt();\n\t\tmade.raw = {call};\n\t\tmade.own();\n\t\treturn [for (item in made.of{interface}()) item];\n\t}}\n"
+                    "\n\tfunction take{title}():Array<{interface}> {{\n\t\tvar made = {stream}.hxnAdopt();\n\t\tmade.hxnRaw = {call};\n\t\tmade.hxnOwn();\n\t\treturn [for (item in made.of{interface}()) item];\n\t}}\n"
                 ));
             }
             Type::Handle {
                 interface,
                 nullable,
             } => out.push_str(&format!(
-                "\n\tfunction take{title}():{} {{\n\t\tvar made = {interface}.adopt();\n\t\tmade.raw = {call};\n{}\t\tmade.own();\n\t\treturn made;\n\t}}\n",
+                "\n\tfunction take{title}():{} {{\n\t\tvar made = {interface}.hxnAdopt();\n\t\tmade.hxnRaw = {call};\n{}\t\tmade.hxnOwn();\n\t\treturn made;\n\t}}\n",
                 haxe_type(carried),
                 if *nullable {
-                    "\t\tif (made.raw == null)\n\t\t\treturn null;\n"
+                    "\t\tif (made.hxnRaw == null)\n\t\t\treturn null;\n"
                 } else {
                     ""
                 }

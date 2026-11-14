@@ -372,7 +372,7 @@ fn says_where_and_why_something_cannot_cross() {
             "`new` is the constructor",
         ),
         ("pub fn new() -> i32 { 0 }", "`new` is the constructor"),
-        ("pub fn close(&mut self) {}", "`close` is what releases"),
+        ("pub fn drop(&mut self) {}", "`drop` names the export"),
         ("pub fn take(&self, out: i32) {}", "a name the adapters use"),
         (
             "#[hxn(inline)]\n    pub fn noted(&self) {}",
@@ -522,14 +522,14 @@ fn objects_are_borrowed_going_in_and_owned_coming_out() {
             .contains("public function route(mixer:Mixer, fallback:Null<AudioDevice>):Null<Mixer>")
     );
     assert!(device.contains("mixer:Mixer.MixerRaw"));
-    assert!(device.contains("mixer == null ? null : mixer.raw"));
-    assert!(device.contains("return made == null ? null : Mixer.adopt(made);"));
-    assert!(device.contains("return AudioDevice.adopt(Native.audio_device_duplicate(raw));"));
+    assert!(device.contains("mixer == null ? null : mixer.hxnRaw"));
+    assert!(device.contains("return made == null ? null : Mixer.hxnAdopt(made);"));
+    assert!(device.contains("return AudioDevice.hxnAdopt(Native.audio_device_duplicate(hxnRaw));"));
     assert!(device.contains("public function finish():Int"));
 
     let cpp = &hxn_gen::haxe_cpp(&library)[0].text;
-    assert!(cpp.contains("var made = Mixer.adopt();"));
-    assert!(cpp.contains("made.own();"));
+    assert!(cpp.contains("var made = Mixer.hxnAdopt();"));
+    assert!(cpp.contains("made.hxnOwn();"));
 
     let manifest = hxn_gen::manifest(&library);
     assert!(
@@ -576,7 +576,7 @@ fn cells_are_lent_going_in_and_kept_by_the_library_coming_out() {
 
     let cpp = hxn_gen::haxe_cpp(&library);
     assert!(cpp.iter().any(|file| file.path == "HxnAudioCell.hx"));
-    assert!(cpp[0].text.contains("var owner = HxnAudioCell.adopt();"));
+    assert!(cpp[0].text.contains("var owner = HxnAudioCell.hxnAdopt();"));
 
     let manifest = hxn_gen::manifest(&library);
     assert!(manifest.contains("{ \"name\": \"cancel\", \"type\": \"atomic_flag\" }"));
@@ -612,18 +612,18 @@ fn what_a_library_holds_is_read_and_a_weighed_object_checks_it() {
         // Each class references the memory meter; only a weighed one checks
         // it.
         let (device, mixer) = (&files[0].text, &files[1].text);
-        assert!(device.contains("static final memory = HxnAudioMemory.meter;"));
-        assert!(!device.contains("memory.check();"));
-        assert!(mixer.contains("static final memory = HxnAudioMemory.meter;"));
-        assert!(mixer.contains("memory.check();"));
+        assert!(device.contains("static final hxnMemory = HxnAudioMemory.meter;"));
+        assert!(!device.contains("hxnMemory.check();"));
+        assert!(mixer.contains("static final hxnMemory = HxnAudioMemory.meter;"));
+        assert!(mixer.contains("hxnMemory.check();"));
     }
 
     // Where a value the library returned is given its owner, on each runtime.
     let mixer = &hxn_gen::haxe_hl(&library)[1].text;
-    assert!(mixer.contains("made.raw = raw;\n\t\tmemory.check();\n\t\treturn made;"));
+    assert!(mixer.contains("made.hxnRaw = hxnRaw;\n\t\thxnMemory.check();\n\t\treturn made;"));
     let mixer = &hxn_gen::haxe_cpp(&library)[1].text;
     assert!(mixer.contains(
-        "cpp.vm.Gc.setFinalizer(this, cpp.Function.fromStaticFunction(finalize));\n\t\tmemory.check();"
+        "cpp.vm.Gc.setFinalizer(this, cpp.Function.fromStaticFunction(hxnFinalize));\n\t\thxnMemory.check();"
     ));
     // And each of its methods checks first, since an earlier call may have
     // grown what it holds.
@@ -635,7 +635,7 @@ fn what_a_library_holds_is_read_and_a_weighed_object_checks_it() {
         assert!(
             attach
                 .trim_start_matches(|c| c != '{')
-                .starts_with("{\n\t\tmemory.check();"),
+                .starts_with("{\n\t\thxnMemory.check();"),
             "{attach}"
         );
     }
@@ -835,7 +835,7 @@ fn bytes_come_back_with_their_length() {
     assert!(
         cpp[0]
             .text
-            .contains("return haxe.io.Bytes.ofData(HxnStoreNative.disk_read(raw, sector));")
+            .contains("return haxe.io.Bytes.ofData(HxnStoreNative.disk_read(hxnRaw, sector));")
     );
     assert!(
         cpp.last()
@@ -975,9 +975,9 @@ fn results_over_time_are_handles_the_library_answers_for() {
         );
     }
     let radio = &hxn_gen::haxe_hl(&library)[0].text;
-    assert!(radio.contains("return HxnFmFuture.ofInt(Native.radio_tune(raw, station));"));
+    assert!(radio.contains("return HxnFmFuture.ofInt(Native.radio_tune(hxnRaw, station));"));
     let radio = &hxn_gen::haxe_cpp(&library)[0].text;
-    assert!(radio.contains("var made = HxnFmStream.adopt();"));
+    assert!(radio.contains("var made = HxnFmStream.hxnAdopt();"));
     assert!(radio.contains("return made.ofText();"));
 
     let manifest = hxn_gen::manifest(&library);
@@ -1493,10 +1493,10 @@ fn a_function_outside_an_impl_is_a_static_of_a_class() {
         assert!(adapter.contains("hxn_library::merged(&first, &second)"));
         assert!(adapter.contains("hxn_library::join("));
         assert!(adapter.contains("fn hxn_book_store_paths_join("));
-        // Such a class is never instantiated, so it has no close function.
-        assert!(adapter.contains("fn hxn_book_store_shelf_close("));
-        assert!(!adapter.contains("book_store_paths_close"));
-        assert!(!adapter.contains("book_store_book_store_close"));
+        // Such a class is never instantiated, so it has no drop function.
+        assert!(adapter.contains("fn hxn_book_store_shelf_drop("));
+        assert!(!adapter.contains("book_store_paths_drop"));
+        assert!(!adapter.contains("book_store_book_store_drop"));
     }
     let header = hxn_gen::c_header(&library);
     assert!(
@@ -1519,7 +1519,7 @@ fn a_function_outside_an_impl_is_a_static_of_a_class() {
         assert!(store.contains("class BookStore {"));
         assert!(store.contains("/** How many shelves a library may have. **/"));
         assert!(store.contains("public static function limit():Int"));
-        for part in ["raw", "adopt", "close", "finalize"] {
+        for part in ["hxnRaw", "hxnAdopt", "close", "hxnFinalize"] {
             assert!(!store.contains(part), "{part}");
         }
         assert!(
@@ -1551,10 +1551,6 @@ fn says_what_a_function_outside_an_impl_cannot_be() {
         (
             "#[hxn::function]\npub fn twice() {}\n#[hxn::function]\npub fn twice() {}",
             "already has a function named `twice`",
-        ),
-        (
-            "#[hxn::function(class = \"Thing\")]\npub fn close() {}",
-            "`close` is what releases the value",
         ),
         (
             "#[hxn::function(class = \"tools\")]\npub fn a() {}",
@@ -1639,7 +1635,7 @@ fn a_script_is_told_what_each_class_is_called_with() {
             declaration.path
         );
         // No implementation detail of how the class calls the library.
-        for inside in ["raw", "Native", "cpp."] {
+        for inside in ["hxnRaw", "Native", "cpp."] {
             assert!(
                 !declaration.text.contains(inside),
                 "{} names `{inside}`",
@@ -1986,12 +1982,15 @@ impl Thing {
     assert!(
         hl_class.contains("var fGuarded = function(a0:hl.Bytes, a0Length:Int, a1:hl.Bytes):Bool")
     );
-    assert!(hl_class.contains("var o1 = Thing.adoptLent(a1);"));
+    assert!(hl_class.contains("var o1 = Thing.hxnAdoptLent(a1);"));
     assert!(hl_class.contains("f(@:privateAccess new haxe.io.Bytes(a0, a0Length), o1)"));
-    assert!(hl_class.contains("var o1 = Band.adoptLent(a1);"));
+    assert!(hl_class.contains("var o1 = Band.hxnAdoptLent(a1);"));
     let cpp_class = &cpp_classes(&library)[0].text;
     assert!(cpp_class.contains("function(a0:haxe.io.BytesData, a1:cpp.Pointer<cpp.Void>):Bool"));
-    assert!(cpp_class.contains("var o1 = Thing.adopt();\n\t\t\to1.raw = a1.raw;\n\t\t\to1.own();"));
+    assert!(
+        cpp_class
+            .contains("var o1 = Thing.hxnAdopt();\n\t\t\to1.hxnRaw = a1.raw;\n\t\t\to1.hxnOwn();")
+    );
     assert!(cpp_class.contains("f(haxe.io.Bytes.ofData(a0), o1)"));
 
     for (taken, expected) in [
@@ -2759,15 +2758,15 @@ impl Thing {
                 "public static function write(value:Event, out:haxe.io.BytesBuffer):Void {"
             )
         );
-        assert!(wire.contains("\t\t\tcase Progress(done, out):\n\t\t\t\tout.addInt32(1);"));
-        assert!(wire.contains("EventWire.write(value, out);"));
+        assert!(wire.contains("\t\t\tcase Progress(var field0, var field1):\n\t\t\t\tout.addInt32(1);\n\t\t\t\tout.addInt32(field0);\n\t\t\t\tout.addInt32(field1);"));
+        assert!(wire.contains("EventWire.write(field0, out);"));
         // Each field is read by a separate statement, in order.
         assert!(wire.contains(
             "\t\t\t\tvar value0:Float = input.readDouble();\n\t\t\t\tvar value1:Kind = (input.readInt32() : Kind);\n\t\t\t\treturn Event.Moved(value0, value1);"
         ));
         assert!(wire.contains("throw new haxe.Exception(\"not a case of Event\");"));
-        assert!(wire.contains("out.addInt32(Lambda.count(value0));"));
-        assert!(wire.contains("for (key0 => item0 in value0) {"));
+        assert!(wire.contains("out.addInt32(Lambda.count(field0));"));
+        assert!(wire.contains("for (key0 => item0 in field0) {"));
     }
 
     let manifest = hxn_gen::manifest(&library);
@@ -3010,15 +3009,18 @@ impl Thing {
     let hl_files = hxn_gen::haxe_hl(&library);
     let future = text_of(&hl_files, "HxnThingFuture.hx");
     assert!(
-        future.contains("public static function ofPoint(raw:HxnThingFutureRaw):hxn.Future<Point>")
+        future
+            .contains("public static function ofPoint(hxnRaw:HxnThingFutureRaw):hxn.Future<Point>")
     );
     assert!(future.contains("Point.hxnRead(input);"));
-    assert!(future.contains("public static function ofU8(raw:HxnThingFutureRaw):hxn.Future<Int>"));
+    assert!(
+        future.contains("public static function ofU8(hxnRaw:HxnThingFutureRaw):hxn.Future<Int>")
+    );
     assert!(future.contains(
-        "public static function ofOptionInt(raw:HxnThingFutureRaw):hxn.Future<Null<Int>>"
+        "public static function ofOptionInt(hxnRaw:HxnThingFutureRaw):hxn.Future<Null<Int>>"
     ));
     let signal = text_of(&hl_files, "HxnThingSignal.hx");
-    assert!(signal.contains("(Native.signal_get_mode(raw) : Mode)"));
+    assert!(signal.contains("(Native.signal_get_mode(hxnRaw) : Mode)"));
     let thing = text_of(&hl_files, "Thing.hx");
     assert!(thing.contains(
         "public static function each(points:Array<Point>, f:(Point, Mode) -> Mode):Void"
@@ -3119,7 +3121,7 @@ fn a_file_the_build_script_writes_is_read_from_out_dir() {
     std::fs::create_dir_all(&out).unwrap();
     std::fs::write(
         dir.join("src/lib.rs"),
-        "hxn::package!(\"window\");\n\ninclude!(concat!(env!(\"OUT_DIR\"), \"/window.rs\"));\n\n// Another include is not the API.\nconst TABLE: &[u8] = include_bytes!(\"lib.rs\");\n",
+        "hxn::package!(\"window\");\n\ninclude!(concat!(env!(\"OUT_DIR\"), \"/window.rs\"));\n\n// Other includes are not the API: one of bytes, and one inside a module.\nconst TABLE: &[u8] = include_bytes!(\"lib.rs\");\nmod backend {\n    include!(concat!(env!(\"OUT_DIR\"), \"/missing/native.rs\"));\n}\n",
     )
     .unwrap();
     std::fs::write(
@@ -3160,4 +3162,61 @@ fn a_file_the_build_script_writes_is_read_from_out_dir() {
     })
     .unwrap();
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn a_close_of_the_librarys_own_replaces_hxns() {
+    let source = "#[hxn::interface]\npub struct Window;\n\n#[hxn::methods]\nimpl Window {\n    pub fn new() -> Self { Window }\n    /// Closes the window.\n    pub fn close(&self) {}\n    pub fn raw(&self, which: i32) -> i64 { 0 }\n}\n";
+    let library = parse("xwindow", source).unwrap();
+    for files in [
+        hxn_gen::haxe_hl(&library),
+        cpp_classes(&library),
+        hxn_gen::haxe_cppia(&library),
+    ] {
+        let window = &files[0].text;
+        assert_eq!(
+            window.matches("public function close()").count(),
+            1,
+            "{window}"
+        );
+        assert!(window.contains("/** Closes the window. **/"));
+        assert!(window.contains("public function raw(which:Int):haxe.Int64"));
+    }
+    // The release has a name of its own, apart from the library's `close`.
+    for adapter in [
+        hxn_gen::hl_adapter(&library, "xwindow"),
+        hxn_gen::c_adapter(&library, "xwindow"),
+    ] {
+        assert!(adapter.contains("fn hxn_xwindow_window_drop("));
+        assert!(adapter.contains("fn hxn_xwindow_window_close("));
+    }
+    let error = parse("xwindow", &source.replace("fn raw(", "fn drop(")).unwrap_err();
+    assert!(
+        error.message.contains("`drop` names the export"),
+        "{}",
+        error.message
+    );
+}
+
+#[test]
+fn a_parameter_named_like_a_keyword_is_renamed_where_it_is_one() {
+    let source = "#[hxn::interface]\npub struct Window;\n\n#[hxn::methods]\nimpl Window {\n    pub fn new() -> Self { Window }\n    pub fn set(&self, protected: bool, delete: i32, default: f64) {}\n}\n";
+    let library = parse("xwindow", source).unwrap();
+    let header = hxn_gen::c_header(&library);
+    assert!(
+        header.contains("int32_t protected_, int32_t delete_, double default_"),
+        "{header}"
+    );
+    let glue = hxn_gen::cpp_glue(&library);
+    assert!(
+        glue.contains("bool protected_, int delete_, double default_)"),
+        "{glue}"
+    );
+    for files in [hxn_gen::haxe_hl(&library), cpp_classes(&library)] {
+        let window = &files[0].text;
+        assert!(
+            window.contains("public function set(protected:Bool, delete:Int, default_:Float):Void"),
+            "{window}"
+        );
+    }
 }

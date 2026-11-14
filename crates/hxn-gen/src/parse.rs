@@ -1012,6 +1012,12 @@ impl Scope<'_> {
                 "a shared interface is reached from more than one place: its functions take `&self`, and change it through a cell or a lock inside",
             );
         }
+        if name == "drop" {
+            return error(
+                signature.ident.span(),
+                "`drop` names the export hxn releases a handle with; call the function something else",
+            );
+        }
         if shared && ["same", "weak"].contains(&name.as_str()) {
             return error(
                 signature.ident.span(),
@@ -1195,24 +1201,28 @@ fn generated(item: &syn::ItemMacro) -> Option<Generated> {
 }
 
 // Flattens a file's items: items of inline modules are added to the rest,
-// and a module defined in another file, or a file included from `OUT_DIR`,
-// is recorded. `dir` is the directory of this level's module files.
+// and a module defined in another file is recorded, as is a file included
+// from `OUT_DIR` at the file's top level. An include inside an inline module,
+// such as a backend's `mod backend { include!(...) }`, is not followed: it is
+// not the API. `dir` is the directory of this level's module files.
 fn flatten(
     items: Vec<Item>,
     dir: &Path,
     out: &mut Vec<Item>,
     outside: &mut Vec<Outside>,
-    included: &mut Vec<Generated>,
+    included: &mut Option<&mut Vec<Generated>>,
 ) {
     for item in items {
         match item {
             Item::Macro(item) if generated(&item).is_some() => {
-                included.extend(generated(&item));
+                if let Some(included) = included {
+                    included.extend(generated(&item));
+                }
             }
             Item::Mod(module) => {
                 let name = module.ident.to_string();
                 match module.content {
-                    Some((_, inner)) => flatten(inner, &dir.join(&name), out, outside, included),
+                    Some((_, inner)) => flatten(inner, &dir.join(&name), out, outside, &mut None),
                     None => outside.push(Outside {
                         line: module.ident.span().start().line,
                         path: path_attribute(&module.attrs),
@@ -1270,7 +1280,13 @@ fn load(
     let mut items = Vec::new();
     let mut outside = Vec::new();
     let mut included = Vec::new();
-    flatten(file.items, dir, &mut items, &mut outside, &mut included);
+    flatten(
+        file.items,
+        dir,
+        &mut items,
+        &mut outside,
+        &mut Some(&mut included),
+    );
     sources.push(Source {
         file: Some(name.clone()),
         items,
@@ -1814,12 +1830,6 @@ fn methods_of(
                     format!("`{}` is exposed twice", method.name),
                 );
             }
-            if method.name == "close" {
-                return error(
-                    function.sig.ident.span(),
-                    "`close` is what releases the value, and every interface has one",
-                );
-            }
             interface.methods.push(method);
         }
     }
@@ -1922,12 +1932,6 @@ fn functions_of(
             return error(
                 name.span(),
                 format!("`{class}` already has a function named `{}`", method.name),
-            );
-        }
-        if method.name == "close" && !interface.namespace {
-            return error(
-                name.span(),
-                "`close` is what releases the value, and every interface has one",
             );
         }
         interface.methods.push(method);
@@ -2103,7 +2107,7 @@ pub fn parse(name: &str, source: &str) -> Result<Library, Error> {
         Path::new(""),
         &mut items,
         &mut Vec::new(),
-        &mut Vec::new(),
+        &mut None,
     );
     build(name, &[Source { file: None, items }])
 }

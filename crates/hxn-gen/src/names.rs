@@ -35,6 +35,151 @@ pub fn camel(name: &str) -> String {
     out
 }
 
+// C and C++ keywords, and the names the C header and the glue give their own
+// parameters.
+const C_TAKEN: [&str; 93] = [
+    "_Bool",
+    "alignas",
+    "alignof",
+    "and",
+    "and_eq",
+    "asm",
+    "auto",
+    "bitand",
+    "bitor",
+    "bool",
+    "break",
+    "case",
+    "catch",
+    "char",
+    "char16_t",
+    "char32_t",
+    "char8_t",
+    "class",
+    "co_await",
+    "co_return",
+    "co_yield",
+    "compl",
+    "concept",
+    "const",
+    "const_cast",
+    "consteval",
+    "constexpr",
+    "constinit",
+    "continue",
+    "decltype",
+    "default",
+    "delete",
+    "do",
+    "double",
+    "dynamic_cast",
+    "else",
+    "enum",
+    "err",
+    "explicit",
+    "export",
+    "extern",
+    "false",
+    "float",
+    "for",
+    "friend",
+    "goto",
+    "if",
+    "inline",
+    "int",
+    "long",
+    "mutable",
+    "namespace",
+    "new",
+    "noexcept",
+    "not",
+    "not_eq",
+    "nullptr",
+    "operator",
+    "or",
+    "or_eq",
+    "out",
+    "private",
+    "protected",
+    "public",
+    "register",
+    "reinterpret_cast",
+    "requires",
+    "restrict",
+    "return",
+    "self",
+    "short",
+    "signed",
+    "sizeof",
+    "static",
+    "static_assert",
+    "static_cast",
+    "struct",
+    "switch",
+    "template",
+    "this",
+    "thread_local",
+    "throw",
+    "true",
+    "try",
+    "typedef",
+    "typeid",
+    "typename",
+    "union",
+    "unsigned",
+    "using",
+    "virtual",
+    "void",
+    "volatile",
+];
+
+/// A parameter's name in the C header and the glue: an underscore follows
+/// one that C or C++ keeps for itself.
+pub fn c_param(name: &str) -> String {
+    if C_TAKEN.contains(&name) {
+        format!("{name}_")
+    } else {
+        name.to_owned()
+    }
+}
+
+// Haxe's keywords that are not Rust's, which a Rust parameter can be named.
+const HAXE_KEYWORDS: [&str; 22] = [
+    "case",
+    "cast",
+    "catch",
+    "class",
+    "default",
+    "extends",
+    "function",
+    "implements",
+    "import",
+    "inline",
+    "interface",
+    "new",
+    "null",
+    "operator",
+    "overload",
+    "package",
+    "private",
+    "public",
+    "switch",
+    "this",
+    "untyped",
+    "var",
+];
+
+/// A parameter's name in Haxe: camel case, with an underscore after one of
+/// Haxe's keywords.
+pub fn haxe_param(name: &str) -> String {
+    let name = camel(name);
+    if HAXE_KEYWORDS.contains(&name.as_str()) {
+        format!("{name}_")
+    } else {
+        name
+    }
+}
+
 /// A method's name within its library: `counter_add` for `Counter::add`.
 /// The Haxe side declares its primitive under this name.
 pub fn local(interface: &str, method: &str) -> String {

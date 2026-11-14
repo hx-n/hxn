@@ -11,7 +11,9 @@ like x-idl does from an API declaration: the source includes it with
 `include!(concat!(env!("OUT_DIR"), "/name.rs"))`. `hxn` then runs
 `cargo check` on the library, which runs the build script, takes `out_dir`
 from cargo's messages and reads the file from there. A library without such
-an include is not checked first.
+an include is not checked first. Only an include at the top level of a
+file is followed; one inside an inline module, such as a backend's
+`mod backend { include!(...) }`, is not part of the API.
 
 The generated classes are in the top-level package unless the library
 declares one with `hxn::package!("name")`, which puts every class,

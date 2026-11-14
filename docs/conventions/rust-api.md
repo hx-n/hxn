@@ -8,6 +8,9 @@
   named across the library. `#[hxn::methods]` uses the bare interface name.
 - Receivers are `&self`, `&mut self`, `self` or absent; `new` is the constructor.
   Moving `self` closes the Haxe object. Exposed APIs have no general generics.
+- Every class gets a `close()` that releases its value, unless the interface
+  has a method named `close` of its own; that object is then released by
+  the collector. `drop` is not a method name.
 - `#[hxn::function]` becomes a static method on the library's CamelCase class
   or `class = "Name"`, including an existing interface. It is public and
   reachable at the crate root. Its name is unique
@@ -20,8 +23,9 @@
   starts with a lowercase letter or an underscore, and the package cannot
   be `hxn`.
 - The build script can write part of the API. The library includes the
-  file it writes with `include!(concat!(env!("OUT_DIR"), "/name.rs"))`, and
-  `hxn build` runs the build script before it reads the library's source.
+  file it writes with `include!(concat!(env!("OUT_DIR"), "/name.rs"))` at the
+  top level of a source file, and `hxn build` runs the build script before it
+  reads the library's source.
 
 ## Values
 

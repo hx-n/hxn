@@ -21,6 +21,7 @@ In this table, `P` means `hxn_<library>_`; interfaces use snake case in exports.
 | Item | Name |
 |---|---|
 | Method or free function | `P<interface>_<method>` or `P<class>_<function>` |
+| Releasing a handle | `P<interface>_drop`, which a Haxe class's `close()` calls |
 | Shared operations | `P<interface>_same`, `_weak`, `_weak_upgrade`, `_weak_close` |
 | Release | `Prelease` |
 | Outbox | `Poutbox_wait`, `Poutbox_next` |
@@ -46,6 +47,11 @@ Kinds name scalars or snake-case types. Wrappers add `option_`, `list_`,
 
 Reserve `Atomic`, `Memory`, `Future`, `Stream`, `Signal`, `Outbox`, generated
 exception/serializer names and `<Interface>Weak`. Shared interfaces reserve
-`same` and `weak`. Keep `hxn_` on exports to avoid C library symbol collisions;
+`same` and `weak`, and every interface reserves `drop`. The members hxn adds
+to a class start with `hxn` (`hxnRaw`, `hxnAdopt`, `hxnOwn`, `hxnFinalize`,
+`hxnMemory`), so they take no name a library's method could have. A
+parameter named like a C or C++ keyword, or like the glue's own `self`,
+`out` and `err`, has `_` appended in the header and the glue; one named like
+a Haxe keyword has `_` appended in Haxe. Keep `hxn_` on exports to avoid C library symbol collisions;
 keep C header names distinct from generated Haxe headers on case-insensitive
 filesystems.

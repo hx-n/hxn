@@ -601,7 +601,7 @@ pub fn c_adapter(library: &Library, core: &str) -> String {
         }
         out.push_str(&format!(
             "\n#[unsafe(no_mangle)]\npub unsafe extern \"C\" fn {name}(this: RawHandle, err: *mut Buf) -> Status {{\n    unsafe {{\n        guard(null_mut::<()>(), err, || {{\n            Handle::<{held}>::from_raw(this)?.take()?;\n            Ok(())\n        }})\n    }}\n}}\n",
-            name = export(library, &interface.name, "close"),
+            name = export(library, &interface.name, "drop"),
             held = held(library, &interface.name),
         ));
         if interface.shared {
@@ -915,11 +915,11 @@ fn hl_exports(library: &Library, core: &str) -> String {
         if interface.namespace {
             continue;
         }
-        let name = export(library, &interface.name, "close");
+        let name = export(library, &interface.name, "drop");
         out.push_str(&format!(
             "\n#[unsafe(no_mangle)]\npub unsafe extern \"C-unwind\" fn {name}(this: *mut Managed) {{\n    unsafe {{\n        prim(|| {{\n            handle::<{held}>(this)?.take()?;\n            Ok(())\n        }})\n    }}\n}}\ndefine_prim!(hlp_{local}, {name}, \"PX{own}__v\");\n",
             held = held(library, &interface.name),
-            local = local(&interface.name, "close"),
+            local = local(&interface.name, "drop"),
         ));
         if interface.shared {
             out.push_str(&hl_shared(library, interface));

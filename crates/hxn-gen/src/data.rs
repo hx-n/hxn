@@ -689,14 +689,20 @@ fn tagged_wire_file(tagged: &Tagged) -> File {
         "/** Writes a `{name}` as the library reads it, and reads what the library wrote. **/\n@:noCompletion class {class} {{\n\tpublic static function write(value:{name}, out:haxe.io.BytesBuffer):Void {{\n\t\tswitch (value) {{\n"
     ));
     for (index, case) in tagged.cases.iter().enumerate() {
-        let fields = case_fields(case);
+        // Captured by position, as `field0` and on: a field's own name could
+        // be `out` or `value`, which this function uses, and a bare name is
+        // also read as a possible misspelling of a constructor.
+        let fields: Vec<String> = (0..case.fields.len())
+            .map(|position| format!("field{position}"))
+            .collect();
         if fields.is_empty() {
             out.push_str(&format!("\t\t\tcase {}:\n", case.name));
         } else {
+            let bound: Vec<String> = fields.iter().map(|field| format!("var {field}")).collect();
             out.push_str(&format!(
                 "\t\t\tcase {}({}):\n",
                 case.name,
-                fields.join(", ")
+                bound.join(", ")
             ));
         }
         out.push_str(&format!("\t\t\t\tout.addInt32({index});\n"));

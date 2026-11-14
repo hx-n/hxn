@@ -35,7 +35,7 @@ Native GC roots would hide reference cycles from the collector.
 | Accept `Arc<T>` | Lets Rust retain a reference. |
 | Return `T` or `Arc<T>` | Creates a Haxe object owning one reference. |
 | `same(other)` | Compares underlying identity. |
-| `close()` or finalization | Releases that object's reference. |
+| `close()` or finalization | Releases that object's reference. An interface with a `close` of its own is released by finalization only. |
 | `weak()` / `upgrade()` | Produces `<Interface>Weak` / a new owner, or null after destruction. |
 
 The value is dropped after the last reference, including references held by
