@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en" prefix="og: https://ogp.me/ns#">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#000000">
+  <title>Learn hxn by example — hxn</title>
+  <meta name="description" content="Short Rust and Haxe tutorials. Build a library, pass data, handle callbacks and deliver asynchronous results.">
+  <meta name="robots" content="index, follow, max-image-preview:large">
+  <link rel="canonical" href="https://hxn.dev/tutorials/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="hxn">
+  <meta property="og:locale" content="en_GB">
+  <meta property="og:title" content="Learn hxn by example — hxn">
+  <meta property="og:description" content="Short Rust and Haxe tutorials. Build a library, pass data, handle callbacks and deliver asynchronous results.">
+  <meta property="og:url" content="https://hxn.dev/tutorials/">
+  <meta property="og:image" content="https://hxn.dev/og-hero.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="2400">
+  <meta property="og:image:height" content="1260">
+  <meta property="og:image:alt" content="hxn — Native Rust bindings for Haxe">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Learn hxn by example — hxn">
+  <meta name="twitter:description" content="Short Rust and Haxe tutorials. Build a library, pass data, handle callbacks and deliver asynchronous results.">
+  <meta name="twitter:image" content="https://hxn.dev/og-hero.png">
+  <meta name="twitter:image:alt" content="hxn — Native Rust bindings for Haxe">
+  <link rel="icon" href="/logo.png" type="image/png">
+  <link rel="apple-touch-icon" href="/logo.png">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/script.js" defer></script>
+  <script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "CollectionPage", "@id": "https://hxn.dev/tutorials/#page", "url": "https://hxn.dev/tutorials/", "name": "Learn hxn by example — hxn", "description": "Short Rust and Haxe tutorials. Build a library, pass data, handle callbacks and deliver asynchronous results.", "inLanguage": "en", "isPartOf": {"@id": "https://hxn.dev/#website"}, "image": "https://hxn.dev/og-hero.png"}, {"@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "hxn", "item": "https://hxn.dev/"}, {"@type": "ListItem", "position": 2, "name": "Tutorials", "item": "https://hxn.dev/tutorials/"}]}, {"@type": "ItemList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Create, run and package", "url": "https://hxn.dev/tutorials/cli/"}, {"@type": "ListItem", "position": 2, "name": "Pass data and handle errors", "url": "https://hxn.dev/tutorials/data/"}, {"@type": "ListItem", "position": 3, "name": "Call Haxe from Rust", "url": "https://hxn.dev/tutorials/callbacks/"}, {"@type": "ListItem", "position": 4, "name": "Work with asynchronous results", "url": "https://hxn.dev/tutorials/async/"}]}]}</script>
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="header">
+    <a class="wordmark" href="/" aria-label="hxn home">hxn<span aria-hidden="true"> /</span></a>
+    <nav class="header-links" aria-label="Main"><a href="/tutorials/" aria-current="page">Tutorials</a><a class="source-link" href="https://github.com/hx-n/hxn">GitHub ↗</a></nav>
+  </header>
+  <main class="tutorial-layout">
+    <aside class="tutorial-sidebar"><nav aria-label="Tutorials"><a class="tutorial-index-link" href="/tutorials/" aria-current="page">Tutorials</a><a href="/tutorials/cli/"><span>01</span> Create, run and package</a><a href="/tutorials/data/"><span>02</span> Pass data and handle errors</a><a href="/tutorials/callbacks/"><span>03</span> Call Haxe from Rust</a><a href="/tutorials/async/"><span>04</span> Work with asynchronous results</a></nav></aside>
+    <article id="content" class="lesson">
+      <header class="lesson-heading"><p class="eyebrow">LEARN HXN</p><h1>Learn hxn by example</h1><p class="lesson-description">Short Rust and Haxe tutorials. Build a library, pass data, handle callbacks and deliver asynchronous results.</p></header>
+
+      <div class="tutorial-cards"><a class="tutorial-card" href="/tutorials/cli/"><span class="eyebrow">01 / CLI · First library</span><h2>Create, run and package<span aria-hidden="true"> →</span></h2><p>Use the CLI to build your first library, compare runtimes and share a haxelib.</p></a><a class="tutorial-card" href="/tutorials/data/"><span class="eyebrow">02 / Records · Collections · Errors</span><h2>Pass data and handle errors<span aria-hidden="true"> →</span></h2><p>Use records, enums, sets and tuples from Haxe, then catch a typed Rust error.</p></a><a class="tutorial-card" href="/tutorials/callbacks/"><span class="eyebrow">03 / Callbacks · Bytes · Ownership</span><h2>Call Haxe from Rust<span aria-hidden="true"> →</span></h2><p>Paint a picture with a Haxe function and let callback exceptions reach the caller.</p></a><a class="tutorial-card" href="/tutorials/async/"><span class="eyebrow">04 / Futures · Streams · Signals</span><h2>Work with asynchronous results<span aria-hidden="true"> →</span></h2><p>Await a future, read a stream and update a reactive value from Rust.</p></a></div><section id="examples" class="lesson-section"><h2>Run the examples</h2><p>For the API tutorials, use the current examples and CLI from the same checkout. Install Rust, Haxe and a runtime first; <code>hxn doctor</code> checks the tools.</p><div class="code-panel">
+  <div class="code-heading"><span>Prepare the examples</span><button class="code-copy" type="button" data-copy-target="code-26" aria-label="Copy Prepare the examples">Copy</button></div>
+  <pre tabindex="0" aria-label="Prepare the examples"><code id="code-26" class="language-bash">git<span class="w"> </span>clone<span class="w"> </span>https://github.com/hx-n/hxn.git
+<span class="nb">cd</span><span class="w"> </span>hxn
+cargo<span class="w"> </span>install<span class="w"> </span>--path<span class="w"> </span>crates/hxn-cli
+hxn<span class="w"> </span>doctor</code></pre>
+</div><p>Each API tutorial shows excerpts from an existing program and links to its complete source. Run commands start at the repository root.</p></section>
+
+    </article>
+  </main>
+  <p id="copy-status" class="sr-only" role="status" aria-live="polite"></p>
+  <footer><p>HashLink · Ash · hxcpp</p><a href="https://github.com/hx-n/hxn/blob/main/LICENSE">Open source · Apache 2.0</a></footer>
+</body>
+</html>

@@ -5,11 +5,15 @@ on:
     branches: [main]
     paths:
       - site/**
+      - tests/site/**
+      - examples/**
       - wrangler.jsonc
       - .github/workflows/site.yml
   pull_request:
     paths:
       - site/**
+      - tests/site/**
+      - examples/**
       - wrangler.jsonc
       - .github/workflows/site.yml
   workflow_dispatch:
@@ -33,5 +37,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
+      - name: Check tutorial examples and navigation
+        run: |
+          python3 tests/site/check.py
+          node --check site/script.js
       - name: Validate static deployment
         run: npx --yes wrangler@4.161.0 deploy --dry-run --outdir target/site-deploy

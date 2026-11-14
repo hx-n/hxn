@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en" prefix="og: https://ogp.me/ns#">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#000000">
+  <title>Work with asynchronous results — hxn</title>
+  <meta name="description" content="Await a future, read a stream and update a reactive value from Rust.">
+  <meta name="robots" content="index, follow, max-image-preview:large">
+  <link rel="canonical" href="https://hxn.dev/tutorials/async/">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="hxn">
+  <meta property="og:locale" content="en_GB">
+  <meta property="og:title" content="Work with asynchronous results — hxn">
+  <meta property="og:description" content="Await a future, read a stream and update a reactive value from Rust.">
+  <meta property="og:url" content="https://hxn.dev/tutorials/async/">
+  <meta property="og:image" content="https://hxn.dev/og-hero.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="2400">
+  <meta property="og:image:height" content="1260">
+  <meta property="og:image:alt" content="hxn — Native Rust bindings for Haxe">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Work with asynchronous results — hxn">
+  <meta name="twitter:description" content="Await a future, read a stream and update a reactive value from Rust.">
+  <meta name="twitter:image" content="https://hxn.dev/og-hero.png">
+  <meta name="twitter:image:alt" content="hxn — Native Rust bindings for Haxe">
+  <link rel="icon" href="/logo.png" type="image/png">
+  <link rel="apple-touch-icon" href="/logo.png">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/script.js" defer></script>
+  <script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "TechArticle", "@id": "https://hxn.dev/tutorials/async/#page", "url": "https://hxn.dev/tutorials/async/", "name": "Work with asynchronous results — hxn", "description": "Await a future, read a stream and update a reactive value from Rust.", "inLanguage": "en", "isPartOf": {"@id": "https://hxn.dev/#website"}, "image": "https://hxn.dev/og-hero.png"}, {"@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "hxn", "item": "https://hxn.dev/"}, {"@type": "ListItem", "position": 2, "name": "Tutorials", "item": "https://hxn.dev/tutorials/"}, {"@type": "ListItem", "position": 3, "name": "Work with asynchronous results", "item": "https://hxn.dev/tutorials/async/"}]}]}</script>
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="header">
+    <a class="wordmark" href="/" aria-label="hxn home">hxn<span aria-hidden="true"> /</span></a>
+    <nav class="header-links" aria-label="Main"><a href="/tutorials/" aria-current="true">Tutorials</a><a class="source-link" href="https://github.com/hx-n/hxn">GitHub ↗</a></nav>
+  </header>
+  <main class="tutorial-layout">
+    <aside class="tutorial-sidebar"><nav aria-label="Tutorials"><a class="tutorial-index-link" href="/tutorials/">Tutorials</a><a href="/tutorials/cli/"><span>01</span> Create, run and package</a><a href="/tutorials/data/"><span>02</span> Pass data and handle errors</a><a href="/tutorials/callbacks/"><span>03</span> Call Haxe from Rust</a><a href="/tutorials/async/" aria-current="page"><span>04</span> Work with asynchronous results</a></nav></aside>
+    <article id="content" class="lesson">
+      <header class="lesson-heading"><p class="eyebrow">TUTORIAL / 04</p><h1>Work with asynchronous results</h1><p class="lesson-description">Await a future, read a stream and update a reactive value from Rust.</p></header>
+      <nav class="lesson-toc" aria-label="On this page"><a href="#future">Future</a><a href="#stream">Stream</a><a href="#signal">Signal</a><a href="#run">Run it</a></nav>
+      <section id="future" class="lesson-section"><h2>1. Await one result</h2><p>The primes example returns a future from Rust. The Haxe caller can await its value or register a handler.</p><div class="code-panel">
+  <div class="code-heading"><span>lib.rs · excerpt</span><button class="code-copy" type="button" data-copy-target="code-18" aria-label="Copy lib.rs · excerpt">Copy</button></div>
+  <pre tabindex="0" aria-label="lib.rs · excerpt"><code id="code-18" class="language-rust" data-source="examples/primes/src/lib.rs"><span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">count</span><span class="p">(</span><span class="nv">limit</span><span class="p">:</span><span class="w"> </span><span class="kt">i32</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nc">Result</span><span class="o">&lt;</span><span class="nc">Future</span><span class="o">&lt;</span><span class="kt">i32</span><span class="o">&gt;</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;&#39;</span><span class="nv">static</span><span class="w"> </span><span class="kt">str</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="nv">limit</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="nc">Err</span><span class="p">(</span><span class="s">&quot;a negative limit&quot;</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="nc">Ok</span><span class="p">(</span><span class="nf">spawn_blocking</span><span class="p">(</span><span class="k">move</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="kd">let</span><span class="w"> </span><span class="nv">count</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="mi">2</span><span class="o">..</span><span class="nv">limit</span><span class="p">).</span><span class="nf">filter</span><span class="p">(</span><span class="o">|</span><span class="nv">number</span><span class="o">|</span><span class="w"> </span><span class="nf">is_prime</span><span class="p">(</span><span class="o">*</span><span class="nv">number</span><span class="p">)).</span><span class="nf">count</span><span class="p">();</span>
+<span class="w">        </span><span class="nc">Ok</span><span class="p">::</span><span class="o">&lt;</span><span class="nv">_</span><span class="p">,</span><span class="w"> </span><span class="nc">Failure</span><span class="o">&gt;</span><span class="p">(</span><span class="nv">count</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="kt">i32</span><span class="p">)</span>
+<span class="w">    </span><span class="p">}))</span>
+<span class="p">}</span></code></pre>
+</div><div class="code-panel">
+  <div class="code-heading"><span>Main.hx · excerpt</span><button class="code-copy" type="button" data-copy-target="code-19" aria-label="Copy Main.hx · excerpt">Copy</button></div>
+  <pre tabindex="0" aria-label="Main.hx · excerpt"><code id="code-19" class="language-haxe" data-source="examples/primes/haxe/Main.hx"><span class="kd">var</span> <span class="nv">count</span> <span class="o">=</span> <span class="nc">Primes</span><span class="p">.</span><span class="nf">count</span><span class="p">(</span><span class="m">100000</span><span class="p">).</span><span class="nf">await</span><span class="p">();</span>
+<span class="nc">Sys</span><span class="p">.</span><span class="nf">println</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">$count</span><span class="s1"> primes below 100000&#39;</span><span class="p">);</span></code></pre>
+</div><p><code>await()</code> waits on this thread. For event-loop delivery, use <code>Primes.count(1000).then(count -&gt; Sys.println(count))</code>. The handler runs on the Haxe delivery thread. <code>spawn_blocking</code> uses a native worker thread; on threadless builds it runs before returning. Use <code>spawn</code> or <code>stepped</code> for cooperative work.</p></section><section id="stream" class="lesson-section"><h2>2. Read every item</h2><div class="code-panel">
+  <div class="code-heading"><span>Main.hx · excerpt</span><button class="code-copy" type="button" data-copy-target="code-20" aria-label="Copy Main.hx · excerpt">Copy</button></div>
+  <pre tabindex="0" aria-label="Main.hx · excerpt"><code id="code-20" class="language-haxe" data-source="examples/primes/haxe/Main.hx"><span class="kd">var</span> <span class="nv">found</span> <span class="o">=</span> <span class="p">[</span><span class="k">for</span> <span class="p">(</span><span class="nv">prime</span> <span class="k">in</span> <span class="nc">Primes</span><span class="p">.</span><span class="nf">below</span><span class="p">(</span><span class="m">30</span><span class="p">))</span> <span class="nv">prime</span><span class="p">];</span>
+<span class="nc">Sys</span><span class="p">.</span><span class="nf">println</span><span class="p">(</span><span class="nv">found</span><span class="p">.</span><span class="nf">join</span><span class="p">(</span><span class="s2">&quot; &quot;</span><span class="p">));</span></code></pre>
+</div><div class="code-panel">
+  <div class="code-heading"><span>Prime stream output</span><button class="code-copy" type="button" data-copy-target="code-21" aria-label="Copy Prime stream output">Copy</button></div>
+  <pre tabindex="0" aria-label="Prime stream output"><code id="code-21" class="language-text" data-source="examples/primes/expected.txt">2 3 5 7 11 13 17 19 23 29</code></pre>
+</div><p>Iteration reads items in order. The stream ends when Rust drops its last sender. Use <code>listen</code> for event-loop delivery; a stream’s failure is delivered after earlier items.</p></section><section id="signal" class="lesson-section"><h2>3. Follow the latest value</h2><p>The thermostat example publishes a Rust signal. Haxe derives a value from it and controls delivery explicitly:</p><div class="code-panel">
+  <div class="code-heading"><span>lib.rs · excerpt</span><button class="code-copy" type="button" data-copy-target="code-22" aria-label="Copy lib.rs · excerpt">Copy</button></div>
+  <pre tabindex="0" aria-label="lib.rs · excerpt"><code id="code-22" class="language-rust" data-source="examples/thermostat/src/lib.rs"><span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">turn</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span><span class="w"> </span><span class="nv">self</span><span class="p">,</span><span class="w"> </span><span class="nv">degrees</span><span class="p">:</span><span class="w"> </span><span class="kt">f64</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="kt">f64</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nv">self</span><span class="p">.</span><span class="na">degrees</span><span class="w"> </span><span class="o">+=</span><span class="w"> </span><span class="nv">degrees</span><span class="p">;</span>
+<span class="w">    </span><span class="nv">self</span><span class="p">.</span><span class="na">source</span><span class="p">.</span><span class="nf">set</span><span class="p">(</span><span class="nv">self</span><span class="p">.</span><span class="na">degrees</span><span class="p">);</span>
+<span class="w">    </span><span class="nv">self</span><span class="p">.</span><span class="na">degrees</span>
+<span class="p">}</span></code></pre>
+</div><div class="code-panel">
+  <div class="code-heading"><span>Main.hx · excerpt</span><button class="code-copy" type="button" data-copy-target="code-23" aria-label="Copy Main.hx · excerpt">Copy</button></div>
+  <pre tabindex="0" aria-label="Main.hx · excerpt"><code id="code-23" class="language-haxe" data-source="examples/thermostat/haxe/Main.hx"><span class="nv">hxn</span><span class="p">.</span><span class="nc">Loop</span><span class="p">.</span><span class="na">manual</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+
+<span class="kd">var</span> <span class="nv">thermostat</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">Thermostat</span><span class="p">(</span><span class="m">20</span><span class="p">);</span>
+<span class="kd">var</span> <span class="nv">target</span> <span class="o">=</span> <span class="nv">thermostat</span><span class="p">.</span><span class="nf">target</span><span class="p">();</span>
+
+<span class="c1">// Derived from the signal, and recomputed when it changes.</span>
+<span class="kd">var</span> <span class="nv">state</span> <span class="o">=</span> <span class="k">new</span> <span class="nv">hxn</span><span class="p">.</span><span class="nc">Computed</span><span class="p">(()</span> <span class="o">-&gt;</span> <span class="nv">target</span><span class="p">.</span><span class="na">value</span> <span class="o">&gt;</span> <span class="m">21</span> <span class="o">?</span> <span class="s2">&quot;heating&quot;</span> <span class="p">:</span> <span class="s2">&quot;idle&quot;</span><span class="p">);</span>
+<span class="c1">// Runs now, and again whenever anything it read has changed.</span>
+<span class="nv">hxn</span><span class="p">.</span><span class="nc">Reactive</span><span class="p">.</span><span class="nf">effect</span><span class="p">(()</span> <span class="o">-&gt;</span> <span class="nc">Sys</span><span class="p">.</span><span class="nf">println</span><span class="p">(</span><span class="s1">&#39;set to </span><span class="si">${</span><span class="nv">target</span><span class="p">.</span><span class="na">value</span><span class="si">}</span><span class="s1">: </span><span class="si">${</span><span class="nv">state</span><span class="p">.</span><span class="na">value</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">));</span>
+
+<span class="nv">thermostat</span><span class="p">.</span><span class="nf">turn</span><span class="p">(</span><span class="m">1.5</span><span class="p">);</span>
+<span class="nv">hxn</span><span class="p">.</span><span class="nc">Loop</span><span class="p">.</span><span class="nf">sync</span><span class="p">();</span>
+
+<span class="c1">// Two changes before a delivery are delivered as one: a signal</span>
+<span class="c1">// reports only its latest value.</span>
+<span class="nv">thermostat</span><span class="p">.</span><span class="nf">turn</span><span class="p">(</span><span class="m">1</span><span class="p">);</span>
+<span class="nv">thermostat</span><span class="p">.</span><span class="nf">turn</span><span class="p">(</span><span class="o">-</span><span class="m">0.5</span><span class="p">);</span>
+<span class="nv">hxn</span><span class="p">.</span><span class="nc">Loop</span><span class="p">.</span><span class="nf">sync</span><span class="p">();</span></code></pre>
+</div><div class="code-panel">
+  <div class="code-heading"><span>Thermostat output</span><button class="code-copy" type="button" data-copy-target="code-24" aria-label="Copy Thermostat output">Copy</button></div>
+  <pre tabindex="0" aria-label="Thermostat output"><code id="code-24" class="language-text" data-source="examples/thermostat/expected.txt">set to 20: idle
+set to 21.5: heating
+set to 22: heating</code></pre>
+</div><p>A signal delivers the latest state; the two final turns produce one update. <code>Computed</code> tracks the values it reads, and <code>Reactive.effect</code> reruns when they change. Manual loops call <code>Loop.sync()</code>; otherwise hxn uses the Haxe event loop.</p></section><section id="run" class="lesson-section"><h2>Run the examples</h2><p>From the repository root, run the complete example:</p><div class="code-panel">
+  <div class="code-heading"><span>Run primes</span><button class="code-copy" type="button" data-copy-target="code-25" aria-label="Copy Run primes">Copy</button></div>
+  <pre tabindex="0" aria-label="Run primes"><code id="code-25" class="language-bash"><span class="nb">cd</span><span class="w"> </span>examples/primes
+hxn<span class="w"> </span>run<span class="w"> </span>hl</code></pre>
+</div><p><a href="https://github.com/hx-n/hxn/tree/main/examples/primes">Full Rust and Haxe source ↗</a> · Use <code>hxn run cpp</code> for hxcpp.</p><p>For the signal example, return to the repository root and run <code>cd examples/thermostat</code>, then <code>hxn run hl</code>.</p></section>
+      <nav class="lesson-paging" aria-label="Continue learning"><a href="/tutorials/callbacks/">← Previous</a><a href="/tutorials/">All tutorials →</a></nav>
+    </article>
+  </main>
+  <p id="copy-status" class="sr-only" role="status" aria-live="polite"></p>
+  <footer><p>HashLink · Ash · hxcpp</p><a href="https://github.com/hx-n/hxn/blob/main/LICENSE">Open source · Apache 2.0</a></footer>
+</body>
+</html>

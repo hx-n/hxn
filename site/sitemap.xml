@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url>
-    <loc>https://hxn.dev/</loc>
-  </url>
+  <url><loc>https://hxn.dev/</loc></url>
+  <url><loc>https://hxn.dev/tutorials/</loc></url>
+  <url><loc>https://hxn.dev/tutorials/cli/</loc></url>
+  <url><loc>https://hxn.dev/tutorials/data/</loc></url>
+  <url><loc>https://hxn.dev/tutorials/callbacks/</loc></url>
+  <url><loc>https://hxn.dev/tutorials/async/</loc></url>
 </urlset>

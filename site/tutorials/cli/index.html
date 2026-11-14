@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en" prefix="og: https://ogp.me/ns#">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#000000">
+  <title>Create, run and package — hxn</title>
+  <meta name="description" content="Use the CLI to build your first library, compare runtimes and share a haxelib.">
+  <meta name="robots" content="index, follow, max-image-preview:large">
+  <link rel="canonical" href="https://hxn.dev/tutorials/cli/">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="hxn">
+  <meta property="og:locale" content="en_GB">
+  <meta property="og:title" content="Create, run and package — hxn">
+  <meta property="og:description" content="Use the CLI to build your first library, compare runtimes and share a haxelib.">
+  <meta property="og:url" content="https://hxn.dev/tutorials/cli/">
+  <meta property="og:image" content="https://hxn.dev/og-hero.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="2400">
+  <meta property="og:image:height" content="1260">
+  <meta property="og:image:alt" content="hxn — Native Rust bindings for Haxe">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Create, run and package — hxn">
+  <meta name="twitter:description" content="Use the CLI to build your first library, compare runtimes and share a haxelib.">
+  <meta name="twitter:image" content="https://hxn.dev/og-hero.png">
+  <meta name="twitter:image:alt" content="hxn — Native Rust bindings for Haxe">
+  <link rel="icon" href="/logo.png" type="image/png">
+  <link rel="apple-touch-icon" href="/logo.png">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/script.js" defer></script>
+  <script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "TechArticle", "@id": "https://hxn.dev/tutorials/cli/#page", "url": "https://hxn.dev/tutorials/cli/", "name": "Create, run and package — hxn", "description": "Use the CLI to build your first library, compare runtimes and share a haxelib.", "inLanguage": "en", "isPartOf": {"@id": "https://hxn.dev/#website"}, "image": "https://hxn.dev/og-hero.png"}, {"@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "hxn", "item": "https://hxn.dev/"}, {"@type": "ListItem", "position": 2, "name": "Tutorials", "item": "https://hxn.dev/tutorials/"}, {"@type": "ListItem", "position": 3, "name": "Create, run and package", "item": "https://hxn.dev/tutorials/cli/"}]}]}</script>
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="header">
+    <a class="wordmark" href="/" aria-label="hxn home">hxn<span aria-hidden="true"> /</span></a>
+    <nav class="header-links" aria-label="Main"><a href="/tutorials/" aria-current="true">Tutorials</a><a class="source-link" href="https://github.com/hx-n/hxn">GitHub ↗</a></nav>
+  </header>
+  <main class="tutorial-layout">
+    <aside class="tutorial-sidebar"><nav aria-label="Tutorials"><a class="tutorial-index-link" href="/tutorials/">Tutorials</a><a href="/tutorials/cli/" aria-current="page"><span>01</span> Create, run and package</a><a href="/tutorials/data/"><span>02</span> Pass data and handle errors</a><a href="/tutorials/callbacks/"><span>03</span> Call Haxe from Rust</a><a href="/tutorials/async/"><span>04</span> Work with asynchronous results</a></nav></aside>
+    <article id="content" class="lesson">
+      <header class="lesson-heading"><p class="eyebrow">TUTORIAL / 01</p><h1>Create, run and package</h1><p class="lesson-description">Use the CLI to build your first library, compare runtimes and share a haxelib.</p></header>
+      <nav class="lesson-toc" aria-label="On this page"><a href="#create">Create</a><a href="#compare">Compare runtimes</a><a href="#package">Package</a><a href="#targets">Other targets</a></nav>
+      <section id="create" class="lesson-section"><h2>1. Create a library</h2><p>Install Rust, Haxe and HashLink or <a href="https://github.com/hx-n/hxn#quick-setup">hxcpp from git</a>. <a href="/#install-command">Install hxn</a>, then check your tools:</p><div class="code-panel">
+  <div class="code-heading"><span>Create and run</span><button class="code-copy" type="button" data-copy-target="code-1" aria-label="Copy Create and run">Copy</button></div>
+  <pre tabindex="0" aria-label="Create and run"><code id="code-1" class="language-bash">hxn<span class="w"> </span>doctor
+hxn<span class="w"> </span>new<span class="w"> </span>greeter
+<span class="nb">cd</span><span class="w"> </span>greeter
+hxn<span class="w"> </span>run<span class="w"> </span>hl</code></pre>
+</div><p><code>src/lib.rs</code> is your Rust API; <code>haxe/Main.hx</code> is the program using it. The starter includes a constructor, methods and a fallible call. See the <a href="/#quick-start">complete Quick Start</a>.</p></section><section id="compare" class="lesson-section"><h2>2. Run the same code on two runtimes</h2><div class="code-panel">
+  <div class="code-heading"><span>Compare HashLink and hxcpp</span><button class="code-copy" type="button" data-copy-target="code-2" aria-label="Copy Compare HashLink and hxcpp">Copy</button></div>
+  <pre tabindex="0" aria-label="Compare HashLink and hxcpp"><code id="code-2" class="language-bash">hxn<span class="w"> </span>run<span class="w"> </span>cpp
+hxn<span class="w"> </span>check<span class="w"> </span>hl<span class="w"> </span>cpp</code></pre>
+</div><p><code>check</code> requires both runs to succeed and print the same output. Commit the generated <code>greeter.hxn.json</code> with API changes; <code>check</code> stops if the manifest is out of date. Use <code>hxn build hl</code> to generate and compile without running.</p></section><section id="package" class="lesson-section"><h2>3. Share a haxelib</h2><div class="code-panel">
+  <div class="code-heading"><span>Package and register</span><button class="code-copy" type="button" data-copy-target="code-3" aria-label="Copy Package and register">Copy</button></div>
+  <pre tabindex="0" aria-label="Package and register"><code id="code-3" class="language-bash">hxn<span class="w"> </span>package<span class="w"> </span>--release<span class="w"> </span>--out<span class="w"> </span>../greeter-haxelib
+haxelib<span class="w"> </span>dev<span class="w"> </span>greeter<span class="w"> </span>../greeter-haxelib</code></pre>
+</div><p>Another Haxe project can use <code>-lib greeter</code>. The package includes generated classes, headers and native libraries; users compile against it without your Rust source. Set haxelib contributors and release notes in <code>[package.metadata.hxn]</code> before publishing.</p></section><section id="targets" class="lesson-section"><h2>4. Choose another target</h2><div class="code-panel">
+  <div class="code-heading"><span>Ash or CPPIA</span><button class="code-copy" type="button" data-copy-target="code-4" aria-label="Copy Ash or CPPIA">Copy</button></div>
+  <pre tabindex="0" aria-label="Ash or CPPIA"><code id="code-4" class="language-bash">hxn<span class="w"> </span>run<span class="w"> </span>hl<span class="w"> </span>--vm<span class="w"> </span><span class="s2">&quot;ash --mode jit&quot;</span>
+hxn<span class="w"> </span>run<span class="w"> </span>cppia</code></pre>
+</div><p>Use <code>--wasm</code> with <code>hl</code> for Ash or <code>cpp</code> for Emscripten. Ash needs nightly Rust with <code>rust-src</code>; Emscripten needs its SDK and compatible hxcpp. <code>hxn doctor</code> lists missing tools. The CLI and the library’s hxn dependency must use matching versions.</p></section>
+      <nav class="lesson-paging" aria-label="Continue learning"><a href="/tutorials/">← All tutorials</a><a href="/tutorials/data/">Pass data and handle errors →</a></nav>
+    </article>
+  </main>
+  <p id="copy-status" class="sr-only" role="status" aria-live="polite"></p>
+  <footer><p>HashLink · Ash · hxcpp</p><a href="https://github.com/hx-n/hxn/blob/main/LICENSE">Open source · Apache 2.0</a></footer>
+</body>
+</html>

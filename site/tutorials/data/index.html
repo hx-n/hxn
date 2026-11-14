@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en" prefix="og: https://ogp.me/ns#">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#000000">
+  <title>Pass data and handle errors — hxn</title>
+  <meta name="description" content="Use records, enums, sets and tuples from Haxe, then catch a typed Rust error.">
+  <meta name="robots" content="index, follow, max-image-preview:large">
+  <link rel="canonical" href="https://hxn.dev/tutorials/data/">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="hxn">
+  <meta property="og:locale" content="en_GB">
+  <meta property="og:title" content="Pass data and handle errors — hxn">
+  <meta property="og:description" content="Use records, enums, sets and tuples from Haxe, then catch a typed Rust error.">
+  <meta property="og:url" content="https://hxn.dev/tutorials/data/">
+  <meta property="og:image" content="https://hxn.dev/og-hero.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="2400">
+  <meta property="og:image:height" content="1260">
+  <meta property="og:image:alt" content="hxn — Native Rust bindings for Haxe">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Pass data and handle errors — hxn">
+  <meta name="twitter:description" content="Use records, enums, sets and tuples from Haxe, then catch a typed Rust error.">
+  <meta name="twitter:image" content="https://hxn.dev/og-hero.png">
+  <meta name="twitter:image:alt" content="hxn — Native Rust bindings for Haxe">
+  <link rel="icon" href="/logo.png" type="image/png">
+  <link rel="apple-touch-icon" href="/logo.png">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/script.js" defer></script>
+  <script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "TechArticle", "@id": "https://hxn.dev/tutorials/data/#page", "url": "https://hxn.dev/tutorials/data/", "name": "Pass data and handle errors — hxn", "description": "Use records, enums, sets and tuples from Haxe, then catch a typed Rust error.", "inLanguage": "en", "isPartOf": {"@id": "https://hxn.dev/#website"}, "image": "https://hxn.dev/og-hero.png"}, {"@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "hxn", "item": "https://hxn.dev/"}, {"@type": "ListItem", "position": 2, "name": "Tutorials", "item": "https://hxn.dev/tutorials/"}, {"@type": "ListItem", "position": 3, "name": "Pass data and handle errors", "item": "https://hxn.dev/tutorials/data/"}]}]}</script>
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="header">
+    <a class="wordmark" href="/" aria-label="hxn home">hxn<span aria-hidden="true"> /</span></a>
+    <nav class="header-links" aria-label="Main"><a href="/tutorials/" aria-current="true">Tutorials</a><a class="source-link" href="https://github.com/hx-n/hxn">GitHub ↗</a></nav>
+  </header>
+  <main class="tutorial-layout">
+    <aside class="tutorial-sidebar"><nav aria-label="Tutorials"><a class="tutorial-index-link" href="/tutorials/">Tutorials</a><a href="/tutorials/cli/"><span>01</span> Create, run and package</a><a href="/tutorials/data/" aria-current="page"><span>02</span> Pass data and handle errors</a><a href="/tutorials/callbacks/"><span>03</span> Call Haxe from Rust</a><a href="/tutorials/async/"><span>04</span> Work with asynchronous results</a></nav></aside>
+    <article id="content" class="lesson">
+      <header class="lesson-heading"><p class="eyebrow">TUTORIAL / 02</p><h1>Pass data and handle errors</h1><p class="lesson-description">Use records, enums, sets and tuples from Haxe, then catch a typed Rust error.</p></header>
+      <nav class="lesson-toc" aria-label="On this page"><a href="#records">Records</a><a href="#collections">Collections</a><a href="#errors">Typed errors</a><a href="#run">Run it</a></nav>
+      <section id="records" class="lesson-section"><h2>1. Pass a record</h2><p>The pantry example marks plain values with <code>#[hxn::data]</code>. Haxe gets a record class and an enum; the Rust library stays independent of the runtime.</p><div class="code-panel">
+  <div class="code-heading"><span>lib.rs · excerpt</span><button class="code-copy" type="button" data-copy-target="code-5" aria-label="Copy lib.rs · excerpt">Copy</button></div>
+  <pre tabindex="0" aria-label="lib.rs · excerpt"><code id="code-5" class="language-rust" data-source="examples/pantry/src/lib.rs"><span class="cp">#[hxn::data]</span>
+<span class="cp">#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]</span>
+<span class="k">pub</span><span class="w"> </span><span class="k">enum</span><span class="w"> </span><span class="nc">Unit</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nc">Each</span><span class="p">,</span>
+<span class="w">    </span><span class="nc">Kilo</span><span class="p">,</span>
+<span class="w">    </span><span class="nc">Litre</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="sd">/// An item on a shelf. Haxe gets a class with these fields.</span>
+<span class="cp">#[hxn::data]</span>
+<span class="cp">#[derive(Clone)]</span>
+<span class="k">pub</span><span class="w"> </span><span class="k">struct</span><span class="w"> </span><span class="nc">Item</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="nv">name</span><span class="p">:</span><span class="w"> </span><span class="nc">String</span><span class="p">,</span>
+<span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="nv">quantity</span><span class="p">:</span><span class="w"> </span><span class="kt">i32</span><span class="p">,</span>
+<span class="w">    </span><span class="cp">#[hxn(default = </span><span class="s">&quot;Item::default_unit&quot;</span><span class="cp">)]</span>
+<span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="nv">unit</span><span class="p">:</span><span class="w"> </span><span class="nc">Unit</span><span class="p">,</span>
+<span class="w">    </span><span class="sd">/// An optional field can be omitted in Haxe.</span>
+<span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="nv">note</span><span class="p">:</span><span class="w"> </span><span class="nc">Option</span><span class="o">&lt;</span><span class="nc">String</span><span class="o">&gt;</span><span class="p">,</span>
+<span class="p">}</span></code></pre>
+</div><div class="code-panel">
+  <div class="code-heading"><span>Main.hx · excerpt</span><button class="code-copy" type="button" data-copy-target="code-6" aria-label="Copy Main.hx · excerpt">Copy</button></div>
+  <pre tabindex="0" aria-label="Main.hx · excerpt"><code id="code-6" class="language-haxe" data-source="examples/pantry/haxe/Main.hx"><span class="kd">var</span> <span class="nv">pantry</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">Pantry</span><span class="p">();</span>
+
+<span class="c1">// Rust fills the omitted unit with Item::default_unit; note is null.</span>
+<span class="nv">pantry</span><span class="p">.</span><span class="nf">stock</span><span class="p">({</span><span class="nv">name</span><span class="p">:</span> <span class="s2">&quot;eggs&quot;</span><span class="p">,</span> <span class="nv">quantity</span><span class="p">:</span> <span class="m">12</span><span class="p">});</span>
+<span class="nv">pantry</span><span class="p">.</span><span class="nf">stock</span><span class="p">({</span><span class="nv">name</span><span class="p">:</span> <span class="s2">&quot;flour&quot;</span><span class="p">,</span> <span class="nv">quantity</span><span class="p">:</span> <span class="m">2</span><span class="p">,</span> <span class="nv">unit</span><span class="p">:</span> <span class="nc">Unit</span><span class="p">.</span><span class="nc">Kilo</span><span class="p">,</span> <span class="nv">note</span><span class="p">:</span> <span class="s2">&quot;wholemeal&quot;</span><span class="p">});</span>
+<span class="kd">var</span> <span class="nv">rice</span><span class="p">:</span><span class="nc">Item</span> <span class="o">=</span> <span class="p">{</span><span class="nv">name</span><span class="p">:</span> <span class="s2">&quot;rice&quot;</span><span class="p">,</span> <span class="nv">quantity</span><span class="p">:</span> <span class="m">1</span><span class="p">,</span> <span class="nv">unit</span><span class="p">:</span> <span class="nc">Unit</span><span class="p">.</span><span class="nc">Kilo</span><span class="p">};</span>
+<span class="nc">Sys</span><span class="p">.</span><span class="nf">println</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">${</span><span class="nv">pantry</span><span class="p">.</span><span class="nf">stock</span><span class="p">(</span><span class="nv">rice</span><span class="p">)</span><span class="si">}</span><span class="s1"> items stocked&#39;</span><span class="p">);</span></code></pre>
+</div><p>Omitted <code>unit</code> uses <code>Item::default_unit()</code>; omitted <code>note</code> becomes null. Rust stores a copy. Changing <code>rice.quantity</code> in Haxe after stocking leaves the pantry unchanged.</p></section><section id="collections" class="lesson-section"><h2>2. Use tuples and sets</h2><div class="code-panel">
+  <div class="code-heading"><span>Main.hx · excerpt</span><button class="code-copy" type="button" data-copy-target="code-7" aria-label="Copy Main.hx · excerpt">Copy</button></div>
+  <pre tabindex="0" aria-label="Main.hx · excerpt"><code id="code-7" class="language-haxe" data-source="examples/pantry/haxe/Main.hx"><span class="kd">var</span> <span class="nv">quantities</span> <span class="o">=</span> <span class="nv">pantry</span><span class="p">.</span><span class="nf">quantities</span><span class="p">();</span>
+<span class="nc">Sys</span><span class="p">.</span><span class="nf">println</span><span class="p">(</span><span class="s1">&#39;shelves: </span><span class="si">${</span><span class="p">[</span><span class="k">for</span> <span class="p">(</span><span class="nv">pair</span> <span class="k">in</span> <span class="nv">quantities</span><span class="p">)</span> <span class="s1">&#39;</span><span class="si">${</span><span class="nv">pair</span><span class="p">[</span><span class="m">0</span><span class="p">]</span><span class="si">}</span><span class="s1">=</span><span class="si">${</span><span class="nv">pair</span><span class="p">[</span><span class="m">1</span><span class="p">]</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">].</span><span class="nf">join</span><span class="p">(</span><span class="s2">&quot;, &quot;</span><span class="p">)</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">);</span></code></pre>
+</div><div class="code-panel">
+  <div class="code-heading"><span>Main.hx · excerpt</span><button class="code-copy" type="button" data-copy-target="code-8" aria-label="Copy Main.hx · excerpt">Copy</button></div>
+  <pre tabindex="0" aria-label="Main.hx · excerpt"><code id="code-8" class="language-haxe" data-source="examples/pantry/haxe/Main.hx"><span class="kd">var</span> <span class="nv">wanted</span> <span class="o">=</span> <span class="k">new</span> <span class="nv">hxn</span><span class="p">.</span><span class="nc">Set</span><span class="p">([</span><span class="s2">&quot;rice&quot;</span><span class="p">,</span> <span class="s2">&quot;salt&quot;</span><span class="p">]);</span>
+<span class="nv">wanted</span><span class="p">.</span><span class="nf">add</span><span class="p">(</span><span class="s2">&quot;salt&quot;</span><span class="p">);</span>
+<span class="nv">wanted</span><span class="p">.</span><span class="nf">add</span><span class="p">(</span><span class="s2">&quot;oil&quot;</span><span class="p">);</span>
+<span class="nc">Sys</span><span class="p">.</span><span class="nf">println</span><span class="p">(</span><span class="s1">&#39;to buy: </span><span class="si">${</span><span class="nv">pantry</span><span class="p">.</span><span class="nf">missing</span><span class="p">(</span><span class="nv">wanted</span><span class="p">).</span><span class="nf">toArray</span><span class="p">().</span><span class="nf">join</span><span class="p">(</span><span class="s2">&quot; and &quot;</span><span class="p">)</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">);</span></code></pre>
+</div><p>Rust’s <code>Vec&lt;(String, i32)&gt;</code> arrives as an array of <code>hxn.Tuple</code> values. Indexed access returns <code>Dynamic</code>; <code>pair.at(0)</code> preserves the position’s static type. <code>hxn.Set</code> supports membership and insertion. This example returns a <code>BTreeSet</code>, so the result is sorted by Rust.</p></section><section id="errors" class="lesson-section"><h2>3. Catch a typed error</h2><div class="code-panel">
+  <div class="code-heading"><span>lib.rs · excerpt</span><button class="code-copy" type="button" data-copy-target="code-9" aria-label="Copy lib.rs · excerpt">Copy</button></div>
+  <pre tabindex="0" aria-label="lib.rs · excerpt"><code id="code-9" class="language-rust" data-source="examples/pantry/src/lib.rs"><span class="cp">#[hxn::data]</span>
+<span class="cp">#[derive(Clone, Debug)]</span>
+<span class="k">pub</span><span class="w"> </span><span class="k">enum</span><span class="w"> </span><span class="nc">PantryError</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="sd">/// No item has that name.</span>
+<span class="w">    </span><span class="nc">Unknown</span><span class="p">(</span><span class="nc">String</span><span class="p">),</span>
+<span class="w">    </span><span class="sd">/// Fewer are in stock than requested.</span>
+<span class="w">    </span><span class="nc">Short</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nv">name</span><span class="p">:</span><span class="w"> </span><span class="nc">String</span><span class="p">,</span><span class="w"> </span><span class="nv">left</span><span class="p">:</span><span class="w"> </span><span class="kt">i32</span><span class="w"> </span><span class="p">},</span>
+<span class="p">}</span></code></pre>
+</div><div class="code-panel">
+  <div class="code-heading"><span>Main.hx · excerpt</span><button class="code-copy" type="button" data-copy-target="code-10" aria-label="Copy Main.hx · excerpt">Copy</button></div>
+  <pre tabindex="0" aria-label="Main.hx · excerpt"><code id="code-10" class="language-haxe" data-source="examples/pantry/haxe/Main.hx"><span class="k">for</span> <span class="p">(</span><span class="nv">wanted</span> <span class="k">in</span> <span class="p">[</span><span class="s2">&quot;eggs&quot;</span><span class="p">,</span> <span class="s2">&quot;salt&quot;</span><span class="p">])</span> <span class="p">{</span>
+	<span class="k">try</span> <span class="p">{</span>
+		<span class="nv">pantry</span><span class="p">.</span><span class="nf">take</span><span class="p">(</span><span class="nv">wanted</span><span class="p">,</span> <span class="m">50</span><span class="p">);</span>
+	<span class="p">}</span> <span class="k">catch</span> <span class="p">(</span><span class="nv">refused</span><span class="p">:</span><span class="nc">PantryException</span><span class="p">)</span> <span class="p">{</span>
+		<span class="k">switch</span> <span class="p">(</span><span class="nv">refused</span><span class="p">.</span><span class="na">error</span><span class="p">)</span> <span class="p">{</span>
+			<span class="k">case</span> <span class="nc">Short</span><span class="p">(</span><span class="nv">name</span><span class="p">,</span> <span class="nv">left</span><span class="p">):</span>
+				<span class="nc">Sys</span><span class="p">.</span><span class="nf">println</span><span class="p">(</span><span class="s1">&#39;only </span><span class="si">$left</span><span class="s1"> of </span><span class="si">$name</span><span class="s1">&#39;</span><span class="p">);</span>
+			<span class="k">case</span> <span class="nc">Unknown</span><span class="p">(</span><span class="nv">name</span><span class="p">):</span>
+				<span class="nc">Sys</span><span class="p">.</span><span class="nf">println</span><span class="p">(</span><span class="s1">&#39;no </span><span class="si">$name</span><span class="s1"> at all&#39;</span><span class="p">);</span>
+		<span class="p">}</span>
+		<span class="nc">Sys</span><span class="p">.</span><span class="nf">println</span><span class="p">(</span><span class="s1">&#39;  </span><span class="si">${</span><span class="nv">refused</span><span class="p">.</span><span class="na">message</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">);</span>
+	<span class="p">}</span>
+<span class="p">}</span></code></pre>
+</div><p><code>take</code> returns <code>Result&lt;Item, PantryError&gt;</code>. Haxe catches <code>PantryException</code>: its <code>error</code> field is the enum, and its message comes from Rust’s <code>Display</code> implementation. Call <code>pantry.close()</code> when finished.</p></section><section id="run" class="lesson-section"><h2>Run the example</h2><p>From the repository root, run the complete example:</p><div class="code-panel">
+  <div class="code-heading"><span>Run pantry</span><button class="code-copy" type="button" data-copy-target="code-11" aria-label="Copy Run pantry">Copy</button></div>
+  <pre tabindex="0" aria-label="Run pantry"><code id="code-11" class="language-bash"><span class="nb">cd</span><span class="w"> </span>examples/pantry
+hxn<span class="w"> </span>run<span class="w"> </span>hl</code></pre>
+</div><p><a href="https://github.com/hx-n/hxn/tree/main/examples/pantry">Full Rust and Haxe source ↗</a> · Use <code>hxn run cpp</code> for hxcpp.</p></section>
+      <nav class="lesson-paging" aria-label="Continue learning"><a href="/tutorials/cli/">← Previous</a><a href="/tutorials/callbacks/">Call Haxe from Rust →</a></nav>
+    </article>
+  </main>
+  <p id="copy-status" class="sr-only" role="status" aria-live="polite"></p>
+  <footer><p>HashLink · Ash · hxcpp</p><a href="https://github.com/hx-n/hxn/blob/main/LICENSE">Open source · Apache 2.0</a></footer>
+</body>
+</html>

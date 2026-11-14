@@ -18,5 +18,3 @@ For usage, see [CLI commands](cli.md), [packaging](packaging.md) and
 - [Futures, streams and scheduling](design/async.md)
 - [Reactivity](design/reactivity.md)
 - [Binding generation](design/generation.md)
-
-[Website deployment](website.md) covers hosting and social previews.

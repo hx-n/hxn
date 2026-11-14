@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en" prefix="og: https://ogp.me/ns#">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#000000">
+  <title>Call Haxe from Rust — hxn</title>
+  <meta name="description" content="Paint a picture with a Haxe function and let callback exceptions reach the caller.">
+  <meta name="robots" content="index, follow, max-image-preview:large">
+  <link rel="canonical" href="https://hxn.dev/tutorials/callbacks/">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="hxn">
+  <meta property="og:locale" content="en_GB">
+  <meta property="og:title" content="Call Haxe from Rust — hxn">
+  <meta property="og:description" content="Paint a picture with a Haxe function and let callback exceptions reach the caller.">
+  <meta property="og:url" content="https://hxn.dev/tutorials/callbacks/">
+  <meta property="og:image" content="https://hxn.dev/og-hero.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="2400">
+  <meta property="og:image:height" content="1260">
+  <meta property="og:image:alt" content="hxn — Native Rust bindings for Haxe">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Call Haxe from Rust — hxn">
+  <meta name="twitter:description" content="Paint a picture with a Haxe function and let callback exceptions reach the caller.">
+  <meta name="twitter:image" content="https://hxn.dev/og-hero.png">
+  <meta name="twitter:image:alt" content="hxn — Native Rust bindings for Haxe">
+  <link rel="icon" href="/logo.png" type="image/png">
+  <link rel="apple-touch-icon" href="/logo.png">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/script.js" defer></script>
+  <script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "TechArticle", "@id": "https://hxn.dev/tutorials/callbacks/#page", "url": "https://hxn.dev/tutorials/callbacks/", "name": "Call Haxe from Rust — hxn", "description": "Paint a picture with a Haxe function and let callback exceptions reach the caller.", "inLanguage": "en", "isPartOf": {"@id": "https://hxn.dev/#website"}, "image": "https://hxn.dev/og-hero.png"}, {"@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "hxn", "item": "https://hxn.dev/"}, {"@type": "ListItem", "position": 2, "name": "Tutorials", "item": "https://hxn.dev/tutorials/"}, {"@type": "ListItem", "position": 3, "name": "Call Haxe from Rust", "item": "https://hxn.dev/tutorials/callbacks/"}]}]}</script>
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="header">
+    <a class="wordmark" href="/" aria-label="hxn home">hxn<span aria-hidden="true"> /</span></a>
+    <nav class="header-links" aria-label="Main"><a href="/tutorials/" aria-current="true">Tutorials</a><a class="source-link" href="https://github.com/hx-n/hxn">GitHub ↗</a></nav>
+  </header>
+  <main class="tutorial-layout">
+    <aside class="tutorial-sidebar"><nav aria-label="Tutorials"><a class="tutorial-index-link" href="/tutorials/">Tutorials</a><a href="/tutorials/cli/"><span>01</span> Create, run and package</a><a href="/tutorials/data/"><span>02</span> Pass data and handle errors</a><a href="/tutorials/callbacks/" aria-current="page"><span>03</span> Call Haxe from Rust</a><a href="/tutorials/async/"><span>04</span> Work with asynchronous results</a></nav></aside>
+    <article id="content" class="lesson">
+      <header class="lesson-heading"><p class="eyebrow">TUTORIAL / 03</p><h1>Call Haxe from Rust</h1><p class="lesson-description">Paint a picture with a Haxe function and let callback exceptions reach the caller.</p></header>
+      <nav class="lesson-toc" aria-label="On this page"><a href="#paint">Paint</a><a href="#exceptions">Exceptions</a><a href="#ownership">Ownership and bytes</a><a href="#run">Run it</a></nav>
+      <section id="paint" class="lesson-section"><h2>1. Pass a Haxe function</h2><p>The picture example lets Rust call a Haxe function for each pixel. Here is the Rust method and a Haxe caller:</p><div class="code-panel">
+  <div class="code-heading"><span>lib.rs · excerpt</span><button class="code-copy" type="button" data-copy-target="code-12" aria-label="Copy lib.rs · excerpt">Copy</button></div>
+  <pre tabindex="0" aria-label="lib.rs · excerpt"><code id="code-12" class="language-rust" data-source="examples/picture/src/lib.rs"><span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nv">paint</span><span class="o">&lt;</span><span class="nc">E</span><span class="o">&gt;</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span><span class="w"> </span><span class="nv">self</span><span class="p">,</span><span class="w"> </span><span class="nv">shade</span><span class="p">:</span><span class="w"> </span><span class="nv">impl</span><span class="w"> </span><span class="nc">Fn</span><span class="p">(</span><span class="kt">i32</span><span class="p">,</span><span class="w"> </span><span class="kt">i32</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nc">Result</span><span class="o">&lt;</span><span class="kt">i32</span><span class="p">,</span><span class="w"> </span><span class="nc">E</span><span class="o">&gt;</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nc">Result</span><span class="o">&lt;</span><span class="p">(),</span><span class="w"> </span><span class="nc">E</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="nv">y</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="mi">0</span><span class="o">..</span><span class="nv">self</span><span class="p">.</span><span class="na">height</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">for</span><span class="w"> </span><span class="nv">x</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="mi">0</span><span class="o">..</span><span class="nv">self</span><span class="p">.</span><span class="na">width</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="kd">let</span><span class="w"> </span><span class="nv">level</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nf">shade</span><span class="p">(</span><span class="nv">x</span><span class="p">,</span><span class="w"> </span><span class="nv">y</span><span class="p">)</span><span class="o">?</span><span class="p">.</span><span class="nf">clamp</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="mi">255</span><span class="p">);</span>
+<span class="w">            </span><span class="nv">self</span><span class="p">.</span><span class="na">pixels</span><span class="p">[(</span><span class="nv">y</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="nv">self</span><span class="p">.</span><span class="na">width</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nv">x</span><span class="p">)</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="kt">usize</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">level</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="kt">u8</span><span class="p">;</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="nc">Ok</span><span class="p">(())</span>
+<span class="p">}</span></code></pre>
+</div><div class="code-panel">
+  <div class="code-heading"><span>Main.hx · excerpt</span><button class="code-copy" type="button" data-copy-target="code-13" aria-label="Copy Main.hx · excerpt">Copy</button></div>
+  <pre tabindex="0" aria-label="Main.hx · excerpt"><code id="code-13" class="language-haxe" data-source="examples/picture/haxe/Main.hx"><span class="kd">var</span> <span class="nv">disc</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">Picture</span><span class="p">(</span><span class="m">25</span><span class="p">,</span> <span class="m">9</span><span class="p">);</span>
+<span class="nv">disc</span><span class="p">.</span><span class="nf">paint</span><span class="p">((</span><span class="nv">x</span><span class="p">,</span> <span class="nv">y</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="p">{</span>
+	<span class="kd">var</span> <span class="nv">dx</span> <span class="o">=</span> <span class="nv">x</span> <span class="o">-</span> <span class="m">12</span><span class="p">,</span> <span class="nv">dy</span> <span class="o">=</span> <span class="p">(</span><span class="nv">y</span> <span class="o">-</span> <span class="m">4</span><span class="p">)</span> <span class="o">*</span> <span class="m">2</span><span class="p">;</span>
+	<span class="k">return</span> <span class="nv">dx</span> <span class="o">*</span> <span class="nv">dx</span> <span class="o">+</span> <span class="nv">dy</span> <span class="o">*</span> <span class="nv">dy</span> <span class="o">&lt;=</span> <span class="m">36</span> <span class="o">?</span> <span class="m">255</span> <span class="p">:</span> <span class="m">0</span><span class="p">;</span>
+<span class="p">});</span></code></pre>
+</div><p>The callback runs during <code>paint</code>, on the calling Haxe thread. Rust uses <code>?</code> to stop painting when it fails.</p></section><section id="exceptions" class="lesson-section"><h2>2. Throw from the callback</h2><div class="code-panel">
+  <div class="code-heading"><span>Main.hx · excerpt</span><button class="code-copy" type="button" data-copy-target="code-14" aria-label="Copy Main.hx · excerpt">Copy</button></div>
+  <pre tabindex="0" aria-label="Main.hx · excerpt"><code id="code-14" class="language-haxe" data-source="examples/picture/haxe/Main.hx"><span class="k">try</span> <span class="p">{</span>
+	<span class="nv">disc</span><span class="p">.</span><span class="nf">paint</span><span class="p">((</span><span class="nv">x</span><span class="p">,</span> <span class="nv">y</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="p">{</span>
+		<span class="k">if</span> <span class="p">(</span><span class="nv">x</span> <span class="o">==</span> <span class="m">5</span><span class="p">)</span>
+			<span class="k">throw</span> <span class="k">new</span> <span class="nv">haxe</span><span class="p">.</span><span class="nc">Exception</span><span class="p">(</span><span class="s1">&#39;gave up at column </span><span class="si">$x</span><span class="s1">&#39;</span><span class="p">);</span>
+		<span class="k">return</span> <span class="m">0</span><span class="p">;</span>
+	<span class="p">});</span>
+<span class="p">}</span> <span class="k">catch</span> <span class="p">(</span><span class="nv">error</span><span class="p">:</span><span class="nv">haxe</span><span class="p">.</span><span class="nc">Exception</span><span class="p">)</span> <span class="p">{</span>
+	<span class="nc">Sys</span><span class="p">.</span><span class="nf">println</span><span class="p">(</span><span class="nv">error</span><span class="p">.</span><span class="na">message</span><span class="p">);</span>
+<span class="p">}</span></code></pre>
+</div><p>The original Haxe exception reaches the caller of <code>paint</code> after Rust returns. Return <code>Result&lt;T, E&gt;</code> from Rust callback signatures and propagate <code>Err</code>; hxn handles the exception conversion.</p></section><section id="ownership" class="lesson-section"><h2>3. Borrow objects and return bytes</h2><div class="code-panel">
+  <div class="code-heading"><span>Main.hx · excerpt</span><button class="code-copy" type="button" data-copy-target="code-15" aria-label="Copy Main.hx · excerpt">Copy</button></div>
+  <pre tabindex="0" aria-label="Main.hx · excerpt"><code id="code-15" class="language-haxe" data-source="examples/picture/haxe/Main.hx"><span class="kd">var</span> <span class="nv">line</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">Picture</span><span class="p">(</span><span class="m">25</span><span class="p">,</span> <span class="m">9</span><span class="p">);</span>
+<span class="nv">line</span><span class="p">.</span><span class="nf">paint</span><span class="p">((</span><span class="nv">x</span><span class="p">,</span> <span class="nv">y</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nv">y</span> <span class="o">==</span> <span class="m">4</span> <span class="o">?</span> <span class="m">255</span> <span class="p">:</span> <span class="m">0</span><span class="p">);</span>
+
+<span class="c1">// One object is passed as a parameter to another object&#39;s method.</span>
+<span class="nv">disc</span><span class="p">.</span><span class="nf">lighten</span><span class="p">(</span><span class="nv">line</span><span class="p">);</span></code></pre>
+</div><div class="code-panel">
+  <div class="code-heading"><span>lib.rs · excerpt</span><button class="code-copy" type="button" data-copy-target="code-16" aria-label="Copy lib.rs · excerpt">Copy</button></div>
+  <pre tabindex="0" aria-label="lib.rs · excerpt"><code id="code-16" class="language-rust" data-source="examples/picture/src/lib.rs"><span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">pixels</span><span class="p">(</span><span class="o">&amp;</span><span class="nv">self</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nc">Vec</span><span class="o">&lt;</span><span class="kt">u8</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nv">self</span><span class="p">.</span><span class="na">pixels</span><span class="p">.</span><span class="nf">clone</span><span class="p">()</span>
+<span class="p">}</span></code></pre>
+</div><p><code>lighten(&amp;mut self, other: &amp;Picture)</code> borrows the second picture for the call. Both Haxe objects remain usable. <code>Vec&lt;u8&gt;</code> becomes <code>haxe.io.Bytes</code>; use <code>pixels.get(index)</code> to read it. Call <code>close()</code> to release a picture promptly; otherwise its finalizer releases it.</p></section><section id="run" class="lesson-section"><h2>Run the example</h2><p>From the repository root, run the complete example:</p><div class="code-panel">
+  <div class="code-heading"><span>Run picture</span><button class="code-copy" type="button" data-copy-target="code-17" aria-label="Copy Run picture">Copy</button></div>
+  <pre tabindex="0" aria-label="Run picture"><code id="code-17" class="language-bash"><span class="nb">cd</span><span class="w"> </span>examples/picture
+hxn<span class="w"> </span>run<span class="w"> </span>hl</code></pre>
+</div><p><a href="https://github.com/hx-n/hxn/tree/main/examples/picture">Full Rust and Haxe source ↗</a> · Use <code>hxn run cpp</code> for hxcpp.</p></section>
+      <nav class="lesson-paging" aria-label="Continue learning"><a href="/tutorials/data/">← Previous</a><a href="/tutorials/async/">Work with asynchronous results →</a></nav>
+    </article>
+  </main>
+  <p id="copy-status" class="sr-only" role="status" aria-live="polite"></p>
+  <footer><p>HashLink · Ash · hxcpp</p><a href="https://github.com/hx-n/hxn/blob/main/LICENSE">Open source · Apache 2.0</a></footer>
+</body>
+</html>
