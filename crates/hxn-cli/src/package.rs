@@ -8,7 +8,7 @@
 //! | `<library>.hxn.json` | the manifest, which `hxn.Bind` uses to locate the package |
 //! | `binding/` | the library's Haxe classes, the same for every runtime |
 //! | `include/` | `hxn.h` and the library's headers, for hxcpp |
-//! | `native/<triple>/` | the built libraries for one target triple, which may be a wasm one; for hxcpp also `link.xml`, the system libraries the archive links. A HashLink library built with `--target` is the archive `lib<library>.a`, which Ash links into the program |
+//! | `native/<triple>/` | the built libraries for one target triple, which may be a wasm one; for hxcpp also `link.xml`, the libraries the archive links, with those a build script found outside the system beside it. A HashLink library built with `--target` is the archive `lib<library>.a`, which Ash links into the program |
 //!
 //! Only `native/` differs between platforms. Packaging on another machine
 //! into the same directory, or copying that machine's `native/<triple>/` into
@@ -109,10 +109,9 @@ pub fn package(
         std::fs::copy(&built.library, native.join(packaged(name, target, &built)))
             .map_err(|error| format!("{}: {error}", built.library.display()))?;
         // What the hxcpp archive links, beside it.
-        let link = built.dir.join("link.xml");
-        if target.runtime == Runtime::Cpp && link.is_file() {
-            std::fs::copy(&link, native.join("link.xml"))
-                .map_err(|error| format!("{}: {error}", link.display()))?;
+        if target.runtime == Runtime::Cpp {
+            let xml = built.linked.package(target.windows(), &native)?;
+            write(&native.join("link.xml"), &xml)?;
         }
         if !triples.contains(&triple) {
             triples.push(triple);

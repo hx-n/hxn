@@ -55,7 +55,9 @@ scripts link, from cargo's messages, and what rustc lists for the archive
 (`--print native-static-libs`), which includes what a crate links with
 `#[link]`, such as a system framework. The C library, libm and libSystem are
 left out, since every program links them, and so is an MSVC C runtime, since
-hxcpp links its own.
+hxcpp links its own. In a package, a library found in a build script's
+directory, such as the import library the `windows` crate ships, is copied
+beside `link.xml` and named from there; the others are the system's.
 
 Libraries maintaining adapters themselves call `hxn-gen` from build scripts,
 as in `tests/counter`.

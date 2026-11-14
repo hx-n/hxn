@@ -91,7 +91,7 @@ impl Target {
     }
 
     // Whether the target platform is Windows.
-    fn windows(self) -> bool {
+    pub(crate) fn windows(self) -> bool {
         self.cross
             .map_or(cfg!(windows), |triple| triple.contains("windows"))
     }
@@ -163,6 +163,8 @@ pub struct Built {
     /// The build artifact: the library a VM loads, or the static library
     /// hxcpp links.
     pub library: PathBuf,
+    /// For hxcpp, what the static library needs linked with it.
+    pub linked: Linked,
 }
 
 // Writes `text` to `path` unless the file already has that content, so that
@@ -294,27 +296,56 @@ impl Linked {
     /// The hxcpp build XML that links these, for a program built for
     /// Windows or not.
     pub fn xml(&self, windows: bool) -> String {
+        let libraries: Vec<String> = self
+            .libraries
+            .iter()
+            .map(|library| system_library(library, windows))
+            .collect();
+        self.text(&self.paths, &libraries, windows)
+    }
+
+    /// The build XML for a package, written into `into`. A library found in
+    /// a build script's directory, which is on the machine that packaged
+    /// it, is copied beside the XML and named from there; the rest are the
+    /// system's.
+    pub fn package(&self, windows: bool, into: &Path) -> Result<String, String> {
+        let mut libraries = Vec::new();
+        for library in &self.libraries {
+            let file = if windows {
+                format!("{library}.lib")
+            } else {
+                format!("lib{library}.a")
+            };
+            let found = self
+                .paths
+                .iter()
+                .map(|dir| Path::new(dir).join(&file))
+                .find(|path| path.is_file());
+            match found {
+                Some(path) => {
+                    std::fs::copy(&path, into.join(&file))
+                        .map_err(|error| format!("{}: {error}", path.display()))?;
+                    libraries.push(format!("${{this_dir}}/{file}"));
+                }
+                None => libraries.push(system_library(library, windows)),
+            }
+        }
+        Ok(self.text(&[], &libraries, windows))
+    }
+
+    fn text(&self, paths: &[String], libraries: &[String], windows: bool) -> String {
         let mut out = String::from(
             "<xml>\n<!-- Written by hxn: what the library links. -->\n<target id=\"haxe\">\n",
         );
-        let escape = |text: &str| {
-            text.replace('&', "&amp;")
-                .replace('"', "&quot;")
-                .replace('<', "&lt;")
-        };
-        for path in &self.paths {
+        for path in paths {
             if windows {
                 out.push_str(&format!("\t<flag value=\"-libpath:{}\"/>\n", escape(path)));
             } else {
                 out.push_str(&format!("\t<flag value=\"-L{}\"/>\n", escape(path)));
             }
         }
-        for library in &self.libraries {
-            if windows {
-                out.push_str(&format!("\t<lib name=\"{}.lib\"/>\n", escape(library)));
-            } else {
-                out.push_str(&format!("\t<lib name=\"-l{}\"/>\n", escape(library)));
-            }
+        for library in libraries {
+            out.push_str(&format!("\t<lib name=\"{}\"/>\n", escape(library)));
         }
         for framework in &self.frameworks {
             out.push_str(&format!(
@@ -325,6 +356,21 @@ impl Linked {
         out.push_str("</target>\n</xml>\n");
         out
     }
+}
+
+// How the linker is given a library it finds on its own search path.
+fn system_library(library: &str, windows: bool) -> String {
+    if windows {
+        format!("{library}.lib")
+    } else {
+        format!("-l{library}")
+    }
+}
+
+fn escape(text: &str) -> String {
+    text.replace('&', "&amp;")
+        .replace('"', "&quot;")
+        .replace('<', "&lt;")
 }
 
 // Runs cargo with `--message-format=json-render-diagnostics` and reads what
@@ -840,6 +886,7 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
         classes: haxe,
         include: out.join("include"),
         library: built,
+        linked,
     })
 }
 
@@ -905,6 +952,26 @@ mod tests {
                 .xml(false)
                 .contains("<target id=\"haxe\">\n</target>")
         );
+    }
+
+    #[test]
+    fn a_package_carries_the_libraries_its_build_scripts_found() {
+        let root = std::env::temp_dir().join(format!("hxn-linked-{}", std::process::id()));
+        let (found, into) = (root.join("registry"), root.join("native"));
+        std::fs::create_dir_all(&found).unwrap();
+        std::fs::create_dir_all(&into).unwrap();
+        std::fs::write(found.join("windows.0.52.0.lib"), "import").unwrap();
+        let linked = Linked {
+            libraries: vec![String::from("windows.0.52.0"), String::from("kernel32")],
+            frameworks: Vec::new(),
+            paths: vec![found.to_string_lossy().into_owned()],
+        };
+        let xml = linked.package(true, &into).unwrap();
+        assert!(xml.contains("<lib name=\"${this_dir}/windows.0.52.0.lib\"/>"));
+        assert!(xml.contains("<lib name=\"kernel32.lib\"/>"));
+        assert!(!xml.contains("-libpath:"));
+        assert!(into.join("windows.0.52.0.lib").is_file());
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]
