@@ -68,7 +68,8 @@ class Bind {
 					return path;
 			}
 			var held = FileSystem.isDirectory(Path.join([root, "native"])) ? FileSystem.readDirectory(Path.join([root, "native"])) : [];
-			return fail('the package in $root has no ${files[0]} for $triple; it has libraries for: ${held.join(", ")}. Run `hxn package $runtime` where Rust builds for $triple, or name another with -D hxn_triple=<triple>');
+			var has = held.length == 0 ? "none" : held.join(", ");
+			return fail('the package in $root has no ${files[0]} for $triple (it has native libraries for: $has). Install a release of the package that includes $triple, run `hxn package $runtime` where Rust builds for $triple, or name another with -D hxn_triple=<triple>');
 		}
 		switch runtime {
 			case "hl":
