@@ -41,6 +41,13 @@ the library's own `hxn` source; command and crate versions must match.
 The adapter lockfile is refreshed when the library's `Cargo.lock` changes.
 Support Haxe classes, headers and compiler arguments accompany the binding.
 
+A static library does not carry the native libraries it needs to the
+program's link. For hxcpp, `hxn` writes them into `link.xml`: what the build
+scripts link, from cargo's messages, and what rustc lists for the archive
+(`--print native-static-libs`), which includes what a crate links with
+`#[link]`, such as a system framework. An MSVC C runtime is left out, since
+hxcpp links its own.
+
 Libraries maintaining adapters themselves call `hxn-gen` from build scripts,
 as in `tests/counter`.
 

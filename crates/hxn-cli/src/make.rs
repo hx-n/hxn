@@ -251,6 +251,43 @@ impl Linked {
         out
     }
 
+    /// Adds what rustc's `--print native-static-libs` lists: `-lname`,
+    /// `-framework Name`, or `name.lib` for MSVC. A system library hxcpp's
+    /// program links anyway is listed again, which is harmless; an MSVC C
+    /// runtime is left out, since hxcpp links its own.
+    fn add_native(&mut self, listed: &str) {
+        const RUNTIMES: [&str; 9] = [
+            "msvcrt",
+            "msvcrtd",
+            "libcmt",
+            "libcmtd",
+            "ucrt",
+            "libucrt",
+            "vcruntime",
+            "libvcruntime",
+            "oldnames",
+        ];
+        let mut words = listed.split_whitespace();
+        while let Some(word) = words.next() {
+            let (list, name) = if word == "-framework" {
+                let Some(name) = words.next() else { break };
+                (&mut self.frameworks, name)
+            } else if let Some(name) = word.strip_prefix("-l") {
+                (&mut self.libraries, name)
+            } else if let Some(name) = word.strip_suffix(".lib") {
+                if RUNTIMES.contains(&name.to_ascii_lowercase().as_str()) {
+                    continue;
+                }
+                (&mut self.libraries, name)
+            } else {
+                continue;
+            };
+            if !list.iter().any(|known| known == name) {
+                list.push(name.to_owned());
+            }
+        }
+    }
+
     /// The hxcpp build XML that links these, for a program built for
     /// Windows or not.
     pub fn xml(&self, windows: bool) -> String {
@@ -662,8 +699,14 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
             .map_err(|error| format!("{}: {error}", library_lock.display()))?;
     }
     let mut cargo = Command::new("cargo");
+    // The hxcpp archive is built with `cargo rustc`, so that rustc, asked
+    // for this crate alone, writes out the native libraries it needs.
+    if runtime == Runtime::Cpp {
+        cargo.args(["rustc", "--lib"]);
+    } else {
+        cargo.arg("build");
+    }
     cargo
-        .arg("build")
         .arg("--manifest-path")
         .arg(krate.join("Cargo.toml"))
         .arg("--target-dir")
@@ -709,9 +752,21 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
     }
     // For hxcpp, what the library's build scripts link is read from cargo's
     // messages: a static library does not carry it to the program's link.
+    // So does rustc, for what a crate links with `#[link]` in its source,
+    // such as a system framework.
     let linked = if runtime == Runtime::Cpp {
-        cargo.arg("--message-format=json-render-diagnostics");
-        linked_by(&mut cargo)?
+        let native = dir.join("native-static-libs.txt");
+        cargo
+            .arg("--message-format=json-render-diagnostics")
+            .arg("--")
+            .arg(format!("--print=native-static-libs={}", text(&native)));
+        let mut linked = linked_by(&mut cargo)?;
+        // Kept from the last build that compiled the crate: an unchanged
+        // crate is not compiled again.
+        if let Ok(listed) = std::fs::read_to_string(&native) {
+            linked.add_native(&listed);
+        }
+        linked
     } else {
         run(&mut cargo)?;
         Linked::default()
@@ -833,8 +888,16 @@ mod tests {
             "{\"reason\":\"build-script-executed\",\"linked_libs\":[\"sqlite3\",\"static=tally_c\",\"dylib=z\",\"framework=Security\"],\"linked_paths\":[\"native=/opt/lib\"]}\n",
             "not json\n",
         );
-        let linked = Linked::read(messages);
+        let mut linked = Linked::read(messages);
         assert_eq!(linked.libraries, ["sqlite3", "z"]);
+        linked.add_native("-framework CoreVideo -lobjc -lsqlite3 -lSystem kernel32.lib msvcrt.lib");
+        assert_eq!(linked.frameworks, ["Security", "CoreVideo"]);
+        assert_eq!(
+            linked.libraries,
+            ["sqlite3", "z", "objc", "System", "kernel32"]
+        );
+        linked.frameworks.truncate(1);
+        linked.libraries.truncate(2);
         assert_eq!(linked.frameworks, ["Security"]);
         assert_eq!(linked.paths, ["/opt/lib"]);
         let xml = linked.xml(false);
