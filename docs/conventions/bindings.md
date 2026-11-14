@@ -3,7 +3,7 @@
 [Design](../design.md) · [Conventions](../conventions.md)
 
 - Share one `hxn.Inbox` and one `hxn.Gc.Meter` per library.
-- Wrap primitive function values: `raw -> Native.take(raw)`.
+- Wrap a returned handle in its class: `Thing.hxnAdopt(raw)`.
 - Catch callback exceptions with `hxn.Callback.failed`; return null, or
   false for void callbacks. Invoke native code inside `Callback.during`.
 - Store retained functions in Haxe fields and pass them on each call.

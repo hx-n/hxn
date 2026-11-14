@@ -5,8 +5,8 @@
 # hxn
 
 Use the same Rust library from Haxe on HashLink, Ash and hxcpp, natively and
-on wasm. Annotate the Rust types and methods to expose; hxn generates the Haxe
-classes and native adapters for each target.
+on wasm. Annotate the Rust types and methods to expose; hxn generates one set
+of Haxe classes for every runtime and a native adapter for each target.
 
 See [CLI usage](docs/cli.md), [packaging](docs/packaging.md),
 [design](docs/design.md) and [conventions](docs/conventions.md).
@@ -156,8 +156,8 @@ haxe -lib greeter -cp src -main Main -hl main.hl
 
 The package depends on the `hxn` haxelib, this repository, for hxn's own
 classes, so every hxn library a program uses shares them. `-lib greeter`
-runs the macro `hxn.Bind.lib("greeter")`, which selects the
-classes for the compile target, passes hxcpp the header and library paths,
+runs the macro `hxn.Bind.lib("greeter")`, which adds the package's classes,
+passes hxcpp the header and library paths,
 and for HashLink copies `greeter.hdll` next to `main.hl`. The package
 contains native libraries for the machine it was built on. To add more, run
 `hxn package` with the same output directory on another machine, or with

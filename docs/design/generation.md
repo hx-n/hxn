@@ -30,10 +30,16 @@ Attribute macros retain the Rust items and remove marker notes. The generator
 writes separate adapter crates, which macro expansion cannot populate.
 Free functions become static methods of the library's class or `class = "Name"`.
 
-HashLink classes declare private `@:hlNative` methods. hxcpp uses one extern
-class for glue calls and build settings; generated classes contain no inline
-C++. CPPIA gets extern declarations and calls the binding through an hxcpp
-host containing the generated and support classes.
+The classes are the same on every runtime. They call one native class,
+`Hxn<Library>Native`, which hxn-gen writes as declarations in Haxe types:
+`static function greeter_greet(self:hxn.Handle, name:String):String;`. Its
+`@:build(hxn.Native.library("<library>"))` gives each a body for the runtime
+being compiled. On HashLink it calls the library's `@:hlNative` primitive,
+converting text, bytes and lent functions. On hxcpp it calls the glue
+header's function through an extern class, and gives a returned handle a
+finalizer that releases it. Generated classes contain no inline C++ and no
+runtime's types. A CPPIA script compiles against the same classes with
+`-D dll_import` and calls those its hxcpp host contains.
 
 ## Adapter builds
 
@@ -57,11 +63,12 @@ as in `tests/counter`.
 ## Packaged bindings
 
 `hxn.Bind.lib`, from the `hxn` haxelib a package depends on, finds the package
-manifest, validates its version and selects the pre-generated classes. Generating classes and adapters together prevents
-signature drift. The macro adds header/archive paths, the target word size
-and the native library selected by Haxe's target defines or `hxn_triple`.
-For HashLink it copies the `.hdll` or `.wasm` beside the program. CPPIA
-scripts get declarations only; `-D scriptable` hosts retain all binding and
-support classes.
+manifest, validates its version and adds the pre-generated classes.
+Generating classes and adapters together prevents signature drift. The macro
+adds header/archive paths, the target word size and the native library
+selected by Haxe's target defines or `hxn_triple`.
+For HashLink it copies the `.hdll` or `.wasm` beside the program. A
+`-D scriptable` host retains all binding and support classes for its
+scripts.
 
 See [packaging](../packaging.md) and [binding rules](../conventions/bindings.md).

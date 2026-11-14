@@ -11,8 +11,7 @@ Haxe programs use it with `-lib <library>` and need no Rust source.
 | Path | Contents |
 |---|---|
 | `<library>.hxn.json` | API manifest. |
-| `binding/hl/`, `binding/cpp/` | Generated classes. |
-| `binding/cppia/` | Script declarations. |
+| `binding/` | Generated classes, the same for every runtime. |
 | `include/` | C headers and glue. |
 | `native/<triple>/` | Native library for each packaged target. |
 | `haxelib.json`, `extraParams.hxml` | Metadata, the dependency on `hxn`, and automatic `hxn.Bind.lib` setup. |

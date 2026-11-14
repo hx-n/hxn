@@ -11,8 +11,7 @@
 //! | the adapter exporting HashLink primitives | [`hl_adapter`] |
 //! | the C header for the C ABI adapter | [`c_header`] |
 //! | the C++ glue hxcpp calls it through | [`cpp_glue`] |
-//! | the Haxe classes | [`haxe_hl`], [`haxe_cpp`] |
-//! | declarations of the hxcpp classes, for a CPPIA script | [`haxe_cppia`] |
+//! | the Haxe classes, the same on every runtime | [`haxe_classes`] |
 //!
 //! The library itself is not changed and depends on no runtime. Each adapter
 //! is emitted as the text of a source file that a separate thin crate
@@ -33,7 +32,7 @@ mod rust;
 
 pub use c::{c_header, cpp_glue};
 pub use classes::haxe_classes;
-pub use haxe::{File, haxe_cpp, haxe_cppia, haxe_hl};
+pub use haxe::File;
 pub use manifest::manifest;
 pub use model::{
     Case, Data, Enumeration, Error, Field, FieldDefault, Interface, Library, Method, Number, Param,

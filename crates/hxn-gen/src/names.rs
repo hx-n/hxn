@@ -246,11 +246,6 @@ pub fn wanted_export(library: &Library) -> String {
     format!("{}_memory_wanted", symbols(library))
 }
 
-/// The hxcpp class that owns a returned atomic cell: `HxnCounterCell`.
-pub fn cell_class(library: &Library) -> String {
-    helper_class(library, "Cell")
-}
-
 /// The hxcpp extern class the glue is called through: `HxnCounterNative`.
 pub fn native_class(library: &Library) -> String {
     helper_class(library, "Native")
