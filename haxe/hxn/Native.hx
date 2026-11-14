@@ -41,6 +41,10 @@ class Native {
 		var kept = [for (field in fields) if (!isDeclaration(field)) field];
 		if (Context.defined("hl"))
 			return kept.concat(new hxn.native.HashLink(name).implement(declared));
+		// A CPPIA script calls the class its host contains, which it is
+		// compiled without (`-D dll_import`), so it only types it.
+		if (Context.defined("cppia"))
+			return kept.concat([for (field in declared) stub(field)]);
 		if (Context.defined("cpp"))
 			return kept.concat(new hxn.native.Hxcpp(name).implement(declared));
 		// Elsewhere, such as an editor's completion, the declarations are only
