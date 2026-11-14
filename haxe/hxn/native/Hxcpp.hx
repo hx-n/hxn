@@ -94,7 +94,7 @@ import hxn.Native;
 			case "hxn.Handle":
 				args.push({name: name, type: Native.type(RAW)});
 				passed.push(macro $i{name} == null ? null : $i{name}.raw);
-			case "hxn.AtomicInt":
+			case "hxn.AtomicInt" | "hxn.AtomicBool":
 				args.push({name: name, type: Native.type("cpp.RawPointer<Int>")});
 				passed.push(macro $i{name} == null ? null : $i{name}.pointer.raw);
 			case "function":
@@ -119,7 +119,12 @@ import hxn.Native;
 		return switch Native.kind(ret) {
 			case "Void": made;
 			case "String" | "Bool" | "Int" | "Float" | "haxe.Int64": macro return $made;
-			case "haxe.io.Bytes": macro return haxe.io.Bytes.ofData($made);
+			// Null when the library returned none, as `thrown_take` does.
+			case "haxe.io.Bytes":
+				macro {
+					var data = $made;
+					return data == null ? null : haxe.io.Bytes.ofData(data);
+				};
 			case "hxn.Handle": macro return hxnOwn($made);
 			// The library owns the cell; the returned atomic keeps its owner.
 			case "hxn.AtomicInt":

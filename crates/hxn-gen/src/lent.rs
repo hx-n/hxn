@@ -73,7 +73,7 @@ pub fn given(library: &Library) -> Vec<&str> {
 
 // A type's wire type: the type itself, or its data's wire type. Two shapes
 // that differ only in their data types are one shape.
-fn crossed(ty: &Type) -> Type {
+pub(crate) fn crossed(ty: &Type) -> Type {
     match ty {
         Type::Data(data) => data.wire().unwrap_or(Type::Bytes),
         other => other.clone(),

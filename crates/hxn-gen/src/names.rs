@@ -203,15 +203,21 @@ pub fn release(library: &Library) -> String {
     format!("{}_release", symbols(library))
 }
 
-/// The HashLink abstract type name for an interface's values.
-pub fn abstract_name(library: &Library, interface: &str) -> String {
-    format!("{}_{}", library.name, snake(interface))
+/// The HashLink abstract type every handle crosses as: one name for every
+/// interface, weak reference, cell and result over time, since a handle
+/// checks its own type when used, and a library's Haxe classes pass them
+/// all as one `hxn.Handle`.
+pub const HANDLE_ABSTRACT: &str = "hxn_handle";
+
+/// The HashLink abstract type of an interface's values.
+pub fn abstract_name(_library: &Library, _interface: &str) -> String {
+    String::from(HANDLE_ABSTRACT)
 }
 
 /// The HashLink abstract type name for a weak reference to a shared
 /// interface's value.
-pub fn weak_abstract(library: &Library, interface: &str) -> String {
-    format!("{}_weak", abstract_name(library, interface))
+pub fn weak_abstract(_library: &Library, _interface: &str) -> String {
+    String::from(HANDLE_ABSTRACT)
 }
 
 /// The Haxe class of a weak reference to a shared interface's value.
@@ -220,8 +226,8 @@ pub fn weak_class(interface: &str) -> String {
 }
 
 /// The HashLink abstract type name for an atomic cell the library returned.
-pub fn cell_abstract(library: &Library) -> String {
-    format!("{}_atomic", library.name)
+pub fn cell_abstract(_library: &Library) -> String {
+    String::from(HANDLE_ABSTRACT)
 }
 
 /// The symbol that returns the address of an atomic cell the library

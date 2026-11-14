@@ -20,6 +20,7 @@
 //! whichever binding is built.
 
 mod c;
+mod classes;
 mod data;
 mod haxe;
 mod later;
@@ -31,6 +32,7 @@ mod parse;
 mod rust;
 
 pub use c::{c_header, cpp_glue};
+pub use classes::haxe_classes;
 pub use haxe::{File, haxe_cpp, haxe_cppia, haxe_hl};
 pub use manifest::manifest;
 pub use model::{

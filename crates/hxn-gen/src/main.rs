@@ -77,6 +77,9 @@ fn run() -> Result<(), String> {
     for file in hxn_gen::haxe_cppia(&library) {
         write(&out.join("haxe/cppia").join(&file.path), &file.text)?;
     }
+    for file in hxn_gen::haxe_classes(&library) {
+        write(&out.join("haxe/classes").join(&file.path), &file.text)?;
+    }
     Ok(())
 }
 

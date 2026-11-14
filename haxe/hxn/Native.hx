@@ -21,17 +21,17 @@ using haxe.macro.ExprTools;
 	returned handle a finalizer that releases it.
 
 	A declaration's types are `Bool`, `Int`, `Float`, `haxe.Int64`, `String`,
-	`haxe.io.Bytes`, `hxn.Handle`, `hxn.AtomicInt`, `Void` for a result, and
+	`haxe.io.Bytes`, `hxn.Handle`, `hxn.AtomicInt` or `hxn.AtomicBool`, `Void`
+	for a result, and
 	for a lent function a function type of those: the binding's guard, which
 	reports a failure by returning `false` or `null`.
 
 	Each runtime's implementation is a class in `hxn.native`: `HashLink` and
 	`Hxcpp`.
 
-	`@:hxn.abstract(name, type)` names the HashLink abstract type of a handle:
-	of the argument `name`, of the result for `return`, or of a lent
-	function's argument as `name.position`. A returned `hxn.AtomicInt` names
-	its cell's abstract type the same way.
+	`@:hxn.given("name.position", export)` names, for a lent function's
+	argument that is an object, the library's export that gives HashLink
+	native code's pointer to it a type: `counter_adopt_lent`.
 **/
 class Native {
 	#if macro
@@ -71,12 +71,12 @@ class Native {
 	public static function returnType(f:Function):ComplexType
 		return f.ret == null ? type("Void") : f.ret;
 
-	// The abstract type each handle crosses as on HashLink, by argument name,
-	// `return`, or `name.position` for a lent function's argument.
-	public static function abstracts(field:Field):Map<String, String> {
+	// For each lent function's argument that is an object, by
+	// `name.position`, the export that types HashLink's pointer to it.
+	public static function given(field:Field):Map<String, String> {
 		var out = new Map<String, String>();
 		for (entry in field.meta)
-			if (entry.name == ":hxn.abstract" && entry.params.length == 2)
+			if (entry.name == ":hxn.given" && entry.params.length == 2)
 				out[entry.params[0].getValue()] = entry.params[1].getValue();
 		return out;
 	}
