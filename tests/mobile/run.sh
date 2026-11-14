@@ -118,13 +118,13 @@ for example in "$root"/examples/*/; do
 	(cd "$example" && "$hxn" package "$runtime" --target "$triple" --out "$package" >/dev/null)
 	if [ "$runtime" = hl ]; then
 		# hxn.Bind copies the library's archive next to main.hl.
-		(cd "$dir" && haxe -cp "$example/haxe" -cp "$package" "$package/extraParams.hxml" \
+		(cd "$dir" && haxe -cp "$example/haxe" -cp "$root/haxe" -cp "$package" "$package/extraParams.hxml" \
 			-D "hxn_triple=$triple" -main Main -hl main.hl >"$dir/build.txt" 2>&1 &&
 			$ash --build program --target "$triple" \
 				$(for archive in lib*.a; do printf -- '--native-lib %s ' "$archive"; done) \
 				main.hl >>"$dir/build.txt" 2>&1)
 	else
-		(cd "$dir" && haxe -cp "$example/haxe" -cp "$package" "$package/extraParams.hxml" \
+		(cd "$dir" && haxe -cp "$example/haxe" -cp "$root/haxe" -cp "$package" "$package/extraParams.hxml" \
 			-main Main -cpp out "${defines[@]}" >"$dir/build.txt" 2>&1 &&
 			link "$dir")
 	fi || {

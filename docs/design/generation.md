@@ -56,8 +56,8 @@ as in `tests/counter`.
 
 ## Packaged bindings
 
-`hxn.Bind.lib` finds the package manifest, validates its version and selects
-the pre-generated classes. Generating classes and adapters together prevents
+`hxn.Bind.lib`, from the `hxn` haxelib a package depends on, finds the package
+manifest, validates its version and selects the pre-generated classes. Generating classes and adapters together prevents
 signature drift. The macro adds header/archive paths, the target word size
 and the native library selected by Haxe's target defines or `hxn_triple`.
 For HashLink it copies the `.hdll` or `.wasm` beside the program. CPPIA

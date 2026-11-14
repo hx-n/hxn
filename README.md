@@ -149,11 +149,14 @@ can compile against this package without the library's Rust source:
 
 ```
 hxn package --release --out ../greeter-haxelib
+haxelib git hxn https://github.com/hx-n/hxn
 haxelib dev greeter ../greeter-haxelib
 haxe -lib greeter -cp src -main Main -hl main.hl
 ```
 
-`-lib greeter` runs the macro `hxn.Bind.lib("greeter")`, which selects the
+The package depends on the `hxn` haxelib, this repository, for hxn's own
+classes, so every hxn library a program uses shares them. `-lib greeter`
+runs the macro `hxn.Bind.lib("greeter")`, which selects the
 classes for the compile target, passes hxcpp the header and library paths,
 and for HashLink copies `greeter.hdll` next to `main.hl`. The package
 contains native libraries for the machine it was built on. To add more, run

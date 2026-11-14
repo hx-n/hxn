@@ -94,7 +94,8 @@ grep -q 'do not pass --wasm' "$work/doctor-wasm.txt" || { cat "$work/doctor-wasm
 # As a package: a program's build refers to the package and its macro, and
 # to none of the paths of its classes, headers or library.
 "$hxn" package "${packaged[@]}" --out "$work/package"
-# The package supplies the tuple type and its constructor macro on its own.
+# hxn's classes, which a program gets from the `hxn` haxelib the package
+# depends on, supply the tuple type and its constructor macro.
 mkdir "$work/tuple"
 cat >"$work/tuple/TupleProbe.hx" <<'EOF'
 import hxn.Tuple;
@@ -113,7 +114,7 @@ class TupleProbe {
 	}
 }
 EOF
-haxe -cp "$work/package" -cp "$work/tuple" -main TupleProbe --interp
+haxe -cp "$root/haxe" -cp "$work/package" -cp "$work/tuple" -main TupleProbe --interp
 for invalid in \
 	'var pair:hxn.Tuple<String, Int> = hxn.Tuple.of("name", "wrong");' \
 	'var pair:hxn.Tuple<String, Int> = hxn.Tuple.of("name");' \
@@ -125,7 +126,7 @@ for invalid in \
 	'var pair = hxn.Tuple.of("name", 42); pair.set(-1, 0);' \
 	'var pair = hxn.Tuple.of("name", 42); var index = 1; pair.at(index);'; do
 	printf '%s\n' 'class BadTuple { static function main() {' "$invalid" '} }' >"$work/tuple/BadTuple.hx"
-	if haxe -cp "$work/package" -cp "$work/tuple" -main BadTuple --no-output >"$work/tuple/error.txt" 2>&1; then
+	if haxe -cp "$root/haxe" -cp "$work/package" -cp "$work/tuple" -main BadTuple --no-output >"$work/tuple/error.txt" 2>&1; then
 		echo "FAILED: the tuple type accepted $invalid" >&2
 		exit 1
 	fi
@@ -133,7 +134,7 @@ done
 mkdir "$work/program"
 (
 	cd "$work/program"
-	compile=(haxe -cp "$work/greeter/haxe" -cp "$work/package" "$work/package/extraParams.hxml" -main Main)
+	compile=(haxe -cp "$work/greeter/haxe" -cp "$root/haxe" -cp "$work/package" "$work/package/extraParams.hxml" -main Main)
 	case "$runtime" in
 		hl)
 			"${compile[@]}" -hl main.hl
@@ -159,7 +160,7 @@ class Host {
 	}
 }
 EOF
-			haxe -cp host -cp "$work/package" "$work/package/extraParams.hxml" -main Host -cpp host/out \
+			haxe -cp host -cp "$root/haxe" -cp "$work/package" "$work/package/extraParams.hxml" -main Host -cpp host/out \
 				-D scriptable -dce no -D dll_export=host.classes
 			"${compile[@]}" -cppia main.cppia -D dll_import=host.classes
 			./host/out/Host main.cppia

@@ -1,0 +1,12 @@
+{
+  "name": "hxn",
+  "url": "https://github.com/hx-n/hxn",
+  "license": "Apache",
+  "tags": ["ffi", "rust", "native", "hashlink", "ash", "hxcpp"],
+  "description": "The Haxe classes of libraries built with hxn: futures, streams, signals, reactive values, atomics, and the macro that binds a packaged library.",
+  "version": "0.2.0",
+  "releasenote": "First haxelib release of hxn's Haxe classes.",
+  "contributors": ["darmie"],
+  "classPath": "haxe",
+  "dependencies": {}
+}
