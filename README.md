@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/logo.png" alt="hxn" width="280">
+  <img src="https://raw.githubusercontent.com/hx-n/hxn/main/docs/logo.png" alt="hxn" width="280">
 </p>
 
 # hxn
@@ -8,8 +8,10 @@ Use the same Rust library from Haxe on HashLink, Ash and hxcpp, natively and
 on wasm. Annotate the Rust types and methods to expose; hxn generates one set
 of Haxe classes for every runtime and a native adapter for each target.
 
-See [CLI usage](docs/cli.md), [packaging](docs/packaging.md),
-[design](docs/design.md) and [conventions](docs/conventions.md).
+See [CLI usage](https://github.com/hx-n/hxn/blob/main/docs/cli.md),
+[packaging](https://github.com/hx-n/hxn/blob/main/docs/packaging.md),
+[design](https://github.com/hx-n/hxn/blob/main/docs/design.md) and
+[conventions](https://github.com/hx-n/hxn/blob/main/docs/conventions.md).
 
 ## Quick setup
 
@@ -218,23 +220,23 @@ A C callback the library calls during the call is passed a Haxe function; one
 it keeps to call later, such as the one `sqlite3_update_hook` registers, is
 returned as a stream of its calls. Use `--link <library>` instead of
 `--source` to link a library that is already built. See
-[Importing C libraries](docs/design/c-import.md) for supported declarations
+[Importing C libraries](https://github.com/hx-n/hxn/blob/main/docs/design/c-import.md) for supported declarations
 and import restrictions.
 
 ## Examples
 
-[examples/](examples) contains `greeter` and six other libraries. Each example
+[examples/](https://github.com/hx-n/hxn/tree/main/examples) contains `greeter` and six other libraries. Each example
 has a Rust crate and a Haxe program that you can run from a checkout:
 
 | Example | Features |
 |---|---|
-| [greeter](examples/greeter) | A struct exposed as a Haxe class, string parameters and return values, and an error thrown as an exception. |
-| [picture](examples/picture) | A Haxe callback called by the library, a byte array return value, and an object passed as a parameter to another object's method. |
-| [primes](examples/primes) | Work done on another thread: a future that can be awaited or given a completion callback, and a stream. |
-| [downloads](examples/downloads) | An `async fn`, a value shared between the library and Haxe, and an atomic counter that Haxe reads without a native call. |
-| [thermostat](examples/thermostat) | A value the library updates, observed from Haxe as a signal. |
-| [pantry](examples/pantry) | Records and enums passed by value, an optional field, a list of records returned, and a typed error. |
-| [document](examples/document) | Wraps an existing crate (`serde_json`): JSON values as a recursive enum, objects as a map, and parse errors as a typed exception with line and column. |
+| [greeter](https://github.com/hx-n/hxn/tree/main/examples/greeter) | A struct exposed as a Haxe class, string parameters and return values, and an error thrown as an exception. |
+| [picture](https://github.com/hx-n/hxn/tree/main/examples/picture) | A Haxe callback called by the library, a byte array return value, and an object passed as a parameter to another object's method. |
+| [primes](https://github.com/hx-n/hxn/tree/main/examples/primes) | Work done on another thread: a future that can be awaited or given a completion callback, and a stream. |
+| [downloads](https://github.com/hx-n/hxn/tree/main/examples/downloads) | An `async fn`, a value shared between the library and Haxe, and an atomic counter that Haxe reads without a native call. |
+| [thermostat](https://github.com/hx-n/hxn/tree/main/examples/thermostat) | A value the library updates, observed from Haxe as a signal. |
+| [pantry](https://github.com/hx-n/hxn/tree/main/examples/pantry) | Records and enums passed by value, an optional field, a list of records returned, and a typed error. |
+| [document](https://github.com/hx-n/hxn/tree/main/examples/document) | Wraps an existing crate (`serde_json`): JSON values as a recursive enum, objects as a map, and parse errors as a typed exception with line and column. |
 
 ```
 cargo install --path crates/hxn-cli
@@ -242,8 +244,8 @@ cd examples/primes
 hxn run hl
 ```
 
-To work on hxn itself, see [AGENTS.md](AGENTS.md).
+To work on hxn itself, see [AGENTS.md](https://github.com/hx-n/hxn/blob/main/AGENTS.md).
 
 ## License
 
-Licensed under Apache-2.0. See [LICENSE](LICENSE).
+Licensed under Apache-2.0. See [LICENSE](https://github.com/hx-n/hxn/blob/main/LICENSE).
