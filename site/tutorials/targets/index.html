@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en" prefix="og: https://ogp.me/ns#">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#000000">
+  <title>Build for other targets — hxn</title>
+  <meta name="description" content="Build native, wasm and mobile bindings, then add each platform to one haxelib package.">
+  <meta name="robots" content="index, follow, max-image-preview:large">
+  <link rel="canonical" href="https://hxn.dev/tutorials/targets/">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="hxn">
+  <meta property="og:locale" content="en_GB">
+  <meta property="og:title" content="Build for other targets — hxn">
+  <meta property="og:description" content="Build native, wasm and mobile bindings, then add each platform to one haxelib package.">
+  <meta property="og:url" content="https://hxn.dev/tutorials/targets/">
+  <meta property="og:image" content="https://hxn.dev/og-hero.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="2400">
+  <meta property="og:image:height" content="1260">
+  <meta property="og:image:alt" content="hxn — Native Rust bindings for Haxe">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Build for other targets — hxn">
+  <meta name="twitter:description" content="Build native, wasm and mobile bindings, then add each platform to one haxelib package.">
+  <meta name="twitter:image" content="https://hxn.dev/og-hero.png">
+  <meta name="twitter:image:alt" content="hxn — Native Rust bindings for Haxe">
+  <link rel="icon" href="/logo.png" type="image/png">
+  <link rel="apple-touch-icon" href="/logo.png">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/script.js" defer></script>
+  <script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "TechArticle", "@id": "https://hxn.dev/tutorials/targets/#page", "url": "https://hxn.dev/tutorials/targets/", "name": "Build for other targets — hxn", "description": "Build native, wasm and mobile bindings, then add each platform to one haxelib package.", "inLanguage": "en", "isPartOf": {"@id": "https://hxn.dev/#website"}, "image": "https://hxn.dev/og-hero.png"}, {"@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "hxn", "item": "https://hxn.dev/"}, {"@type": "ListItem", "position": 2, "name": "Tutorials", "item": "https://hxn.dev/tutorials/"}, {"@type": "ListItem", "position": 3, "name": "Build for other targets", "item": "https://hxn.dev/tutorials/targets/"}]}]}</script>
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="header">
+    <a class="wordmark" href="/" aria-label="hxn home">hxn<span aria-hidden="true"> /</span></a>
+    <nav class="header-links" aria-label="Main"><a href="/tutorials/" aria-current="true">Tutorials</a><a class="source-link" href="https://github.com/hx-n/hxn">GitHub ↗</a></nav>
+  </header>
+  <main class="tutorial-layout">
+    <aside class="tutorial-sidebar"><nav aria-label="Tutorials"><a class="tutorial-index-link" href="/tutorials/">Tutorials</a><a href="/tutorials/cli/"><span>01</span> Create, run and package</a><a href="/tutorials/targets/" aria-current="page"><span>02</span> Build for other targets</a><a href="/tutorials/data/"><span>03</span> Pass data and handle errors</a><a href="/tutorials/callbacks/"><span>04</span> Call Haxe from Rust</a><a href="/tutorials/async/"><span>05</span> Work with asynchronous results</a></nav></aside>
+    <article id="content" class="lesson">
+      <header class="lesson-heading"><p class="eyebrow">TUTORIAL / 02</p><h1>Build for other targets</h1><p class="lesson-description">Build native, wasm and mobile bindings, then add each platform to one haxelib package.</p></header>
+<nav class="lesson-toc" aria-label="On this page"><a href="#native">Native</a><a href="#wasm">Wasm</a><a href="#cross">Cross-compile</a><a href="#packages">Package targets</a><a href="#ash-mobile">Ash mobile</a><a href="#hxcpp-mobile">hxcpp mobile</a></nav>
+<section id="native" class="lesson-section"><h2>1. Build native bindings</h2><p>Run these commands from the <code>greeter</code> crate created in the <a href="/tutorials/cli/">first tutorial</a>. Rust and Haxe are required throughout. <code>build</code> generates the binding and prints the Haxe compiler arguments; <code>run</code> also compiles and runs the example app.</p><div class="lesson-table-wrap" tabindex="0" aria-label="Native targets"><table><thead><tr><th scope="col">Runtime</th><th scope="col">Build</th><th scope="col">Tools to run the app</th></tr></thead><tbody><tr><td>HashLink</td><td><code>hxn build hl --release</code></td><td>HashLink, or Ash with <code>--vm ash</code>.</td></tr><tr><td>hxcpp</td><td><code>hxn build cpp --release</code></td><td>hxcpp from git and a host C++ toolchain.</td></tr><tr><td>CPPIA</td><td><code>hxn build cppia --release</code></td><td>hxcpp and a C++ toolchain; hxn also builds the script host.</td></tr></tbody></table></div><p>Use <code>hxn run hl</code>, <code>hxn run cpp</code> or <code>hxn run cppia</code> to execute. <code>hxn run hl --vm "ash --mode jit"</code> selects Ash’s JIT; <code>--mode interp</code> selects its interpreter.</p></section><section id="wasm" class="lesson-section"><h2>2. Build wasm</h2><p>HashLink bytecode runs through Ash; hxcpp uses Emscripten. Activate the tools for the runtime you choose before building.</p><div class="code-panel">
+  <div class="code-heading"><span>Ash wasm</span><button class="code-copy" type="button" data-copy-target="code-104" aria-label="Copy Ash wasm">Copy</button></div>
+  <pre tabindex="0" aria-label="Ash wasm"><code id="code-104" class="language-bash">rustup<span class="w"> </span>toolchain<span class="w"> </span>install<span class="w"> </span>nightly<span class="w"> </span>--component<span class="w"> </span>rust-src
+<span class="nv">RUSTUP_TOOLCHAIN</span><span class="o">=</span>nightly<span class="w"> </span>hxn<span class="w"> </span>build<span class="w"> </span>hl<span class="w"> </span>--wasm<span class="w"> </span>--release
+<span class="nv">RUSTUP_TOOLCHAIN</span><span class="o">=</span>nightly<span class="w"> </span>hxn<span class="w"> </span>run<span class="w"> </span>hl<span class="w"> </span>--wasm<span class="w"> </span>--release<span class="w"> </span>--vm<span class="w"> </span>ash</code></pre>
+</div><p>Ash must be on <code>PATH</code>. This build recompiles Rust’s standard library with nightly and produces a <code>wasm32-wasip1</code> binding.</p><div class="code-panel">
+  <div class="code-heading"><span>hxcpp wasm</span><button class="code-copy" type="button" data-copy-target="code-105" aria-label="Copy hxcpp wasm">Copy</button></div>
+  <pre tabindex="0" aria-label="hxcpp wasm"><code id="code-105" class="language-bash">rustup<span class="w"> </span>target<span class="w"> </span>add<span class="w"> </span>wasm32-unknown-emscripten
+hxn<span class="w"> </span>build<span class="w"> </span>cpp<span class="w"> </span>--wasm<span class="w"> </span>--release
+hxn<span class="w"> </span>run<span class="w"> </span>cpp<span class="w"> </span>--wasm<span class="w"> </span>--release</code></pre>
+</div><p>Activate the Emscripten SDK so <code>emcc</code> and <code>emar</code> are on <code>PATH</code>. Running also needs Node.js and hxcpp from git with wasm exception support. The binding target is <code>wasm32-unknown-emscripten</code>. CPPIA has no wasm target.</p></section><section id="cross" class="lesson-section"><h2>3. Cross-compile a binding</h2><p>Both <code>hl</code> and <code>cpp</code> build and package mobile bindings. Choose the runtime and Rust triple for your application; <code>rustc --print target-list</code> lists Rust’s built-in targets. Install the chosen triple with <code>rustup target add &lt;triple&gt;</code>. The library’s dependencies must also support that platform.</p><div class="lesson-table-wrap" tabindex="0" aria-label="Platform targets for both runtimes"><table><thead><tr><th scope="col">Platform</th><th scope="col">HashLink through Ash</th><th scope="col">hxcpp</th></tr></thead><tbody><tr><td>Linux x86-64</td><td><code>x86_64-unknown-linux-gnu</code></td><td><code>x86_64-unknown-linux-gnu</code></td></tr><tr><td>Windows x86-64</td><td><code>x86_64-pc-windows-msvc</code></td><td><code>x86_64-pc-windows-msvc</code></td></tr><tr><td>iOS device</td><td><code>aarch64-apple-ios</code></td><td><code>aarch64-apple-ios</code></td></tr><tr><td>iOS simulator</td><td><code>aarch64-apple-ios-sim</code></td><td><code>x86_64-apple-ios</code></td></tr><tr><td>Android ARM64</td><td><code>aarch64-linux-android</code></td><td><code>aarch64-linux-android</code></td></tr><tr><td>Android x86-64 emulator</td><td><code>x86_64-linux-android</code></td><td><code>x86_64-linux-android</code></td></tr></tbody></table></div><div class="code-panel">
+  <div class="code-heading"><span>Cross-compile for Android</span><button class="code-copy" type="button" data-copy-target="code-106" aria-label="Copy Cross-compile for Android">Copy</button></div>
+  <pre tabindex="0" aria-label="Cross-compile for Android"><code id="code-106" class="language-bash">rustup<span class="w"> </span>target<span class="w"> </span>add<span class="w"> </span>aarch64-apple-ios<span class="w"> </span>aarch64-apple-ios-sim<span class="w"> </span>aarch64-linux-android
+hxn<span class="w"> </span>doctor<span class="w"> </span>--target<span class="w"> </span>aarch64-linux-android
+hxn<span class="w"> </span>build<span class="w"> </span>cpp<span class="w"> </span>--target<span class="w"> </span>aarch64-linux-android<span class="w"> </span>--release
+hxn<span class="w"> </span>build<span class="w"> </span>hl<span class="w"> </span>--target<span class="w"> </span>aarch64-linux-android<span class="w"> </span>--release</code></pre>
+</div><p>Both commands produce static libraries: Ash links the <code>hl</code> archive into its executable, and hxcpp links the <code>cpp</code> archive into the app. Building the complete app also needs its platform toolchain: Xcode for iOS, the Android NDK for Android, or the matching desktop linker and SDK. Dependencies that compile C may need those tools during the binding build too. <code>doctor --target</code> checks Rust prerequisites only.</p><p>Use <code>--target</code> with <code>build hl</code>, <code>build cpp</code> or <code>package</code>. It cannot be combined with <code>--wasm</code> or <code>cppia</code>. <code>run</code> and <code>check</code> reject cross-compiled targets.</p></section><section id="packages" class="lesson-section"><h2>4. Add targets to a package</h2><p>From the <code>greeter</code> crate, package only the targets you prepared. Reuse the same output directory; each command adds a <code>native/&lt;triple&gt;/</code> entry and keeps the other platforms.</p><div class="code-panel">
+  <div class="code-heading"><span>Host and wasm packages</span><button class="code-copy" type="button" data-copy-target="code-107" aria-label="Copy Host and wasm packages">Copy</button></div>
+  <pre tabindex="0" aria-label="Host and wasm packages"><code id="code-107" class="language-bash">hxn<span class="w"> </span>package<span class="w"> </span>hl<span class="w"> </span>cpp<span class="w"> </span>--release<span class="w"> </span>--out<span class="w"> </span>../greeter-haxelib
+<span class="nv">RUSTUP_TOOLCHAIN</span><span class="o">=</span>nightly<span class="w"> </span>hxn<span class="w"> </span>package<span class="w"> </span>hl<span class="w"> </span>--wasm<span class="w"> </span>--release<span class="w"> </span>--out<span class="w"> </span>../greeter-haxelib
+hxn<span class="w"> </span>package<span class="w"> </span>cpp<span class="w"> </span>--wasm<span class="w"> </span>--release<span class="w"> </span>--out<span class="w"> </span>../greeter-haxelib</code></pre>
+</div><div class="code-panel">
+  <div class="code-heading"><span>Mobile packages · HashLink through Ash</span><button class="code-copy" type="button" data-copy-target="code-201" aria-label="Copy Mobile packages · HashLink through Ash">Copy</button></div>
+  <pre tabindex="0" aria-label="Mobile packages · HashLink through Ash"><code id="code-201" class="language-bash">hxn<span class="w"> </span>package<span class="w"> </span>hl<span class="w"> </span>--target<span class="w"> </span>aarch64-apple-ios<span class="w"> </span>--release<span class="w"> </span>--out<span class="w"> </span>../greeter-haxelib
+hxn<span class="w"> </span>package<span class="w"> </span>hl<span class="w"> </span>--target<span class="w"> </span>aarch64-apple-ios-sim<span class="w"> </span>--release<span class="w"> </span>--out<span class="w"> </span>../greeter-haxelib
+hxn<span class="w"> </span>package<span class="w"> </span>hl<span class="w"> </span>--target<span class="w"> </span>aarch64-linux-android<span class="w"> </span>--release<span class="w"> </span>--out<span class="w"> </span>../greeter-haxelib</code></pre>
+</div><div class="code-panel">
+  <div class="code-heading"><span>Mobile packages · hxcpp</span><button class="code-copy" type="button" data-copy-target="code-202" aria-label="Copy Mobile packages · hxcpp">Copy</button></div>
+  <pre tabindex="0" aria-label="Mobile packages · hxcpp"><code id="code-202" class="language-bash">hxn<span class="w"> </span>package<span class="w"> </span>cpp<span class="w"> </span>--target<span class="w"> </span>aarch64-apple-ios<span class="w"> </span>--release<span class="w"> </span>--out<span class="w"> </span>../greeter-haxelib
+hxn<span class="w"> </span>package<span class="w"> </span>cpp<span class="w"> </span>--target<span class="w"> </span>x86_64-apple-ios<span class="w"> </span>--release<span class="w"> </span>--out<span class="w"> </span>../greeter-haxelib
+hxn<span class="w"> </span>package<span class="w"> </span>cpp<span class="w"> </span>--target<span class="w"> </span>aarch64-linux-android<span class="w"> </span>--release<span class="w"> </span>--out<span class="w"> </span>../greeter-haxelib</code></pre>
+</div><p>Use <code>hxn package hl cpp --target &lt;triple&gt;</code> to include both runtimes for the same triple. The repository’s hxcpp simulator runner uses x86-64 (Rosetta on Apple Silicon); Ash targets Apple Silicon simulators natively.</p><p>For another desktop’s dynamic HashLink <code>.hdll</code>, run native packaging on that system and combine its <code>native/&lt;triple&gt;/</code> files with the package. Cross-compiled HashLink bindings are static archives for Ash.</p></section><section id="apps" class="lesson-section"><h2>5. Compile the Haxe app for that platform</h2><p>Register the package with <code>haxelib dev greeter ../greeter-haxelib</code>. Run the following commands from the <code>greeter</code> crate.</p><h3 id="ash-mobile">HashLink through Ash</h3><p>Select the packaged triple when compiling Haxe bytecode, then link its static archive with Ash. Choose the build for your device or simulator:</p><div class="code-panel">
+  <div class="code-heading"><span>Build mobile executables with Ash</span><button class="code-copy" type="button" data-copy-target="code-203" aria-label="Copy Build mobile executables with Ash">Copy</button></div>
+  <pre tabindex="0" aria-label="Build mobile executables with Ash"><code id="code-203" class="language-bash">haxe<span class="w"> </span>-lib<span class="w"> </span>greeter<span class="w"> </span>-D<span class="w"> </span><span class="nv">hxn_triple</span><span class="o">=</span>aarch64-linux-android<span class="w"> </span>-cp<span class="w"> </span>haxe<span class="w"> </span>-main<span class="w"> </span>Main<span class="w"> </span>-hl<span class="w"> </span>android.hl
+ash<span class="w"> </span>--build<span class="w"> </span>greeter-android<span class="w"> </span>--target<span class="w"> </span>aarch64-linux-android<span class="w"> </span>--native-lib<span class="w"> </span>libgreeter.a<span class="w"> </span>android.hl
+
+haxe<span class="w"> </span>-lib<span class="w"> </span>greeter<span class="w"> </span>-D<span class="w"> </span><span class="nv">hxn_triple</span><span class="o">=</span>aarch64-apple-ios-sim<span class="w"> </span>-cp<span class="w"> </span>haxe<span class="w"> </span>-main<span class="w"> </span>Main<span class="w"> </span>-hl<span class="w"> </span>ios-sim.hl
+ash<span class="w"> </span>--build<span class="w"> </span>greeter-ios-sim<span class="w"> </span>--target<span class="w"> </span>aarch64-apple-ios-sim<span class="w"> </span>--native-lib<span class="w"> </span>libgreeter.a<span class="w"> </span>ios-sim.hl
+
+haxe<span class="w"> </span>-lib<span class="w"> </span>greeter<span class="w"> </span>-D<span class="w"> </span><span class="nv">hxn_triple</span><span class="o">=</span>aarch64-apple-ios<span class="w"> </span>-cp<span class="w"> </span>haxe<span class="w"> </span>-main<span class="w"> </span>Main<span class="w"> </span>-hl<span class="w"> </span>ios.hl
+ash<span class="w"> </span>--build<span class="w"> </span>greeter-ios<span class="w"> </span>--target<span class="w"> </span>aarch64-apple-ios<span class="w"> </span>--native-lib<span class="w"> </span>libgreeter.a<span class="w"> </span>ios.hl</code></pre>
+</div><p><code>hxn.Bind</code> copies <code>libgreeter.a</code> beside the bytecode. Use an Ash build with mobile AOT support and a runtime archive for the selected triple. If Ash cannot locate that runtime, add <code>--runtime /path/to/libash_std.a</code> to its build command.</p><p>Run the Android executable with adb, or the simulator executable in a booted iOS simulator:</p><div class="code-panel">
+  <div class="code-heading"><span>Run the Ash executables</span><button class="code-copy" type="button" data-copy-target="code-204" aria-label="Copy Run the Ash executables">Copy</button></div>
+  <pre tabindex="0" aria-label="Run the Ash executables"><code id="code-204" class="language-bash">adb<span class="w"> </span>push<span class="w"> </span>greeter-android<span class="w"> </span>/data/local/tmp/
+adb<span class="w"> </span>shell<span class="w"> </span>/data/local/tmp/greeter-android
+
+xcrun<span class="w"> </span>simctl<span class="w"> </span>spawn<span class="w"> </span>booted<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$PWD</span><span class="s2">/greeter-ios-sim&quot;</span></code></pre>
+</div><h3 id="hxcpp-mobile">hxcpp</h3><p>hxcpp’s platform defines select its packaged library. Use the command matching your installed SDK:</p><div class="code-panel">
+  <div class="code-heading"><span>Compile mobile libraries with hxcpp</span><button class="code-copy" type="button" data-copy-target="code-205" aria-label="Copy Compile mobile libraries with hxcpp">Copy</button></div>
+  <pre tabindex="0" aria-label="Compile mobile libraries with hxcpp"><code id="code-205" class="language-bash">haxe<span class="w"> </span>-lib<span class="w"> </span>greeter<span class="w"> </span>-cp<span class="w"> </span>haxe<span class="w"> </span>-main<span class="w"> </span>Main<span class="w"> </span>-cpp<span class="w"> </span>out/android<span class="w"> </span>-D<span class="w"> </span>android<span class="w"> </span>-D<span class="w"> </span>HXCPP_ARM64
+haxe<span class="w"> </span>-lib<span class="w"> </span>greeter<span class="w"> </span>-cp<span class="w"> </span>haxe<span class="w"> </span>-main<span class="w"> </span>Main<span class="w"> </span>-cpp<span class="w"> </span>out/ios<span class="w"> </span>-D<span class="w"> </span>iphoneos<span class="w"> </span>-D<span class="w"> </span>HXCPP_ARM64
+haxe<span class="w"> </span>-lib<span class="w"> </span>greeter<span class="w"> </span>-cp<span class="w"> </span>haxe<span class="w"> </span>-main<span class="w"> </span>Main<span class="w"> </span>-cpp<span class="w"> </span>out/ios-sim<span class="w"> </span>-D<span class="w"> </span>iphonesim<span class="w"> </span>-D<span class="w"> </span>HXCPP_M64</code></pre>
+</div><p>Link the resulting native library into your Android or iOS app. Mobile compilation needs Xcode or the Android NDK; creating an installable app also requires the platform’s normal application packaging and signing.</p></section>
+      <nav class="lesson-paging" aria-label="Continue learning"><a href="/tutorials/cli/">← Previous</a><a href="/tutorials/data/">Pass data and handle errors →</a></nav>
+    </article>
+  </main>
+  <p id="copy-status" class="sr-only" role="status" aria-live="polite"></p>
+  <footer><p>HashLink · Ash · hxcpp</p><a href="https://github.com/hx-n/hxn/blob/main/LICENSE">Open source · Apache 2.0</a></footer>
+</body>
+</html>

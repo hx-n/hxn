@@ -38,9 +38,9 @@
     <nav class="header-links" aria-label="Main"><a href="/tutorials/" aria-current="true">Tutorials</a><a class="source-link" href="https://github.com/hx-n/hxn">GitHub ↗</a></nav>
   </header>
   <main class="tutorial-layout">
-    <aside class="tutorial-sidebar"><nav aria-label="Tutorials"><a class="tutorial-index-link" href="/tutorials/">Tutorials</a><a href="/tutorials/cli/"><span>01</span> Create, run and package</a><a href="/tutorials/data/" aria-current="page"><span>02</span> Pass data and handle errors</a><a href="/tutorials/callbacks/"><span>03</span> Call Haxe from Rust</a><a href="/tutorials/async/"><span>04</span> Work with asynchronous results</a></nav></aside>
+    <aside class="tutorial-sidebar"><nav aria-label="Tutorials"><a class="tutorial-index-link" href="/tutorials/">Tutorials</a><a href="/tutorials/cli/"><span>01</span> Create, run and package</a><a href="/tutorials/targets/"><span>02</span> Build for other targets</a><a href="/tutorials/data/" aria-current="page"><span>03</span> Pass data and handle errors</a><a href="/tutorials/callbacks/"><span>04</span> Call Haxe from Rust</a><a href="/tutorials/async/"><span>05</span> Work with asynchronous results</a></nav></aside>
     <article id="content" class="lesson">
-      <header class="lesson-heading"><p class="eyebrow">TUTORIAL / 02</p><h1>Pass data and handle errors</h1><p class="lesson-description">Use records, enums, sets and tuples from Haxe, then catch a typed Rust error.</p></header>
+      <header class="lesson-heading"><p class="eyebrow">TUTORIAL / 03</p><h1>Pass data and handle errors</h1><p class="lesson-description">Use records, enums, sets and tuples from Haxe, then catch a typed Rust error.</p></header>
       <nav class="lesson-toc" aria-label="On this page"><a href="#records">Records</a><a href="#collections">Collections</a><a href="#errors">Typed errors</a><a href="#run">Run it</a></nav>
       <section id="records" class="lesson-section"><h2>1. Pass a record</h2><p>The pantry example marks plain values with <code>#[hxn::data]</code>. Haxe gets a record class and an enum; the Rust library stays independent of the runtime.</p><div class="code-panel">
   <div class="code-heading"><span>lib.rs · excerpt</span><button class="code-copy" type="button" data-copy-target="code-5" aria-label="Copy lib.rs · excerpt">Copy</button></div>
@@ -112,7 +112,7 @@
   <pre tabindex="0" aria-label="Run pantry"><code id="code-11" class="language-bash"><span class="nb">cd</span><span class="w"> </span>examples/pantry
 hxn<span class="w"> </span>run<span class="w"> </span>hl</code></pre>
 </div><p><a href="https://github.com/hx-n/hxn/tree/main/examples/pantry">Full Rust and Haxe source ↗</a> · Use <code>hxn run cpp</code> for hxcpp.</p></section>
-      <nav class="lesson-paging" aria-label="Continue learning"><a href="/tutorials/cli/">← Previous</a><a href="/tutorials/callbacks/">Call Haxe from Rust →</a></nav>
+      <nav class="lesson-paging" aria-label="Continue learning"><a href="/tutorials/targets/">← Previous</a><a href="/tutorials/callbacks/">Call Haxe from Rust →</a></nav>
     </article>
   </main>
   <p id="copy-status" class="sr-only" role="status" aria-live="polite"></p>

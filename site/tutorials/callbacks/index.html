@@ -38,9 +38,9 @@
     <nav class="header-links" aria-label="Main"><a href="/tutorials/" aria-current="true">Tutorials</a><a class="source-link" href="https://github.com/hx-n/hxn">GitHub ↗</a></nav>
   </header>
   <main class="tutorial-layout">
-    <aside class="tutorial-sidebar"><nav aria-label="Tutorials"><a class="tutorial-index-link" href="/tutorials/">Tutorials</a><a href="/tutorials/cli/"><span>01</span> Create, run and package</a><a href="/tutorials/data/"><span>02</span> Pass data and handle errors</a><a href="/tutorials/callbacks/" aria-current="page"><span>03</span> Call Haxe from Rust</a><a href="/tutorials/async/"><span>04</span> Work with asynchronous results</a></nav></aside>
+    <aside class="tutorial-sidebar"><nav aria-label="Tutorials"><a class="tutorial-index-link" href="/tutorials/">Tutorials</a><a href="/tutorials/cli/"><span>01</span> Create, run and package</a><a href="/tutorials/targets/"><span>02</span> Build for other targets</a><a href="/tutorials/data/"><span>03</span> Pass data and handle errors</a><a href="/tutorials/callbacks/" aria-current="page"><span>04</span> Call Haxe from Rust</a><a href="/tutorials/async/"><span>05</span> Work with asynchronous results</a></nav></aside>
     <article id="content" class="lesson">
-      <header class="lesson-heading"><p class="eyebrow">TUTORIAL / 03</p><h1>Call Haxe from Rust</h1><p class="lesson-description">Paint a picture with a Haxe function and let callback exceptions reach the caller.</p></header>
+      <header class="lesson-heading"><p class="eyebrow">TUTORIAL / 04</p><h1>Call Haxe from Rust</h1><p class="lesson-description">Paint a picture with a Haxe function and let callback exceptions reach the caller.</p></header>
       <nav class="lesson-toc" aria-label="On this page"><a href="#paint">Paint</a><a href="#exceptions">Exceptions</a><a href="#ownership">Ownership and bytes</a><a href="#run">Run it</a></nav>
       <section id="paint" class="lesson-section"><h2>1. Pass a Haxe function</h2><p>The picture example lets Rust call a Haxe function for each pixel. Here is the Rust method and a Haxe caller:</p><div class="code-panel">
   <div class="code-heading"><span>lib.rs · excerpt</span><button class="code-copy" type="button" data-copy-target="code-12" aria-label="Copy lib.rs · excerpt">Copy</button></div>

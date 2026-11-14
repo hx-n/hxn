@@ -170,3 +170,13 @@ footer p { margin: 0; }
   .lesson-section { margin-top: 36px; }
   .header-links { gap: 20px; }
 }
+
+.lesson-table-wrap { overflow-x: auto; margin: 18px 0; border: 1px solid #282828; border-radius: 8px; }
+.lesson-table-wrap:focus-visible { outline: 2px solid #aaa; outline-offset: 3px; }
+.lesson-table-wrap table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; line-height: 1.75; }
+.lesson-table-wrap th, .lesson-table-wrap td { padding: 13px 16px; border-bottom: 1px solid #282828; vertical-align: top; }
+.lesson-table-wrap th { background: #0c0c0c; color: #ddd; font-weight: 550; }
+.lesson-table-wrap td { color: #aaa; min-width: 140px; }
+.lesson-table-wrap td code { font-size: 11px; white-space: nowrap; }
+.lesson-table-wrap tr:last-child td { border-bottom: 0; }
+.tutorial-card:last-child:nth-child(odd) { grid-column: 1 / -1; }
