@@ -37,4 +37,6 @@ an hxcpp host containing the binding. See [binding generation](design/generation
 Cargo supplies the name, version, description, repository URL, keywords as
 tags, and the SPDX license mapped to a haxelib license. Set `contributors`
 (haxelib account names) and `releasenote` under `[package.metadata.hxn]`.
+The haxelib is named after the library unless `haxelib` there names it; the
+native library and `hxn.Bind.lib` keep the library's name.
 `hxn package` lists fields still required by `haxelib submit`.

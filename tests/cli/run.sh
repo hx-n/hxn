@@ -230,9 +230,10 @@ fi
 # it does not provide are reported.
 cat >>Cargo.toml <<'EOF'
 contributors = ["someone"]
+haxelib = "greeter-haxe"
 EOF
 "$hxn" package "${packaged[@]}" --out "$work/listed" | tr -d '\r' >"$work/listed.txt"
-if ! grep -q '"contributors": \["someone"\]' "$work/listed/haxelib.json" || ! grep -q 'releasenote' "$work/listed.txt"; then
+if ! grep -q '"contributors": \["someone"\]' "$work/listed/haxelib.json" || ! grep -q '"name": "greeter-haxe"' "$work/listed/haxelib.json" || ! grep -q 'releasenote' "$work/listed.txt"; then
 	echo "FAILED: the package's haxelib.json does not list what the crate gives" >&2
 	exit 1
 fi

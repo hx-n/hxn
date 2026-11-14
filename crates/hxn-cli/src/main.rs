@@ -662,9 +662,9 @@ Not imported (listed at the end of {name}.webidl):"
                 options(&arguments, hashlink.as_deref()),
                 &out,
             )?;
-            let name = &project.library;
+            let (name, haxelib) = (&project.library, &project.haxelib);
             println!(
-                "Packaged {name} in {}, with the libraries built for {}.\nAs a haxelib:\n  haxelib dev {name} {}\n  haxe -lib {name} ...\nOr as a class path:\n  haxe -cp {} --macro 'hxn.Bind.lib(\"{name}\")' ...",
+                "Packaged {name} in {}, with the libraries built for {}.\nAs a haxelib:\n  haxelib dev {haxelib} {}\n  haxe -lib {haxelib} ...\nOr as a class path:\n  haxe -cp {} --macro 'hxn.Bind.lib(\"{name}\")' ...",
                 out.display(),
                 triples.join(" and "),
                 out.display(),

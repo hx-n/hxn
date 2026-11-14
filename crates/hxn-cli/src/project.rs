@@ -16,6 +16,9 @@ pub struct Project {
     pub krate: String,
     /// The name used in its binaries' file names and in its exported symbols.
     pub library: String,
+    /// Its haxelib's name: `haxelib` under `[package.metadata.hxn]`, or the
+    /// library's name.
+    pub haxelib: String,
     /// The package's version and description, copied into its haxelib.json.
     pub version: String,
     pub description: String,
@@ -217,6 +220,15 @@ fn flags(settings: Option<&Value>) -> Result<Vec<String>, String> {
 }
 
 /// Whether `name` can be used in both C symbol names and Haxe class names.
+/// Whether `name` can name a haxelib: at least three letters, digits, `_`,
+/// `-` or `.`.
+pub fn is_haxelib_name(name: &str) -> bool {
+    name.len() >= 3
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
+}
+
 pub fn is_library_name(name: &str) -> bool {
     let mut letters = name.chars();
     letters
@@ -284,6 +296,12 @@ impl Project {
                 "`{library}` cannot name a library: use lowercase letters, digits and `_`, or set `library` under `[package.metadata.hxn]`"
             ));
         }
+        let haxelib = setting("haxelib").unwrap_or(&library).to_owned();
+        if !is_haxelib_name(&haxelib) {
+            return Err(format!(
+                "`{haxelib}` cannot name a haxelib: use at least three letters, digits, `_`, `-` or `.`"
+            ));
+        }
         let source = match setting("source") {
             Some(source) => dir.join(source),
             None => PathBuf::from(
@@ -317,6 +335,7 @@ impl Project {
             package: name.to_owned(),
             krate,
             library,
+            haxelib,
             version: text(package, "version").unwrap_or("0.0.0").to_owned(),
             description: text(package, "description").unwrap_or_default().to_owned(),
             listing: Listing {

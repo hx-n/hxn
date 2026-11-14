@@ -60,7 +60,7 @@ fn haxelib(project: &Project) -> String {
     };
     let listing = &project.listing;
     let mut fields = vec![
-        format!("\"name\": {}", quoted(&project.library)),
+        format!("\"name\": {}", quoted(&project.haxelib)),
         format!("\"version\": {}", quoted(&project.version)),
         format!("\"description\": {}", quoted(&project.description)),
     ];
