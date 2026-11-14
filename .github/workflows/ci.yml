@@ -21,6 +21,8 @@ env:
   # crash on Windows when a program exits right after a collection.
   HXN_HXCPP: 615adc73d5ef28f3f74ea47977c39c4f25ce256d
   HXN_EMSDK: 5.0.7
+  # The first Ash release that bundles its Android and iOS runtimes.
+  HXN_ASH: v0.1.18
 
 defaults:
   run:
@@ -213,7 +215,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.HXN_RUST }}
-          targets: x86_64-apple-ios
+          targets: x86_64-apple-ios, aarch64-apple-ios-sim
       - uses: Swatinem/rust-cache@v2
       # setup-haxe does not support arm64 macOS, so Haxe comes from Homebrew
       # here. hxcpp builds x86-64 simulator binaries, which need Rosetta.
@@ -228,3 +230,12 @@ jobs:
           git -C "$dir" checkout -q "$HXN_HXCPP"
           (cd "$dir/tools/hxcpp" && haxe compile.hxml)
       - run: tests/mobile/run.sh ios-sim
+      # The same examples as HashLink programs, which Ash builds for the
+      # simulator with each library's archive linked in.
+      - name: Install Ash
+        run: |
+          mkdir -p "$RUNNER_TEMP/ash"
+          curl -fsSL "https://github.com/rayzor-blade/ash/releases/download/$HXN_ASH/ash-macos-aarch64.tar.gz" |
+            tar -xz -C "$RUNNER_TEMP/ash"
+          "$RUNNER_TEMP/ash/ash" --version
+      - run: ASH="$RUNNER_TEMP/ash/ash" tests/mobile/run.sh ios-sim hl

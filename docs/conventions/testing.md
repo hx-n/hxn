@@ -33,7 +33,9 @@ Windows is known to pass only after CI runs.
 
 VM strings include options, for example `hl "ash --mode jit"`.
 CI runs unit tests on Linux/macOS/Windows, native HashLink/hxcpp and CPPIA,
-Emscripten and iOS simulator tests. Run Ash and Android locally.
+Emscripten, and the iOS simulator with hxcpp and with HashLink through Ash
+(`HXN_ASH` in the workflow names the release). Run Ash on the desktop, Ash
+wasm and Android locally.
 
 ## Checks and fixtures
 
