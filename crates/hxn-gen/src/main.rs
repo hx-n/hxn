@@ -68,17 +68,8 @@ fn run() -> Result<(), String> {
         &out.join(format!("include/{name}_glue.h")),
         &hxn_gen::cpp_glue(&library),
     )?;
-    for file in hxn_gen::haxe_hl(&library) {
-        write(&out.join("haxe/hl").join(&file.path), &file.text)?;
-    }
-    for file in hxn_gen::haxe_cpp(&library) {
-        write(&out.join("haxe/cpp").join(&file.path), &file.text)?;
-    }
-    for file in hxn_gen::haxe_cppia(&library) {
-        write(&out.join("haxe/cppia").join(&file.path), &file.text)?;
-    }
     for file in hxn_gen::haxe_classes(&library) {
-        write(&out.join("haxe/classes").join(&file.path), &file.text)?;
+        write(&out.join("haxe").join(&file.path), &file.text)?;
     }
     Ok(())
 }

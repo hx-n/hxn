@@ -13,15 +13,15 @@ import sys.io.File;
 	The package's `extraParams.hxml` specifies
 	`--macro hxn.Bind.lib("name")`, so a program's build only needs
 	`-lib name`. The package is located by its manifest, `name.hxn.json`, on
-	the class path. Depending on the compilation target, this adds the
-	library's HashLink or hxcpp classes to the class path, defines the header
-	and library paths for hxcpp, and copies a HashLink library next to the
-	compiled program.
+	the class path. This adds the library's classes to the class path, the
+	same on every runtime; depending on the compilation target, it defines the
+	header and library paths for hxcpp, and copies a HashLink library next to
+	the compiled program.
 
-	A CPPIA script gets declarations of the hxcpp classes. The classes
-	themselves are in its host, an hxcpp program compiled with
-	`-D scriptable` and this same macro. In the host, the macro includes the
-	library's classes whether or not the host uses them.
+	A CPPIA script is compiled against the same classes and calls those its
+	host contains: an hxcpp program compiled with `-D scriptable` and this
+	same macro. In the host, the macro includes the library's classes whether
+	or not the host uses them.
 
 	The native library used is the one built for the host machine, or for
 	wasm when `wasm` or `emscripten` is defined. `-D hxn_triple=<triple>`
@@ -45,11 +45,14 @@ class Bind {
 		var runtime = if (Context.defined("hl")) "hl" else if (Context.defined("cpp")) "cpp" else null;
 		if (runtime == null)
 			fail('$name is bound for HashLink and hxcpp, and this compile is for neither');
-		// A CPPIA script is also compiled as hxcpp, and makes no native calls itself.
+		// A CPPIA script is also compiled as hxcpp, and calls the classes its
+		// host contains, so it makes no native calls itself.
 		var script = Context.defined("cppia");
-		var classes = Path.join([root, "binding", script ? "cppia" : runtime]);
+		// The same classes for every runtime: hxn.Native implements their
+		// native class for the one compiled.
+		var classes = Path.join([root, "binding"]);
 		if (!FileSystem.isDirectory(classes))
-			fail('the package in $root was not built for $runtime: run `hxn package $runtime` on the library');
+			fail('the package in $root has no classes: run `hxn package` on the library');
 		Compiler.addClassPath(classes);
 		// A display request from an editor only needs types. Nothing is built, so no native library is looked up.
 		if (script || Context.defined("display"))

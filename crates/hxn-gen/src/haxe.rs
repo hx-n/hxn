@@ -162,7 +162,8 @@ const SHARED_CLOSE_DOCS: &str = "\t/**\n\t\tGives up this object's share of the 
 
 pub(crate) const SAME_DOCS: &str = "\t/**\n\t\tWhether `other` holds the value this does. Two objects can: each time\n\t\tthe library returns the value, a new object gets a share of it.\n\t**/\n";
 
-pub(crate) const WEAK_DOCS: &str = "\t/** A reference to the value that does not keep it alive. **/\n";
+pub(crate) const WEAK_DOCS: &str =
+    "\t/** A reference to the value that does not keep it alive. **/\n";
 
 pub(crate) const UPGRADE_DOCS: &str =
     "\t/** The value, if anything still holds it: a new object with a share of its own. **/\n";
@@ -469,7 +470,8 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
 }
 
 // A class that only holds static functions and is never instantiated.
-pub(crate) const NAMESPACE_DOCS: &str = "/** The library's functions that belong to no object. **/\n";
+pub(crate) const NAMESPACE_DOCS: &str =
+    "/** The library's functions that belong to no object. **/\n";
 
 fn hl_module(library: &Library, interface: &Interface) -> String {
     let name = &interface.name;

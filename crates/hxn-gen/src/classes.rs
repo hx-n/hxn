@@ -96,7 +96,12 @@ fn guard_type(params: &[Type], returns: &Type) -> String {
 // One declaration of the native class. A lent function's argument that is
 // an object names, as `name.position`, the export that gives HashLink
 // native code's pointer to it a type.
-fn declaration(name: &str, params: &[(String, Type)], returns: &Type, given: &[(String, String)]) -> String {
+fn declaration(
+    name: &str,
+    params: &[(String, Type)],
+    returns: &Type,
+    given: &[(String, String)],
+) -> String {
     let mut out = String::new();
     for (key, export) in given {
         out.push_str(&format!("\t@:hxn.given(\"{key}\", \"{export}\")\n"));
@@ -134,7 +139,12 @@ fn method_declaration(interface: &Interface, method: &Method) -> String {
         }
         params.push((name, param.ty.clone()));
     }
-    declaration(&local(&interface.name, &method.name), &params, &method.returns, &given)
+    declaration(
+        &local(&interface.name, &method.name),
+        &params,
+        &method.returns,
+        &given,
+    )
 }
 
 fn handle(interface: &str) -> Type {
@@ -164,14 +174,34 @@ fn natives(library: &Library) -> String {
         if interface.namespace {
             continue;
         }
-        out.push_str(&declaration(&local(name, "drop"), &this(name), &Type::Void, &[]));
+        out.push_str(&declaration(
+            &local(name, "drop"),
+            &this(name),
+            &Type::Void,
+            &[],
+        ));
         if interface.shared {
             let mut both = this(name);
             both.push((String::from("other"), handle(name)));
             out.push_str(&declaration(&local(name, "same"), &both, &Type::Bool, &[]));
-            out.push_str(&declaration(&local(name, "weak"), &this(name), &handle(name), &[]));
-            out.push_str(&declaration(&local(name, "weak_upgrade"), &this(name), &handle(name), &[]));
-            out.push_str(&declaration(&local(name, "weak_close"), &this(name), &Type::Void, &[]));
+            out.push_str(&declaration(
+                &local(name, "weak"),
+                &this(name),
+                &handle(name),
+                &[],
+            ));
+            out.push_str(&declaration(
+                &local(name, "weak_upgrade"),
+                &this(name),
+                &handle(name),
+                &[],
+            ));
+            out.push_str(&declaration(
+                &local(name, "weak_close"),
+                &this(name),
+                &Type::Void,
+                &[],
+            ));
         }
     }
     let used = later::used(library);
@@ -190,7 +220,12 @@ fn natives(library: &Library) -> String {
             for name in later::names(params) {
                 taken.push((name.to_owned(), Type::I32));
             }
-            out.push_str(&declaration(&format!("{}_{call}", kind.name()), &taken, &Type::I32, &[]));
+            out.push_str(&declaration(
+                &format!("{}_{call}", kind.name()),
+                &taken,
+                &Type::I32,
+                &[],
+            ));
         }
         for carried in carried {
             // A future or stream of nothing takes whether it was delivered.
@@ -254,7 +289,10 @@ fn guard(name: &str, params: &[Type], returns: &Type) -> String {
     let refused = "\n\t\t\t\tif (result == null)\n\t\t\t\t\tthrow new haxe.Exception(\"a function lent to a library returned null\");";
     let (succeed, fail) = match returns {
         Type::Void => (format!("{call};\n\t\t\t\treturn true;"), "false"),
-        Type::Bytes => (format!("var result = {call};{refused}\n\t\t\t\treturn result;"), "null"),
+        Type::Bytes => (
+            format!("var result = {call};{refused}\n\t\t\t\treturn result;"),
+            "null",
+        ),
         Type::Data(data) if lent::crossed(returns) == Type::Bytes => {
             let mut lines = vec![
                 format!("var result = {call};"),
@@ -265,7 +303,10 @@ fn guard(name: &str, params: &[Type], returns: &Type) -> String {
             (lines.join("\n").replace('\n', "\n\t\t\t\t"), "null")
         }
         // Null is how the guard reports a throw, so it is not a valid result.
-        Type::Str => (format!("var result = {call};{refused}\n\t\t\t\treturn result;"), "null"),
+        Type::Str => (
+            format!("var result = {call};{refused}\n\t\t\t\treturn result;"),
+            "null",
+        ),
         _ => (format!("return {call};"), "null"),
     };
     let returned = match lent::crossed(returns) {
@@ -394,7 +435,10 @@ fn module(library: &Library, interface: &Interface) -> String {
             weak_class = weak_class(name),
         ));
     }
-    out.push_str(&close(interface, &format!("{native}.{}", local(name, "drop"))));
+    out.push_str(&close(
+        interface,
+        &format!("{native}.{}", local(name, "drop")),
+    ));
     out
 }
 
@@ -459,7 +503,11 @@ fn maker_file(library: &Library, kind: Kind, carried: &[Type]) -> File {
         kind.title()
     );
     for (index, carried) in carried.iter().enumerate() {
-        let take = format!("{native}.{local}_{}_{}(hxnRaw)", kind.take(), later::suffix(carried));
+        let take = format!(
+            "{native}.{local}_{}_{}(hxnRaw)",
+            kind.take(),
+            later::suffix(carried)
+        );
         let take = match later::value_type(carried) {
             Type::Void => format!("{{\n\t\t\t{take};\n\t\t\thxn.Unit.Nothing;\n\t\t}}"),
             Type::List { interface } => {

@@ -885,7 +885,8 @@ fn cpp_file(library: &Library, kind: Kind, carried: &[Type]) -> File {
     }
 }
 
-pub(crate) const INBOX_DOCS: &str = "Where everything the library produces over time reaches the app.";
+pub(crate) const INBOX_DOCS: &str =
+    "Where everything the library produces over time reaches the app.";
 
 /// The Haxe classes HashLink needs for these: one per kind, and the inbox.
 pub fn hl_files(library: &Library) -> Vec<File> {

@@ -6,8 +6,7 @@
 //! | `haxelib.json` | the library's name and version, and the other haxelib fields the crate's metadata provides |
 //! | `extraParams.hxml` | calls the macro `hxn.Bind.lib`, which sets up the rest at compile time |
 //! | `<library>.hxn.json` | the manifest, which `hxn.Bind` uses to locate the package |
-//! | `binding/<runtime>/` | the library's Haxe classes for `hl` or `cpp` |
-//! | `binding/cppia/` | declarations of the `cpp` classes, for a CPPIA script |
+//! | `binding/` | the library's Haxe classes, the same for every runtime |
 //! | `include/` | `hxn.h` and the library's headers, for hxcpp |
 //! | `native/<triple>/` | the built libraries for one target triple, which may be a wasm one; for hxcpp also `link.xml`, the system libraries the archive links. A HashLink library built with `--target` is the archive `lib<library>.a`, which Ash links into the program |
 //!
@@ -99,15 +98,9 @@ pub fn package(
     let mut triples = Vec::new();
     for &target in targets {
         let built = make::build(project, target, options)?;
-        mirror(
-            &built.classes,
-            &out.join("binding").join(target.runtime.name()),
-        )?;
+        mirror(&built.classes, &out.join("binding"))?;
         if target.runtime == Runtime::Cpp {
             mirror(&built.include, &out.join("include"))?;
-        }
-        if target.runtime == Runtime::Cpp && !target.wasm {
-            mirror(&built.declarations, &out.join("binding").join("cppia"))?;
         }
         let triple = target.triple().unwrap_or(&host).to_owned();
         let native = out.join("native").join(&triple);

@@ -155,16 +155,14 @@ pub struct Built {
     pub arguments: Vec<(&'static str, String)>,
     /// The same arguments as an hxml file.
     pub hxml: PathBuf,
-    /// The class path of the library's Haxe classes for the runtime.
+    /// The class path of the library's Haxe classes, the same for every
+    /// runtime.
     pub classes: PathBuf,
     /// `hxn.h` and the library's headers, which hxcpp compiles against.
     pub include: PathBuf,
     /// The build artifact: the library a VM loads, or the static library
     /// hxcpp links.
     pub library: PathBuf,
-    /// The class path of the declarations of the hxcpp classes, for a CPPIA
-    /// script. Written only by a native hxcpp build.
-    pub declarations: PathBuf,
 }
 
 // Writes `text` to `path` unless the file already has that content, so that
@@ -646,15 +644,12 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
         &krate.join("Cargo.toml"),
         &manifest(project, target, library.returns_later()),
     )?;
-    let (adapter, classes) = match runtime {
+    let adapter = match runtime {
         Runtime::Hl => {
             if !target.archive() {
                 write(&krate.join("build.rs"), HL_BUILD_SCRIPT)?;
             }
-            (
-                hxn_gen::hl_adapter(&library, &project.krate),
-                hxn_gen::haxe_hl(&library),
-            )
+            hxn_gen::hl_adapter(&library, &project.krate)
         }
         Runtime::Cpp => {
             let include = out.join("include");
@@ -667,10 +662,7 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
                 &include.join(format!("{name}_glue.h")),
                 &hxn_gen::cpp_glue(&library),
             )?;
-            (
-                hxn_gen::c_adapter(&library, &project.krate),
-                hxn_gen::haxe_cpp(&library),
-            )
+            hxn_gen::c_adapter(&library, &project.krate)
         }
     };
     // The exports carry no safety docs of their own: each one's safety
@@ -681,12 +673,10 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
         &format!("#![allow(clippy::missing_safety_doc)]\n\n{adapter}"),
     )?;
 
+    // The same classes for every runtime: hxn's native class implements
+    // their natives for the one compiled.
     let haxe = dir.join("haxe");
-    classes_in(&haxe, &classes)?;
-    let declarations = out.join("cppia").join("haxe");
-    if runtime == Runtime::Cpp && !target.wasm {
-        classes_in(&declarations, &hxn_gen::haxe_cppia(&library))?;
-    }
+    classes_in(&haxe, &hxn_gen::haxe_classes(&library))?;
 
     // The adapter starts from the library's Cargo.lock, so it uses the
     // dependency versions the library resolved, and starts from it again
@@ -850,7 +840,6 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
         classes: haxe,
         include: out.join("include"),
         library: built,
-        declarations,
     })
 }
 

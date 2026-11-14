@@ -6,7 +6,6 @@
 //!
 //! | Path | What it is |
 //! |---|---|
-//! | `haxe/` | declarations of the library's classes (a class path for a script) |
 //! | `host/` | the host program's single class, and hxcpp's build output for it |
 //! | `host.classes` | the list of classes compiled into the host, which a script's compile excludes |
 //! | `build.hxml` | the `haxe` arguments for compiling a script for the host |
@@ -60,10 +59,10 @@ pub struct Host {
 /// program uses, because a script can only call code compiled into its host.
 pub fn host(project: &Project, built: &Built) -> Result<Host, String> {
     let dir = built
-        .declarations
+        .dir
         .parent()
-        .ok_or("the declarations have no directory")?
-        .to_owned();
+        .ok_or("the binding has no directory")?
+        .join("cppia");
     let source = dir.join("host");
     write(&source.join("Host.hx"), HOST)?;
     let held = dir.join("host.classes");
@@ -89,15 +88,14 @@ pub fn host(project: &Project, built: &Built) -> Result<Host, String> {
         .args(&project.flags);
     make::run(&mut haxe)?;
 
-    // The support classes are compiled into the host. A script is only
-    // type-checked against them.
+    // The library's and hxn's classes are compiled into the host. A script is
+    // compiled against them and calls the host's.
     let mut arguments: Vec<(&'static str, String)> = built
         .arguments
         .iter()
-        .filter(|(flag, value)| *flag == "-cp" && *value != text(&built.classes))
+        .filter(|(flag, _)| *flag == "-cp")
         .cloned()
         .collect();
-    arguments.push(("-cp", text(&built.declarations)));
     arguments.push(("-D", format!("dll_import={}", text(&held))));
     let hxml = dir.join("build.hxml");
     let lines: Vec<String> = arguments

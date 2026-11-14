@@ -66,6 +66,7 @@ staticlib() {
 # Generates the header, the glue and the Haxe classes from the same source
 # the adapter crates generate their adapters from.
 generate() {
+	rm -rf "$work/gen"
 	cargo run --quiet --manifest-path "$root/Cargo.toml" -p hxn-gen -- \
 		--library counter --source "$here/core/src/lib.rs" --crate counter_core --out "$work/gen" >/dev/null
 }
@@ -75,7 +76,7 @@ case "$runtime" in
 		vm="$(command -v "${2:-hl}")"
 		hdll counter-gen-hl
 		generate
-		haxe -cp "$root/haxe" -cp "$here/haxe" -cp "$work/gen/haxe/hl" -main Generated -hl "$work/main.hl"
+		haxe -cp "$root/haxe" -cp "$here/haxe" -cp "$work/gen/haxe" -main Generated -hl "$work/main.hl"
 		cd "$work"
 		DYLD_LIBRARY_PATH="$work:$vm_dir${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}" \
 		LD_LIBRARY_PATH="$work:$vm_dir${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
@@ -84,7 +85,7 @@ case "$runtime" in
 	gen-cpp)
 		staticlib counter-gen-c
 		generate
-		haxe -cp "$root/haxe" -cp "$here/haxe" -cp "$work/gen/haxe/cpp" -main Generated -cpp "$work/out" \
+		haxe -cp "$root/haxe" -cp "$here/haxe" -cp "$work/gen/haxe" -main Generated -cpp "$work/out" \
 			${linked[@]+"${linked[@]}"} \
 			-D HXN_INCLUDE="$root/include" \
 			-D COUNTER_INCLUDE="$work/gen/include" \
@@ -98,16 +99,16 @@ case "$runtime" in
 		# binding and of hxn, and lists them in a file for the script's
 		# compilation. Dead-code elimination is off because the script may use
 		# classes the host does not.
-		haxe -cp "$root/haxe" -cp "$here/haxe" -cp "$here/haxe/cppia" -cp "$work/gen/haxe/cpp" -main Host -cpp "$work/host" \
+		haxe -cp "$root/haxe" -cp "$here/haxe" -cp "$here/haxe/cppia" -cp "$work/gen/haxe" -main Host -cpp "$work/host" \
 			-D scriptable -dce no -D dll_export="$work/host.classes" \
-			--macro "include('hxn')" --macro "include('', true, null, ['$work/gen/haxe/cpp'])" \
+			--macro "include('hxn')" --macro "include('', true, null, ['$work/gen/haxe'])" \
 			${linked[@]+"${linked[@]}"} \
 			-D HXN_INCLUDE="$root/include" \
 			-D COUNTER_INCLUDE="$work/gen/include" \
 			-D COUNTER_LIB="$root/target/debug/${prefix}counter_gen.$static"
-		# The script is compiled against extern declarations of the binding's
-		# classes, and omits every class the host already contains.
-		haxe -cp "$root/haxe" -cp "$here/haxe" -cp "$work/gen/haxe/cppia" -main Generated -cppia "$work/generated.cppia" \
+		# The script is compiled against the binding's classes, and omits
+		# every class the host already contains.
+		haxe -cp "$root/haxe" -cp "$here/haxe" -cp "$work/gen/haxe" -main Generated -cppia "$work/generated.cppia" \
 			-D dll_import="$work/host.classes"
 		"$work/host/Host$exe" "$work/generated.cppia" | tee "$work/out.txt"
 		;;
@@ -135,7 +136,7 @@ case "$runtime" in
 		if [ "$runtime" = gen-wasm ]; then
 			generate
 			package=counter-gen-hl archive=libcounter_gen_hl.a main=Generated
-			adapter="$work/gen/hl/adapter.rs" classes="$work/gen/haxe/hl"
+			adapter="$work/gen/hl/adapter.rs" classes="$work/gen/haxe"
 		else
 			package=counter-hl archive=libcounter_hl.a main=Main
 			adapter="$here/hl/src/lib.rs" classes="$here/haxe/hl"
@@ -171,7 +172,7 @@ case "$runtime" in
 		if [ "$runtime" = gen-emcc ]; then
 			generate
 			package=counter-gen-c archive=libcounter_gen.a main=Generated
-			include="$work/gen/include" classes="$work/gen/haxe/cpp"
+			include="$work/gen/include" classes="$work/gen/haxe"
 		else
 			package=counter-c archive=libcounter.a main=Main
 			include="$here/c" classes="$here/haxe/cpp"

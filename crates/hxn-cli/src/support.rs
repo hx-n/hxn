@@ -23,8 +23,10 @@ pub const HAXE: &[(&str, &str)] = &[
     ),
     ("hxn/Future.hx", include_str!("../../../haxe/hxn/Future.hx")),
     ("hxn/Gc.hx", include_str!("../../../haxe/hxn/Gc.hx")),
+    ("hxn/Handle.hx", include_str!("../../../haxe/hxn/Handle.hx")),
     ("hxn/Inbox.hx", include_str!("../../../haxe/hxn/Inbox.hx")),
     ("hxn/Loop.hx", include_str!("../../../haxe/hxn/Loop.hx")),
+    ("hxn/Native.hx", include_str!("../../../haxe/hxn/Native.hx")),
     (
         "hxn/Reactive.hx",
         include_str!("../../../haxe/hxn/Reactive.hx"),
@@ -39,6 +41,14 @@ pub const HAXE: &[(&str, &str)] = &[
     ),
     ("hxn/Unit.hx", include_str!("../../../haxe/hxn/Unit.hx")),
     ("hxn/Wire.hx", include_str!("../../../haxe/hxn/Wire.hx")),
+    (
+        "hxn/native/HashLink.hx",
+        include_str!("../../../haxe/hxn/native/HashLink.hx"),
+    ),
+    (
+        "hxn/native/Hxcpp.hx",
+        include_str!("../../../haxe/hxn/native/Hxcpp.hx"),
+    ),
     (
         "hxn/reactive/Node.hx",
         include_str!("../../../haxe/hxn/reactive/Node.hx"),
