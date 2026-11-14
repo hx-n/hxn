@@ -252,10 +252,12 @@ impl Linked {
     }
 
     /// Adds what rustc's `--print native-static-libs` lists: `-lname`,
-    /// `-framework Name`, or `name.lib` for MSVC. A system library hxcpp's
-    /// program links anyway is listed again, which is harmless; an MSVC C
-    /// runtime is left out, since hxcpp links its own.
+    /// `-framework Name`, or `name.lib` for MSVC. The C library, libm and
+    /// Apple's libSystem are left out, since every program links them and a
+    /// static archive cannot name them; so is an MSVC C runtime, since hxcpp
+    /// links its own.
     fn add_native(&mut self, listed: &str) {
+        const BASE: [&str; 3] = ["c", "m", "System"];
         const RUNTIMES: [&str; 9] = [
             "msvcrt",
             "msvcrtd",
@@ -273,6 +275,9 @@ impl Linked {
                 let Some(name) = words.next() else { break };
                 (&mut self.frameworks, name)
             } else if let Some(name) = word.strip_prefix("-l") {
+                if BASE.contains(&name) {
+                    continue;
+                }
                 (&mut self.libraries, name)
             } else if let Some(name) = word.strip_suffix(".lib") {
                 if RUNTIMES.contains(&name.to_ascii_lowercase().as_str()) {
@@ -890,12 +895,11 @@ mod tests {
         );
         let mut linked = Linked::read(messages);
         assert_eq!(linked.libraries, ["sqlite3", "z"]);
-        linked.add_native("-framework CoreVideo -lobjc -lsqlite3 -lSystem kernel32.lib msvcrt.lib");
-        assert_eq!(linked.frameworks, ["Security", "CoreVideo"]);
-        assert_eq!(
-            linked.libraries,
-            ["sqlite3", "z", "objc", "System", "kernel32"]
+        linked.add_native(
+            "-framework CoreVideo -lobjc -lsqlite3 -lSystem -lc -lm kernel32.lib msvcrt.lib",
         );
+        assert_eq!(linked.frameworks, ["Security", "CoreVideo"]);
+        assert_eq!(linked.libraries, ["sqlite3", "z", "objc", "kernel32"]);
         linked.frameworks.truncate(1);
         linked.libraries.truncate(2);
         assert_eq!(linked.frameworks, ["Security"]);

@@ -47,7 +47,8 @@ A static library does not carry the native libraries it needs to the
 program's link. For hxcpp, `hxn` writes them into `link.xml`: what the build
 scripts link, from cargo's messages, and what rustc lists for the archive
 (`--print native-static-libs`), which includes what a crate links with
-`#[link]`, such as a system framework. An MSVC C runtime is left out, since
+`#[link]`, such as a system framework. The C library, libm and libSystem are
+left out, since every program links them, and so is an MSVC C runtime, since
 hxcpp links its own.
 
 Libraries maintaining adapters themselves call `hxn-gen` from build scripts,
