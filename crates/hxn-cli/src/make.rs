@@ -10,6 +10,7 @@
 //! | `<runtime>/haxe/` | the library's Haxe classes (a class path) |
 //! | `<runtime>/build.hxml` | the `haxe` arguments for compiling against them |
 //! | `hl/<library>.hdll` | the built library for HashLink |
+//! | `hl-<triple>/lib<library>.a` | the built library for HashLink on another platform, which Ash links into the program |
 //! | `cppia/` | the files a CPPIA script needs, written by [`crate::script`] |
 //! | `hl-wasm/<library>.wasm` | the built library as a wasm module that Ash loads into a wasm program |
 //!
@@ -53,8 +54,9 @@ impl Runtime {
 pub struct Target {
     pub runtime: Runtime,
     pub wasm: bool,
-    /// The target triple of a cross-compiled build. Only the hxcpp binding
-    /// supports one: it is a static library, linked later with the program.
+    /// The target triple of a cross-compiled build. The binding is then a
+    /// static library, linked later with the program: by hxcpp, or by Ash
+    /// for HashLink.
     pub cross: Option<&'static str>,
 }
 
@@ -80,6 +82,12 @@ impl Target {
             (None, true, Runtime::Hl) => Some("wasm32-wasip1"),
             (None, true, Runtime::Cpp) => Some("wasm32-unknown-emscripten"),
         }
+    }
+
+    // Whether the adapter is a static library, linked into the program by a
+    // later step. Only a native HashLink binding is a library the VM loads.
+    fn archive(self) -> bool {
+        self.runtime == Runtime::Cpp || self.wasm || self.cross.is_some()
     }
 
     // Whether the target platform is Windows.
@@ -307,7 +315,7 @@ fn manifest(project: &Project, target: Target, later: bool) -> String {
         // cargo cannot link a wasm library whose imports are provided by
         // the program, so it is built as a static library and linked in a
         // later step.
-        Runtime::Hl if target.wasm => ("staticlib", &["hxn-abi", "hxn-hl"]),
+        Runtime::Hl if target.archive() => ("staticlib", &["hxn-abi", "hxn-hl"]),
         Runtime::Hl => ("cdylib", &["hxn-abi", "hxn-hl"]),
         Runtime::Cpp => ("staticlib", &["hxn-abi"]),
     };
@@ -342,7 +350,10 @@ const HL_BUILD_SCRIPT: &str = "// Written by hxn. Do not edit.\nfn main() {\n   
 // The file name of the library cargo builds from an adapter crate.
 fn artifact(library: &str, target: Target) -> String {
     match target.runtime {
-        Runtime::Hl if target.wasm => format!("lib{library}_hl.a"),
+        Runtime::Hl if target.archive() && target.windows() && !target.wasm => {
+            format!("{library}_hl.lib")
+        }
+        Runtime::Hl if target.archive() => format!("lib{library}_hl.a"),
         Runtime::Hl if cfg!(windows) => format!("{library}_hl.dll"),
         Runtime::Hl if cfg!(target_os = "macos") => format!("lib{library}_hl.dylib"),
         Runtime::Hl => format!("lib{library}_hl.so"),
@@ -501,7 +512,7 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
     )?;
     let (adapter, classes) = match runtime {
         Runtime::Hl => {
-            if !target.wasm {
+            if !target.archive() {
                 write(&krate.join("build.rs"), HL_BUILD_SCRIPT)?;
             }
             (
@@ -623,6 +634,18 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
             let module = dir.join(format!("{name}.wasm"));
             side_module(&built, &adapter, &module)?;
             built = module;
+        }
+        Runtime::Hl if target.cross.is_some() => {
+            // Named after the library, as an .hdll is, for Ash's
+            // `--native-lib`.
+            let archive = dir.join(if target.windows() {
+                format!("{name}.lib")
+            } else {
+                format!("lib{name}.a")
+            });
+            std::fs::copy(&built, &archive)
+                .map_err(|error| format!("{}: {error}", built.display()))?;
+            built = archive;
         }
         Runtime::Hl => {
             // Copied to the file name the Haxe classes load it by.
@@ -773,6 +796,14 @@ mod tests {
             ..mobile
         };
         assert_eq!(artifact("greeter", windows), "greeter_cpp.lib");
+        // So is a HashLink one, which Ash links into a mobile program.
+        let ash_mobile = Target {
+            runtime: Runtime::Hl,
+            ..mobile
+        };
+        assert_eq!(ash_mobile.name(), "hl-aarch64-apple-ios");
+        assert!(ash_mobile.archive() && !native.archive() && ash.archive());
+        assert_eq!(artifact("greeter", ash_mobile), "libgreeter_hl.a");
         assert!(windows.rustflags().is_some());
         assert_eq!(emscripten.name(), "cpp-wasm");
         assert_eq!(emscripten.triple(), Some("wasm32-unknown-emscripten"));

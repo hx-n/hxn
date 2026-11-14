@@ -28,6 +28,7 @@ features.
 | hxcpp / Emscripten | C adapter compiled to wasm; no threads or forced GC. Requires wasm-exception-compatible hxcpp. |
 | hxcpp / iOS | Rust merged into the app's static library. Examples tested on simulator only; panics untested. |
 | hxcpp / Android | Rust linked into the shared library; output through logcat. Examples tested on emulator only; panics untested. |
+| Ash / iOS, Android | Rust static library linked into the program with `--native-lib`, with threads. Examples and the generated fixture tested on simulator and emulator only. |
 
 On Windows, HashLink links `libhl.lib` from `HXN_HL_DIR`. hxcpp uses its
 static C runtime, Rust's required system libraries and a 64-bit host build.

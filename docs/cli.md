@@ -22,9 +22,21 @@ Run build, run, check and package commands in the library crate. See the
 
 - `--wasm` builds the selected runtime's wasm form. Ash requires nightly
   Rust with `rust-src`; Emscripten requires its SDK and compatible hxcpp.
-- `--target <triple>` cross-compiles `build cpp` or `package`. Install the
-  Rust target; the application's linker and SDK are needed later. `run` and
-  `check` require locally runnable targets.
+- `--target <triple>` makes `build` and `package` build the binding for
+  another platform, such as `aarch64-linux-android`, as a static library.
+  Install that triple's Rust standard library first with
+  `rustup target add <triple>`. hxn needs no linker for this; the
+  platform's linker and SDK are used when the program is linked.
+
+  hxcpp links the `cpp` library into the app. For HashLink, Ash links
+  `lib<library>.a` into the program it builds for that platform:
+
+  ```
+  ash --build <program> --target <triple> --native-lib lib<library>.a main.hl
+  ```
+
+  `run` and `check` do not accept `--target`, because they run the program
+  on this machine.
 - `cppia` builds an hxcpp host and runs the program as a script. Arguments
   after the script name go to the program.
 - Set the Haxe directory, main class and `haxe-flags` under

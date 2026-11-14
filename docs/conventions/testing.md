@@ -28,7 +28,7 @@ Windows is known to pass only after CI runs.
 | `tests/cli/run.sh` | New, run, check and package; `hl <vm>`, `cpp`, `cppia`, `wasm <ash>`, `emcc`. |
 | `tests/examples/run.sh` | Each example against `expected.txt`; same modes as CLI. |
 | `tests/cimport/run.sh` | Import tally and installed sqlite3; `hl <vm>`, `cpp`, `cppia`, `emcc`; needs clang. |
-| `tests/mobile/run.sh ios-sim` / `android` | Package, compile, link and run examples on local mobile tools. Run after hxcpp compilation/linking changes. |
+| `tests/mobile/run.sh ios-sim` / `android`, each `[cpp\|hl]` | Package, compile, link and run examples on local mobile tools: hxcpp, or HashLink through Ash (`ASH`). Run after changes to how an hxcpp program or a cross-compiled library is built or linked. |
 | `tests/install/run.sh` | Offline release archives, platforms and installer failures. |
 
 VM strings include options, for example `hl "ash --mode jit"`.

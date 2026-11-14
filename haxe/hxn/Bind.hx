@@ -73,11 +73,13 @@ class Bind {
 		switch runtime {
 			case "hl":
 				var wasm = StringTools.startsWith(triple, "wasm32");
-				var file = name + (wasm ? ".wasm" : ".hdll");
-				var from = library([file]);
+				// A library cross-compiled for another platform is an
+				// archive, which Ash links into the program it builds.
+				var from = library(wasm ? ['$name.wasm'] : ['$name.hdll', 'lib$name.a', '$name.lib']);
+				var file = Path.withoutDirectory(from);
 				// The VM loads the library by name, and Ash loads the module
 				// next to the program it builds: both search the program's
-				// directory.
+				// directory. An archive is put there too, for `--native-lib`.
 				Context.onAfterGenerate(() -> {
 					var output = Compiler.getOutput();
 					if (Path.extension(output) == "hl")

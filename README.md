@@ -170,6 +170,23 @@ hxn package cpp --target aarch64-linux-android --out ../greeter-haxelib
 Compiling with hxcpp's defines for that platform (`-D iphoneos`, or
 `-D android -D HXCPP_ARM64`) selects the matching library.
 
+A HashLink program can run on iOS and Android as well, built by Ash. A
+program on those platforms cannot load an `.hdll`, so `--target` packages
+the HashLink library as a static archive, and Ash links it into the
+executable:
+
+```
+hxn package hl --target aarch64-linux-android --out ../greeter-haxelib
+haxe -lib greeter -D hxn_triple=aarch64-linux-android -cp src -main Main -hl main.hl
+ash --build main --target aarch64-linux-android --native-lib libgreeter.a main.hl
+```
+
+`-D hxn_triple` selects the Android library from the package, and
+`hxn.Bind` copies it, `libgreeter.a`, next to `main.hl`. For the iOS
+simulator the triple is `aarch64-apple-ios-sim`. Ash also links its own
+runtime for the platform, which it finds beside the `ash` command or takes
+from `--runtime`.
+
 `haxelib submit` requires a few more fields. Set `repository` and `license`
 in Cargo.toml, and the haxelib contributors and a release note under
 `[package.metadata.hxn]`:

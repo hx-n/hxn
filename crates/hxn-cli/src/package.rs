@@ -10,7 +10,7 @@
 //! | `binding/<runtime>/` | the library's Haxe classes for `hl` or `cpp` |
 //! | `binding/cppia/` | declarations of the `cpp` classes, for a CPPIA script |
 //! | `include/` | `hxn.h` and the library's headers, for hxcpp |
-//! | `native/<triple>/` | the built libraries for one target triple, which may be a wasm one; for hxcpp also `link.xml`, the system libraries the archive links |
+//! | `native/<triple>/` | the built libraries for one target triple, which may be a wasm one; for hxcpp also `link.xml`, the system libraries the archive links. A HashLink library built with `--target` is the archive `lib<library>.a`, which Ash links into the program |
 //!
 //! Only `native/` differs between platforms. Packaging on another machine
 //! into the same directory, or copying that machine's `native/<triple>/` into
@@ -47,8 +47,8 @@ fn mirror(from: &Path, to: &Path) -> Result<(), String> {
 fn packaged(library: &str, target: Target, built: &Built) -> String {
     match target.runtime {
         Runtime::Hl if target.wasm => format!("{library}.wasm"),
-        Runtime::Hl => format!("{library}.hdll"),
-        Runtime::Cpp => built
+        Runtime::Hl if target.cross.is_none() => format!("{library}.hdll"),
+        _ => built
             .library
             .file_name()
             .map(|name| name.to_string_lossy().into_owned())

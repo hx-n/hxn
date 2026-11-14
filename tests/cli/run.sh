@@ -207,9 +207,9 @@ if ! grep -q '"contributors": \["someone"\]' "$work/listed/haxelib.json" || ! gr
 	echo "FAILED: the package's haxelib.json does not list what the crate gives" >&2
 	exit 1
 fi
-# `hxn run` refuses a cross-compilation target, and `hxn build hl` refuses
-# to cross-compile an .hdll.
-for refused in "run cpp" "build hl"; do
+# `hxn run` and `hxn check` refuse a cross-compilation target, since they
+# run the program on this machine.
+for refused in "run cpp" "run hl" "check"; do
 	if "$hxn" $refused --target aarch64-apple-ios >/dev/null 2>&1; then
 		echo "FAILED: \`hxn $refused --target\` was not refused" >&2
 		exit 1

@@ -21,9 +21,12 @@ Haxe programs use it with `-lib <library>` and need no Rust source.
 ## Additional platforms
 
 Run packaging again into the same directory to add platforms. `--wasm` adds
-`wasm32-wasip1` or `wasm32-unknown-emscripten`. `--target` adds an hxcpp
-static library, including iOS and Android; install its Rust target first.
-HashLink `.hdll` files must be built on the system they run on.
+`wasm32-wasip1` or `wasm32-unknown-emscripten`. `--target` adds a static
+library for that triple, including iOS and Android; install its Rust target
+first. For hxcpp it is linked into the app. For HashLink it is
+`lib<library>.a`, which `hxn.Bind` copies next to `main.hl` and Ash links
+into the program as a `--native-lib`, since an Android or iOS program cannot
+open an `.hdll`. A host `.hdll` must be built on the system it runs on.
 
 `hxn.Bind.lib` selects the host, wasm or mobile library from Haxe defines.
 Use `-D hxn_triple=<triple>` to override the selection. CPPIA scripts use

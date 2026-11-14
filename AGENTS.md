@@ -18,9 +18,10 @@ for the area you are changing:
   the `hxn` command the way the readme uses it, and `tests/examples/run.sh`
   runs every library under `examples/`; both take `hl`, `cpp`, `cppia`,
   `wasm` and `emcc`, and a VM with its options, as in `hl "ash --mode jit"`.
-  `tests/mobile/run.sh ios-sim|android` runs the examples in an iOS
-  simulator and on an Android device or emulator. Run it after changing how
-  an hxcpp program is compiled or linked. `tests/cimport/run.sh` imports a
+  `tests/mobile/run.sh ios-sim|android [cpp|hl]` runs the examples in an
+  iOS simulator and on an Android device or emulator, with hxcpp or with
+  HashLink through Ash. Run it after changing how an hxcpp program or a
+  cross-compiled library is compiled or linked. `tests/cimport/run.sh` imports a
   C library with `hxn import` and runs a program against it; it takes `hl`,
   `cpp`, `cppia` and `emcc`, and needs clang.
 - **Run runtime tests under a timeout.** A wrong wait hangs instead of failing.

@@ -72,12 +72,14 @@ is compiled as a script and run by that host.
       another machine, or with --wasm or --target, adds to the same
       directory.
 
-On build cpp or package, --target cross-compiles the Rust static binding
-for a target triple, such as `aarch64-apple-ios` or `aarch64-linux-android`.
-It needs the target's standard library (`rustup target add <triple>`).
-The library's dependencies and the Haxe app may need platform tools and SDKs.
-On doctor, --target checks the Rust binding's prerequisites without building.
-An .hdll is linked when it is built, so it has to be built on its platform.
+On build or package, --target cross-compiles the binding for a target
+triple, such as `aarch64-apple-ios` or `aarch64-linux-android`, as a static
+library. hxcpp links the `cpp` one into the app; Ash links the `hl` one
+into the program it builds for that platform (`ash --build --target
+<triple> --native-lib lib<name>.a`). It needs the target's standard
+library (`rustup target add <triple>`). The library's dependencies and the
+Haxe app may need platform tools and SDKs. On doctor, --target checks the
+Rust binding's prerequisites without building.
 
 With --wasm the binding and the program are built for wasm. `hl --wasm` is
 built and run by Ash. Set --vm or HXN_VM if its command is not `ash`.
@@ -179,12 +181,12 @@ fn target(arguments: &Arguments) -> Result<Target, String> {
     Ok(Target {
         runtime,
         wasm: arguments.wasm,
-        cross: cross(arguments, runtime)?,
+        cross: cross(arguments)?,
     })
 }
 
-// The `--target` triple, if given and valid for this runtime.
-fn cross(arguments: &Arguments, runtime: Runtime) -> Result<Option<&'static str>, String> {
+// The `--target` triple, if given and valid with the other flags.
+fn cross(arguments: &Arguments) -> Result<Option<&'static str>, String> {
     let Some(triple) = arguments.cross else {
         return Ok(None);
     };
@@ -194,11 +196,6 @@ fn cross(arguments: &Arguments, runtime: Runtime) -> Result<Option<&'static str>
     if script(arguments) {
         return Err(String::from(
             "--target is not supported for `cppia`: cross-compile the `cpp` binding instead",
-        ));
-    }
-    if runtime == Runtime::Hl {
-        return Err(format!(
-            "--target is not supported for `hl`: an .hdll has to be linked on the platform it runs on ({triple}). Only the `cpp` binding, a static library, can be cross-compiled"
         ));
     }
     Ok(Some(triple))
@@ -271,7 +268,8 @@ fn exit(command: &mut Command) -> Result<u8, String> {
 fn run(project: &Project, target: Target, arguments: Arguments) -> Result<u8, String> {
     if let Some(triple) = target.cross {
         return Err(format!(
-            "cannot run a binding built for {triple} on this machine: use `hxn build cpp --target {triple}` or `hxn package --target {triple}`"
+            "cannot run a binding built for {triple} on this machine: use `hxn build {} --target {triple}` or `hxn package --target {triple}`",
+            target.runtime.name()
         ));
     }
     let script = script(&arguments);
@@ -607,23 +605,26 @@ Not imported (listed at the end of {name}.webidl):"
                 target.name(),
                 built.hxml.display()
             );
-            match (target.runtime, target.wasm) {
-                (Runtime::Hl, false) => println!(
+            match (target.runtime, target.wasm, target.cross) {
+                (Runtime::Hl, _, Some(triple)) => println!(
+                    "Ash links {} into a program for {triple}. With main.hl compiled against it:\n  ash --build main --target {triple} --native-lib {} main.hl",
+                    project.library,
+                    built.library.display()
+                ),
+                (Runtime::Hl, false, None) => println!(
                     "The VM loads {}.hdll from {}.",
                     project.library,
                     built.dir.display()
                 ),
-                (Runtime::Hl, true) => println!(
+                (Runtime::Hl, true, None) => println!(
                     "Ash builds the wasm program and loads {}.wasm from the same directory. With main.hl in {}:\n  ASH_WASM_FIBERS=1 ash --build main.wasm --target wasm32-wasip1 main.hl\n  ash run main.wasm",
                     project.library,
                     built.dir.display()
                 ),
-                (Runtime::Cpp, _) => {}
-            }
-            if let Some(triple) = target.cross {
-                println!(
+                (Runtime::Cpp, _, Some(triple)) => println!(
                     "Built for {triple}. Compile the program for the same platform, with hxcpp's defines for it."
-                );
+                ),
+                (Runtime::Cpp, _, None) => {}
             }
             Ok(0)
         }
@@ -637,20 +638,13 @@ Not imported (listed at the end of {name}.webidl):"
             let named: &[String] = &arguments.positional;
             let both = [String::from("hl"), String::from("cpp")];
             let mut targets = Vec::new();
-            // Only the hxcpp binding can be cross-compiled.
-            let other = [String::from("cpp")];
-            let all: &[String] = if arguments.cross.is_some() {
-                &other
-            } else {
-                &both
-            };
-            for name in if named.is_empty() { all } else { named } {
+            for name in if named.is_empty() { &both } else { named } {
                 let runtime = Runtime::parse(name)
                     .ok_or(format!("unknown runtime `{name}`: expected `hl` or `cpp`"))?;
                 targets.push(Target {
                     runtime,
                     wasm: arguments.wasm,
-                    cross: cross(&arguments, runtime)?,
+                    cross: cross(&arguments)?,
                 });
             }
             let project = Project::read(&here)?;
@@ -769,5 +763,24 @@ mod tests {
         assert!(!script(&read(&["cpp"])));
         assert!(target(&read(&["cppia", "--wasm"])).is_err());
         assert!(target(&read(&["neko"])).is_err());
+    }
+
+    #[test]
+    fn either_runtime_is_cross_compiled_but_not_a_script_or_for_wasm() {
+        let read = |given: &[&str]| arguments(given.iter().map(|word| word.to_string())).unwrap();
+        for runtime in ["hl", "cpp"] {
+            let built = target(&read(&[runtime, "--target", "aarch64-linux-android"])).unwrap();
+            assert_eq!(built.cross, Some("aarch64-linux-android"));
+            assert!(
+                target(&read(&[
+                    runtime,
+                    "--wasm",
+                    "--target",
+                    "aarch64-linux-android"
+                ]))
+                .is_err()
+            );
+        }
+        assert!(target(&read(&["cppia", "--target", "aarch64-apple-ios"])).is_err());
     }
 }
