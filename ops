@@ -1,1 +1,1 @@
-{"author":{"id":"585844baa6074d44d241f46aa7c9f21ff46653adf617d7f070fbfe327626c989"},"ops":[{"type":4,"timestamp":1794769427,"nonce":"8NnbWPuZ0Atx1kpbetzZlJhHC4w=","status":2}]}
+{"author":{"id":"585844baa6074d44d241f46aa7c9f21ff46653adf617d7f070fbfe327626c989"},"ops":[{"type":3,"timestamp":1794782967,"nonce":"p0gxG9MPqzrd9HZMJSKMNvtctkE=","message":"Amended to e4d0f81 (still unpushed): tests/cli/run.sh wasm built the packaged greeter with ash --build and no --native-lib, which the archive link needs; it passes with --native-lib libgreeter.a.","files":null}]}
