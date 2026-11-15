@@ -4,8 +4,8 @@
   "license": "Apache",
   "tags": ["ffi", "rust", "native", "hashlink", "ash", "hxcpp"],
   "description": "The Haxe classes of libraries built with hxn: futures, streams, signals, reactive values, atomics, and the macro that binds a packaged library.",
-  "version": "0.3.2",
-  "releasenote": "hxn.Bind.lib adds a package's hand-written Haxe from sources/ to the class path, and a package's extraParams.hxml can run init macros of its own.",
+  "version": "0.3.3",
+  "releasenote": "Under Emscripten, futures settled by a JavaScript callback are delivered from the page's event loop, and Haxe events queued after main returns run; hxn run and check take --browser for a cpp --wasm program; link-args passes linker arguments by target triple.",
   "contributors": ["darmie"],
   "classPath": "haxe",
   "dependencies": {}

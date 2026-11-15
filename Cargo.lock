@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "counter-c"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "counter-core",
  "hxn-abi",
@@ -13,7 +13,7 @@ dependencies = [
 
 [[package]]
 name = "counter-core"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "hxn",
  "hxn-future",
@@ -21,7 +21,7 @@ dependencies = [
 
 [[package]]
 name = "counter-gen-c"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "counter-core",
  "hxn-abi",
@@ -31,7 +31,7 @@ dependencies = [
 
 [[package]]
 name = "counter-gen-hl"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "counter-core",
  "hl_abi",
@@ -43,7 +43,7 @@ dependencies = [
 
 [[package]]
 name = "counter-hl"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "counter-core",
  "hl_abi",
@@ -82,7 +82,7 @@ source = "git+https://github.com/rayzor-blade/hl_abi#f38e06df4c7f7d7e79348df345c
 
 [[package]]
 name = "hxn"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "hxn-abi",
  "hxn-macros",
@@ -90,11 +90,11 @@ dependencies = [
 
 [[package]]
 name = "hxn-abi"
-version = "0.3.2"
+version = "0.3.3"
 
 [[package]]
 name = "hxn-c"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "hxn-gen",
  "serde_json",
@@ -103,7 +103,7 @@ dependencies = [
 
 [[package]]
 name = "hxn-cli"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "hxn-c",
  "hxn-gen",
@@ -112,7 +112,7 @@ dependencies = [
 
 [[package]]
 name = "hxn-future"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "hxn-abi",
  "krio-core",
@@ -122,7 +122,7 @@ dependencies = [
 
 [[package]]
 name = "hxn-gen"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "proc-macro2",
  "syn 2.0.119",
@@ -130,7 +130,7 @@ dependencies = [
 
 [[package]]
 name = "hxn-hl"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "hl_abi",
  "hxn-abi",
@@ -138,7 +138,7 @@ dependencies = [
 
 [[package]]
 name = "hxn-macros"
-version = "0.3.2"
+version = "0.3.3"
 
 [[package]]
 name = "itoa"
