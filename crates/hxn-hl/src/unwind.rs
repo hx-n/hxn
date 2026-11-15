@@ -1,9 +1,9 @@
 //! The two libunwind functions Rust's `panic=unwind` calls on WASI, for a
-//! side module that unwinds with wasm exceptions. On WASI Rust expects them
-//! from the toolchain's libunwind, which neither the module nor Ash's
-//! runtime has, so the module defines them, as Rust's own wasm shim does
-//! for `wasm32-unknown-unknown`. A panic never leaves the module, so the
-//! exception tag is the module's own.
+//! library that unwinds with wasm exceptions. On WASI Rust expects them
+//! from the toolchain's libunwind, which neither the library nor Ash's
+//! runtime has, so the library defines them, as Rust's own wasm shim does
+//! for `wasm32-unknown-unknown`. A panic never leaves the library, so the
+//! exception tag is the library's own.
 
 use std::ffi::c_int;
 

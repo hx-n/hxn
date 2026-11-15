@@ -83,7 +83,7 @@ Rust binding's prerequisites without building.
 
 With --wasm the binding and the program are built for wasm. `hl --wasm` is
 built and run by Ash. With --threads it is threaded: wasm32-wasip1-threads,
-the side module and the program over one shared memory, each Haxe thread a
+the library and the program over one shared memory, each Haxe thread a
 thread of its own. Set --vm or HXN_VM if its command is not `ash`.
 `cpp --wasm` is built by hxcpp with Emscripten and run by node, or by the
 command given with --vm. With --browser either is a web page in headless
@@ -109,7 +109,7 @@ struct Arguments {
     wasm: bool,
     // With `--wasm`: the program is a web page, run in a headless browser.
     browser: bool,
-    // With `hl --wasm`: a threaded program and side module over shared memory.
+    // With `hl --wasm`: a threaded program and library over shared memory.
     threads: bool,
     // The target triple given with `--target`, for a cross-compiled binding.
     cross: Option<&'static str>,
@@ -198,7 +198,7 @@ fn target(arguments: &Arguments) -> Result<Target, String> {
     }
     if arguments.threads && (runtime != Runtime::Hl || !arguments.wasm) {
         return Err(String::from(
-            "--threads builds a threaded Ash program and side module: give `hl --wasm`",
+            "--threads builds a threaded Ash program and library: give `hl --wasm`",
         ));
     }
     Ok(Target {
@@ -472,11 +472,10 @@ fn program(
             let vm = vm("ash");
             let (ash, options) = words(&vm)?;
             let module = built.dir.join("main.wasm");
-            // Ash looks for the library's module next to its output file.
-            // Without threads, ASH_WASM_FIBERS makes a waiting Haxe thread
-            // suspend so that the others can run; with them, each Haxe thread
-            // is a thread. The `--vm` options are passed to the build step
-            // only.
+            // Ash links the library's archive into the program. Without
+            // threads, ASH_WASM_FIBERS makes a waiting Haxe thread suspend so
+            // that the others can run; with them, each Haxe thread is a thread.
+            // The `--vm` options are passed to the build step only.
             let triple = target.triple().unwrap_or("wasm32-wasip1");
             make::run(
                 Command::new(ash)
@@ -485,6 +484,8 @@ fn program(
                     .arg("--build")
                     .arg(&module)
                     .args(["--target", triple])
+                    .arg("--native-lib")
+                    .arg(&built.library)
                     .arg(&program),
             )?;
             if arguments.browser {

@@ -167,7 +167,7 @@ EOF
 			;;
 		wasm)
 			"${compile[@]}" -D wasm -hl main.hl
-			ASH_WASM_FIBERS=1 "${2:-ash}" --build main.wasm --target wasm32-wasip1 main.hl
+			ASH_WASM_FIBERS=1 "${2:-ash}" --build main.wasm --target wasm32-wasip1 --native-lib libgreeter.a main.hl
 			"${2:-ash}" run main.wasm
 			;;
 		emcc)

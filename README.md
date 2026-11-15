@@ -132,8 +132,9 @@ native library without running anything, and prints the `haxe` arguments for
 compiling your own program against them.
 
 Add `--wasm` to build and run the same program as wasm: `hxn run hl --wasm`
-through Ash, and `hxn run cpp --wasm` through hxcpp and Emscripten. The first
-needs a nightly Rust toolchain; the second needs Rust's Emscripten target
+compiles it with Ash, and `hxn run cpp --wasm` with hxcpp. The first needs
+Ash 0.1.19 or later and a nightly Rust toolchain; the second needs the
+Emscripten SDK and Rust's Emscripten target
 (`rustup target add wasm32-unknown-emscripten`).
 
 `hxn run cppia` runs the same program as a CPPIA script: it builds the hxcpp

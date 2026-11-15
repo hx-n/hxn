@@ -423,6 +423,13 @@ fn names_follow_each_language() {
         "pub unsafe extern \"C-unwind\" fn hxn_audio_audio_device_default_gain() -> f64"
     ));
     assert!(adapter.contains("define_prim!(hlp_audio_audio_device_write, hxn_audio_audio_device_write, \"PXhxn_handle_Bi_i\");"));
+    // Ash links every wasm library into one program, so each primitive
+    // carries its library's name.
+    assert!(
+        adapter
+            .match_indices("define_prim!(")
+            .all(|(at, _)| adapter[at..].starts_with("define_prim!(hlp_audio_"))
+    );
     assert!(adapter.contains("blocking(|| this.drain())"));
     assert!(adapter.contains("use audio_core::{AudioDevice, Mixer};"));
 

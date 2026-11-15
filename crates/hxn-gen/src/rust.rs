@@ -872,7 +872,7 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
     )
 }
 
-/// The adapter of HashLink primitives, for an `.hdll` or a wasm side module.
+/// The adapter of HashLink primitives, for an `.hdll` or a wasm library Ash links.
 pub fn hl_adapter(library: &Library, core: &str) -> String {
     named_after(library, hl_exports(library, core))
 }

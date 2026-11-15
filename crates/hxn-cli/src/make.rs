@@ -12,7 +12,7 @@
 //! | `hl/<library>.hdll` | the built library for HashLink |
 //! | `hl-<triple>/lib<library>.a` | the built library for HashLink on another platform, which Ash links into the program |
 //! | `cppia/` | the files a CPPIA script needs, written by [`crate::script`] |
-//! | `hl-wasm/<library>.wasm` | the built library as a wasm module that Ash loads into a wasm program |
+//! | `hl-wasm/lib<library>.a` | the built library for wasm, which Ash links into the program it builds |
 //!
 //! `<runtime>` is `hl` or `cpp`, or `hl-wasm` or `cpp-wasm` for a wasm
 //! build. One file is written into the library's own crate: its manifest.
@@ -54,7 +54,7 @@ impl Runtime {
 pub struct Target {
     pub runtime: Runtime,
     pub wasm: bool,
-    /// With `hl --wasm`: a threaded side module over shared memory, for a
+    /// With `hl --wasm`: a threaded library over shared memory, for a
     /// program Ash builds for `wasm32-wasip1-threads`.
     pub threads: bool,
     /// The target triple of a cross-compiled build. The binding is then a
@@ -101,23 +101,22 @@ impl Target {
             .map_or(cfg!(windows), |triple| triple.contains("windows"))
     }
 
-    // Extra rustc flags. A wasm side module must be position-independent.
-    // Emscripten implements exceptions as JavaScript exceptions, which a
-    // library that unwinds cannot link against, so that build aborts on
-    // panic.
+    // Extra rustc flags. Emscripten implements exceptions as JavaScript
+    // exceptions, which a library that unwinds cannot link against, so that
+    // build aborts on panic.
     fn rustflags(self) -> Option<&'static str> {
         match (self.wasm, self.runtime) {
             // hxcpp links the static C runtime on Windows, and a library
             // linked into its program has to use the same one.
             (false, Runtime::Cpp) if self.windows() => Some("-C target-feature=+crt-static"),
             (false, _) => None,
-            // Position-independent for a side module, and unwinding with wasm
-            // exceptions in the encoding Ash emits.
+            // Unwinding with wasm exceptions in the encoding Ash emits, and for
+            // threads, atomics over shared memory.
             (true, Runtime::Hl) if self.threads => Some(
-                "-C relocation-model=pic -C target-feature=+mutable-globals,+exception-handling,+atomics,+bulk-memory -C panic=unwind -C llvm-args=-wasm-use-legacy-eh=false",
+                "-C target-feature=+mutable-globals,+exception-handling,+atomics,+bulk-memory -C panic=unwind -C llvm-args=-wasm-use-legacy-eh=false",
             ),
             (true, Runtime::Hl) => Some(
-                "-C relocation-model=pic -C target-feature=+mutable-globals,+exception-handling -C panic=unwind -C llvm-args=-wasm-use-legacy-eh=false",
+                "-C target-feature=+mutable-globals,+exception-handling -C panic=unwind -C llvm-args=-wasm-use-legacy-eh=false",
             ),
             // The prebuilt std unwinds with wasm exceptions, as hxcpp does.
             (true, Runtime::Cpp) => None,
@@ -551,47 +550,6 @@ pub fn on_path(program: &str) -> bool {
     })
 }
 
-// The name of each primitive's resolver function in a HashLink adapter. A
-// VM looks up a primitive by that name.
-fn resolvers(adapter: &str) -> Vec<&str> {
-    adapter
-        .split("define_prim!(")
-        .skip(1)
-        .filter_map(|rest| rest.split(',').next())
-        .map(str::trim)
-        .collect()
-}
-
-// Links the adapter's static library into a side module that a wasm program
-// loads. Its undefined symbols, the VM's functions and the allocator, become
-// imports that the program provides.
-fn side_module(archive: &Path, adapter: &str, module: &Path, threads: bool) -> Result<(), String> {
-    let sysroot = printed(Command::new("rustc").args(["--print", "sysroot"]))
-        .ok_or("`rustc --print sysroot` did not print a path")?;
-    let linker = Path::new(sysroot.trim())
-        .join("lib/rustlib")
-        .join(rustc_reports("host:")?)
-        .join("bin/rust-lld");
-    let mut link = Command::new(linker);
-    link.args(["-flavor", "wasm", "--experimental-pic", "-shared"])
-        .args(["--no-entry", "--gc-sections", "--no-export-dynamic"])
-        .arg("--unresolved-symbols=import-dynamic");
-    // A threaded program's memory is shared, and a module it loads has to
-    // declare the same.
-    if threads {
-        link.args(["--shared-memory", "--max-memory=1073741824"]);
-    }
-    for resolver in resolvers(adapter) {
-        link.arg(format!("--export={resolver}"));
-    }
-    link.arg("--whole-archive")
-        .arg(archive)
-        .arg("--no-whole-archive")
-        .arg("-o")
-        .arg(module);
-    run(&mut link)
-}
-
 // Writes these classes to `dir` and deletes every other file there. A stale
 // class for an interface the library has removed would otherwise still be
 // compiled.
@@ -679,8 +637,8 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
     let runtime = target.runtime;
     check_version(&project.package, &project.hxn_version)?;
     if target.wasm && runtime == Runtime::Hl {
-        // An Ash side module needs std rebuilt as position-independent code
-        // that unwinds, and only a nightly cargo can rebuild std.
+        // An Ash wasm library needs std rebuilt to unwind with wasm exceptions,
+        // and for threads with atomics, and only a nightly cargo can rebuild std.
         let release = rustc_reports("release:")?;
         if !release.contains("nightly") && !release.contains("dev") {
             return Err(format!(
@@ -870,9 +828,14 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
     }
     match runtime {
         Runtime::Hl if target.wasm => {
-            let module = dir.join(format!("{name}.wasm"));
-            side_module(&built, &adapter, &module, target.threads)?;
-            built = module;
+            // Ash links it into the program it builds, with `--native-lib`.
+            // Ash would also load a `<library>.wasm` it finds beside the
+            // program, so none is left there.
+            let _ = std::fs::remove_file(dir.join(format!("{name}.wasm")));
+            let archive = dir.join(format!("lib{name}.a"));
+            std::fs::copy(&built, &archive)
+                .map_err(|error| format!("{}: {error}", built.display()))?;
+            built = archive;
             // Beside the program, where Ash writes its page.
             if let Some(page) = &project.page {
                 copy_page(page, &dir)?;
@@ -1098,20 +1061,5 @@ mod tests {
         assert_eq!(emscripten.name(), "cpp-wasm");
         assert_eq!(emscripten.triple(), Some("wasm32-unknown-emscripten"));
         assert_eq!(artifact("greeter", emscripten), "libgreeter_cpp.a");
-    }
-
-    #[test]
-    fn every_primitive_of_an_adapter_is_exported_from_its_module() {
-        let source = "#[hxn::interface]\npub struct Greeter;\n#[hxn::methods]\nimpl Greeter {\n    pub fn new() -> Self { Self }\n    pub fn greeted(&self) -> i32 { 0 }\n}\n";
-        let library = hxn_gen::parse("greeter", source).unwrap();
-        let adapter = hxn_gen::hl_adapter(&library, "greeter");
-        let found = resolvers(&adapter);
-        assert_eq!(found.len(), adapter.matches("define_prim!").count());
-        assert!(found.iter().all(|name| name.starts_with("hlp_")));
-        // Named after the library, then the interface.
-        assert!(
-            found.contains(&"hlp_greeter_greeter_new")
-                && found.contains(&"hlp_greeter_greeter_greeted")
-        );
     }
 }

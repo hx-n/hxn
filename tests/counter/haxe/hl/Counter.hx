@@ -6,7 +6,7 @@ private typedef RawEmitter = hl.Abstract<"hxn_emitter">;
 private typedef RawSignal = hl.Abstract<"hxn_signal">;
 private typedef RawGauge = hl.Abstract<"hxn_gauge">;
 
-@:hlNative("counter")
+@:hlNative("counter", "counter_")
 private class Native {
 	public static function make(start:Int):Raw
 		return null;

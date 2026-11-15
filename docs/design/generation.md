@@ -69,7 +69,8 @@ manifest, validates its version and adds the pre-generated classes.
 Generating classes and adapters together prevents signature drift. The macro
 adds header/archive paths, the target word size and the native library
 selected by Haxe's target defines or `hxn_triple`.
-For HashLink it copies the `.hdll` or `.wasm` beside the program. A
+For HashLink it copies the `.hdll`, or the `lib<library>.a` Ash links into a
+wasm or mobile program, beside the program. A
 `-D scriptable` host retains all binding and support classes for its
 scripts.
 

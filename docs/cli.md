@@ -21,13 +21,12 @@ Run build, run, check and package commands in the library crate. See the
 ## Targets and settings
 
 - `--wasm` builds the selected runtime's wasm form. For Ash, hxn rebuilds
-  Rust's standard library and links the library into a side module with the
-  Rust toolchain's `rust-lld`, which needs nightly Rust with `rust-src`, and
-  on macOS `llvm-tools`; Ash itself needs neither. Emscripten requires its
-  SDK and compatible hxcpp.
-- `--threads`, with `hl --wasm`, builds a threaded side module and program
+  Rust's standard library, which needs nightly Rust with `rust-src`, builds
+  the library as `lib<library>.a`, and Ash links it into the program with
+  `--native-lib`. Emscripten requires its SDK and compatible hxcpp.
+- `--threads`, with `hl --wasm`, builds a threaded library and program
   for `wasm32-wasip1-threads`, over one shared memory, and passes
-  `-D hxn_threads` so `hxn.Bind.lib` selects that module. A library that
+  `-D hxn_threads` so `hxn.Bind.lib` selects that library. A library that
   serves a browser API through `ash_host_agent` needs it, since the page's
   browser agent reads the program's memory. It needs an Ash with that target's
   runtime object.

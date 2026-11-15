@@ -21,8 +21,8 @@ env:
   # crash on Windows when a program exits right after a collection.
   HXN_HXCPP: 615adc73d5ef28f3f74ea47977c39c4f25ce256d
   HXN_EMSDK: 5.0.7
-  # The first Ash release that bundles its Android and iOS runtimes.
-  HXN_ASH: v0.1.18
+  # The first Ash release that links a wasm library given with --native-lib.
+  HXN_ASH: v0.1.19
 
 defaults:
   run:

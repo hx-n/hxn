@@ -2,7 +2,7 @@
 # Builds the counter binding for one runtime and runs haxe/Main.hx on it.
 #   run.sh hl [vm]     vm is a HashLink-compatible executable, default `hl`
 #   run.sh cpp
-#   run.sh wasm [ash]  as a side module of an Ash wasm program, run by `ash run`
+#   run.sh wasm [ash]  linked into an Ash wasm program, run by `ash run`
 #   run.sh wasm-threads [ash]
 #                      the same, threaded: wasm32-wasip1-threads over shared memory
 #   run.sh emcc        hxcpp through Emscripten, run by node; needs emcc on PATH
@@ -136,49 +136,34 @@ case "$runtime" in
 		;;
 	wasm | gen-wasm | wasm-threads | gen-wasm-threads)
 		ash="$(command -v "${2:-ash}")"
-		# A threaded program's memory is shared, and the module is built with
-		# atomics and declares a shared memory too.
-		# Without threads, fibers let a Haxe thread that blocks suspend so the
-		# others run; a threaded program's Haxe threads are threads of their own.
-		triple=wasm32-wasip1 features=+mutable-globals,+exception-handling shared=() fibers=1
+		# A threaded program's memory is shared and the library is built with
+		# atomics. Without threads, fibers let a Haxe thread that blocks suspend
+		# so the others run; a threaded program's Haxe threads are threads of
+		# their own.
+		triple=wasm32-wasip1 features=+mutable-globals,+exception-handling fibers=1
 		case "$runtime" in
 			*-threads)
-				triple=wasm32-wasip1-threads features="$features,+atomics,+bulk-memory"
-				shared=(--shared-memory --max-memory=1073741824) fibers=0
+				triple=wasm32-wasip1-threads features="$features,+atomics,+bulk-memory" fibers=0
 				;;
 		esac
 		if [ "${runtime#gen-}" != "$runtime" ]; then
 			generate
 			package=counter-gen-hl archive=libcounter_gen_hl.a main=Generated
-			adapter="$work/gen/hl/adapter.rs" classes="$work/gen/haxe"
+			classes="$work/gen/haxe"
 		else
 			package=counter-hl archive=libcounter_hl.a main=Main
-			adapter="$here/hl/src/lib.rs" classes="$here/haxe/hl"
+			classes="$here/haxe/hl"
 		fi
-		# A side module must be position-independent and the prebuilt std is
-		# not, so std is rebuilt. It unwinds with wasm exceptions in the
-		# encoding Ash emits, so a panic is caught. Only the static library is
-		# built, because cargo cannot link a wasm shared library whose imports
-		# come from the main program.
-		RUSTFLAGS="-C relocation-model=pic -C target-feature=$features -C panic=unwind -C llvm-args=-wasm-use-legacy-eh=false" \
+		# std is rebuilt to unwind with wasm exceptions in the encoding Ash
+		# emits, so a panic is caught. Ash links the static library into the
+		# program.
+		RUSTFLAGS="-C target-feature=$features -C panic=unwind -C llvm-args=-wasm-use-legacy-eh=false" \
 			cargo rustc --manifest-path "$root/Cargo.toml" -p "$package" --crate-type staticlib \
 			--target "$triple" -Z build-std=std,panic_unwind
-		lld="$(rustc --print sysroot)/lib/rustlib/$(rustc -vV | sed -n 's/^host: //p')/bin/rust-lld"
-		exports=()
-		while read -r resolver; do
-			exports+=("--export=$resolver")
-		done < <(tr '\n' ' ' < "$adapter" | grep -o 'define_prim!( *hlp_[a-z0-9_]*' | sed 's/define_prim!( *//')
-		# Undefined symbols become imports that the main program resolves when
-		# it loads the module.
-		"$lld" -flavor wasm --experimental-pic -shared --no-entry --gc-sections --no-export-dynamic \
-			--unresolved-symbols=import-dynamic ${shared[@]+"${shared[@]}"} "${exports[@]}" \
-			--whole-archive "$root/target/$triple/debug/$archive" --no-whole-archive \
-			-o "$work/counter.wasm"
 		haxe -D wasm -cp "$root/haxe" -cp "$here/haxe" -cp "$classes" -main "$main" -hl "$work/main.hl"
 		cd "$work"
-		# Ash finds the library next to the output and exports the symbols it
-		# imports.
-		ASH_WASM_FIBERS=$fibers "$ash" --build main.wasm --target "$triple" main.hl
+		ASH_WASM_FIBERS=$fibers "$ash" --build main.wasm --target "$triple" \
+			--native-lib "$root/target/$triple/debug/$archive" main.hl
 		"$ash" run main.wasm | tee "$work/out.txt"
 		;;
 	emcc | gen-emcc)

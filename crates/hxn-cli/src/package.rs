@@ -39,7 +39,7 @@ fn mirror(from: &Path, to: &Path) -> Result<(), String> {
 // under that name.
 fn packaged(library: &str, target: Target, built: &Built) -> String {
     match target.runtime {
-        Runtime::Hl if target.wasm => format!("{library}.wasm"),
+        Runtime::Hl if target.wasm => format!("lib{library}.a"),
         Runtime::Hl if target.cross.is_none() => format!("{library}.hdll"),
         _ => built
             .library

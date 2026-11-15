@@ -13,7 +13,7 @@ features.
 | `include/hxn.h` | C declarations and hxcpp glue helpers. |
 | `<name>-core` | Library implementation, without runtime dependencies. |
 | `<name>-c` | Static C adapter for hxcpp. |
-| `<name>-hl` | Shared HashLink adapter, or static Ash wasm side module. |
+| `<name>-hl` | Shared HashLink adapter, or static library Ash links into a wasm program. |
 | Generated Haxe | The same public API on each runtime. |
 
 ## Runtime support
@@ -22,7 +22,7 @@ features.
 |---|---|
 | HashLink | Native `.hdll`, with threads. |
 | Ash native | Same `.hdll`; hybrid, JIT and cooperative interpreter modes. |
-| Ash wasm | Side module using the program's allocator; Haxe fibers, no Rust threads. |
+| Ash wasm | Static library linked by Ash, using the program's allocator; Haxe fibers, or threads with `--threads`. |
 | hxcpp | Static C adapter and C++ glue, with threads. |
 | CPPIA | Script in an hxcpp host built with `-D scriptable` and DCE off. |
 | hxcpp / Emscripten | C adapter compiled to wasm; no threads or forced GC. Requires wasm-exception-compatible hxcpp. |
@@ -33,9 +33,8 @@ features.
 On Windows, HashLink links `libhl.lib` from `HXN_HL_DIR`. hxcpp uses its
 static C runtime, Rust's required system libraries and a 64-bit host build.
 
-Ash wasm rebuilds Rust's standard library with nightly, position-independent
-code and wasm exceptions (`-wasm-use-legacy-eh=false`). Emscripten uses its
-prebuilt standard library. Both catch panics at the boundary.
+Ash wasm rebuilds Rust's standard library with nightly and wasm exceptions
+(`-wasm-use-legacy-eh=false`). Emscripten uses its prebuilt standard library. Both catch panics at the boundary.
 
 Threadless builds queue work locally and use bounded waits; see
 [scheduling](async.md). Windows is validated by CI. There is no Rayzor adapter.

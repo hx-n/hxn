@@ -25,7 +25,7 @@ import sys.io.File;
 
 	The native library used is the one built for the host machine, or for
 	wasm when `wasm` or `emscripten` is defined; for HashLink, `hxn_threads`
-	with `wasm` selects the threaded side module. `-D hxn_triple=<triple>`
+	with `wasm` selects the threaded library. `-D hxn_triple=<triple>`
 	selects another, given as a Rust target triple.
 **/
 class Bind {
@@ -82,13 +82,12 @@ class Bind {
 		switch runtime {
 			case "hl":
 				var wasm = StringTools.startsWith(triple, "wasm32");
-				// A library cross-compiled for another platform is an
-				// archive, which Ash links into the program it builds.
-				var from = library(wasm ? ['$name.wasm'] : ['$name.hdll', 'lib$name.a', '$name.lib']);
+				// A library for wasm or cross-compiled for another platform is
+				// an archive, which Ash links into the program it builds.
+				var from = library(wasm ? ['lib$name.a'] : ['$name.hdll', 'lib$name.a', '$name.lib']);
 				var file = Path.withoutDirectory(from);
-				// The VM loads the library by name, and Ash loads the module
-				// next to the program it builds: both search the program's
-				// directory. An archive is put there too, for `--native-lib`.
+				// The VM loads an .hdll by name from the program's directory; an
+				// archive is put there too, for Ash's `--native-lib`.
 				// A wasm library's page files go there too, beside the page Ash
 				// writes for the program: the shim of a browser agent it starts.
 				var page = Path.join([root, "page"]);

@@ -8,7 +8,7 @@ license.workspace = true
 
 [lib]
 name = "counter_gen_hl"
-# wasm-ld links the static library into a side module.
+# Ash links the static library into a wasm program.
 crate-type = ["cdylib", "staticlib"]
 test = false
 doctest = false

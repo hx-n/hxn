@@ -4,7 +4,7 @@
 // VM passes.
 #![allow(clippy::missing_safety_doc)]
 
-// A wasm side module shares the main program's heap, so it uses the
+// On wasm the library shares the Ash program's heap, so it uses the
 // program's allocator.
 #[cfg(target_family = "wasm")]
 #[global_allocator]
