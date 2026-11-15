@@ -108,10 +108,21 @@ try {
       const { type, args, timestamp } = message.params;
       const text = args.map((a) => (a.value !== undefined ? String(a.value) : a.description ?? "")).join(" ");
       written.push({ timestamp, error: type === "error" || type === "warning", text });
+    } else if (message.method === "Runtime.exceptionThrown") {
+      // Uncaught, in the web page or any Worker: a browser agent that fails to start, say.
+      const { timestamp, exceptionDetails } = message.params;
+      const text = exceptionDetails.exception?.description ?? exceptionDetails.text;
+      written.push({ timestamp, error: true, text: `uncaught: ${text}` });
     }
   };
   await send("Runtime.enable");
   await send("Target.setAutoAttach", { autoAttach: true, waitForDebuggerOnStart: true, flatten: true });
+  // HXN_PAGE_CORES sets navigator.hardwareConcurrency, which sizes the web
+  // page's pool of thread agents: a smaller machine's, reproduced on this one.
+  if (process.env.HXN_PAGE_CORES)
+    await send("Emulation.setHardwareConcurrencyOverride", {
+      hardwareConcurrency: Number(process.env.HXN_PAGE_CORES),
+    });
   await send("Page.navigate", { url: `http://localhost:${webPort}/` });
 
   const timeout = Number(process.env.HXN_PAGE_TIMEOUT ?? 300) * 1000;

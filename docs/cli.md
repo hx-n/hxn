@@ -39,6 +39,8 @@ Run build, run, check and package commands in the library crate. See the
   later drives Chrome over the DevTools protocol; `HXN_BROWSER` is Chrome's
   path when it is not installed where Chrome installs. `HXN_PAGE_TIMEOUT` is
   the seconds to wait for the program to finish in either, 300 by default.
+  For Ash, `HXN_PAGE_CORES` sets the core count the web page sees, which
+  sizes its pool of thread agents, to reproduce a smaller machine.
   `HXN_BROWSER_ARGS` adds flags to Chrome's command line, such as
   `--enable-unsafe-webgpu`. An hxcpp program in a web page delivers a future
   with `then`: the browser settles it only while the web page's event loop is
