@@ -246,6 +246,11 @@ hxn run hl
 
 To work on hxn itself, see [AGENTS.md](https://github.com/hx-n/hxn/blob/main/AGENTS.md).
 
+## Agent skill
+
+[`skills/hxn/SKILL.md`](https://github.com/hx-n/hxn/blob/main/skills/hxn/SKILL.md) describes hxn for coding
+agents. The haxelib includes it.
+
 ## License
 
 Licensed under Apache-2.0. See [LICENSE](https://github.com/hx-n/hxn/blob/main/LICENSE).

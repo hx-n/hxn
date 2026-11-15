@@ -84,7 +84,7 @@ jobs:
             exit 1
           fi
           echo "ZIP=hxn-haxelib-$version.zip" >> "$GITHUB_ENV"
-      - run: zip -qr "$ZIP" haxelib.json haxe README.md LICENSE
+      - run: zip -qr "$ZIP" haxelib.json haxe README.md LICENSE skills
       - uses: actions/upload-artifact@v4
         with:
           name: haxelib
