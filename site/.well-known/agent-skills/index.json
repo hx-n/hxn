@@ -49,6 +49,13 @@
       "description": "Drive the GPU from Haxe through Direct3D 12 with the hxn-gpu-d3d12 haxelib (package `gpu.d3d12`) on Ash, HashLink, hxcpp and CPPIA, on Windows. Use when a Haxe program runs compute shaders, renders, samples textures or presents to a window with Direct3D 12, records resource transitions or enhanced barriers, or uses HXSL shaders from hxnsl as HLSL or DXIL.",
       "url": "/.well-known/agent-skills/hxn-gpu-d3d12/SKILL.md",
       "digest": "sha256:c0a44f8e8f08074a47953d49af5f139fdb210a8399322afff70918e0994a8b7c"
+    },
+    {
+      "name": "hxn-gpu-gles",
+      "type": "skill-md",
+      "description": "Drive the GPU from Haxe through OpenGL ES 3.0 over EGL with the hxn-gpu-gles haxelib (package `gpu.gles`) on Ash, HashLink, hxcpp and CPPIA, on Android, Linux through Mesa, and macOS and Windows through ANGLE. Use when a Haxe program renders with OpenGL ES, samples textures, presents to a window with EGL, or uses HXSL shaders from hxnsl as GLSL ES 3.00.",
+      "url": "/.well-known/agent-skills/hxn-gpu-gles/SKILL.md",
+      "digest": "sha256:2797eda158fbeadd37f3126e1386ec4012e8efcfeed0ce18150524d1533b01dc"
     }
   ]
 }
