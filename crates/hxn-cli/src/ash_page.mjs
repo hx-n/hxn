@@ -78,6 +78,8 @@ try {
   const waiting = new Map();
   // Each console call: when, whether it was an error, and its text.
   const written = [];
+  // The type of each target followed: the program's Worker and the others.
+  const attached = [];
   const send = (method, params = {}, sessionId) =>
     new Promise((resolve) => {
       const id = nextId++;
@@ -97,6 +99,7 @@ try {
       waiting.get(message.id)(message);
       waiting.delete(message.id);
     } else if (message.method === "Target.attachedToTarget") {
+      attached.push(message.params.targetInfo?.type ?? "?");
       follow(message.params.sessionId);
     } else if (message.method === "Runtime.consoleAPICalled") {
       const { type, args, timestamp } = message.params;
@@ -126,6 +129,8 @@ try {
     if (!error && !text.startsWith("[ash] ")) process.stdout.write(text + "\n");
     else process.stderr.write(text + "\n");
   }
+  if (written.length === 0)
+    process.stderr.write(`no console output from the web page: ${attached.length} targets followed (${attached.join(", ") || "none"}), title "${title}"\n`);
   if (/ — done$/.test(title)) status = 0;
   else if (!/ — trapped$/.test(title))
     process.stderr.write(`the page did not finish in ${timeout / 1000} s (HXN_PAGE_TIMEOUT)\n`);

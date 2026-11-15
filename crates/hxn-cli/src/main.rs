@@ -261,7 +261,10 @@ fn browser(arguments: &Arguments, dir: &Path, page: &Path) -> Result<Program, St
         let _ = std::fs::remove_file(log);
     }
     let name = std::env::var("HXN_BROWSER").unwrap_or_else(|_| String::from("chrome"));
-    let profile = dir.join("browser-profile");
+    // A fresh profile each run, outside the target directory: a profile that a
+    // build cache restored carries another machine's lock, and Chrome exits.
+    let profile = std::env::temp_dir().join(format!("hxn-browser-profile-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&profile);
     let mut flags = format!(
         "--headless=new --no-first-run --no-default-browser-check --user-data-dir={}",
         profile.display()
@@ -292,6 +295,7 @@ fn browser(arguments: &Arguments, dir: &Path, page: &Path) -> Result<Program, St
     Ok(Program {
         command,
         page: Some((stdout, stderr)),
+        profile: Some(profile),
     })
 }
 
@@ -326,6 +330,8 @@ fn ash_page(ash: &str, dir: &Path) -> Result<Program, String> {
 struct Program {
     command: Command,
     page: Option<(PathBuf, PathBuf)>,
+    /// The browser profile to remove once the program has run.
+    profile: Option<PathBuf>,
 }
 
 impl From<Command> for Program {
@@ -333,6 +339,7 @@ impl From<Command> for Program {
         Program {
             command,
             page: None,
+            profile: None,
         }
     }
 }
@@ -341,6 +348,9 @@ impl Program {
     /// What a web page printed on stdout, after printing what it printed on
     /// stderr to stderr; None for a program that prints for itself.
     fn page_output(&self) -> Option<String> {
+        if let Some(profile) = &self.profile {
+            let _ = std::fs::remove_dir_all(profile);
+        }
         let (stdout, stderr) = self.page.as_ref()?;
         if let Ok(text) = std::fs::read_to_string(stderr) {
             eprint!("{text}");
