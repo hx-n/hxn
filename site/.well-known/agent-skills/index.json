@@ -25,16 +25,16 @@
     {
       "name": "hxnsl",
       "type": "skill-md",
-      "description": "Write GPU shaders in Haxe with the hxnsl haxelib, which compiles HXSL (Heaps' shader language) during the Haxe build to WGSL, MSL, HLSL, SPIR-V and GLSL ES with their bind group layout and binding slots as class constants. Use when writing an HXSL shader class, reading its generated fields to build pipelines or bind resources, setting @const values, or extending hxnsl with a framework Extension or a driver Target.",
+      "description": "Write GPU shaders in Haxe with the hxnsl haxelib, which translates HXSL (Heaps' shader language) at compile time to WGSL, MSL, HLSL, SPIR-V and GLSL ES with their bind group layout and binding slots as class constants. Use when writing an HXSL shader class, reading its generated fields to build pipelines or bind resources, setting @const values, or extending hxnsl with a framework Extension or a driver Target.",
       "url": "/.well-known/agent-skills/hxnsl/SKILL.md",
-      "digest": "sha256:3c44f1a824ddd0716520556753ee8315ca2a678da0914f61a287724200dbecdf"
+      "digest": "sha256:c08c0892bff141845584f3b8a6fbe52e3918a49f9c2f3c24eb6727b3400e5d61"
     },
     {
       "name": "hxn-gpu-metal",
       "type": "skill-md",
       "description": "Drive the GPU from Haxe through Apple's Metal with the hxn-gpu-metal haxelib (package `gpu.metal`) on Ash, HashLink, hxcpp and CPPIA, on macOS and iOS. Use when a Haxe program runs compute shaders, renders to a texture or a window, or uses shaders written in HXSL with hxnsl on Metal.",
       "url": "/.well-known/agent-skills/hxn-gpu-metal/SKILL.md",
-      "digest": "sha256:8e0d6260853ced3494785bf68bf6cc43c34c3e82df0e0d17af067e7b37e42a19"
+      "digest": "sha256:0cc7633389a54b16ee6d046a0e936a61c6c3adf5ad25b94f7a97bcc5c74e8bb2"
     },
     {
       "name": "hxn-gpu-vulkan",
@@ -48,7 +48,7 @@
       "type": "skill-md",
       "description": "Drive the GPU from Haxe through Direct3D 12 with the hxn-gpu-d3d12 haxelib (package `gpu.d3d12`) on Ash, HashLink, hxcpp and CPPIA, on Windows. Use when a Haxe program runs compute shaders, renders, samples textures or presents to a window with Direct3D 12, records resource transitions or enhanced barriers, or uses HXSL shaders from hxnsl as HLSL or DXIL.",
       "url": "/.well-known/agent-skills/hxn-gpu-d3d12/SKILL.md",
-      "digest": "sha256:cbc042d689b88c4cfae274880b771ece92cf05fcd9d96948db272e212f794398"
+      "digest": "sha256:c0a44f8e8f08074a47953d49af5f139fdb210a8399322afff70918e0994a8b7c"
     }
   ]
 }

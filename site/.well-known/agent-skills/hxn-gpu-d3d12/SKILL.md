@@ -15,8 +15,8 @@ haxe -lib hxn-gpu-d3d12 -lib hxnsl -main Main -cpp out        # hxcpp
 ```
 
 Windows x86-64; a program needs no Rust. With DXC 1.8+ on `PATH` (or
-`HXN_GPU_D3D12_DXC` set to it) the Haxe build compiles each entry point to
-DXIL; without it the build warns "hxn-gpu-d3d12: no DXC" and the HLSL is
+`HXN_GPU_D3D12_DXC` set to it) each entry point compiles to
+DXIL at compile time; without it compilation warns "hxn-gpu-d3d12: no DXC" and the HLSL is
 compiled at load time.
 
 ## Use

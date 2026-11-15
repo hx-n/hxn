@@ -1,6 +1,6 @@
 ---
 name: hxnsl
-description: Write GPU shaders in Haxe with the hxnsl haxelib, which compiles HXSL (Heaps' shader language) during the Haxe build to WGSL, MSL, HLSL, SPIR-V and GLSL ES with their bind group layout and binding slots as class constants. Use when writing an HXSL shader class, reading its generated fields to build pipelines or bind resources, setting @const values, or extending hxnsl with a framework Extension or a driver Target.
+description: Write GPU shaders in Haxe with the hxnsl haxelib, which translates HXSL (Heaps' shader language) at compile time to WGSL, MSL, HLSL, SPIR-V and GLSL ES with their bind group layout and binding slots as class constants. Use when writing an HXSL shader class, reading its generated fields to build pipelines or bind resources, setting @const values, or extending hxnsl with a framework Extension or a driver Target.
 ---
 
 # hxnsl
@@ -33,7 +33,7 @@ Compile with `-lib hxnsl`. The syntax is Heaps' HXSL
 error. A compute shader has `function main()`, and `setLayout(x)`,
 `setLayout(x, y)` or `setLayout(x, y, z)` for its workgroup size, and `RWBuffer<T>` for a read-write storage buffer.
 
-hxnsl links each shader with what it imports or extends at build time only.
+hxnsl links each shader with what it imports or extends at compile time only.
 It does not combine shaders at run time as Heaps does.
 
 ## Fields the class gets
@@ -62,7 +62,7 @@ bind resources; do not hard-code slot numbers.
 
 A `@const` is a WGSL `override` with no default. WebGPU sets it at pipeline
 creation by the `CONST_<name>` key; the other languages are written with the
-value the class gives, and the build fails without one:
+value the class gives, and compilation fails without one:
 
 ```haxe
 @:constants({fog: true})
@@ -90,11 +90,11 @@ class Fogged implements hxnsl.Shader { ... @const var fog : Bool; ... }
   compiler; `s.resource` adds a resource; `s.field` makes a field. Shaders of
   that family get only the registered targets; register
   `new hxnsl.targets.Msl()` (or `Hlsl`, `Spirv`, `Glsl`) as well to keep those
-  fields. Two targets adding one field fail the build.
+  fields. Two targets adding one field fail compilation.
 
 ## The tool
 
-The build runs the `hxnsl` tool (russl's compiler), shipped in the haxelib
+At compile time hxnsl runs the `hxnsl` tool (russl's compiler), shipped in the haxelib
 for macOS arm64 and x86-64, Linux x86-64 and arm64, and Windows x86-64.
 `HXNSL_TOOL` overrides its path; `HXNSL_CACHE` sets the cache directory.
 
