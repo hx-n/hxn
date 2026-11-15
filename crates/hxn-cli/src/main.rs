@@ -39,7 +39,7 @@ const USAGE: &str = "usage: hxn <command>
       Generates the library's binding for HashLink or hxcpp and builds it.
       Prints the haxe arguments for compiling a program against it.
 
-  hxn run <hl|cpp|cppia> [--wasm] [--release] [--vm <command>] [-- <arguments>]
+  hxn run <hl|cpp|cppia> [--wasm] [--browser] [--release] [--vm <command>] [-- <arguments>]
       Builds the binding, then compiles the Haxe program in haxe/ and runs
       it. --vm, or the HXN_VM environment variable, sets the
       HashLink-compatible VM to run it with, including any options:
@@ -49,7 +49,7 @@ const USAGE: &str = "usage: hxn <command>
 an hxcpp executable that contains the library's classes. The Haxe program
 is compiled as a script and run by that host.
 
-  hxn check [hl] [cpp] [cppia] [--wasm] [--release] [--vm <command>]
+  hxn check [hl] [cpp] [cppia] [--wasm] [--browser] [--release] [--vm <command>]
       Runs the Haxe program on each runtime listed. With none listed, it
       runs on whichever of HashLink and hxcpp are installed. Fails unless
       every run succeeds and all runs print the same output. Before
@@ -84,7 +84,9 @@ Rust binding's prerequisites without building.
 With --wasm the binding and the program are built for wasm. `hl --wasm` is
 built and run by Ash. Set --vm or HXN_VM if its command is not `ash`.
 `cpp --wasm` is built by hxcpp with Emscripten and run by node, or by the
-command given with --vm. `hl --wasm` rebuilds Rust's standard library,
+command given with --vm. With --browser it is a page instead, which emrun
+serves to headless Chrome, or the browser HXN_BROWSER names, with the flags
+in HXN_BROWSER_ARGS added; --vm then replaces the emrun command. `hl --wasm` rebuilds Rust's standard library,
 which requires a nightly toolchain.
 
 build accepts --timings, which makes cargo report how long each crate took
@@ -102,6 +104,8 @@ struct Arguments {
     release: bool,
     timings: bool,
     wasm: bool,
+    // With `cpp --wasm`: the program is a page, run in a headless browser.
+    browser: bool,
     // The target triple given with `--target`, for a cross-compiled binding.
     cross: Option<&'static str>,
     vm: Option<String>,
@@ -120,6 +124,7 @@ fn arguments(mut given: impl Iterator<Item = String>) -> Result<Arguments, Strin
         release: false,
         timings: false,
         wasm: false,
+        browser: false,
         cross: None,
         vm: None,
         hxn: None,
@@ -139,6 +144,7 @@ fn arguments(mut given: impl Iterator<Item = String>) -> Result<Arguments, Strin
             "--release" => out.release = true,
             "--timings" => out.timings = true,
             "--wasm" => out.wasm = true,
+            "--browser" => out.browser = true,
             // Leaked on purpose: it is parsed once and used until the process
             // exits.
             "--target" => out.cross = Some(Box::leak(value("--target")?.into_boxed_str())),
@@ -178,6 +184,11 @@ fn target(arguments: &Arguments) -> Result<Target, String> {
             ));
         }
     };
+    if arguments.browser && (runtime != Runtime::Cpp || !arguments.wasm) {
+        return Err(String::from(
+            "--browser runs a `cpp --wasm` program in a page: give `cpp --wasm`",
+        ));
+    }
     Ok(Target {
         runtime,
         wasm: arguments.wasm,
@@ -223,6 +234,76 @@ fn directory_of(program: &str) -> Option<PathBuf> {
 
 // The command that runs a HashLink program: the value of `--vm` or `HXN_VM`,
 // including its options, otherwise `default`.
+// emrun serving `page` to a headless browser: Chrome unless HXN_BROWSER names
+// another, with HXN_BROWSER_ARGS added to its flags. It prints the program's
+// output and exits with its status once the program exits. `--vm` replaces
+// the `emrun` command.
+fn browser(arguments: &Arguments, dir: &Path, page: &Path) -> Result<Program, String> {
+    let (emrun, options) = words(arguments.vm.as_deref().unwrap_or("emrun"))?;
+    // emrun prints its own messages on stdout, so the page's output goes to
+    // files, which it appends to.
+    let stdout = dir.join("page-stdout.txt");
+    let stderr = dir.join("page-stderr.txt");
+    for log in [&stdout, &stderr] {
+        let _ = std::fs::remove_file(log);
+    }
+    let name = std::env::var("HXN_BROWSER").unwrap_or_else(|_| String::from("chrome"));
+    let profile = dir.join("browser-profile");
+    let mut flags = format!(
+        "--headless=new --no-first-run --no-default-browser-check --user-data-dir={}",
+        profile.display()
+    );
+    if let Ok(more) = std::env::var("HXN_BROWSER_ARGS") {
+        flags.push(' ');
+        flags.push_str(&more);
+    }
+    let mut command = Command::new(emrun);
+    command
+        .args(options)
+        .arg("--browser")
+        .arg(name)
+        .arg(format!("--browser_args={flags}"))
+        .args(["--kill_start", "--kill_exit"])
+        .arg("--log-stdout")
+        .arg(&stdout)
+        .arg("--log-stderr")
+        .arg(&stderr)
+        .arg(page)
+        .args(&arguments.rest)
+        .stdout(std::process::Stdio::null());
+    Ok(Program {
+        command,
+        page: Some((stdout, stderr)),
+    })
+}
+
+/// A program to run, and for a page the files its stdout and stderr go to.
+struct Program {
+    command: Command,
+    page: Option<(PathBuf, PathBuf)>,
+}
+
+impl From<Command> for Program {
+    fn from(command: Command) -> Self {
+        Program {
+            command,
+            page: None,
+        }
+    }
+}
+
+impl Program {
+    /// What a page printed on stdout, after printing what it printed on
+    /// stderr to stderr; None for a program that prints for itself.
+    fn page_output(&self) -> Option<String> {
+        let (stdout, stderr) = self.page.as_ref()?;
+        if let Ok(text) = std::fs::read_to_string(stderr) {
+            eprint!("{text}");
+        }
+        Some(std::fs::read_to_string(stdout).unwrap_or_default())
+    }
+}
+
 fn vm_command(arguments: &Arguments, default: &str) -> String {
     let named = arguments.vm.clone();
     named
@@ -273,7 +354,12 @@ fn run(project: &Project, target: Target, arguments: Arguments) -> Result<u8, St
         ));
     }
     let script = script(&arguments);
-    exit(&mut program(project, target, script, &arguments)?)
+    let mut program = program(project, target, script, &arguments)?;
+    let code = exit(&mut program.command)?;
+    if let Some(text) = program.page_output() {
+        print!("{text}");
+    }
+    Ok(code)
 }
 
 // Builds the binding and the Haxe program for `target`, as a CPPIA script
@@ -283,7 +369,7 @@ fn program(
     target: Target,
     script: bool,
     arguments: &Arguments,
-) -> Result<Command, String> {
+) -> Result<Program, String> {
     let built = make::build(
         project,
         target,
@@ -312,7 +398,7 @@ fn program(
         make::run(&mut haxe)?;
         let mut command = Command::new(host.program);
         command.arg(program).args(&arguments.rest);
-        return Ok(command);
+        return Ok(command.into());
     }
     for (flag, value) in &built.arguments {
         haxe.arg(flag).arg(value);
@@ -346,7 +432,7 @@ fn program(
             )?;
             let mut command = Command::new(ash);
             command.arg("run").arg(&module).args(&arguments.rest);
-            Ok(command)
+            Ok(command.into())
         }
         Runtime::Hl => {
             let program = built.dir.join("main.hl");
@@ -372,7 +458,7 @@ fn program(
                 let joined = std::env::join_paths(all).map_err(|error| error.to_string())?;
                 command.env(variable, joined);
             }
-            Ok(command)
+            Ok(command.into())
         }
         Runtime::Cpp => {
             let out = built.dir.join("out");
@@ -381,10 +467,23 @@ fn program(
                 // hxcpp would use a compiler set in CC or CXX instead of emcc.
                 haxe.env_remove("CC").env_remove("CXX");
             }
+            if arguments.browser {
+                // hxcpp also writes a page that loads the program, and links it
+                // with `--emrun`, which sends its output to the emrun server.
+                haxe.args([
+                    "-D",
+                    "HXCPP_LINK_EMSCRIPTEN_EXT=.html",
+                    "-D",
+                    "HXCPP_LINK_EMRUN",
+                ]);
+            }
             make::run(&mut haxe)?;
             // hxcpp names the executable after the main class, without its
             // package.
             let name = project.main.rsplit('.').next().unwrap_or(&project.main);
+            if arguments.browser {
+                return browser(arguments, &built.dir, &out.join(format!("{name}.html")));
+            }
             if target.wasm {
                 // HXN_VM is not read here: it names a HashLink VM, and this
                 // program runs under node.
@@ -394,7 +493,7 @@ fn program(
                     .args(options)
                     .arg(out.join(format!("{name}.js")))
                     .args(&arguments.rest);
-                return Ok(command);
+                return Ok(command.into());
             }
             let program = out.join(if cfg!(windows) {
                 format!("{name}.exe")
@@ -403,7 +502,7 @@ fn program(
             });
             let mut command = Command::new(program);
             command.args(&arguments.rest);
-            Ok(command)
+            Ok(command.into())
         }
     }
 }
@@ -468,18 +567,24 @@ fn check(project: &Project, arguments: &Arguments) -> Result<u8, String> {
             wasm: arguments.wasm,
             cross: None,
         };
-        let label = if arguments.wasm {
+        let label = if arguments.browser {
+            format!("{runtime} --wasm --browser")
+        } else if arguments.wasm {
             format!("{runtime} --wasm")
         } else {
             runtime.clone()
         };
-        let mut command = program(project, target, script, arguments)?;
-        let output = command
+        let mut program = program(project, target, script, arguments)?;
+        let output = program
+            .command
             .stderr(std::process::Stdio::inherit())
             .output()
             .map_err(|error| format!("running the program on {label}: {error}"))?;
+        let stdout = program
+            .page_output()
+            .unwrap_or_else(|| String::from_utf8_lossy(&output.stdout).into_owned());
         // Strips the carriage returns of Windows line endings.
-        let text = String::from_utf8_lossy(&output.stdout).replace('\r', "");
+        let text = stdout.replace('\r', "");
         println!("== {label}\n{}", text.trim_end());
         if !output.status.success() {
             return Err(format!("the program failed on {label}"));

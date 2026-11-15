@@ -22,6 +22,12 @@ Run build, run, check and package commands in the library crate. See the
 
 - `--wasm` builds the selected runtime's wasm form. Ash requires nightly
   Rust with `rust-src`; Emscripten requires its SDK and compatible hxcpp.
+- `--browser`, with `cpp --wasm`, makes the program a page. `run` and `check`
+  serve it with Emscripten's `emrun` to headless Chrome and print what it
+  prints. `HXN_BROWSER` names another browser emrun knows, and
+  `HXN_BROWSER_ARGS` adds flags to its command line, such as
+  `--enable-unsafe-webgpu`. In a page, a future settles while the program
+  leaves the page's event loop free: use `then`, since `await` blocks it.
 - `--target <triple>` makes `build` and `package` build the binding for
   another platform, such as `aarch64-linux-android`, as a static library.
   Install that triple's Rust standard library first with

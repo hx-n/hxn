@@ -42,6 +42,10 @@ pub const HAXE: &[(&str, &str)] = &[
     ("hxn/Unit.hx", include_str!("../../../haxe/hxn/Unit.hx")),
     ("hxn/Wire.hx", include_str!("../../../haxe/hxn/Wire.hx")),
     (
+        "hxn/native/Emscripten.hx",
+        include_str!("../../../haxe/hxn/native/Emscripten.hx"),
+    ),
+    (
         "hxn/native/HashLink.hx",
         include_str!("../../../haxe/hxn/native/HashLink.hx"),
     ),

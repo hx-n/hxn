@@ -141,10 +141,16 @@ class Inbox {
 			return;
 		var events = Thread.current().events;
 		#if (emscripten || hxn_no_threads)
-		// No thread can block waiting on the library, so each event loop iteration polls it.
+		// No thread can block waiting on the library, so each turn polls it. Under Emscripten a
+		// turn runs from the host's event loop, which then runs its own callbacks between turns.
 		if (driven)
 			return;
 		driven = true;
+		#if (cpp && emscripten)
+		var post = hxn.native.Emscripten.later;
+		#else
+		var post = events.run;
+		#end
 		var turn:Null<() -> Void> = null;
 		turn = () -> {
 			if (Loop.manual) {
@@ -155,15 +161,15 @@ class Inbox {
 			try {
 				more = sync();
 			} catch (error:Exception) {
-				events.run(turn);
+				post(turn);
 				throw error;
 			}
 			if (more)
-				events.run(turn);
+				post(turn);
 			else
 				driven = false;
 		};
-		events.run(turn);
+		post(turn);
 		#else
 		// Schedules a sync so a new watcher's initial delivery does not wait for the library to queue something.
 		if (!looking) {

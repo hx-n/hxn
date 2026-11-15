@@ -1,0 +1,20 @@
+{
+  "hxn": 1,
+  "library": "timer",
+  "interfaces": [
+    {
+      "name": "Timer",
+      "methods": [
+        {
+          "name": "after",
+          "docs": "Settles with `ms` after about `ms` milliseconds.",
+          "kind": "static",
+          "params": [{ "name": "ms", "type": "i32" }],
+          "returns": "future<i32>",
+          "fallible": false,
+          "blocking": false
+        }
+      ]
+    }
+  ]
+}

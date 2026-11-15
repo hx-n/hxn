@@ -174,8 +174,9 @@ jobs:
             "$cdb" -G -cf "$(cygpath -w "$RUNNER_TEMP/crash.cdb")" target/counter-gen-cppia/host/Host.exe target/counter-gen-cppia/generated.cppia || true
           fi
 
-  # hxcpp through Emscripten, run by node, against Rust's prebuilt standard
-  # library for Emscripten, which unwinds with wasm exceptions as hxcpp does.
+  # hxcpp through Emscripten, run by node and as a page in the runner's Chrome,
+  # against Rust's prebuilt standard library for Emscripten, which unwinds
+  # with wasm exceptions as hxcpp does.
   emscripten:
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -203,6 +204,8 @@ jobs:
       - run: source "$RUNNER_TEMP/emsdk/emsdk_env.sh" && tests/counter/run.sh gen-emcc
       - run: source "$RUNNER_TEMP/emsdk/emsdk_env.sh" && tests/examples/run.sh emcc
       - run: source "$RUNNER_TEMP/emsdk/emsdk_env.sh" && tests/cimport/run.sh emcc
+      - run: source "$RUNNER_TEMP/emsdk/emsdk_env.sh" && tests/web/run.sh node
+      - run: source "$RUNNER_TEMP/emsdk/emsdk_env.sh" && tests/web/run.sh browser
 
   # Every example in an iOS simulator: hxcpp's toolchain for one, and the
   # library built for the simulator's machine from this one.

@@ -8,6 +8,7 @@ members = [
     "tests/counter/hl",
     "tests/counter/gen-c",
     "tests/counter/gen-hl",
+    "tests/web",
 ]
 
 [workspace.package]
