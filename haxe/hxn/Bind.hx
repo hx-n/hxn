@@ -24,8 +24,8 @@ import sys.io.File;
 	or not the host uses them.
 
 	The native library used is the one built for the host machine, or for
-	wasm when `wasm` or `emscripten` is defined; for HashLink, `hxn_threads`
-	with `wasm` selects the threaded library. `-D hxn_triple=<triple>`
+	wasm when `wasm` or `emscripten` is defined; `hxn_threads` with either
+	selects the threaded library. `-D hxn_triple=<triple>`
 	selects another, given as a Rust target triple.
 **/
 class Bind {
@@ -68,7 +68,10 @@ class Bind {
 		}
 
 		var triple = triple(runtime);
-		var built = Path.join([root, "native", triple]);
+		// Rust gives a threaded Emscripten build the same triple, so its
+		// library has a directory of its own.
+		var threaded = runtime == "cpp" && triple == "wasm32-unknown-emscripten" && Context.defined("hxn_threads");
+		var built = Path.join([root, "native", threaded ? '$triple-threads' : triple]);
 		function library(files:Array<String>):String {
 			for (file in files) {
 				var path = Path.join([built, file]);
@@ -104,6 +107,9 @@ class Bind {
 				});
 			case _:
 				var upper = name.toUpperCase();
+				// hxcpp builds a program for Emscripten single-threaded unless told.
+				if (threaded)
+					Compiler.define("HXCPP_MULTI_THREADED_APP");
 				var include = Path.join([root, "include"]);
 				Compiler.define("HXN_INCLUDE", include);
 				Compiler.define('${upper}_INCLUDE', include);

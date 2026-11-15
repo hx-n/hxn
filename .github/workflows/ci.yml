@@ -176,7 +176,9 @@ jobs:
 
   # hxcpp through Emscripten, run by node and as a page in the runner's Chrome,
   # against Rust's prebuilt standard library for Emscripten, which unwinds
-  # with wasm exceptions as hxcpp does.
+  # with wasm exceptions as hxcpp does; and threaded, with the standard library
+  # rebuilt with atomics, the program linked with Emscripten's pthreads and its
+  # main on a pthread.
   emscripten:
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -186,6 +188,7 @@ jobs:
         with:
           toolchain: ${{ env.HXN_RUST }}
           targets: wasm32-unknown-emscripten
+          components: rust-src
       - uses: Swatinem/rust-cache@v2
       - uses: krdlab/setup-haxe@v1
         with:
@@ -202,10 +205,15 @@ jobs:
           "$RUNNER_TEMP/emsdk/emsdk" install "$HXN_EMSDK"
           "$RUNNER_TEMP/emsdk/emsdk" activate "$HXN_EMSDK"
       - run: source "$RUNNER_TEMP/emsdk/emsdk_env.sh" && tests/counter/run.sh gen-emcc
+      - run: source "$RUNNER_TEMP/emsdk/emsdk_env.sh" && tests/counter/run.sh gen-emcc-threads
       - run: source "$RUNNER_TEMP/emsdk/emsdk_env.sh" && tests/examples/run.sh emcc
+      - run: source "$RUNNER_TEMP/emsdk/emsdk_env.sh" && tests/examples/run.sh emcc-threads
+      - run: source "$RUNNER_TEMP/emsdk/emsdk_env.sh" && tests/examples/run.sh emcc-threads-page
       - run: source "$RUNNER_TEMP/emsdk/emsdk_env.sh" && tests/cimport/run.sh emcc
       - run: source "$RUNNER_TEMP/emsdk/emsdk_env.sh" && tests/web/run.sh node
       - run: source "$RUNNER_TEMP/emsdk/emsdk_env.sh" && tests/web/run.sh browser
+      - run: source "$RUNNER_TEMP/emsdk/emsdk_env.sh" && tests/web/run.sh node-threads
+      - run: source "$RUNNER_TEMP/emsdk/emsdk_env.sh" && tests/web/run.sh browser-threads
 
   # Every example in an iOS simulator: hxcpp's toolchain for one, and the
   # library built for the simulator's machine from this one.

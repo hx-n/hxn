@@ -11,11 +11,14 @@
 #   run.sh wasm-page [ash] and wasm-threads-page [ash]
 #                      the same, in a page Ash serves, in headless Chrome
 #   run.sh emcc        hxcpp through Emscripten, run by node; needs emcc on PATH
+#   run.sh emcc-threads the same, threaded: Emscripten's pthreads over shared memory
+#   run.sh emcc-page and emcc-threads-page
+#                      the same, in a page emrun serves, in headless Chrome
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "$here/../.." && pwd)"
-runtime="${1:?usage: run.sh hl [vm] | cpp | cppia | wasm [ash] | wasm-threads [ash] | wasm-page [ash] | wasm-threads-page [ash] | emcc}"
+runtime="${1:?usage: run.sh hl [vm] | cpp | cppia | wasm [ash] | wasm-threads [ash] | wasm-page [ash] | wasm-threads-page [ash] | emcc | emcc-threads | emcc-page | emcc-threads-page}"
 
 case "$runtime" in
 	hl) arguments=(run hl --vm "${2:-hl}") ;;
@@ -26,6 +29,9 @@ case "$runtime" in
 	wasm-page) arguments=(run hl --wasm --browser --vm "${2:-ash}") ;;
 	wasm-threads-page) arguments=(run hl --wasm --threads --browser --vm "${2:-ash}") ;;
 	emcc) arguments=(run cpp --wasm) ;;
+	emcc-threads) arguments=(run cpp --wasm --threads) ;;
+	emcc-page) arguments=(run cpp --wasm --browser) ;;
+	emcc-threads-page) arguments=(run cpp --wasm --threads --browser) ;;
 	*)
 		echo "unknown runtime: $runtime" >&2
 		exit 2

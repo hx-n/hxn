@@ -1,7 +1,7 @@
 //! A future settled by a callback from the host, after the call that made it has returned: on
 //! Emscripten a JavaScript timer, through `emscripten_async_call`; elsewhere a thread that
 //! sleeps. A program in a browser sees the callback only while it leaves the page's event loop
-//! free to run.
+//! free to run. `chunks` runs blocking work on threads where the build has them.
 
 use hxn_future::Future;
 
@@ -13,6 +13,22 @@ impl Timer {
     /// Settles with `ms` after about `ms` milliseconds.
     pub fn after(ms: i32) -> Future<i32> {
         later(ms)
+    }
+
+    /// Settles with `count` after `count` pieces of blocking work, each on a thread of its own
+    /// where the build has threads, and each but the first started from the thread the work
+    /// before it resumed on.
+    pub fn chunks(count: i32) -> Future<i32> {
+        hxn_future::spawn(async move {
+            for _ in 0..count {
+                let _ = hxn_future::spawn_blocking(|| {
+                    std::thread::sleep(std::time::Duration::from_millis(1));
+                    Ok::<_, hxn_future::Failure>(())
+                })
+                .await;
+            }
+            Ok::<_, hxn_future::Failure>(count)
+        })
     }
 }
 

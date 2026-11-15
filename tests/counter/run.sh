@@ -6,6 +6,7 @@
 #   run.sh wasm-threads [ash]
 #                      the same, threaded: wasm32-wasip1-threads over shared memory
 #   run.sh emcc        hxcpp through Emscripten, run by node; needs emcc on PATH
+#   run.sh emcc-threads the same, threaded: Emscripten's pthreads over shared memory
 #
 # The same for the binding hxn-gen generates from the library's source,
 # tested by haxe/Generated.hx:
@@ -14,12 +15,12 @@
 #   run.sh gen-cppia   as a CPPIA script, in an hxcpp host that contains the classes
 #   run.sh gen-wasm [ash]
 #   run.sh gen-wasm-threads [ash]
-#   run.sh gen-emcc
+#   run.sh gen-emcc and gen-emcc-threads
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "$here/../.." && pwd)"
-runtime="${1:?usage: run.sh hl [vm] | cpp | wasm [ash] | wasm-threads [ash] | emcc | gen-hl [vm] | gen-cpp | gen-cppia | gen-wasm [ash] | gen-wasm-threads [ash] | gen-emcc}"
+runtime="${1:?usage: run.sh hl [vm] | cpp | wasm [ash] | wasm-threads [ash] | emcc | emcc-threads | gen-hl [vm] | gen-cpp | gen-cppia | gen-wasm [ash] | gen-wasm-threads [ash] | gen-emcc | gen-emcc-threads}"
 
 # The file name prefixes and extensions cargo and hxcpp use on this system.
 prefix=lib static=a exe=
@@ -166,8 +167,8 @@ case "$runtime" in
 			--native-lib "$root/target/$triple/debug/$archive" main.hl
 		"$ash" run main.wasm | tee "$work/out.txt"
 		;;
-	emcc | gen-emcc)
-		if [ "$runtime" = gen-emcc ]; then
+	emcc | gen-emcc | emcc-threads | gen-emcc-threads)
+		if [ "${runtime#gen-}" != "$runtime" ]; then
 			generate
 			package=counter-gen-c archive=libcounter_gen.a main=Generated
 			include="$work/gen/include" classes="$work/gen/haxe"
@@ -178,13 +179,26 @@ case "$runtime" in
 		command -v emcc >/dev/null || { echo "emcc is not on PATH; source emsdk_env.sh first" >&2; exit 2; }
 		# hxcpp would use CXX from the environment instead of emcc.
 		unset CC CXX
-		# The prebuilt std unwinds with wasm exceptions, as hxcpp does.
-		cargo build --manifest-path "$root/Cargo.toml" -p "$package" \
-			--target wasm32-unknown-emscripten
+		# The prebuilt std unwinds with wasm exceptions, as hxcpp does. A threaded
+		# build rebuilds it with atomics, as shared memory needs of every object,
+		# and hxcpp compiles and links with -pthread.
+		threads=()
+		case "$runtime" in
+			*-threads)
+				RUSTFLAGS="-C target-feature=+atomics,+bulk-memory" \
+					cargo build --manifest-path "$root/Cargo.toml" -p "$package" \
+					--target wasm32-unknown-emscripten -Z build-std=std,panic_unwind
+				threads=(-D hxn_threads -D HXCPP_MULTI_THREADED_APP)
+				;;
+			*)
+				cargo build --manifest-path "$root/Cargo.toml" -p "$package" \
+					--target wasm32-unknown-emscripten
+				;;
+		esac
 		# hxcpp assumes the build machine's 64-bit word size, and its UTF-16
 		# strings call a Windows-only function under Emscripten.
 		haxe -D wasm -cp "$root/haxe" -cp "$here/haxe" -cp "$classes" -main "$main" -cpp "$work" \
-			-D emscripten -D HXCPP_M32 -D disable_unicode_strings \
+			-D emscripten -D HXCPP_M32 -D disable_unicode_strings ${threads[@]+"${threads[@]}"} \
 			-D HXN_INCLUDE="$root/include" \
 			-D COUNTER_INCLUDE="$include" \
 			-D COUNTER_LIB="$root/target/wasm32-unknown-emscripten/debug/$archive"

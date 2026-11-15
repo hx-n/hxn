@@ -54,8 +54,9 @@ impl Runtime {
 pub struct Target {
     pub runtime: Runtime,
     pub wasm: bool,
-    /// With `hl --wasm`: a threaded library over shared memory, for a
-    /// program Ash builds for `wasm32-wasip1-threads`.
+    /// With `--wasm`: a threaded library over shared memory, for a program
+    /// Ash builds for `wasm32-wasip1-threads` or hxcpp links with Emscripten's
+    /// pthreads.
     pub threads: bool,
     /// The target triple of a cross-compiled build. The binding is then a
     /// static library, linked later with the program: by hxcpp, or by Ash
@@ -89,6 +90,18 @@ impl Target {
         }
     }
 
+    /// The name of the package's `native/` directory for its library: the
+    /// target triple, with `-threads` after it for a threaded Emscripten
+    /// build, which Rust gives the same triple.
+    pub fn platform(self) -> Option<String> {
+        let triple = self.triple()?;
+        Some(if self.threads && self.runtime == Runtime::Cpp {
+            format!("{triple}-threads")
+        } else {
+            triple.to_owned()
+        })
+    }
+
     // Whether the adapter is a static library, linked into the program by a
     // later step. Only a native HashLink binding is a library the VM loads.
     fn archive(self) -> bool {
@@ -118,7 +131,9 @@ impl Target {
             (true, Runtime::Hl) => Some(
                 "-C target-feature=+mutable-globals,+exception-handling -C panic=unwind -C llvm-args=-wasm-use-legacy-eh=false",
             ),
-            // The prebuilt std unwinds with wasm exceptions, as hxcpp does.
+            // The prebuilt std unwinds with wasm exceptions, as hxcpp does;
+            // a threaded build rebuilds it with atomics.
+            (true, Runtime::Cpp) if self.threads => Some("-C target-feature=+atomics,+bulk-memory"),
             (true, Runtime::Cpp) => None,
         }
     }
@@ -636,9 +651,9 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
     let name = &project.library;
     let runtime = target.runtime;
     check_version(&project.package, &project.hxn_version)?;
-    if target.wasm && runtime == Runtime::Hl {
+    if target.wasm && (runtime == Runtime::Hl || target.threads) {
         // An Ash wasm library needs std rebuilt to unwind with wasm exceptions,
-        // and for threads with atomics, and only a nightly cargo can rebuild std.
+        // a threaded one with atomics, and only a nightly cargo can rebuild std.
         let release = rustc_reports("release:")?;
         if !release.contains("nightly") && !release.contains("dev") {
             return Err(format!(
@@ -763,7 +778,7 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
                 }
             }
         }
-        if target.wasm && runtime == Runtime::Hl {
+        if target.wasm && (runtime == Runtime::Hl || target.threads) {
             cargo.arg("-Zbuild-std=std,panic_unwind");
         }
         built.push(triple);
@@ -802,12 +817,20 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
         run(&mut cargo)?;
         Linked::default()
     };
-    if runtime == Runtime::Cpp
-        && let Some(args) = target
-            .triple()
-            .and_then(|triple| project.link_args.get(triple))
-    {
-        linked.args = args.clone();
+    // The triple's link arguments, then those a threaded Emscripten build
+    // adds under its package directory's name.
+    if runtime == Runtime::Cpp {
+        let names = [target.triple().map(str::to_owned), target.platform()];
+        let mut seen = Vec::new();
+        for name in names.into_iter().flatten() {
+            if seen.contains(&name) {
+                continue;
+            }
+            if let Some(args) = project.link_args.get(&name) {
+                linked.args.extend(args.iter().cloned());
+            }
+            seen.push(name);
+        }
     }
     built.push(if release { "release" } else { "debug" });
     built.push(artifact(name, target));
@@ -825,6 +848,10 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
     }
     if target.threads {
         arguments.push(("-D", String::from("hxn_threads")));
+    }
+    // hxcpp builds a program for Emscripten single-threaded unless told.
+    if target.threads && runtime == Runtime::Cpp {
+        arguments.push(("-D", String::from("HXCPP_MULTI_THREADED_APP")));
     }
     match runtime {
         Runtime::Hl if target.wasm => {

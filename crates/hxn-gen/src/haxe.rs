@@ -302,11 +302,17 @@ pub(crate) const MEMORY_DOCS: &str = "What the library's values hold that the co
 // glue. It also tells the build what to include and link.
 // The hxcpp build settings of the library's native class: the header and
 // library paths come through defines. Under Emscripten hxcpp links its own
-// exception support but does not compile with it unless told to.
+// exception support but does not compile with it unless told to. A threaded
+// Emscripten build has shared memory, which every object has to be compiled
+// for, so the whole program is compiled and linked with -pthread. Its main
+// runs on a pthread, as an Ash program runs in a Worker, so it can wait
+// while the web page's thread stays free to start the threads it asks for;
+// exiting it ends the runtime and its threads, which otherwise keep node
+// running.
 pub(crate) fn build_xml(library: &Library) -> String {
     let upper = library.name.to_uppercase();
     let name = &library.name;
     format!(
-        "@:buildXml('\n<files id=\"haxe\">\n\t<compilerflag value=\"-I${{HXN_INCLUDE}}\"/>\n\t<compilerflag value=\"-I${{{upper}_INCLUDE}}\"/>\n\t<depend name=\"${{HXN_INCLUDE}}/hxn.h\"/>\n\t<depend name=\"${{{upper}_INCLUDE}}/{name}_abi.h\"/>\n\t<depend name=\"${{{upper}_INCLUDE}}/{name}_glue.h\"/>\n</files>\n<target id=\"haxe\">\n\t<lib name=\"${{{upper}_LIB}}\"/>\n\t<lib name=\"-lpthread\" if=\"linux\"/>\n\t<lib name=\"-ldl\" if=\"linux\"/>\n\t<lib name=\"kernel32.lib\" if=\"windows\"/>\n\t<lib name=\"ntdll.lib\" if=\"windows\"/>\n\t<lib name=\"userenv.lib\" if=\"windows\"/>\n\t<lib name=\"ws2_32.lib\" if=\"windows\"/>\n\t<lib name=\"dbghelp.lib\" if=\"windows\"/>\n</target>\n<!-- After the archive: a linker that reads libraries in order looks in them only for what is already undefined. -->\n<include name=\"${{{upper}_LINK}}\" if=\"{upper}_LINK\"/>\n')\n"
+        "@:buildXml('\n<files id=\"haxe\">\n\t<compilerflag value=\"-I${{HXN_INCLUDE}}\"/>\n\t<compilerflag value=\"-I${{{upper}_INCLUDE}}\"/>\n\t<depend name=\"${{HXN_INCLUDE}}/hxn.h\"/>\n\t<depend name=\"${{{upper}_INCLUDE}}/{name}_abi.h\"/>\n\t<depend name=\"${{{upper}_INCLUDE}}/{name}_glue.h\"/>\n</files>\n<target id=\"haxe\">\n\t<lib name=\"${{{upper}_LIB}}\"/>\n\t<lib name=\"-lpthread\" if=\"linux\"/>\n\t<lib name=\"-ldl\" if=\"linux\"/>\n\t<lib name=\"kernel32.lib\" if=\"windows\"/>\n\t<lib name=\"ntdll.lib\" if=\"windows\"/>\n\t<lib name=\"userenv.lib\" if=\"windows\"/>\n\t<lib name=\"ws2_32.lib\" if=\"windows\"/>\n\t<lib name=\"dbghelp.lib\" if=\"windows\"/>\n</target>\n<!-- After the archive: a linker that reads libraries in order looks in them only for what is already undefined. -->\n<include name=\"${{{upper}_LINK}}\" if=\"{upper}_LINK\"/>\n<section if=\"emscripten hxn_threads\">\n\t<compiler id=\"emscripten\"><flag value=\"-pthread\"/></compiler>\n\t<linker id=\"exe\"><flag value=\"-pthread\"/><flag value=\"-sPTHREAD_POOL_SIZE=8\"/><flag value=\"-sALLOW_MEMORY_GROWTH=1\"/><flag value=\"-sPROXY_TO_PTHREAD\"/><flag value=\"-sEXIT_RUNTIME=1\"/></linker>\n</section>\n')\n"
     )
 }

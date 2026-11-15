@@ -14,7 +14,7 @@ import sys.thread.EventLoop.NextEventTime;
 	so each turn here also runs the Haxe events that are due, and schedules
 	another turn for those queued later.
 **/
-@:cppFileCode("#include <emscripten.h>")
+@:cppFileCode("#include <emscripten.h>\n#include <emscripten/eventloop.h>\n#include <stdlib.h>")
 class Emscripten {
 	static var due:Array<() -> Void> = [];
 
@@ -51,6 +51,14 @@ class Emscripten {
 			case At(time):
 				wake(Std.int(Math.max(0, (time - haxe.Timer.stamp()) * 1000)));
 			case Never | AnyTime(_):
+				#if hxn_threads
+				// `main` runs on a pthread, where Emscripten ends only the
+				// thread once nothing keeps the runtime alive, so a last turn
+				// with nothing after it ends the program, as it ends on the web
+				// page's thread.
+				if (due.length == 0)
+					untyped __cpp__("if (!emscripten_runtime_keepalive_check()) exit(0)");
+				#end
 		}
 		if (failure != null)
 			throw failure;

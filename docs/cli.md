@@ -24,12 +24,25 @@ Run build, run, check and package commands in the library crate. See the
   Rust's standard library, which needs nightly Rust with `rust-src`, builds
   the library as `lib<library>.a`, and Ash links it into the program with
   `--native-lib`. Emscripten requires its SDK and compatible hxcpp.
-- `--threads`, with `hl --wasm`, builds a threaded library and program
-  for `wasm32-wasip1-threads`, over one shared memory, and passes
-  `-D hxn_threads` so `hxn.Bind.lib` selects that library. A library that
-  serves a browser API through `ash_host_agent` needs it, since the page's
-  browser agent reads the program's memory. It needs an Ash with that target's
-  runtime object.
+- `--threads`, with `--wasm`, builds a threaded library and program over one
+  shared memory, and passes `-D hxn_threads` so `hxn.Bind.lib` selects that
+  library. The library's workers run on threads of their own: Web Workers in
+  a browser, worker threads under node.
+  - With `hl --wasm`, the target is `wasm32-wasip1-threads`. A library that
+    serves a browser API through `ash_host_agent` needs it, since the page's
+    browser agent reads the program's memory. It needs an Ash with that
+    target's runtime object.
+  - With `cpp --wasm`, hxn rebuilds Rust's standard library with atomics,
+    which needs nightly Rust with `rust-src`, and passes
+    `-D HXCPP_MULTI_THREADED_APP`; the library's generated classes compile
+    and link the program with Emscripten's `-pthread`, and `main` runs on a
+    pthread (`-sPROXY_TO_PTHREAD`), as an Ash program runs in a Worker. A
+    library that draws on the web page's canvas has it transferred to that
+    thread with its `link-args` (see [packaging](packaging.md)). `emrun`
+    serves the web page with the cross-origin isolation headers shared memory
+    needs; a server of your own has to send
+    `Cross-Origin-Opener-Policy: same-origin` and
+    `Cross-Origin-Embedder-Policy: require-corp`.
 - `--browser` runs a wasm program in a web page in headless Chrome, and prints
   what it prints. With `cpp --wasm`, hxcpp writes the page and Emscripten's
   `emrun` serves it; `HXN_BROWSER` names another browser emrun knows. With
@@ -41,9 +54,11 @@ Run build, run, check and package commands in the library crate. See the
   For Ash, `HXN_PAGE_CORES` sets the core count the web page sees, which
   sizes its pool of thread agents, to reproduce a smaller machine.
   `HXN_BROWSER_ARGS` adds flags to Chrome's command line, such as
-  `--enable-unsafe-webgpu`. An hxcpp program in a web page delivers a future
-  with `then`: the browser settles it only while the web page's event loop is
-  free, and `await` blocks that loop.
+  `--enable-unsafe-webgpu`. An hxcpp program built without `--threads` runs
+  on the web page's thread and delivers a future with `then`: the browser
+  settles it only while that thread's event loop is free, and `await` blocks
+  it. A threaded hxcpp program, like an Ash one, runs on a thread of its own,
+  where `await` works.
 - `--target <triple>` makes `build` and `package` build the binding for
   another platform, such as `aarch64-linux-android`, as a static library.
   Install that triple's Rust standard library first with

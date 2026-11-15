@@ -193,6 +193,20 @@ simulator the triple is `aarch64-apple-ios-sim`. Ash also links its own
 runtime for the platform, which it finds beside the `ash` command or takes
 from `--runtime`.
 
+A wasm program is linked the same way. `-D wasm` selects the library
+`hxn package hl --wasm` added, and Ash links it into `main.wasm`:
+
+```
+haxe -lib greeter -D wasm -cp src -main Main -hl main.hl
+ash --build main.wasm --target wasm32-wasip1 --native-lib libgreeter.a main.hl
+```
+
+`hxn package hl --wasm --threads` and `hxn package cpp --wasm --threads` add
+threaded wasm libraries, which `-D hxn_threads` selects: Ash builds those
+programs for `wasm32-wasip1-threads`, and hxcpp compiles and links them with
+Emscripten's pthreads. Either way the program runs on a thread of its own,
+not the web page's, so `await` works in a web page.
+
 `haxelib submit` requires a few more fields. Set `repository` and `license`
 in Cargo.toml, and the haxelib contributors and a release note under
 `[package.metadata.hxn]`:

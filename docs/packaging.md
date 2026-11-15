@@ -14,7 +14,7 @@ Haxe programs use it with `-lib <library>` and need no Rust source.
 | `binding/` | Generated classes, the same for every runtime. |
 | `sources/` | The crate's own hand-written Haxe, from its `sources/` directory, when it has one. |
 | `include/` | C headers and glue. |
-| `native/<triple>/` | Native library for each packaged target. |
+| `native/<triple>/` | Native library for each packaged target; a threaded Emscripten one is under `native/wasm32-unknown-emscripten-threads/`. |
 | `haxelib.json`, `extraParams.hxml` | Metadata, the dependency on `hxn`, and automatic `hxn.Bind.lib` setup, then the library's `init` macros. |
 
 hxn's own Haxe classes, `hxn.Bind` among them, are the `hxn` haxelib, which
@@ -24,7 +24,8 @@ generated it, so every hxn library a program uses shares one copy.
 ## Additional platforms
 
 Run packaging again into the same directory to add platforms. `--wasm` adds
-`wasm32-wasip1` or `wasm32-unknown-emscripten`. `--target` adds a static
+`wasm32-wasip1` or `wasm32-unknown-emscripten`, and with `--threads` the
+threaded build of either. `--target` adds a static
 library for that triple, including iOS and Android; install its Rust target
 first. For hxcpp it is linked into the app. For HashLink on wasm, Android and
 iOS it is `lib<library>.a`, which `hxn.Bind` copies next to `main.hl` and Ash
@@ -79,4 +80,16 @@ triple, for what a static library cannot carry, such as an Emscripten port:
 ```toml
 [package.metadata.hxn]
 link-args = { wasm32-unknown-emscripten = ["--use-port=emdawnwebgpu"] }
+```
+
+A threaded Emscripten build takes those of `wasm32-unknown-emscripten`, then
+those of `wasm32-unknown-emscripten-threads`. Its `main` runs on a pthread,
+so a library that draws on the web page's canvas there adds
+`-sOFFSCREENCANVAS_SUPPORT`, which transfers the element with the id
+`canvas` to that thread:
+
+```toml
+[package.metadata.hxn.link-args]
+wasm32-unknown-emscripten = ["-sMIN_WEBGL_VERSION=2", "-sMAX_WEBGL_VERSION=2"]
+wasm32-unknown-emscripten-threads = ["-sOFFSCREENCANVAS_SUPPORT"]
 ```

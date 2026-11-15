@@ -82,11 +82,12 @@ Haxe app may need platform tools and SDKs. On doctor, --target checks the
 Rust binding's prerequisites without building.
 
 With --wasm the binding and the program are built for wasm. `hl --wasm` is
-built and run by Ash. With --threads it is threaded: wasm32-wasip1-threads,
-the library and the program over one shared memory, each Haxe thread a
-thread of its own. Set --vm or HXN_VM if its command is not `ash`.
+built and run by Ash; set --vm or HXN_VM if its command is not `ash`.
 `cpp --wasm` is built by hxcpp with Emscripten and run by node, or by the
-command given with --vm. With --browser either is a web page in headless
+command given with --vm. With --threads either is threaded: the library and
+the program over one shared memory, each Haxe thread and each of the
+library's workers a thread of its own (wasm32-wasip1-threads for Ash,
+Emscripten's pthreads for hxcpp). With --browser either is a web page in headless
 Chrome: emrun serves hxcpp's (--vm then replaces the emrun command), and
 `ash serve` serves Ash's, which node drives over the DevTools protocol.
 HXN_BROWSER names the browser, HXN_BROWSER_ARGS adds its flags. `hl --wasm` rebuilds Rust's standard library,
@@ -109,7 +110,7 @@ struct Arguments {
     wasm: bool,
     // With `--wasm`: the program is a web page, run in a headless browser.
     browser: bool,
-    // With `hl --wasm`: a threaded program and library over shared memory.
+    // With `--wasm`: a threaded program and library over shared memory.
     threads: bool,
     // The target triple given with `--target`, for a cross-compiled binding.
     cross: Option<&'static str>,
@@ -196,9 +197,9 @@ fn target(arguments: &Arguments) -> Result<Target, String> {
             "--browser runs a wasm program in a web page: give `cpp --wasm` or `hl --wasm`",
         ));
     }
-    if arguments.threads && (runtime != Runtime::Hl || !arguments.wasm) {
+    if arguments.threads && !arguments.wasm {
         return Err(String::from(
-            "--threads builds a threaded Ash program and library: give `hl --wasm`",
+            "--threads builds a threaded wasm program and library: give `hl --wasm` or `cpp --wasm`",
         ));
     }
     Ok(Target {
@@ -626,16 +627,19 @@ fn check(project: &Project, arguments: &Arguments) -> Result<u8, String> {
                 ))?
             },
             wasm: arguments.wasm,
-            threads: arguments.threads && runtime == "hl",
+            threads: arguments.threads && arguments.wasm,
             cross: None,
         };
-        let label = if arguments.browser {
-            format!("{runtime} --wasm --browser")
-        } else if arguments.wasm {
-            format!("{runtime} --wasm")
-        } else {
-            runtime.clone()
-        };
+        let mut label = runtime.clone();
+        for (set, flag) in [
+            (arguments.wasm, " --wasm"),
+            (arguments.threads, " --threads"),
+            (arguments.browser, " --browser"),
+        ] {
+            if set {
+                label.push_str(flag);
+            }
+        }
         let mut program = program(project, target, script, arguments)?;
         let output = program
             .command
@@ -812,7 +816,7 @@ Not imported (listed at the end of {name}.webidl):"
                 targets.push(Target {
                     runtime,
                     wasm: arguments.wasm,
-                    threads: arguments.threads && runtime == Runtime::Hl,
+                    threads: arguments.threads && arguments.wasm,
                     cross: cross(&arguments)?,
                 });
             }

@@ -104,7 +104,7 @@ pub fn package(
         if target.runtime == Runtime::Cpp {
             mirror(&built.include, &out.join("include"))?;
         }
-        let triple = target.triple().unwrap_or(&host).to_owned();
+        let triple = target.platform().unwrap_or(host.clone());
         let native = out.join("native").join(&triple);
         std::fs::create_dir_all(&native)
             .map_err(|error| format!("{}: {error}", native.display()))?;

@@ -25,7 +25,7 @@ features.
 | Ash wasm | Static library linked by Ash, using the program's allocator; Haxe fibers, or threads with `--threads`. |
 | hxcpp | Static C adapter and C++ glue, with threads. |
 | CPPIA | Script in an hxcpp host built with `-D scriptable` and DCE off. |
-| hxcpp / Emscripten | C adapter compiled to wasm; no threads or forced GC. Requires wasm-exception-compatible hxcpp. |
+| hxcpp / Emscripten | C adapter compiled to wasm; threads with `--threads`, through Emscripten's pthreads; no forced GC. Requires wasm-exception-compatible hxcpp. |
 | hxcpp / iOS | Rust merged into the app's static library. Examples tested on simulator only; panics untested. |
 | hxcpp / Android | Rust linked into the shared library; output through logcat. Examples tested on emulator only; panics untested. |
 | Ash / iOS, Android | Rust static library linked into the program with `--native-lib`, with threads. Examples and the generated fixture tested on simulator and emulator only. |
@@ -34,7 +34,9 @@ On Windows, HashLink links `libhl.lib` from `HXN_HL_DIR`. hxcpp uses its
 static C runtime, Rust's required system libraries and a 64-bit host build.
 
 Ash wasm rebuilds Rust's standard library with nightly and wasm exceptions
-(`-wasm-use-legacy-eh=false`). Emscripten uses its prebuilt standard library. Both catch panics at the boundary.
+(`-wasm-use-legacy-eh=false`). Emscripten uses its prebuilt standard library,
+or for `--threads` one rebuilt with atomics, and the program is compiled and
+linked with `-pthread` and its `main` runs on a pthread. Both catch panics at the boundary.
 
 Threadless builds queue work locally and use bounded waits; see
 [scheduling](async.md). Windows is validated by CI. There is no Rayzor adapter.

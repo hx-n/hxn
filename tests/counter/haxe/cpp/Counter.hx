@@ -14,6 +14,10 @@
 	<lib name="ws2_32.lib" if="windows"/>
 	<lib name="dbghelp.lib" if="windows"/>
 </target>
+<section if="emscripten hxn_threads">
+	<compiler id="emscripten"><flag value="-pthread"/></compiler>
+	<linker id="exe"><flag value="-pthread"/><flag value="-sPTHREAD_POOL_SIZE=8"/><flag value="-sALLOW_MEMORY_GROWTH=1"/><flag value="-sPROXY_TO_PTHREAD"/><flag value="-sEXIT_RUNTIME=1"/></linker>
+</section>
 ')
 @:headerInclude("counter_glue.h")
 class Counter {

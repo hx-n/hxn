@@ -13,6 +13,15 @@
           "returns": "future<i32>",
           "fallible": false,
           "blocking": false
+        },
+        {
+          "name": "chunks",
+          "docs": "Settles with `count` after `count` pieces of blocking work, each on a thread of its own\nwhere the build has threads, and each but the first started from the thread the work\nbefore it resumed on.",
+          "kind": "static",
+          "params": [{ "name": "count", "type": "i32" }],
+          "returns": "future<i32>",
+          "fallible": false,
+          "blocking": false
         }
       ]
     }

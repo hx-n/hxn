@@ -12,12 +12,17 @@ for the area you are changing:
 
 - **Run every runtime.** `cargo test --workspace` covers the pure crates only.
   The rest is `tests/counter/run.sh` in each of its modes: `hl`, `cpp`, `wasm`,
-  `emcc`, `gen-hl`, `gen-cpp`, `gen-cppia`, `gen-wasm`, `gen-emcc`. Run Ash
+  `wasm-threads`, `emcc`, `emcc-threads`, the `gen-` form of each, and
+  `gen-cppia`. Run Ash
   in its hybrid, JIT and interpreter modes (`ash --mode jit`,
   `ash --mode interp`); they differ in how threads and native calls behave. `tests/cli/run.sh` checks
   the `hxn` command the way the readme uses it, and `tests/examples/run.sh`
   runs every library under `examples/`; both take `hl`, `cpp`, `cppia`,
-  `wasm` and `emcc`, and a VM with its options, as in `hl "ash --mode jit"`.
+  `wasm` and `emcc`, and a VM with its options, as in `hl "ash --mode jit"`;
+  the examples also run threaded and in a web page (`wasm-threads`,
+  `wasm-page`, `emcc-threads`, `emcc-page` and the others its usage line
+  lists). `tests/web/run.sh` runs futures a JavaScript timer settles, and work
+  on threads, under node and in a web page, threaded or not.
   `tests/mobile/run.sh ios-sim|android [cpp|hl]` runs the examples in an
   iOS simulator and on an Android device or emulator, with hxcpp or with
   HashLink through Ash. Run it after changing how an hxcpp program or a

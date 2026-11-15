@@ -100,9 +100,16 @@ pub struct Item { pub name: String, pub count: i32 }
 
 ## Other platforms
 
-- `--wasm`: `hxn run hl --wasm` through Ash (nightly Rust with `rust-src`),
-  `hxn run cpp --wasm` through Emscripten
-  (`rustup target add wasm32-unknown-emscripten`).
+- `--wasm`: `hxn run hl --wasm` built by Ash (nightly Rust with `rust-src`),
+  `hxn run cpp --wasm` built by hxcpp with Emscripten
+  (`rustup target add wasm32-unknown-emscripten`). A packaged wasm library
+  is `lib<library>.a`, which Ash links with
+  `ash --build main.wasm --target wasm32-wasip1 --native-lib lib<library>.a main.hl`.
+  `--threads` builds both threaded over shared memory (`-D hxn_threads`
+  selects that library), and runs the program on a thread of its own;
+  `--browser` runs the program in a web page in headless Chrome. An hxcpp
+  program built without `--threads` runs on the web page's thread, where it
+  delivers futures with `then`: `await` blocks that thread.
 - iOS and Android: `hxn package cpp --target aarch64-apple-ios` (or
   `aarch64-linux-android`, `aarch64-apple-ios-sim`) after
   `rustup target add <triple>`. For HashLink the package holds
