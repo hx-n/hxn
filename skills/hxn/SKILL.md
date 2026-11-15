@@ -93,6 +93,10 @@ pub struct Item { pub name: String, pub count: i32 }
   runs `hxn.Bind.lib`, which adds the classes, passes hxcpp its paths, and
   copies the `.hdll` beside the `.hl` output. It depends on the `hxn`
   haxelib at the version that generated it.
+- Hand-written Haxe goes in the crate's `sources/` directory: local builds
+  and the package put it on the class path. `init = ["pkg.Class.fn()"]` under
+  `[package.metadata.hxn]` lists macros the package's `extraParams.hxml` runs
+  after `hxn.Bind.lib`, such as one registering the library's own macros.
 
 ## Other platforms
 

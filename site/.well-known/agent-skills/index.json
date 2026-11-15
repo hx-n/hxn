@@ -6,7 +6,7 @@
       "type": "skill-md",
       "description": "Expose a Rust library to Haxe with hxn, so one set of generated Haxe classes runs on HashLink, Ash, hxcpp and CPPIA, natively and on wasm. Use when writing or changing a crate annotated with #[hxn::interface], #[hxn::methods], #[hxn::function] or #[hxn::data], running the hxn command (new, build, run, check, package, import, doctor), packaging an hxn library as a haxelib, or binding a C header with hxn import.",
       "url": "/.well-known/agent-skills/hxn/SKILL.md",
-      "digest": "sha256:83a19caaf84fb4bc4e40c2049e6018c6f7493606f2122f97b09d7a5db6269183"
+      "digest": "sha256:b72d3db619ff35536685c6729a95eb83bc517edafa091e42317a5b8709d1588b"
     },
     {
       "name": "hxn-window",
@@ -28,6 +28,13 @@
       "description": "Write GPU shaders in Haxe with the hxnsl haxelib, which compiles HXSL (Heaps' shader language) during the Haxe build to WGSL, MSL, HLSL, SPIR-V and GLSL ES with their bind group layout and binding slots as class constants. Use when writing an HXSL shader class, reading its generated fields to build pipelines or bind resources, setting @const values, or extending hxnsl with a framework Extension or a driver Target.",
       "url": "/.well-known/agent-skills/hxnsl/SKILL.md",
       "digest": "sha256:876aabec57ea78719839378807c56293d9a7098fbd6ce93060a92aeb6a014531"
+    },
+    {
+      "name": "hxn-gpu-metal",
+      "type": "skill-md",
+      "description": "Drive the GPU from Haxe through Apple's Metal with the hxn-gpu-metal haxelib (package `gpu.metal`) on Ash, HashLink, hxcpp and CPPIA, on macOS and iOS. Use when a Haxe program runs compute shaders, renders to a texture or a window, or uses shaders written in HXSL with hxnsl on Metal.",
+      "url": "/.well-known/agent-skills/hxn-gpu-metal/SKILL.md",
+      "digest": "sha256:ea6781171d3bcf3e75b6e93aa86b8effdc7e51d4c8b7c043650a84735c490fec"
     }
   ]
 }
