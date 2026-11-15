@@ -26,7 +26,7 @@ Run build, run, check and package commands in the library crate. See the
   for `wasm32-wasip1-threads`, over one shared memory, and passes
   `-D hxn_threads` so `hxn.Bind.lib` selects that module. A library that
   serves a browser API through `ash_host_agent` needs it, since the page's
-  agent reads the program's memory. It needs an Ash with that target's
+  browser agent reads the program's memory. It needs an Ash with that target's
   runtime object.
 - `--browser` runs a wasm program in a web page in headless Chrome, and prints
   what it prints. With `cpp --wasm`, hxcpp writes the page and Emscripten's

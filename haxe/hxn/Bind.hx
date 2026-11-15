@@ -90,7 +90,7 @@ class Bind {
 				// next to the program it builds: both search the program's
 				// directory. An archive is put there too, for `--native-lib`.
 				// A wasm library's page files go there too, beside the page Ash
-				// writes for the program: the shim of an agent it starts.
+				// writes for the program: the shim of a browser agent it starts.
 				var page = Path.join([root, "page"]);
 				Context.onAfterGenerate(() -> {
 					var output = Compiler.getOutput();

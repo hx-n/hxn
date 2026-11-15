@@ -39,7 +39,7 @@ pub struct Project {
     /// `sources` directory, if it has one.
     pub sources: Option<PathBuf>,
     /// Files the web page needs beside an Ash program that uses the library, such as the shim of an
-    /// agent it starts through `ash_host_agent`: the crate's `page` directory, if it has one.
+    /// browser agent it starts through `ash_host_agent`: the crate's `page` directory, if it has one.
     pub page: Option<PathBuf>,
     /// Init macros a program using the package runs after `hxn.Bind.lib`, such as one that
     /// registers the library's own macros: `init` under `[package.metadata.hxn]`.
