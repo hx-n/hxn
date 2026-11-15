@@ -41,6 +41,10 @@ pub struct Project {
     /// Init macros a program using the package runs after `hxn.Bind.lib`, such as one that
     /// registers the library's own macros: `init` under `[package.metadata.hxn]`.
     pub init: Vec<String>,
+    /// Arguments for the program's link, by target triple: `link-args` under
+    /// `[package.metadata.hxn]`, such as `--use-port=emdawnwebgpu` for
+    /// `wasm32-unknown-emscripten`. hxcpp passes them to its linker.
+    pub link_args: std::collections::BTreeMap<String, Vec<String>>,
     /// Cargo's target directory for it.
     pub target: PathBuf,
     /// The source of its `hxn` dependency, which the adapters also use.
@@ -225,6 +229,34 @@ fn flags(settings: Option<&Value>) -> Result<Vec<String>, String> {
         })
 }
 
+// The `link-args` setting: a table from target triple to a list of linker arguments.
+fn link_args(
+    settings: Option<&Value>,
+) -> Result<std::collections::BTreeMap<String, Vec<String>>, String> {
+    let Some(value) = settings.and_then(|settings| settings.get("link-args")) else {
+        return Ok(Default::default());
+    };
+    let table: Option<std::collections::BTreeMap<String, Vec<String>>> =
+        value.as_object().and_then(|table| {
+            table
+                .iter()
+                .map(|(triple, args)| {
+                    let args: Option<Vec<String>> = args.as_array().and_then(|args| {
+                        args.iter()
+                            .map(|arg| arg.as_str().map(str::to_owned))
+                            .collect()
+                    });
+                    args.map(|args| (triple.clone(), args))
+                })
+                .collect()
+        });
+    table.ok_or_else(|| {
+        String::from(
+            "`link-args` under `[package.metadata.hxn]` must map target triples to lists of strings, such as { wasm32-unknown-emscripten = [\"--use-port=emdawnwebgpu\"] }",
+        )
+    })
+}
+
 // The `init` setting: macro calls, such as `"gpu.metal.Shaders.register()"`.
 fn init(settings: Option<&Value>) -> Result<Vec<String>, String> {
     let Some(value) = settings.and_then(|settings| settings.get("init")) else {
@@ -394,6 +426,7 @@ impl Project {
             flags: flags(settings)?,
             sources: Some(dir.join("sources")).filter(|sources| sources.is_dir()),
             init: init(settings)?,
+            link_args: link_args(settings)?,
             target: PathBuf::from(
                 text(&metadata, "target_directory")
                     .ok_or("`cargo metadata` reported no target directory")?,
@@ -486,6 +519,28 @@ mod tests {
         assert!(is_library_name("greeter") && is_library_name("audio_2"));
         for bad in ["", "Greeter", "2d", "my-lib", "a b"] {
             assert!(!is_library_name(bad), "{bad}");
+        }
+    }
+
+    #[test]
+    fn link_args_are_lists_by_triple() {
+        let settings: Value = serde_json::from_str(
+            r#"{ "link-args": { "wasm32-unknown-emscripten": ["--use-port=emdawnwebgpu"] } }"#,
+        )
+        .unwrap();
+        let args = super::link_args(Some(&settings)).unwrap();
+        assert_eq!(
+            args.get("wasm32-unknown-emscripten").unwrap(),
+            &vec![String::from("--use-port=emdawnwebgpu")]
+        );
+        assert!(super::link_args(None).unwrap().is_empty());
+        for wrong in [
+            r#"{ "link-args": ["--use-port=x"] }"#,
+            r#"{ "link-args": { "x": "--use-port=x" } }"#,
+            r#"{ "link-args": { "x": [1] } }"#,
+        ] {
+            let settings: Value = serde_json::from_str(wrong).unwrap();
+            assert!(super::link_args(Some(&settings)).is_err(), "{wrong}");
         }
     }
 

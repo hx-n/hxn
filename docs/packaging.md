@@ -63,3 +63,11 @@ tags, and the SPDX license mapped to a haxelib license. Set `contributors`
 The haxelib is named after the library unless `haxelib` there names it; the
 native library and `hxn.Bind.lib` keep the library's name.
 `hxn package` lists fields still required by `haxelib submit`.
+
+`link-args` passes arguments to the program's link for hxcpp, by target
+triple, for what a static library cannot carry, such as an Emscripten port:
+
+```toml
+[package.metadata.hxn]
+link-args = { wasm32-unknown-emscripten = ["--use-port=emdawnwebgpu"] }
+```

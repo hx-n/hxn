@@ -205,6 +205,8 @@ pub struct Linked {
     libraries: Vec<String>,
     frameworks: Vec<String>,
     paths: Vec<String>,
+    /// The library's own `link-args` for the target, passed to the linker as they are.
+    args: Vec<String>,
 }
 
 impl Linked {
@@ -352,6 +354,9 @@ impl Linked {
                 "\t<flag value=\"-framework\"/>\n\t<flag value=\"{}\"/>\n",
                 escape(framework)
             ));
+        }
+        for arg in &self.args {
+            out.push_str(&format!("\t<flag value=\"{}\"/>\n", escape(arg)));
         }
         out.push_str("</target>\n</xml>\n");
         out
@@ -795,7 +800,7 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
     // messages: a static library does not carry it to the program's link.
     // So does rustc, for what a crate links with `#[link]` in its source,
     // such as a system framework.
-    let linked = if runtime == Runtime::Cpp {
+    let mut linked = if runtime == Runtime::Cpp {
         let native = dir.join("native-static-libs.txt");
         cargo
             .arg("--message-format=json-render-diagnostics")
@@ -812,6 +817,13 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
         run(&mut cargo)?;
         Linked::default()
     };
+    if runtime == Runtime::Cpp
+        && let Some(args) = target
+            .triple()
+            .and_then(|triple| project.link_args.get(triple))
+    {
+        linked.args = args.clone();
+    }
     built.push(if release { "release" } else { "debug" });
     built.push(artifact(name, target));
 
@@ -972,9 +984,11 @@ mod tests {
             libraries: vec![String::from("windows.0.52.0"), String::from("kernel32")],
             frameworks: Vec::new(),
             paths: vec![found.to_string_lossy().into_owned()],
+            args: vec![String::from("--use-port=emdawnwebgpu")],
         };
         let xml = linked.package(true, &into).unwrap();
         assert!(xml.contains("<lib name=\"${this_dir}/windows.0.52.0.lib\"/>"));
+        assert!(xml.contains("<flag value=\"--use-port=emdawnwebgpu\"/>"));
         assert!(xml.contains("<lib name=\"kernel32.lib\"/>"));
         assert!(!xml.contains("-libpath:"));
         assert!(into.join("windows.0.52.0.lib").is_file());
