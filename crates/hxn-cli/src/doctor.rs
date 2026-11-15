@@ -16,8 +16,8 @@ pub struct Found {
     /// Whether the source of Rust's standard library is installed. An Ash
     /// wasm build rebuilds it.
     pub source: bool,
-    /// Whether the toolchain's rust-lld, which links an Ash side module, can
-    /// load LLVM's library: on macOS it loads `rustlib/<host>/lib/libLLVM.dylib`,
+    /// Whether the Rust toolchain's rust-lld, which hxn links an Ash side module
+    /// with, can load LLVM's library: on macOS it loads `rustlib/<host>/lib/libLLVM.dylib`,
     /// which the llvm-tools component installs.
     pub lld_llvm: bool,
     /// Targets with a standard-library archive in the active rustc sysroot.
