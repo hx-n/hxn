@@ -28,10 +28,15 @@ Run build, run, check and package commands in the library crate. See the
   serves a browser API through `ash_host_agent` needs it, since the page's
   agent reads the program's memory. It needs an Ash with that target's
   runtime object.
-- `--browser`, with `cpp --wasm`, makes the program a page. `run` and `check`
-  serve it with Emscripten's `emrun` to headless Chrome and print what it
-  prints. `HXN_BROWSER` names another browser emrun knows, and
-  `HXN_BROWSER_ARGS` adds flags to its command line, such as
+- `--browser` runs a wasm program in a page, in headless Chrome, and prints
+  what it prints. With `cpp --wasm`, hxcpp writes the page and Emscripten's
+  `emrun` serves it; `HXN_BROWSER` names another browser emrun knows. With
+  `hl --wasm`, Ash writes the page, `ash serve` serves it with the
+  cross-origin isolation headers a threaded program needs, and node 22 or
+  later drives Chrome over the DevTools protocol; `HXN_BROWSER` is Chrome's
+  path when it is not installed where Chrome installs, and `HXN_PAGE_TIMEOUT`
+  the seconds to wait for the program to finish, 300 by default.
+  `HXN_BROWSER_ARGS` adds flags to Chrome's command line, such as
   `--enable-unsafe-webgpu`. In a page, a future settles while the program
   leaves the page's event loop free: use `then`, since `await` blocks it.
 - `--target <triple>` makes `build` and `package` build the binding for

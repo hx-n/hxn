@@ -8,12 +8,14 @@
 #   run.sh wasm [ash]  built and run by Ash
 #   run.sh wasm-threads [ash]
 #                      the same, threaded: wasm32-wasip1-threads over shared memory
+#   run.sh wasm-page [ash] and wasm-threads-page [ash]
+#                      the same, in a page Ash serves, in headless Chrome
 #   run.sh emcc        hxcpp through Emscripten, run by node; needs emcc on PATH
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "$here/../.." && pwd)"
-runtime="${1:?usage: run.sh hl [vm] | cpp | cppia | wasm [ash] | wasm-threads [ash] | emcc}"
+runtime="${1:?usage: run.sh hl [vm] | cpp | cppia | wasm [ash] | wasm-threads [ash] | wasm-page [ash] | wasm-threads-page [ash] | emcc}"
 
 case "$runtime" in
 	hl) arguments=(run hl --vm "${2:-hl}") ;;
@@ -21,6 +23,8 @@ case "$runtime" in
 	cppia) arguments=(run cppia) ;;
 	wasm) arguments=(run hl --wasm --vm "${2:-ash}") ;;
 	wasm-threads) arguments=(run hl --wasm --threads --vm "${2:-ash}") ;;
+	wasm-page) arguments=(run hl --wasm --browser --vm "${2:-ash}") ;;
+	wasm-threads-page) arguments=(run hl --wasm --threads --browser --vm "${2:-ash}") ;;
 	emcc) arguments=(run cpp --wasm) ;;
 	*)
 		echo "unknown runtime: $runtime" >&2

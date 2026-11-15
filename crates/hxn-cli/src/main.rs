@@ -86,9 +86,10 @@ built and run by Ash. With --threads it is threaded: wasm32-wasip1-threads,
 the side module and the program over one shared memory, each Haxe thread a
 thread of its own. Set --vm or HXN_VM if its command is not `ash`.
 `cpp --wasm` is built by hxcpp with Emscripten and run by node, or by the
-command given with --vm. With --browser it is a page instead, which emrun
-serves to headless Chrome, or the browser HXN_BROWSER names, with the flags
-in HXN_BROWSER_ARGS added; --vm then replaces the emrun command. `hl --wasm` rebuilds Rust's standard library,
+command given with --vm. With --browser either is a page in headless
+Chrome: emrun serves hxcpp's (--vm then replaces the emrun command), and
+`ash serve` serves Ash's, which node drives over the DevTools protocol.
+HXN_BROWSER names the browser, HXN_BROWSER_ARGS adds its flags. `hl --wasm` rebuilds Rust's standard library,
 which requires a nightly toolchain.
 
 build accepts --timings, which makes cargo report how long each crate took
@@ -190,9 +191,9 @@ fn target(arguments: &Arguments) -> Result<Target, String> {
             ));
         }
     };
-    if arguments.browser && (runtime != Runtime::Cpp || !arguments.wasm) {
+    if arguments.browser && !arguments.wasm {
         return Err(String::from(
-            "--browser runs a `cpp --wasm` program in a page: give `cpp --wasm`",
+            "--browser runs a wasm program in a page: give `cpp --wasm` or `hl --wasm`",
         ));
     }
     if arguments.threads && (runtime != Runtime::Hl || !arguments.wasm) {
@@ -287,6 +288,33 @@ fn browser(arguments: &Arguments, dir: &Path, page: &Path) -> Result<Program, St
         command,
         page: Some((stdout, stderr)),
     })
+}
+
+// node running the page Ash wrote beside the program, in headless Chrome:
+// HXN_BROWSER names Chrome's executable when it is not where Chrome installs,
+// and HXN_BROWSER_ARGS adds flags. The script prints what the program printed
+// and exits with its status.
+fn ash_page(ash: &str, dir: &Path) -> Result<Program, String> {
+    let script = dir.join("ash_page.mjs");
+    make::write(&script, include_str!("ash_page.mjs"))?;
+    let chrome = std::env::var("HXN_BROWSER")
+        .ok()
+        .filter(|named| named.contains('/') || named.contains('\\'))
+        .unwrap_or_else(|| {
+            String::from(if cfg!(target_os = "macos") {
+                "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+            } else if cfg!(windows) {
+                "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
+            } else {
+                "google-chrome"
+            })
+        });
+    let mut command = Command::new("node");
+    command.arg(&script).arg(ash).arg(dir).arg(chrome);
+    if let Ok(flags) = std::env::var("HXN_BROWSER_ARGS") {
+        command.args(flags.split_whitespace());
+    }
+    Ok(command.into())
 }
 
 /// A program to run, and for a page the files its stdout and stderr go to.
@@ -444,6 +472,9 @@ fn program(
                     .args(["--target", triple])
                     .arg(&program),
             )?;
+            if arguments.browser {
+                return ash_page(ash, &built.dir);
+            }
             let mut command = Command::new(ash);
             command.arg("run").arg(&module).args(&arguments.rest);
             Ok(command.into())
