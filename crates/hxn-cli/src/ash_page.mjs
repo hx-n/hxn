@@ -1,4 +1,4 @@
-// Runs an Ash wasm program in a page: serves its directory with `ash serve`,
+// Runs an Ash wasm program in a web page: serves its directory with `ash serve`,
 // which sends the cross-origin isolation headers a threaded module needs,
 // opens it in headless Chrome over the DevTools protocol, and waits for the
 // page to set its title to done or trapped. What the program writes reaches

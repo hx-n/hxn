@@ -6,7 +6,7 @@ import sys.thread.EventLoop.NextEventTime;
 
 /**
 	Runs Haxe code from the host's event loop: the browser's, or Node's. A
-	program in a page that spins on the Haxe event loop never lets the page
+	program in a web page that spins on the Haxe event loop never lets the page
 	run its own callbacks, such as a timer or a resolved promise, so a future
 	they settle would stay pending; work scheduled here runs between them.
 

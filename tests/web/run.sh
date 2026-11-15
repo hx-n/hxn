@@ -2,7 +2,7 @@
 # Runs the timer library under Emscripten with `hxn run cpp --wasm`, its futures settled by
 # JavaScript timers after `main` returns, and compares what it prints with expected.txt.
 #   run.sh node      run by node
-#   run.sh browser   a page, served by emrun to headless Chrome
+#   run.sh browser   a web page, served by emrun to headless Chrome
 # Needs emcc and emrun on PATH: source emsdk_env.sh first.
 set -euo pipefail
 

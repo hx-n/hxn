@@ -86,7 +86,7 @@ built and run by Ash. With --threads it is threaded: wasm32-wasip1-threads,
 the side module and the program over one shared memory, each Haxe thread a
 thread of its own. Set --vm or HXN_VM if its command is not `ash`.
 `cpp --wasm` is built by hxcpp with Emscripten and run by node, or by the
-command given with --vm. With --browser either is a page in headless
+command given with --vm. With --browser either is a web page in headless
 Chrome: emrun serves hxcpp's (--vm then replaces the emrun command), and
 `ash serve` serves Ash's, which node drives over the DevTools protocol.
 HXN_BROWSER names the browser, HXN_BROWSER_ARGS adds its flags. `hl --wasm` rebuilds Rust's standard library,
@@ -107,7 +107,7 @@ struct Arguments {
     release: bool,
     timings: bool,
     wasm: bool,
-    // With `cpp --wasm`: the program is a page, run in a headless browser.
+    // With `--wasm`: the program is a web page, run in a headless browser.
     browser: bool,
     // With `hl --wasm`: a threaded program and side module over shared memory.
     threads: bool,
@@ -193,7 +193,7 @@ fn target(arguments: &Arguments) -> Result<Target, String> {
     };
     if arguments.browser && !arguments.wasm {
         return Err(String::from(
-            "--browser runs a wasm program in a page: give `cpp --wasm` or `hl --wasm`",
+            "--browser runs a wasm program in a web page: give `cpp --wasm` or `hl --wasm`",
         ));
     }
     if arguments.threads && (runtime != Runtime::Hl || !arguments.wasm) {
@@ -317,7 +317,7 @@ fn ash_page(ash: &str, dir: &Path) -> Result<Program, String> {
     Ok(command.into())
 }
 
-/// A program to run, and for a page the files its stdout and stderr go to.
+/// A program to run, and for a web page the files its stdout and stderr go to.
 struct Program {
     command: Command,
     page: Option<(PathBuf, PathBuf)>,
@@ -333,7 +333,7 @@ impl From<Command> for Program {
 }
 
 impl Program {
-    /// What a page printed on stdout, after printing what it printed on
+    /// What a web page printed on stdout, after printing what it printed on
     /// stderr to stderr; None for a program that prints for itself.
     fn page_output(&self) -> Option<String> {
         let (stdout, stderr) = self.page.as_ref()?;
@@ -513,7 +513,7 @@ fn program(
                 haxe.env_remove("CC").env_remove("CXX");
             }
             if arguments.browser {
-                // hxcpp also writes a page that loads the program, and links it
+                // hxcpp also writes a web page that loads the program, and links it
                 // with `--emrun`, which sends its output to the emrun server.
                 haxe.args([
                     "-D",
