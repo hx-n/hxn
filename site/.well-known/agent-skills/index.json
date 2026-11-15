@@ -27,7 +27,7 @@
       "type": "skill-md",
       "description": "Write GPU shaders in Haxe with the hxnsl haxelib, which translates HXSL (Heaps' shader language) at compile time to WGSL, MSL, HLSL, SPIR-V and GLSL ES with their bind group layout and binding slots as class constants. Use when writing an HXSL shader class, reading its generated fields to build pipelines or bind resources, setting @const values, or extending hxnsl with a framework Extension or a driver Target.",
       "url": "/.well-known/agent-skills/hxnsl/SKILL.md",
-      "digest": "sha256:c08c0892bff141845584f3b8a6fbe52e3918a49f9c2f3c24eb6727b3400e5d61"
+      "digest": "sha256:749aef432b2b3c2bd335d8aa5109cef148ef63b5c3c07cfc93e24512b099f16f"
     },
     {
       "name": "hxn-gpu-metal",

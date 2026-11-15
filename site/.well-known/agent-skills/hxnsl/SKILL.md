@@ -86,7 +86,7 @@ class Fogged implements hxnsl.Shader { ... @const var fog : Bool; ... }
   `group` (where globals go), `transform`, `output`.
 - A driver: a subclass of `hxnsl.Target` whose `build(s:hxnsl.Compiled)`
   returns fields, registered with `hxnsl.Targets.register(target, family)`.
-  `s.step(key, inputs, run, outputs)` is a cached build step for an external
+  `s.step(key, inputs, run, outputs)` is a cached compile-time step for an external
   compiler; `s.resource` adds a resource; `s.field` makes a field. Shaders of
   that family get only the registered targets; register
   `new hxnsl.targets.Msl()` (or `Hlsl`, `Spirv`, `Glsl`) as well to keep those
