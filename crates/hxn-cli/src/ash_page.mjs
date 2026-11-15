@@ -56,6 +56,9 @@ const cleanup = () => {
 };
 
 let status = 1;
+// What goes to stdout and stderr, written once the run is over.
+let out = "";
+let err = "";
 try {
   let target;
   for (let i = 0; i < 150 && !target; i++) {
@@ -126,17 +129,22 @@ try {
   // Ash's runtime writes its own notes to stdout, prefixed `[ash] `; they go
   // to stderr, as under `ash run`.
   for (const { error, text } of written) {
-    if (!error && !text.startsWith("[ash] ")) process.stdout.write(text + "\n");
-    else process.stderr.write(text + "\n");
+    if (!error && !text.startsWith("[ash] ")) out += text + "\n";
+    else err += text + "\n";
   }
   if (written.length === 0)
-    process.stderr.write(`no console output from the web page: ${attached.length} targets followed (${attached.join(", ") || "none"}), title "${title}"\n`);
+    err += `no console output from the web page: ${attached.length} targets followed (${attached.join(", ") || "none"}), title "${title}"\n`;
   if (/ — done$/.test(title)) status = 0;
   else if (!/ — trapped$/.test(title))
-    process.stderr.write(`the page did not finish in ${timeout / 1000} s (HXN_PAGE_TIMEOUT)\n`);
+    err += `the web page did not finish in ${timeout / 1000} s (HXN_PAGE_TIMEOUT)\n`;
 } catch (e) {
-  process.stderr.write(`${e.message}\n`);
+  err += `${e.message}\n`;
 } finally {
   cleanup();
 }
+// Writes to a pipe are asynchronous on macOS, and exiting before they finish
+// loses them, so the exit waits for both.
+const flush = (stream, text) => new Promise((resolve) => stream.write(text, resolve));
+await flush(process.stderr, err);
+await flush(process.stdout, out);
 process.exit(status);
