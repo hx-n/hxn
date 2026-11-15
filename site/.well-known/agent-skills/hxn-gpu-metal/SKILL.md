@@ -31,13 +31,13 @@ import gpu.metal.*;
 var device = Device.systemDefault();             // throws without a Metal device
 var queue = device.newCommandQueue();
 var library = device.newLibraryFromSource(Tripled.MSL);
-var pipeline = device.newComputePipeline(library.functionNamed("main_"));
+var pipeline = device.newComputePipeline(library.functionNamed("compute_main"));
 var data = device.newBufferWith(bytes);
 
 var commands = queue.commandBuffer();
 var encoder = commands.computeEncoder();
 encoder.setPipeline(pipeline);
-encoder.setBuffer(data, 0, slot(Tripled.MSL_SLOTS, "main", Tripled.BUFFER_data_GROUP, Tripled.BUFFER_data));
+encoder.setBuffer(data, 0, slot(Tripled.MSL_SLOTS, "compute_main", Tripled.BUFFER_data_GROUP, Tripled.BUFFER_data));
 encoder.dispatchThreads(64, 1, 1, 16, 1, 1);     // threads, then threadgroup size
 encoder.end();
 commands.completed().then(_ -> use(data.read(0, 64 * 4)));   // before commit()
@@ -57,8 +57,8 @@ then `commands.renderEncoder(target, LoadAction.Clear, r, g, b, a)`,
 
 ## Rules
 
-- MSL function names: hxnsl's `vertex`, `fragment` and `main` are `vertex_`,
-  `fragment_` and `main_`. `library.functionNames()` lists them.
+- MSL function names are hxnsl's entry point names, `vertex_main`,
+  `fragment_main` and `compute_main`, the same as in `MSL_SLOTS`.
 - Bind each resource at the index `MSL_SLOTS` gives for that entry point; do
   not hard-code indices.
 - A stage with a storage buffer has `sizesBuffer` in its `MSL_SLOTS` entry:

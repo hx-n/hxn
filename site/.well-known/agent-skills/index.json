@@ -27,14 +27,21 @@
       "type": "skill-md",
       "description": "Write GPU shaders in Haxe with the hxnsl haxelib, which compiles HXSL (Heaps' shader language) during the Haxe build to WGSL, MSL, HLSL, SPIR-V and GLSL ES with their bind group layout and binding slots as class constants. Use when writing an HXSL shader class, reading its generated fields to build pipelines or bind resources, setting @const values, or extending hxnsl with a framework Extension or a driver Target.",
       "url": "/.well-known/agent-skills/hxnsl/SKILL.md",
-      "digest": "sha256:876aabec57ea78719839378807c56293d9a7098fbd6ce93060a92aeb6a014531"
+      "digest": "sha256:3c44f1a824ddd0716520556753ee8315ca2a678da0914f61a287724200dbecdf"
     },
     {
       "name": "hxn-gpu-metal",
       "type": "skill-md",
       "description": "Drive the GPU from Haxe through Apple's Metal with the hxn-gpu-metal haxelib (package `gpu.metal`) on Ash, HashLink, hxcpp and CPPIA, on macOS and iOS. Use when a Haxe program runs compute shaders, renders to a texture or a window, or uses shaders written in HXSL with hxnsl on Metal.",
       "url": "/.well-known/agent-skills/hxn-gpu-metal/SKILL.md",
-      "digest": "sha256:ea6781171d3bcf3e75b6e93aa86b8effdc7e51d4c8b7c043650a84735c490fec"
+      "digest": "sha256:8e0d6260853ced3494785bf68bf6cc43c34c3e82df0e0d17af067e7b37e42a19"
+    },
+    {
+      "name": "hxn-gpu-vulkan",
+      "type": "skill-md",
+      "description": "Drive the GPU from Haxe through Vulkan with the hxn-gpu-vulkan haxelib (package `gpu.vulkan`) on Ash, HashLink, hxcpp and CPPIA, on Linux, Windows, Android and macOS through MoltenVK. Use when a Haxe program runs compute shaders or renders with Vulkan, records barriers and image layout transitions, or uses HXSL shaders from hxnsl as SPIR-V.",
+      "url": "/.well-known/agent-skills/hxn-gpu-vulkan/SKILL.md",
+      "digest": "sha256:5d634158099b14743b07ec3c00859175f12c4d4eae5c4b838e641439bf42e2cc"
     }
   ]
 }

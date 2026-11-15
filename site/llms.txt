@@ -1,6 +1,6 @@
 # hxn
 
-> hxn generates Haxe bindings for a Rust library: one set of Haxe classes that runs on HashLink, Ash, hxcpp and CPPIA, natively and on wasm, with a native adapter for each runtime. The hx-n libraries built with it give Haxe native windows (hxn-window), audio and video (hxn-av), GPU shaders compiled at build time (hxnsl) and Metal (hxn-gpu-metal).
+> hxn generates Haxe bindings for a Rust library: one set of Haxe classes that runs on HashLink, Ash, hxcpp and CPPIA, natively and on wasm, with a native adapter for each runtime. The hx-n libraries built with it give Haxe native windows (hxn-window), audio and video (hxn-av), GPU shaders compiled at build time (hxnsl), and Metal and Vulkan drivers (hxn-gpu-metal, hxn-gpu-vulkan).
 
 Each library has an agent skill: a SKILL.md whose frontmatter says when to use it, followed by instructions. They are listed below and in the Agent Skills discovery index at https://hxn.dev/.well-known/agent-skills/index.json, so `npx skills add https://hxn.dev` installs them. The haxelib of each library also contains its skill under `skills/`.
 
@@ -11,6 +11,7 @@ Each library has an agent skill: a SKILL.md whose frontmatter says when to use i
 - [hxn-av](https://hxn.dev/.well-known/agent-skills/hxn-av/SKILL.md): Audio and video from Haxe with the platform's codecs: playback, frames, PCM audio, an equalizer, AAC and H.264, and MP4.
 - [hxnsl](https://hxn.dev/.well-known/agent-skills/hxnsl/SKILL.md): GPU shaders written in HXSL and compiled during the Haxe build to WGSL, MSL, HLSL, SPIR-V and GLSL ES, with their layouts as constants.
 - [hxn-gpu-metal](https://hxn.dev/.well-known/agent-skills/hxn-gpu-metal/SKILL.md): Metal from Haxe on macOS and iOS: compute and render passes, with hxnsl shaders built into Metal libraries during the build.
+- [hxn-gpu-vulkan](https://hxn.dev/.well-known/agent-skills/hxn-gpu-vulkan/SKILL.md): Vulkan from Haxe on Linux, Windows, Android and macOS: compute and rendering with explicit barriers, and hxnsl shaders as SPIR-V.
 
 ## Docs
 
@@ -30,6 +31,7 @@ Each library has an agent skill: a SKILL.md whose frontmatter says when to use i
 - [hxn-av](https://raw.githubusercontent.com/hx-n/hxn-av/main/README.md): Audio and video over AVFoundation, Media Foundation and GStreamer.
 - [hxnsl](https://raw.githubusercontent.com/hx-n/hxnsl/main/README.md): HXSL shaders for every GPU API, and how hxnsl differs from Heaps.
 - [hxn-gpu-metal](https://raw.githubusercontent.com/hx-n/hxn-gpu-metal/main/README.md): A Metal driver over Apple's framework, binding by hxnsl's slots.
+- [hxn-gpu-vulkan](https://raw.githubusercontent.com/hx-n/hxn-gpu-vulkan/main/README.md): A Vulkan driver over the ash crate, binding by hxnsl's descriptor sets.
 
 ## Optional
 

@@ -43,7 +43,8 @@ It does not combine shaders at run time as Heaps does.
   cannot run the shader (compute, storage buffers).
 - `LAYOUT`: each bind group's entries (`binding`, `visibility` bits 1 vertex,
   2 fragment, 4 compute, `type`, ...), empty for a skipped group.
-  `ENTRY_POINTS`: name, stage, workgroup.
+  `ENTRY_POINTS`: name, stage, workgroup. Entry points are `vertex_main`,
+  `fragment_main` and `compute_main` in every language.
 - Slots per language: `MSL_SLOTS` (per entry point, `kind` buffer, texture
   or sampler, and `index`), `HLSL_SLOTS` (register class, index, space, or a
   sampler index), `GLSL_BINDINGS` (uniform names). SPIR-V's descriptor set
