@@ -89,11 +89,11 @@ pub fn host(project: &Project, built: &Built) -> Result<Host, String> {
     make::run(&mut haxe)?;
 
     // The library's and hxn's classes are compiled into the host. A script is
-    // compiled against them and calls the host's.
+    // compiled against them and calls the host's, and runs the library's init macros too.
     let mut arguments: Vec<(&'static str, String)> = built
         .arguments
         .iter()
-        .filter(|(flag, _)| *flag == "-cp")
+        .filter(|(flag, _)| *flag == "-cp" || *flag == "--macro")
         .cloned()
         .collect();
     arguments.push(("-D", format!("dll_import={}", text(&held))));

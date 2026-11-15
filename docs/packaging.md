@@ -12,9 +12,10 @@ Haxe programs use it with `-lib <library>` and need no Rust source.
 |---|---|
 | `<library>.hxn.json` | API manifest. |
 | `binding/` | Generated classes, the same for every runtime. |
+| `sources/` | The crate's own hand-written Haxe, from its `sources/` directory, when it has one. |
 | `include/` | C headers and glue. |
 | `native/<triple>/` | Native library for each packaged target. |
-| `haxelib.json`, `extraParams.hxml` | Metadata, the dependency on `hxn`, and automatic `hxn.Bind.lib` setup. |
+| `haxelib.json`, `extraParams.hxml` | Metadata, the dependency on `hxn`, and automatic `hxn.Bind.lib` setup, then the library's `init` macros. |
 
 hxn's own Haxe classes, `hxn.Bind` among them, are the `hxn` haxelib, which
 this repository is. A package depends on it at the version of hxn that
@@ -33,6 +34,26 @@ open an `.hdll`. A host `.hdll` must be built on the system it runs on.
 `hxn.Bind.lib` selects the host, wasm or mobile library from Haxe defines.
 Use `-D hxn_triple=<triple>` to override the selection. CPPIA scripts use
 an hxcpp host containing the binding. See [binding generation](design/generation.md).
+
+## Hand-written Haxe
+
+A library can carry Haxe of its own beside the generated classes: helpers,
+macros, or an hxnsl target a GPU driver registers. Put it in the crate's
+`sources/` directory. `hxn build`, `run` and `check` add it to the class path,
+`hxn package` copies it into the package, and `hxn.Bind.lib` adds the
+package's `sources/` to the class path. `init` under
+`[package.metadata.hxn]` lists macros to run after `hxn.Bind.lib`, which may
+name classes in `sources/`:
+
+```toml
+[package.metadata.hxn]
+init = ["gpu.metal.Shaders.register()"]
+```
+
+`hxn package` writes each into `extraParams.hxml` as `--macro <call>`, and
+local builds pass them to `haxe` the same way, CPPIA scripts included. The
+directory keeps its name in the package, so a repository whose root is its
+haxelib has the same layout as the package.
 
 ## Metadata
 

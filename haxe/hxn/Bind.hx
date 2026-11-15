@@ -54,6 +54,10 @@ class Bind {
 		if (!FileSystem.isDirectory(classes))
 			fail('the package in $root has no classes: run `hxn package` on the library');
 		Compiler.addClassPath(classes);
+		// The library's own Haxe, which the init macros after this one in extraParams.hxml may name.
+		var sources = Path.join([root, "sources"]);
+		if (FileSystem.isDirectory(sources))
+			Compiler.addClassPath(sources);
 		// A display request from an editor only needs types. Nothing is built, so no native library is looked up.
 		if (script || Context.defined("display"))
 			return;

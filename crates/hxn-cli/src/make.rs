@@ -816,6 +816,13 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
     built.push(artifact(name, target));
 
     let mut arguments = vec![("-cp", text(&support)), ("-cp", text(&haxe))];
+    // The library's own Haxe, then its init macros, which may name classes there.
+    if let Some(sources) = &project.sources {
+        arguments.push(("-cp", text(sources)));
+    }
+    for call in &project.init {
+        arguments.push(("--macro", call.clone()));
+    }
     if target.wasm {
         arguments.push(("-D", String::from("wasm")));
     }

@@ -35,6 +35,12 @@ pub struct Project {
     pub bindings: PathBuf,
     /// Extra `haxe` arguments for compiling the program, added to hxn's own.
     pub flags: Vec<String>,
+    /// Hand-written Haxe the package carries beside its generated classes: the crate's
+    /// `sources` directory, if it has one.
+    pub sources: Option<PathBuf>,
+    /// Init macros a program using the package runs after `hxn.Bind.lib`, such as one that
+    /// registers the library's own macros: `init` under `[package.metadata.hxn]`.
+    pub init: Vec<String>,
     /// Cargo's target directory for it.
     pub target: PathBuf,
     /// The source of its `hxn` dependency, which the adapters also use.
@@ -219,6 +225,39 @@ fn flags(settings: Option<&Value>) -> Result<Vec<String>, String> {
         })
 }
 
+// The `init` setting: macro calls, such as `"gpu.metal.Shaders.register()"`.
+fn init(settings: Option<&Value>) -> Result<Vec<String>, String> {
+    let Some(value) = settings.and_then(|settings| settings.get("init")) else {
+        return Ok(Vec::new());
+    };
+    let calls: Option<Vec<String>> = value.as_array().and_then(|calls| {
+        calls
+            .iter()
+            .map(|call| call.as_str().map(str::to_owned))
+            .collect()
+    });
+    match calls {
+        Some(calls) if calls.iter().all(|call| is_macro_call(call)) => Ok(calls),
+        _ => Err(String::from(
+            "`init` under `[package.metadata.hxn]` must be a list of macro calls, such as [\"gpu.metal.Shaders.register()\"]",
+        )),
+    }
+}
+
+/// Whether `call` is a call of a static function by its dotted path, with no line break that
+/// would end its line in `extraParams.hxml`.
+fn is_macro_call(call: &str) -> bool {
+    let Some((path, rest)) = call.split_once('(') else {
+        return false;
+    };
+    rest.ends_with(')')
+        && !call.contains(['\n', '\r'])
+        && path.split('.').count() >= 2
+        && path.split('.').all(|part| {
+            !part.is_empty() && part.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+        })
+}
+
 /// Whether `name` can be used in both C symbol names and Haxe class names.
 /// Whether `name` can name a haxelib: at least three letters, digits, `_`,
 /// `-` or `.`.
@@ -353,6 +392,8 @@ impl Project {
             webidl: setting("webidl").map(|file| dir.join(file)),
             bindings: dir.join(setting("bindings").unwrap_or("src/bindings.rs")),
             flags: flags(settings)?,
+            sources: Some(dir.join("sources")).filter(|sources| sources.is_dir()),
+            init: init(settings)?,
             target: PathBuf::from(
                 text(&metadata, "target_directory")
                     .ok_or("`cargo metadata` reported no target directory")?,
@@ -445,6 +486,28 @@ mod tests {
         assert!(is_library_name("greeter") && is_library_name("audio_2"));
         for bad in ["", "Greeter", "2d", "my-lib", "a b"] {
             assert!(!is_library_name(bad), "{bad}");
+        }
+    }
+
+    #[test]
+    fn init_is_a_list_of_macro_calls() {
+        let settings: Value =
+            serde_json::from_str(r#"{ "init": ["gpu.metal.Shaders.register()", "a.B.c(\"x\")"] }"#)
+                .unwrap();
+        assert_eq!(
+            super::init(Some(&settings)).unwrap(),
+            ["gpu.metal.Shaders.register()", "a.B.c(\"x\")"]
+        );
+        assert!(super::init(None).unwrap().is_empty());
+        for bad in [
+            r#"{ "init": "a.B.c()" }"#,
+            r#"{ "init": ["register()"] }"#,
+            r#"{ "init": ["a.B.c"] }"#,
+            r#"{ "init": ["a.B.c()\n-lib x"] }"#,
+            r#"{ "init": [1] }"#,
+        ] {
+            let settings: Value = serde_json::from_str(bad).unwrap();
+            assert!(super::init(Some(&settings)).is_err(), "{bad}");
         }
     }
 

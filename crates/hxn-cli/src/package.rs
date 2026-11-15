@@ -4,9 +4,10 @@
 //! | Path | What it is |
 //! |---|---|
 //! | `haxelib.json` | the library's name and version, and the other haxelib fields the crate's metadata provides |
-//! | `extraParams.hxml` | calls the macro `hxn.Bind.lib`, which sets up the rest at compile time |
+//! | `extraParams.hxml` | calls the macro `hxn.Bind.lib`, which sets up the rest at compile time, then the library's `init` macros |
 //! | `<library>.hxn.json` | the manifest, which `hxn.Bind` uses to locate the package |
 //! | `binding/` | the library's Haxe classes, the same for every runtime |
+//! | `sources/` | the crate's own hand-written Haxe, from its `sources` directory, when it has one |
 //! | `include/` | `hxn.h` and the library's headers, for hxcpp |
 //! | `native/<triple>/` | the built libraries for one target triple, which may be a wasm one; for hxcpp also `link.xml`, the libraries the archive links, with those a build script found outside the system beside it. A HashLink library built with `--target` is the archive `lib<library>.a`, which Ash links into the program |
 //!
@@ -122,12 +123,31 @@ pub fn package(
     let text = std::fs::read_to_string(project.dir.join(&manifest))
         .map_err(|error| format!("{manifest}: {error}"))?;
     write(&out.join(&manifest), &text)?;
+    // hxn.Bind.lib adds the sources to the class path, so the init macros after it can name
+    // classes there.
+    // Packaging into the crate itself, as a library whose repository is its haxelib does,
+    // leaves its sources as they are.
+    if let Some(sources) = &project.sources {
+        let into = out.join("sources");
+        if std::fs::canonicalize(&into).ok() != std::fs::canonicalize(sources).ok() {
+            mirror(sources, &into)?;
+        }
+    }
     write(
         &out.join("extraParams.hxml"),
-        &format!("--macro hxn.Bind.lib(\"{name}\")\n"),
+        &extra_params(name, &project.init),
     )?;
     write(&out.join("haxelib.json"), &haxelib(project))?;
     Ok(triples)
+}
+
+/// The package's `extraParams.hxml`: `hxn.Bind.lib`, then the library's init macros.
+fn extra_params(name: &str, init: &[String]) -> String {
+    let mut text = format!("--macro hxn.Bind.lib(\"{name}\")\n");
+    for call in init {
+        text.push_str(&format!("--macro {call}\n"));
+    }
+    text
 }
 
 /// Where a library is packaged unless the command line specifies a directory.
@@ -142,6 +162,18 @@ pub fn default_directory(project: &Project) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn init_macros_follow_the_binding() {
+        assert_eq!(
+            extra_params("metal", &[]),
+            "--macro hxn.Bind.lib(\"metal\")\n"
+        );
+        assert_eq!(
+            extra_params("metal", &[String::from("gpu.metal.Shaders.register()")]),
+            "--macro hxn.Bind.lib(\"metal\")\n--macro gpu.metal.Shaders.register()\n"
+        );
+    }
 
     #[test]
     fn the_hxn_haxelib_is_the_commands_version() {
