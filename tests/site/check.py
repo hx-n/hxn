@@ -3,7 +3,9 @@
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
+import hashlib
 import json
+import re
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -18,6 +20,7 @@ class Page(HTMLParser):
         self.links = []
         self.meta = {}
         self.canonical = None
+        self.describedby = None
         self.h1_count = 0
         self.snippets = []
         self.copy_targets = []
@@ -37,6 +40,8 @@ class Page(HTMLParser):
             self.meta[attrs.get('name', attrs.get('property'))] = attrs.get('content')
         if tag == 'link' and attrs.get('rel') == 'canonical':
             self.canonical = attrs['href']
+        if tag == 'link' and attrs.get('rel') == 'describedby':
+            self.describedby = attrs['href']
         if 'data-copy-target' in attrs:
             self.copy_targets.append(attrs['data-copy-target'])
         if tag in ('a', 'link', 'img', 'script'):
@@ -76,6 +81,7 @@ for path, page in pages.items():
     assert page.canonical not in urls, f'{path}: duplicate canonical URL'
     urls.add(page.canonical)
     assert page.h1_count == 1, f'{path}: expected one h1'
+    assert page.describedby == '/llms.txt', f'{path}: no describedby link to /llms.txt'
     assert page.schemas, f'{path}: missing structured data'
     assert page.meta.get('description'), f'{path}: missing description'
     assert page.meta.get('og:url') == page.canonical, f'{path}: Open Graph URL mismatch'
@@ -105,4 +111,38 @@ for path, page in pages.items():
 sitemap = ET.parse(SITE / 'sitemap.xml')
 listed = {node.text for node in sitemap.findall('.//{http://www.sitemaps.org/schemas/sitemap/0.9}loc')}
 assert listed == urls, f'Sitemap mismatch: {listed ^ urls}'
+
+def local(url):
+    """The file under site/ that an https://hxn.dev/ URL serves."""
+    path = SITE / unquote(urlsplit(url).path).lstrip('/')
+    return path / 'index.html' if path.is_dir() else path
+
+
+# llms.txt (llmstxt.org): an H1, a blockquote summary, then H2 sections of links.
+llms = (SITE / 'llms.txt').read_text()
+lines = llms.split('\n')
+assert lines[0].startswith('# ') and lines[2].startswith('> '), 'llms.txt: no H1 followed by a blockquote summary'
+assert not re.search(r'^#{3,} ', llms, re.M), 'llms.txt: a heading below H2'
+listed_links = re.findall(r'^- \[[^\]]+\]\((\S+?)\)', llms, re.M)
+for url in listed_links:
+    if url.startswith('https://hxn.dev/'):
+        assert local(url).is_file(), f'llms.txt: {url} is not in the site'
+
+# The Agent Skills discovery index, v0.2.0, which scripts/sync_site_skills.py writes.
+index = json.loads((SITE / '.well-known' / 'agent-skills' / 'index.json').read_text())
+assert index['$schema'] == 'https://schemas.agentskills.io/discovery/0.2.0/schema.json', 'skills index: unknown $schema'
+for skill in index['skills']:
+    name = skill['name']
+    assert re.fullmatch(r'[a-z0-9]+(-[a-z0-9]+)*', name) and len(name) <= 64, f'skills index: invalid name {name}'
+    assert skill['type'] == 'skill-md', f'skills index: {name} is not a skill-md'
+    data = local('https://hxn.dev' + skill['url']).read_bytes()
+    assert skill['digest'] == 'sha256:' + hashlib.sha256(data).hexdigest(), f'skills index: {name} digest mismatch'
+    head = data.decode().split('\n---', 1)[0]
+    assert f'\nname: {name}\n' in head, f'skills index: {name} SKILL.md names another skill'
+    assert f'\ndescription: {skill["description"]}' in head, f'skills index: {name} description differs from its SKILL.md'
+    assert len(skill['description']) <= 1024, f'skills index: {name} description is too long'
+    assert 'https://hxn.dev' + skill['url'] in listed_links, f'llms.txt: {name} skill is not listed'
+assert (SITE / '.well-known/agent-skills/hxn/SKILL.md').read_bytes() == (ROOT / 'skills/hxn/SKILL.md').read_bytes(), \
+    'site: the hxn skill differs from skills/hxn/SKILL.md; run scripts/sync_site_skills.py'
+print(f'PASS: {len(index["skills"])} agent skills and llms.txt.')
 print(f'PASS: {len(pages)} pages, local links, SEO, copy targets and {sum(len(p.snippets) for p in pages.values())} source excerpts.')

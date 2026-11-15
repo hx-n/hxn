@@ -1,0 +1,35 @@
+# hxn
+
+> hxn generates Haxe bindings for a Rust library: one set of Haxe classes that runs on HashLink, Ash, hxcpp and CPPIA, natively and on wasm, with a native adapter for each runtime. The hx-n libraries built with it give Haxe native windows (hxn-window), audio and video (hxn-av) and GPU shaders compiled at build time (hxnsl).
+
+Each library has an agent skill: a SKILL.md whose frontmatter says when to use it, followed by instructions. They are listed below and in the Agent Skills discovery index at https://hxn.dev/.well-known/agent-skills/index.json, so `npx skills add https://hxn.dev` installs them. The haxelib of each library also contains its skill under `skills/`.
+
+## Agent skills
+
+- [hxn](https://hxn.dev/.well-known/agent-skills/hxn/SKILL.md): Write a Rust library for Haxe with hxn's attributes, and build, test and package it with the hxn command.
+- [hxn-window](https://hxn.dev/.well-known/agent-skills/hxn-window/SKILL.md): Native windows from Haxe: events, monitors, gamepads, the clipboard and GPU surface handles.
+- [hxn-av](https://hxn.dev/.well-known/agent-skills/hxn-av/SKILL.md): Audio and video from Haxe with the platform's codecs: playback, frames, PCM audio, an equalizer, AAC and H.264, and MP4.
+- [hxnsl](https://hxn.dev/.well-known/agent-skills/hxnsl/SKILL.md): GPU shaders written in HXSL and compiled during the Haxe build to WGSL, MSL, HLSL, SPIR-V and GLSL ES, with their layouts as constants.
+
+## Docs
+
+- [README](https://raw.githubusercontent.com/hx-n/hxn/main/README.md): Installing hxn, a first library, packaging, iOS, Android and wasm, and binding a C library.
+- [CLI](https://raw.githubusercontent.com/hx-n/hxn/main/docs/cli.md): Every command and its options.
+- [Packaging](https://raw.githubusercontent.com/hx-n/hxn/main/docs/packaging.md): What a haxelib built by hxn contains, and adding platforms to it.
+- [Rust API rules](https://raw.githubusercontent.com/hx-n/hxn/main/docs/conventions/rust-api.md): What an exposed Rust API may contain: types, ownership, errors, async and callbacks.
+- [Data](https://raw.githubusercontent.com/hx-n/hxn/main/docs/design/data.md): Records, enums, collections and field defaults, and how they cross to Haxe.
+- [Handles](https://raw.githubusercontent.com/hx-n/hxn/main/docs/design/handles.md): Object ownership, `close()`, shared interfaces and atomics.
+- [Futures, streams and signals](https://raw.githubusercontent.com/hx-n/hxn/main/docs/design/async.md): Asynchronous results, scheduling and delivery to Haxe.
+- [Callbacks](https://raw.githubusercontent.com/hx-n/hxn/main/docs/design/callbacks.md): Haxe functions called from Rust.
+- [Importing C libraries](https://raw.githubusercontent.com/hx-n/hxn/main/docs/design/c-import.md): `hxn import` and the WebIDL it writes.
+
+## Libraries
+
+- [hxn-window](https://raw.githubusercontent.com/hx-n/hxn-window/main/README.md): Windows and input over winit, for HashLink, Ash, hxcpp and CPPIA.
+- [hxn-av](https://raw.githubusercontent.com/hx-n/hxn-av/main/README.md): Audio and video over AVFoundation, Media Foundation and GStreamer.
+- [hxnsl](https://raw.githubusercontent.com/hx-n/hxnsl/main/README.md): HXSL shaders for every GPU API, and how hxnsl differs from Heaps.
+
+## Optional
+
+- [Tutorials](https://hxn.dev/tutorials/): Walkthroughs of the CLI, runtimes and targets, data, callbacks and async, as HTML.
+- [Examples](https://github.com/hx-n/hxn/tree/main/examples): Seven libraries, each a Rust crate with a Haxe program.

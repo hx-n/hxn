@@ -1,0 +1,12 @@
+# Points agents at the llms.txt that describes the site (llmstxt.org).
+/*
+  Link: </llms.txt>; rel="describedby"; type="text/markdown"
+
+/llms.txt
+  Content-Type: text/markdown; charset=utf-8
+  Access-Control-Allow-Origin: *
+
+# The Agent Skills discovery index and its skills, readable from any origin.
+/.well-known/agent-skills/*
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=3600

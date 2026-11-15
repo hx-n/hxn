@@ -1,0 +1,33 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "skills": [
+    {
+      "name": "hxn",
+      "type": "skill-md",
+      "description": "Expose a Rust library to Haxe with hxn, so one set of generated Haxe classes runs on HashLink, Ash, hxcpp and CPPIA, natively and on wasm. Use when writing or changing a crate annotated with #[hxn::interface], #[hxn::methods], #[hxn::function] or #[hxn::data], running the hxn command (new, build, run, check, package, import, doctor), packaging an hxn library as a haxelib, or binding a C header with hxn import.",
+      "url": "/.well-known/agent-skills/hxn/SKILL.md",
+      "digest": "sha256:83a19caaf84fb4bc4e40c2049e6018c6f7493606f2122f97b09d7a5db6269183"
+    },
+    {
+      "name": "hxn-window",
+      "type": "skill-md",
+      "description": "Open and drive native windows from Haxe with the hxn-window haxelib (package `window`, over winit) on HashLink, Ash, hxcpp and CPPIA. Use when a Haxe program needs a window, its events (keyboard, mouse, touch, IME, resize, close), monitors, gamepads, the clipboard, or the native window handles for creating a GPU surface.",
+      "url": "/.well-known/agent-skills/hxn-window/SKILL.md",
+      "digest": "sha256:d75b8b5319ec3bd85582c84c4cceedaa70b736db2ae12f38184281137701dd8d"
+    },
+    {
+      "name": "hxn-av",
+      "type": "skill-md",
+      "description": "Audio and video in Haxe with the hxn-av haxelib (package `media`) on HashLink, Ash, hxcpp and CPPIA, using the platform's own codecs rather than FFmpeg. Use when a Haxe program plays a media file, works with video frames or PCM audio, applies an equalizer, encodes or decodes AAC or H.264, or reads or writes MP4.",
+      "url": "/.well-known/agent-skills/hxn-av/SKILL.md",
+      "digest": "sha256:ce337c03ef75ac90450fa88c59fee57da90fa79a7ecdf4d1ce71b48fdb8018f3"
+    },
+    {
+      "name": "hxnsl",
+      "type": "skill-md",
+      "description": "Write GPU shaders in Haxe with the hxnsl haxelib, which compiles HXSL (Heaps' shader language) during the Haxe build to WGSL, MSL, HLSL, SPIR-V and GLSL ES with their bind group layout and binding slots as class constants. Use when writing an HXSL shader class, reading its generated fields to build pipelines or bind resources, setting @const values, or extending hxnsl with a framework Extension or a driver Target.",
+      "url": "/.well-known/agent-skills/hxnsl/SKILL.md",
+      "digest": "sha256:876aabec57ea78719839378807c56293d9a7098fbd6ce93060a92aeb6a014531"
+    }
+  ]
+}

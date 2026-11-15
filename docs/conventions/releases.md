@@ -17,4 +17,15 @@ the latest release and `~/.local/bin`; override with `HXN_VERSION` and
 `HXN_INSTALL_DIR`. `tests/install/run.sh` checks platforms and failure paths
 using local archives without network access.
 
+## Agent skills
+
+Each hx-n library keeps its agent skill in `skills/<name>/SKILL.md`, and its
+release puts `skills/` in the haxelib. hxn.dev serves copies of all of them
+from `site/.well-known/agent-skills/`, with the discovery index beside them,
+and lists them in `site/llms.txt`. After a library's skill changes on main,
+run `python3 scripts/sync_site_skills.py --github` (without `--github` it
+reads checkouts beside this one) and commit `site/`. `tests/site/check.py`
+fails when a copy's digest, name or description disagrees with the index, or
+when `site/`'s hxn skill differs from `skills/hxn/SKILL.md`.
+
 See [CLI usage](../cli.md) and [packaging](../packaging.md).

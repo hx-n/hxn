@@ -8,6 +8,8 @@ on:
       - tests/site/**
       - examples/**
       - wrangler.jsonc
+      - skills/**
+      - scripts/sync_site_skills.py
       - .github/workflows/site.yml
   pull_request:
     paths:
@@ -15,6 +17,8 @@ on:
       - tests/site/**
       - examples/**
       - wrangler.jsonc
+      - skills/**
+      - scripts/sync_site_skills.py
       - .github/workflows/site.yml
   workflow_dispatch:
 
