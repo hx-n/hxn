@@ -277,6 +277,11 @@ fn browser(arguments: &Arguments, dir: &Path, page: &Path) -> Result<Program, St
         .arg(name)
         .arg(format!("--browser_args={flags}"))
         .args(["--kill_start", "--kill_exit"])
+        // A web page that never exits fails the run after HXN_PAGE_TIMEOUT
+        // seconds rather than holding it.
+        .arg("--timeout")
+        .arg(std::env::var("HXN_PAGE_TIMEOUT").unwrap_or_else(|_| String::from("300")))
+        .args(["--timeout-returncode", "1"])
         .arg("--log-stdout")
         .arg(&stdout)
         .arg("--log-stderr")

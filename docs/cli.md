@@ -37,8 +37,8 @@ Run build, run, check and package commands in the library crate. See the
   `hl --wasm`, Ash writes the page, `ash serve` serves it with the
   cross-origin isolation headers a threaded program needs, and node 22 or
   later drives Chrome over the DevTools protocol; `HXN_BROWSER` is Chrome's
-  path when it is not installed where Chrome installs, and `HXN_PAGE_TIMEOUT`
-  the seconds to wait for the program to finish, 300 by default.
+  path when it is not installed where Chrome installs. `HXN_PAGE_TIMEOUT` is
+  the seconds to wait for the program to finish in either, 300 by default.
   `HXN_BROWSER_ARGS` adds flags to Chrome's command line, such as
   `--enable-unsafe-webgpu`. An hxcpp program in a web page delivers a future
   with `then`: the browser settles it only while the web page's event loop is
