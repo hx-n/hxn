@@ -39,7 +39,7 @@ const USAGE: &str = "usage: hxn <command>
       Generates the library's binding for HashLink or hxcpp and builds it.
       Prints the haxe arguments for compiling a program against it.
 
-  hxn run <hl|cpp|cppia> [--wasm] [--browser] [--release] [--vm <command>] [-- <arguments>]
+  hxn run <hl|cpp|cppia> [--wasm] [--threads] [--browser] [--release] [--vm <command>] [-- <arguments>]
       Builds the binding, then compiles the Haxe program in haxe/ and runs
       it. --vm, or the HXN_VM environment variable, sets the
       HashLink-compatible VM to run it with, including any options:
@@ -49,7 +49,7 @@ const USAGE: &str = "usage: hxn <command>
 an hxcpp executable that contains the library's classes. The Haxe program
 is compiled as a script and run by that host.
 
-  hxn check [hl] [cpp] [cppia] [--wasm] [--browser] [--release] [--vm <command>]
+  hxn check [hl] [cpp] [cppia] [--wasm] [--threads] [--browser] [--release] [--vm <command>]
       Runs the Haxe program on each runtime listed. With none listed, it
       runs on whichever of HashLink and hxcpp are installed. Fails unless
       every run succeeds and all runs print the same output. Before
@@ -82,7 +82,9 @@ Haxe app may need platform tools and SDKs. On doctor, --target checks the
 Rust binding's prerequisites without building.
 
 With --wasm the binding and the program are built for wasm. `hl --wasm` is
-built and run by Ash. Set --vm or HXN_VM if its command is not `ash`.
+built and run by Ash. With --threads it is threaded: wasm32-wasip1-threads,
+the side module and the program over one shared memory, each Haxe thread a
+thread of its own. Set --vm or HXN_VM if its command is not `ash`.
 `cpp --wasm` is built by hxcpp with Emscripten and run by node, or by the
 command given with --vm. With --browser it is a page instead, which emrun
 serves to headless Chrome, or the browser HXN_BROWSER names, with the flags
@@ -106,6 +108,8 @@ struct Arguments {
     wasm: bool,
     // With `cpp --wasm`: the program is a page, run in a headless browser.
     browser: bool,
+    // With `hl --wasm`: a threaded program and side module over shared memory.
+    threads: bool,
     // The target triple given with `--target`, for a cross-compiled binding.
     cross: Option<&'static str>,
     vm: Option<String>,
@@ -125,6 +129,7 @@ fn arguments(mut given: impl Iterator<Item = String>) -> Result<Arguments, Strin
         timings: false,
         wasm: false,
         browser: false,
+        threads: false,
         cross: None,
         vm: None,
         hxn: None,
@@ -145,6 +150,7 @@ fn arguments(mut given: impl Iterator<Item = String>) -> Result<Arguments, Strin
             "--timings" => out.timings = true,
             "--wasm" => out.wasm = true,
             "--browser" => out.browser = true,
+            "--threads" => out.threads = true,
             // Leaked on purpose: it is parsed once and used until the process
             // exits.
             "--target" => out.cross = Some(Box::leak(value("--target")?.into_boxed_str())),
@@ -189,9 +195,15 @@ fn target(arguments: &Arguments) -> Result<Target, String> {
             "--browser runs a `cpp --wasm` program in a page: give `cpp --wasm`",
         ));
     }
+    if arguments.threads && (runtime != Runtime::Hl || !arguments.wasm) {
+        return Err(String::from(
+            "--threads builds a threaded Ash program and side module: give `hl --wasm`",
+        ));
+    }
     Ok(Target {
         runtime,
         wasm: arguments.wasm,
+        threads: arguments.threads,
         cross: cross(arguments)?,
     })
 }
@@ -418,16 +430,18 @@ fn program(
             let (ash, options) = words(&vm)?;
             let module = built.dir.join("main.wasm");
             // Ash looks for the library's module next to its output file.
-            // ASH_WASM_FIBERS makes a waiting Haxe thread suspend so that
-            // the others can run. The `--vm` options are passed to the
-            // build step only.
+            // Without threads, ASH_WASM_FIBERS makes a waiting Haxe thread
+            // suspend so that the others can run; with them, each Haxe thread
+            // is a thread. The `--vm` options are passed to the build step
+            // only.
+            let triple = target.triple().unwrap_or("wasm32-wasip1");
             make::run(
                 Command::new(ash)
-                    .env("ASH_WASM_FIBERS", "1")
+                    .env("ASH_WASM_FIBERS", if target.threads { "0" } else { "1" })
                     .args(options)
                     .arg("--build")
                     .arg(&module)
-                    .args(["--target", "wasm32-wasip1"])
+                    .args(["--target", triple])
                     .arg(&program),
             )?;
             let mut command = Command::new(ash);
@@ -565,6 +579,7 @@ fn check(project: &Project, arguments: &Arguments) -> Result<u8, String> {
                 ))?
             },
             wasm: arguments.wasm,
+            threads: arguments.threads && runtime == "hl",
             cross: None,
         };
         let label = if arguments.browser {
@@ -750,6 +765,7 @@ Not imported (listed at the end of {name}.webidl):"
                 targets.push(Target {
                     runtime,
                     wasm: arguments.wasm,
+                    threads: arguments.threads && runtime == Runtime::Hl,
                     cross: cross(&arguments)?,
                 });
             }

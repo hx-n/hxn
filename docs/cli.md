@@ -22,6 +22,12 @@ Run build, run, check and package commands in the library crate. See the
 
 - `--wasm` builds the selected runtime's wasm form. Ash requires nightly
   Rust with `rust-src`; Emscripten requires its SDK and compatible hxcpp.
+- `--threads`, with `hl --wasm`, builds a threaded side module and program
+  for `wasm32-wasip1-threads`, over one shared memory, and passes
+  `-D hxn_threads` so `hxn.Bind.lib` selects that module. A library that
+  serves a browser API through `ash_host_agent` needs it, since the page's
+  agent reads the program's memory. It needs an Ash with that target's
+  runtime object.
 - `--browser`, with `cpp --wasm`, makes the program a page. `run` and `check`
   serve it with Emscripten's `emrun` to headless Chrome and print what it
   prints. `HXN_BROWSER` names another browser emrun knows, and

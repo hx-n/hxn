@@ -6,18 +6,21 @@
 #   run.sh cpp
 #   run.sh cppia       as a CPPIA script, in an hxcpp host that contains the library
 #   run.sh wasm [ash]  built and run by Ash
+#   run.sh wasm-threads [ash]
+#                      the same, threaded: wasm32-wasip1-threads over shared memory
 #   run.sh emcc        hxcpp through Emscripten, run by node; needs emcc on PATH
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "$here/../.." && pwd)"
-runtime="${1:?usage: run.sh hl [vm] | cpp | cppia | wasm [ash] | emcc}"
+runtime="${1:?usage: run.sh hl [vm] | cpp | cppia | wasm [ash] | wasm-threads [ash] | emcc}"
 
 case "$runtime" in
 	hl) arguments=(run hl --vm "${2:-hl}") ;;
 	cpp) arguments=(run cpp) ;;
 	cppia) arguments=(run cppia) ;;
 	wasm) arguments=(run hl --wasm --vm "${2:-ash}") ;;
+	wasm-threads) arguments=(run hl --wasm --threads --vm "${2:-ash}") ;;
 	emcc) arguments=(run cpp --wasm) ;;
 	*)
 		echo "unknown runtime: $runtime" >&2

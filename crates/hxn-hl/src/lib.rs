@@ -25,6 +25,11 @@
     all(target_os = "wasi", panic = "unwind"),
     feature(link_llvm_intrinsics, asm_experimental_arch)
 )]
+// A threaded Ash side module keeps its own errno, as a thread-local.
+#![cfg_attr(
+    all(target_os = "wasi", target_feature = "atomics"),
+    feature(thread_local)
+)]
 
 use std::ffi::{c_int, c_void};
 
@@ -33,6 +38,14 @@ use hxn_abi::{Failure, Fault, Handle, RawHandle, Slice, SliceMut, catch, release
 
 #[cfg(all(target_os = "wasi", panic = "unwind"))]
 mod unwind;
+
+// Threaded std reads errno as a thread-local, which a dylink side module cannot
+// import from the program, so the module defines its own. libc runs in the
+// program, so `last_os_error` here never sees the codes libc sets.
+#[cfg(all(target_os = "wasi", target_feature = "atomics"))]
+#[unsafe(no_mangle)]
+#[thread_local]
+static mut errno: c_int = 0;
 
 // Re-exports the `hl_abi` items a generated adapter uses, so that its crate
 // depends on this one alone.

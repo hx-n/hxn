@@ -3,6 +3,8 @@
 #   run.sh hl [vm]     vm is a HashLink-compatible executable, default `hl`
 #   run.sh cpp
 #   run.sh wasm [ash]  as a side module of an Ash wasm program, run by `ash run`
+#   run.sh wasm-threads [ash]
+#                      the same, threaded: wasm32-wasip1-threads over shared memory
 #   run.sh emcc        hxcpp through Emscripten, run by node; needs emcc on PATH
 #
 # The same for the binding hxn-gen generates from the library's source,
@@ -11,12 +13,13 @@
 #   run.sh gen-cpp
 #   run.sh gen-cppia   as a CPPIA script, in an hxcpp host that contains the classes
 #   run.sh gen-wasm [ash]
+#   run.sh gen-wasm-threads [ash]
 #   run.sh gen-emcc
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "$here/../.." && pwd)"
-runtime="${1:?usage: run.sh hl [vm] | cpp | wasm [ash] | emcc | gen-hl [vm] | gen-cpp | gen-cppia | gen-wasm [ash] | gen-emcc}"
+runtime="${1:?usage: run.sh hl [vm] | cpp | wasm [ash] | wasm-threads [ash] | emcc | gen-hl [vm] | gen-cpp | gen-cppia | gen-wasm [ash] | gen-wasm-threads [ash] | gen-emcc}"
 
 # The file name prefixes and extensions cargo and hxcpp use on this system.
 prefix=lib static=a exe=
@@ -131,9 +134,20 @@ case "$runtime" in
 			-D COUNTER_LIB="$root/target/debug/${prefix}counter.$static"
 		"$work/Main$exe" | tee "$work/out.txt"
 		;;
-	wasm | gen-wasm)
+	wasm | gen-wasm | wasm-threads | gen-wasm-threads)
 		ash="$(command -v "${2:-ash}")"
-		if [ "$runtime" = gen-wasm ]; then
+		# A threaded program's memory is shared, and the module is built with
+		# atomics and declares a shared memory too.
+		# Without threads, fibers let a Haxe thread that blocks suspend so the
+		# others run; a threaded program's Haxe threads are threads of their own.
+		triple=wasm32-wasip1 features=+mutable-globals,+exception-handling shared=() fibers=1
+		case "$runtime" in
+			*-threads)
+				triple=wasm32-wasip1-threads features="$features,+atomics,+bulk-memory"
+				shared=(--shared-memory --max-memory=1073741824) fibers=0
+				;;
+		esac
+		if [ "${runtime#gen-}" != "$runtime" ]; then
 			generate
 			package=counter-gen-hl archive=libcounter_gen_hl.a main=Generated
 			adapter="$work/gen/hl/adapter.rs" classes="$work/gen/haxe"
@@ -146,9 +160,9 @@ case "$runtime" in
 		# encoding Ash emits, so a panic is caught. Only the static library is
 		# built, because cargo cannot link a wasm shared library whose imports
 		# come from the main program.
-		RUSTFLAGS="-C relocation-model=pic -C target-feature=+mutable-globals,+exception-handling -C panic=unwind -C llvm-args=-wasm-use-legacy-eh=false" \
+		RUSTFLAGS="-C relocation-model=pic -C target-feature=$features -C panic=unwind -C llvm-args=-wasm-use-legacy-eh=false" \
 			cargo rustc --manifest-path "$root/Cargo.toml" -p "$package" --crate-type staticlib \
-			--target wasm32-wasip1 -Z build-std=std,panic_unwind
+			--target "$triple" -Z build-std=std,panic_unwind
 		lld="$(rustc --print sysroot)/lib/rustlib/$(rustc -vV | sed -n 's/^host: //p')/bin/rust-lld"
 		exports=()
 		while read -r resolver; do
@@ -157,15 +171,14 @@ case "$runtime" in
 		# Undefined symbols become imports that the main program resolves when
 		# it loads the module.
 		"$lld" -flavor wasm --experimental-pic -shared --no-entry --gc-sections --no-export-dynamic \
-			--unresolved-symbols=import-dynamic "${exports[@]}" \
-			--whole-archive "$root/target/wasm32-wasip1/debug/$archive" --no-whole-archive \
+			--unresolved-symbols=import-dynamic ${shared[@]+"${shared[@]}"} "${exports[@]}" \
+			--whole-archive "$root/target/$triple/debug/$archive" --no-whole-archive \
 			-o "$work/counter.wasm"
 		haxe -D wasm -cp "$root/haxe" -cp "$here/haxe" -cp "$classes" -main "$main" -hl "$work/main.hl"
 		cd "$work"
 		# Ash finds the library next to the output and exports the symbols it
-		# imports. With fibers, a Haxe thread that blocks is suspended and the
-		# other threads run.
-		ASH_WASM_FIBERS=1 "$ash" --build main.wasm --target wasm32-wasip1 main.hl
+		# imports.
+		ASH_WASM_FIBERS=$fibers "$ash" --build main.wasm --target "$triple" main.hl
 		"$ash" run main.wasm | tee "$work/out.txt"
 		;;
 	emcc | gen-emcc)

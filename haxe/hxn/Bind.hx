@@ -24,7 +24,8 @@ import sys.io.File;
 	or not the host uses them.
 
 	The native library used is the one built for the host machine, or for
-	wasm when `wasm` or `emscripten` is defined. `-D hxn_triple=<triple>`
+	wasm when `wasm` or `emscripten` is defined; for HashLink, `hxn_threads`
+	with `wasm` selects the threaded side module. `-D hxn_triple=<triple>`
 	selects another, given as a Rust target triple.
 **/
 class Bind {
@@ -122,8 +123,10 @@ class Bind {
 			return named;
 		if (Context.defined("emscripten"))
 			return "wasm32-unknown-emscripten";
+		if (Context.defined("wasm") && runtime == "hl")
+			return Context.defined("hxn_threads") ? "wasm32-wasip1-threads" : "wasm32-wasip1";
 		if (Context.defined("wasm"))
-			return runtime == "hl" ? "wasm32-wasip1" : "wasm32-unknown-emscripten";
+			return "wasm32-unknown-emscripten";
 		// iOS and Android, detected from the defines hxcpp sets when building for them.
 		if (runtime == "cpp") {
 			if (Context.defined("iphoneos"))

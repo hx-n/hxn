@@ -54,6 +54,9 @@ impl Runtime {
 pub struct Target {
     pub runtime: Runtime,
     pub wasm: bool,
+    /// With `hl --wasm`: a threaded side module over shared memory, for a
+    /// program Ash builds for `wasm32-wasip1-threads`.
+    pub threads: bool,
     /// The target triple of a cross-compiled build. The binding is then a
     /// static library, linked later with the program: by hxcpp, or by Ash
     /// for HashLink.
@@ -67,6 +70,7 @@ impl Target {
         let runtime = self.runtime.name();
         match self.cross {
             Some(triple) => format!("{runtime}-{triple}"),
+            None if self.wasm && self.threads => format!("{runtime}-wasm-threads"),
             None if self.wasm => format!("{runtime}-wasm"),
             None => runtime.to_owned(),
         }
@@ -79,6 +83,7 @@ impl Target {
         match (self.cross, self.wasm, self.runtime) {
             (Some(triple), _, _) => Some(triple),
             (None, false, _) => None,
+            (None, true, Runtime::Hl) if self.threads => Some("wasm32-wasip1-threads"),
             (None, true, Runtime::Hl) => Some("wasm32-wasip1"),
             (None, true, Runtime::Cpp) => Some("wasm32-unknown-emscripten"),
         }
@@ -108,6 +113,9 @@ impl Target {
             (false, _) => None,
             // Position-independent for a side module, and unwinding with wasm
             // exceptions in the encoding Ash emits.
+            (true, Runtime::Hl) if self.threads => Some(
+                "-C relocation-model=pic -C target-feature=+mutable-globals,+exception-handling,+atomics,+bulk-memory -C panic=unwind -C llvm-args=-wasm-use-legacy-eh=false",
+            ),
             (true, Runtime::Hl) => Some(
                 "-C relocation-model=pic -C target-feature=+mutable-globals,+exception-handling -C panic=unwind -C llvm-args=-wasm-use-legacy-eh=false",
             ),
@@ -543,7 +551,7 @@ fn resolvers(adapter: &str) -> Vec<&str> {
 // Links the adapter's static library into a side module that a wasm program
 // loads. Its undefined symbols, the VM's functions and the allocator, become
 // imports that the program provides.
-fn side_module(archive: &Path, adapter: &str, module: &Path) -> Result<(), String> {
+fn side_module(archive: &Path, adapter: &str, module: &Path, threads: bool) -> Result<(), String> {
     let sysroot = printed(Command::new("rustc").args(["--print", "sysroot"]))
         .ok_or("`rustc --print sysroot` did not print a path")?;
     let linker = Path::new(sysroot.trim())
@@ -554,6 +562,11 @@ fn side_module(archive: &Path, adapter: &str, module: &Path) -> Result<(), Strin
     link.args(["-flavor", "wasm", "--experimental-pic", "-shared"])
         .args(["--no-entry", "--gc-sections", "--no-export-dynamic"])
         .arg("--unresolved-symbols=import-dynamic");
+    // A threaded program's memory is shared, and a module it loads has to
+    // declare the same.
+    if threads {
+        link.args(["--shared-memory", "--max-memory=1073741824"]);
+    }
     for resolver in resolvers(adapter) {
         link.arg(format!("--export={resolver}"));
     }
@@ -838,10 +851,13 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
     if target.wasm {
         arguments.push(("-D", String::from("wasm")));
     }
+    if target.threads {
+        arguments.push(("-D", String::from("hxn_threads")));
+    }
     match runtime {
         Runtime::Hl if target.wasm => {
             let module = dir.join(format!("{name}.wasm"));
-            side_module(&built, &adapter, &module)?;
+            side_module(&built, &adapter, &module, target.threads)?;
             built = module;
         }
         Runtime::Hl if target.cross.is_some() => {
@@ -1014,6 +1030,7 @@ mod tests {
         let native = Target {
             runtime: Runtime::Hl,
             wasm: false,
+            threads: false,
             cross: None,
         };
         assert_eq!(native.name(), "hl");
@@ -1021,6 +1038,7 @@ mod tests {
         let ash = Target {
             runtime: Runtime::Hl,
             wasm: true,
+            threads: false,
             cross: None,
         };
         assert_eq!(ash.name(), "hl-wasm");
@@ -1029,12 +1047,14 @@ mod tests {
         let emscripten = Target {
             runtime: Runtime::Cpp,
             wasm: true,
+            threads: false,
             cross: None,
         };
         // A cross-compiled build uses the installed standard library.
         let mobile = Target {
             runtime: Runtime::Cpp,
             wasm: false,
+            threads: false,
             cross: Some("aarch64-apple-ios"),
         };
         assert_eq!(mobile.name(), "cpp-aarch64-apple-ios");
