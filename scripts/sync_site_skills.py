@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'site' / '.well-known' / 'agent-skills'
 SCHEMA = 'https://schemas.agentskills.io/discovery/0.2.0/schema.json'
 # (repository, skill name), in the order the index lists them.
-SKILLS = [('hxn', 'hxn'), ('hxn-window', 'hxn-window'), ('hxn-av', 'hxn-av'), ('hxnsl', 'hxnsl'), ('hxn-gpu-metal', 'hxn-gpu-metal'), ('hxn-gpu-vulkan', 'hxn-gpu-vulkan')]
+SKILLS = [('hxn', 'hxn'), ('hxn-window', 'hxn-window'), ('hxn-av', 'hxn-av'), ('hxnsl', 'hxnsl'), ('hxn-gpu-metal', 'hxn-gpu-metal'), ('hxn-gpu-vulkan', 'hxn-gpu-vulkan'), ('hxn-gpu-d3d12', 'hxn-gpu-d3d12')]
 
 
 def frontmatter(text):

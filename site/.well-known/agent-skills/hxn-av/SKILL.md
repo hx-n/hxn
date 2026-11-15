@@ -13,9 +13,10 @@ haxe -lib hxn-av -main Main -hl main.hl     # then: hl main.hl, or ash main.hl
 haxe -lib hxn-av -main Main -cpp out        # then: out/Main
 ```
 
-The haxelib carries prebuilt native libraries for Linux x86-64, macOS arm64
-and Windows x86-64; a program needs no Rust. It installs the `hxn` haxelib with
-it. Android, iOS and wasm are not set up yet. A `haxelib git` install has
+The haxelib carries prebuilt native libraries for Linux x86-64 and ARM64,
+macOS arm64 and Windows x86-64, and static libraries for Intel macOS (hxcpp
+only), iOS, the iOS simulator and Android arm64; a program needs no Rust. It
+installs the `hxn` haxelib with it. wasm is not set up yet. A `haxelib git` install has
 no native libraries until a release ZIP's `native/` directory is copied into
 it.
 

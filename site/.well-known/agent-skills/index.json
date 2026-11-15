@@ -13,14 +13,14 @@
       "type": "skill-md",
       "description": "Open and drive native windows from Haxe with the hxn-window haxelib (package `window`, over winit) on HashLink, Ash, hxcpp and CPPIA. Use when a Haxe program needs a window, its events (keyboard, mouse, touch, IME, resize, close), monitors, gamepads, the clipboard, or the native window handles for creating a GPU surface.",
       "url": "/.well-known/agent-skills/hxn-window/SKILL.md",
-      "digest": "sha256:d75b8b5319ec3bd85582c84c4cceedaa70b736db2ae12f38184281137701dd8d"
+      "digest": "sha256:73223f38c581de9da670793618c974086c9e788d7a0c3f06f6190f1866e9e5e7"
     },
     {
       "name": "hxn-av",
       "type": "skill-md",
       "description": "Audio and video in Haxe with the hxn-av haxelib (package `media`) on HashLink, Ash, hxcpp and CPPIA, using the platform's own codecs rather than FFmpeg. Use when a Haxe program plays a media file, works with video frames or PCM audio, applies an equalizer, encodes or decodes AAC or H.264, or reads or writes MP4.",
       "url": "/.well-known/agent-skills/hxn-av/SKILL.md",
-      "digest": "sha256:ce337c03ef75ac90450fa88c59fee57da90fa79a7ecdf4d1ce71b48fdb8018f3"
+      "digest": "sha256:002e162a8c90b1009a5aabd408691d6e569a64efa826ad4813ed4136325e353c"
     },
     {
       "name": "hxnsl",
@@ -42,6 +42,13 @@
       "description": "Drive the GPU from Haxe through Vulkan with the hxn-gpu-vulkan haxelib (package `gpu.vulkan`) on Ash, HashLink, hxcpp and CPPIA, on Linux, Windows, Android and macOS through MoltenVK. Use when a Haxe program runs compute shaders or renders with Vulkan, records barriers and image layout transitions, or uses HXSL shaders from hxnsl as SPIR-V.",
       "url": "/.well-known/agent-skills/hxn-gpu-vulkan/SKILL.md",
       "digest": "sha256:5d634158099b14743b07ec3c00859175f12c4d4eae5c4b838e641439bf42e2cc"
+    },
+    {
+      "name": "hxn-gpu-d3d12",
+      "type": "skill-md",
+      "description": "Drive the GPU from Haxe through Direct3D 12 with the hxn-gpu-d3d12 haxelib (package `gpu.d3d12`) on Ash, HashLink, hxcpp and CPPIA, on Windows. Use when a Haxe program runs compute shaders, renders, samples textures or presents to a window with Direct3D 12, records resource transitions or enhanced barriers, or uses HXSL shaders from hxnsl as HLSL or DXIL.",
+      "url": "/.well-known/agent-skills/hxn-gpu-d3d12/SKILL.md",
+      "digest": "sha256:cbc042d689b88c4cfae274880b771ece92cf05fcd9d96948db272e212f794398"
     }
   ]
 }
