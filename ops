@@ -1,1 +1,1 @@
-{"author":{"id":"585844baa6074d44d241f46aa7c9f21ff46653adf617d7f070fbfe327626c989"},"ops":[{"type":5,"timestamp":1794746695,"nonce":"xToc+GC9Elkz89At0X1lwRAsgjw=","added":["bug","area:bind"],"removed":null}]}
+{"author":{"id":"585844baa6074d44d241f46aa7c9f21ff46653adf617d7f070fbfe327626c989"},"ops":[{"type":3,"timestamp":1794747513,"nonce":"V3kx+jrAw2lR5KVwi8J45461FwQ=","message":"hxn-window 0.1.2 (93bbc9f) and hxn-av 0.1.2 (d1b6ace) depend on hxn 0.3.2; the reproducer compiles in either -lib order with them. The check in Bind.lib is still open.","files":null}]}
