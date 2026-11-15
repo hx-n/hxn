@@ -529,6 +529,20 @@ pub fn rustc_reports(key: &str) -> Result<String, String> {
         .ok_or_else(|| String::from("`rustc -vV` did not print the expected line"))
 }
 
+/// Copies the files of a library's `page` directory into `dir`.
+pub fn copy_page(page: &Path, dir: &Path) -> Result<(), String> {
+    for file in files_under(page)? {
+        let from = page.join(&file);
+        let to = dir.join(&file);
+        if let Some(parent) = to.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|error| format!("{}: {error}", parent.display()))?;
+        }
+        std::fs::copy(&from, &to).map_err(|error| format!("{}: {error}", from.display()))?;
+    }
+    Ok(())
+}
+
 /// Whether `program` is in a directory on PATH.
 pub fn on_path(program: &str) -> bool {
     std::env::var_os("PATH").is_some_and(|path| {
@@ -859,6 +873,10 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
             let module = dir.join(format!("{name}.wasm"));
             side_module(&built, &adapter, &module, target.threads)?;
             built = module;
+            // Beside the program, where Ash writes its page.
+            if let Some(page) = &project.page {
+                copy_page(page, &dir)?;
+            }
         }
         Runtime::Hl if target.cross.is_some() => {
             // Named after the library, as an .hdll is, for Ash's

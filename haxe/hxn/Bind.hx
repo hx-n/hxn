@@ -89,10 +89,19 @@ class Bind {
 				// The VM loads the library by name, and Ash loads the module
 				// next to the program it builds: both search the program's
 				// directory. An archive is put there too, for `--native-lib`.
+				// A wasm library's page files go there too, beside the page Ash
+				// writes for the program: the shim of an agent it starts.
+				var page = Path.join([root, "page"]);
 				Context.onAfterGenerate(() -> {
 					var output = Compiler.getOutput();
-					if (Path.extension(output) == "hl")
-						File.copy(from, Path.join([Path.directory(FileSystem.absolutePath(output)), file]));
+					if (Path.extension(output) != "hl")
+						return;
+					var dir = Path.directory(FileSystem.absolutePath(output));
+					File.copy(from, Path.join([dir, file]));
+					if (wasm && FileSystem.isDirectory(page))
+						for (entry in FileSystem.readDirectory(page))
+							if (!FileSystem.isDirectory(Path.join([page, entry])))
+								File.copy(Path.join([page, entry]), Path.join([dir, entry]));
 				});
 			case _:
 				var upper = name.toUpperCase();

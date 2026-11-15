@@ -8,6 +8,7 @@
 //! | `<library>.hxn.json` | the manifest, which `hxn.Bind` uses to locate the package |
 //! | `binding/` | the library's Haxe classes, the same for every runtime |
 //! | `sources/` | the crate's own hand-written Haxe, from its `sources` directory, when it has one |
+//! | `page/` | files an Ash program's page needs beside it, from the crate's `page` directory, when it has one |
 //! | `include/` | `hxn.h` and the library's headers, for hxcpp |
 //! | `native/<triple>/` | the built libraries for one target triple, which may be a wasm one; for hxcpp also `link.xml`, the libraries the archive links, with those a build script found outside the system beside it. A HashLink library built with `--target` is the archive `lib<library>.a`, which Ash links into the program |
 //!
@@ -131,6 +132,13 @@ pub fn package(
         let into = out.join("sources");
         if std::fs::canonicalize(&into).ok() != std::fs::canonicalize(sources).ok() {
             mirror(sources, &into)?;
+        }
+    }
+    // hxn.Bind.lib copies these beside an Ash wasm program's output.
+    if let Some(page) = &project.page {
+        let into = out.join("page");
+        if std::fs::canonicalize(&into).ok() != std::fs::canonicalize(page).ok() {
+            mirror(page, &into)?;
         }
     }
     write(

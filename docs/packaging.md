@@ -55,6 +55,15 @@ local builds pass them to `haxe` the same way, CPPIA scripts included. The
 directory keeps its name in the package, so a repository whose root is its
 haxelib has the same layout as the package.
 
+## Page files
+
+A library that serves a browser API to an Ash wasm program, through an agent
+the page starts with `ash_host_agent`, keeps the agent's shim and what it
+imports in the crate's `page/` directory. `hxn build hl --wasm` copies them
+beside the program, where Ash writes its page; `hxn package` copies them into
+the package's `page/`, and `hxn.Bind.lib` copies those beside the `.hl` output
+of a wasm build.
+
 ## Metadata
 
 Cargo supplies the name, version, description, repository URL, keywords as

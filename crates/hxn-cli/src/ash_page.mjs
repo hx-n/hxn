@@ -1,8 +1,11 @@
 // Runs an Ash wasm program in a page: serves its directory with `ash serve`,
 // which sends the cross-origin isolation headers a threaded module needs,
 // opens it in headless Chrome over the DevTools protocol, and waits for the
-// page to set its title to done or trapped. Prints what the program printed
-// to stdout, the page's other lines to stderr, and exits with its status.
+// page to set its title to done or trapped. What the program writes reaches
+// the console of the Worker it runs in: console.log for stdout, console.error
+// for stderr. This prints both, from the page and every Worker it starts, in
+// the order they were written, and exits 0 when the page says done, 1 when it
+// trapped or did not finish.
 //
 //     node ash_page.mjs <ash> <directory> <chrome> [chrome flags...]
 //
@@ -57,10 +60,9 @@ try {
   let target;
   for (let i = 0; i < 150 && !target; i++) {
     try {
-      const response = await fetch(
-        `http://127.0.0.1:${debugPort}/json/new?http://localhost:${webPort}/`,
-        { method: "PUT" },
-      );
+      const response = await fetch(`http://127.0.0.1:${debugPort}/json/new?about:blank`, {
+        method: "PUT",
+      });
       if (response.ok) target = await response.json();
     } catch {}
     if (!target) await sleep(200);
@@ -74,46 +76,58 @@ try {
   });
   let nextId = 1;
   const waiting = new Map();
+  // Each console call: when, whether it was an error, and its text.
+  const written = [];
+  const send = (method, params = {}, sessionId) =>
+    new Promise((resolve) => {
+      const id = nextId++;
+      waiting.set(id, resolve);
+      socket.send(JSON.stringify(sessionId ? { id, method, params, sessionId } : { id, method, params }));
+    });
+  // Every Worker, the program's and its agents', is attached before it runs
+  // and paused until its console is followed.
+  const follow = (sessionId) => {
+    send("Runtime.enable", {}, sessionId);
+    send("Target.setAutoAttach", { autoAttach: true, waitForDebuggerOnStart: true, flatten: true }, sessionId);
+    send("Runtime.runIfWaitingForDebugger", {}, sessionId);
+  };
   socket.onmessage = (event) => {
     const message = JSON.parse(event.data);
     if (message.id && waiting.has(message.id)) {
       waiting.get(message.id)(message);
       waiting.delete(message.id);
+    } else if (message.method === "Target.attachedToTarget") {
+      follow(message.params.sessionId);
+    } else if (message.method === "Runtime.consoleAPICalled") {
+      const { type, args, timestamp } = message.params;
+      const text = args.map((a) => (a.value !== undefined ? String(a.value) : a.description ?? "")).join(" ");
+      written.push({ timestamp, error: type === "error" || type === "warning", text });
     }
   };
-  const call = (method, params = {}) =>
-    new Promise((resolve) => {
-      const id = nextId++;
-      waiting.set(id, resolve);
-      socket.send(JSON.stringify({ id, method, params }));
-    });
+  await send("Runtime.enable");
+  await send("Target.setAutoAttach", { autoAttach: true, waitForDebuggerOnStart: true, flatten: true });
+  await send("Page.navigate", { url: `http://localhost:${webPort}/` });
 
-  // The page's log, line by line, with each line's class: none for what the
-  // program wrote to stdout, `err` for stderr, `meta` for the page's own.
-  const read = `JSON.stringify({
-    title: document.title,
-    lines: [...(document.getElementById("out")?.children ?? [])].map((s) => [s.className, s.textContent]),
-  })`;
   const timeout = Number(process.env.HXN_PAGE_TIMEOUT ?? 300) * 1000;
   const deadline = Date.now() + timeout;
-  let page = { title: "", lines: [] };
+  let title = "";
   while (Date.now() < deadline) {
-    const state = await call("Runtime.evaluate", { expression: read, returnByValue: true });
-    try {
-      page = JSON.parse(state.result.result.value);
-      if (/ — (done|trapped)$/.test(page.title)) break;
-    } catch {}
+    const state = await send("Runtime.evaluate", { expression: "document.title", returnByValue: true });
+    title = state.result?.result?.value ?? "";
+    if (/ — (done|trapped)$/.test(title)) break;
     await sleep(250);
   }
-  // Ash's runtime writes its own notes to the program's stdout, prefixed
-  // `[ash] `; they go to stderr, as under `ash run`.
-  for (const [kind, text] of page.lines) {
-    if (kind === "" && !text.startsWith("[ash] ")) process.stdout.write(text);
-    else process.stderr.write(text);
+  // What the last console calls posted before the title changed.
+  await sleep(250);
+  written.sort((a, b) => a.timestamp - b.timestamp);
+  // Ash's runtime writes its own notes to stdout, prefixed `[ash] `; they go
+  // to stderr, as under `ash run`.
+  for (const { error, text } of written) {
+    if (!error && !text.startsWith("[ash] ")) process.stdout.write(text + "\n");
+    else process.stderr.write(text + "\n");
   }
-  const exited = page.lines.map(([, text]) => /^exited with (-?\d+)/.exec(text)).find(Boolean);
-  if (/ — done$/.test(page.title)) status = exited ? Number(exited[1]) : 0;
-  else if (!/ — trapped$/.test(page.title))
+  if (/ — done$/.test(title)) status = 0;
+  else if (!/ — trapped$/.test(title))
     process.stderr.write(`the page did not finish in ${timeout / 1000} s (HXN_PAGE_TIMEOUT)\n`);
 } catch (e) {
   process.stderr.write(`${e.message}\n`);

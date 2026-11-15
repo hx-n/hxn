@@ -38,6 +38,9 @@ pub struct Project {
     /// Hand-written Haxe the package carries beside its generated classes: the crate's
     /// `sources` directory, if it has one.
     pub sources: Option<PathBuf>,
+    /// Files a page needs beside an Ash program that uses the library, such as the shim of an
+    /// agent it starts through `ash_host_agent`: the crate's `page` directory, if it has one.
+    pub page: Option<PathBuf>,
     /// Init macros a program using the package runs after `hxn.Bind.lib`, such as one that
     /// registers the library's own macros: `init` under `[package.metadata.hxn]`.
     pub init: Vec<String>,
@@ -425,6 +428,7 @@ impl Project {
             bindings: dir.join(setting("bindings").unwrap_or("src/bindings.rs")),
             flags: flags(settings)?,
             sources: Some(dir.join("sources")).filter(|sources| sources.is_dir()),
+            page: Some(dir.join("page")).filter(|page| page.is_dir()),
             init: init(settings)?,
             link_args: link_args(settings)?,
             target: PathBuf::from(
