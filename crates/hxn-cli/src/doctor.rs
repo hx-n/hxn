@@ -16,6 +16,10 @@ pub struct Found {
     /// Whether the source of Rust's standard library is installed. An Ash
     /// wasm build rebuilds it.
     pub source: bool,
+    /// Whether the toolchain's rust-lld, which links an Ash side module, can
+    /// load LLVM's library: on macOS it loads `rustlib/<host>/lib/libLLVM.dylib`,
+    /// which the llvm-tools component installs.
+    pub lld_llvm: bool,
     /// Targets with a standard-library archive in the active rustc sysroot.
     /// `None` means the installation could not be inspected.
     pub rust_targets: Option<Vec<String>>,
@@ -111,6 +115,14 @@ pub fn find(vm: &str) -> Found {
             .is_some_and(|root| root.join(part).is_dir())
     };
     let source = installed("src/rust/library");
+    let lld_llvm = !cfg!(target_os = "macos")
+        || sysroot.as_ref().is_some_and(|root| {
+            std::fs::read_dir(root)
+                .into_iter()
+                .flatten()
+                .flatten()
+                .any(|entry| entry.path().join("lib/libLLVM.dylib").is_file())
+        });
     let rust_targets = sysroot
         .as_ref()
         .and_then(|root| standard_libraries(root).ok());
@@ -123,6 +135,7 @@ pub fn find(vm: &str) -> Found {
         cargo: first_line(Command::new("cargo").arg("--version")),
         nightly: release.contains("nightly") || release.contains("dev"),
         source,
+        lld_llvm,
         rust_targets,
         supported_targets,
         haxe: first_line(Command::new("haxe").arg("--version"))
@@ -211,6 +224,11 @@ impl Found {
         if !self.source {
             missing.push(String::from(
                 "the source of Rust's standard library (`rustup component add rust-src`)",
+            ));
+        }
+        if !self.lld_llvm {
+            missing.push(String::from(
+                "LLVM's library for the toolchain's rust-lld (`rustup component add llvm-tools`)",
             ));
         }
         missing
@@ -481,6 +499,7 @@ mod tests {
         let all = Found {
             nightly: true,
             source: true,
+            lld_llvm: true,
             rust_targets: Some(vec![String::from("wasm32-unknown-emscripten")]),
             hxcpp_wasm_exceptions: true,
             ash: true,
