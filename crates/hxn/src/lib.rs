@@ -32,8 +32,8 @@
 //! reads the marked items and writes the adapter for each runtime, the C
 //! header, and the Haxe classes.
 
-/// Puts the library's Haxe classes in a package: `hxn::package!("window");`
-/// at the crate root makes them `window.Window` and so on. Without it they
+/// Puts the library's Haxe classes in a package: `hxn::package!("hxn.window");`
+/// at the crate root makes them `hxn.window.Window` and so on. Without it they
 /// are in the top-level package. It expands to nothing.
 #[macro_export]
 macro_rules! package {

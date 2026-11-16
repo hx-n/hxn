@@ -260,7 +260,7 @@ fn link_args(
     })
 }
 
-// The `init` setting: macro calls, such as `"gpu.metal.Shaders.register()"`.
+// The `init` setting: macro calls, such as `"hxn.gpu.metal.Shaders.register()"`.
 fn init(settings: Option<&Value>) -> Result<Vec<String>, String> {
     let Some(value) = settings.and_then(|settings| settings.get("init")) else {
         return Ok(Vec::new());
@@ -274,7 +274,7 @@ fn init(settings: Option<&Value>) -> Result<Vec<String>, String> {
     match calls {
         Some(calls) if calls.iter().all(|call| is_macro_call(call)) => Ok(calls),
         _ => Err(String::from(
-            "`init` under `[package.metadata.hxn]` must be a list of macro calls, such as [\"gpu.metal.Shaders.register()\"]",
+            "`init` under `[package.metadata.hxn]` must be a list of macro calls, such as [\"hxn.gpu.metal.Shaders.register()\"]",
         )),
     }
 }
@@ -550,12 +550,13 @@ mod tests {
 
     #[test]
     fn init_is_a_list_of_macro_calls() {
-        let settings: Value =
-            serde_json::from_str(r#"{ "init": ["gpu.metal.Shaders.register()", "a.B.c(\"x\")"] }"#)
-                .unwrap();
+        let settings: Value = serde_json::from_str(
+            r#"{ "init": ["hxn.gpu.metal.Shaders.register()", "a.B.c(\"x\")"] }"#,
+        )
+        .unwrap();
         assert_eq!(
             super::init(Some(&settings)).unwrap(),
-            ["gpu.metal.Shaders.register()", "a.B.c(\"x\")"]
+            ["hxn.gpu.metal.Shaders.register()", "a.B.c(\"x\")"]
         );
         assert!(super::init(None).unwrap().is_empty());
         for bad in [

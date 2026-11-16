@@ -2033,8 +2033,12 @@ fn build(name: &str, sources: &[Source]) -> Result<Library, Error> {
     Ok(library)
 }
 
-// Whether `text` can name a Haxe package: dotted segments, each starting
-// with a lowercase letter or an underscore, and not hxn's own.
+// Packages that hold hxn's own classes. A library's classes may not go in them.
+const HXN_PACKAGES: [&str; 3] = ["hxn", "hxn.native", "hxn.reactive"];
+
+// Whether `text` is a valid library package: dotted segments that each start with a
+// lowercase letter or an underscore. It may sit under `hxn`, as `hxn.window` does, but
+// may not be one of hxn's own packages or sit under `hxn.native` or `hxn.reactive`.
 fn package_name(text: &str) -> bool {
     let segment = |part: &str| {
         let mut characters = part.chars();
@@ -2043,7 +2047,10 @@ fn package_name(text: &str) -> bool {
             .is_some_and(|first| first.is_ascii_lowercase() || first == '_')
             && characters.all(|rest| rest.is_ascii_alphanumeric() || rest == '_')
     };
-    text.split('.').all(segment) && text.split('.').next() != Some("hxn")
+    let own = |package: &&str| {
+        text == *package || (*package != "hxn" && text.starts_with(&format!("{package}.")))
+    };
+    text.split('.').all(segment) && !HXN_PACKAGES.iter().any(own)
 }
 
 // The package `hxn::package!("...")` names, if the library declares one.
@@ -2081,7 +2088,7 @@ fn package_of(sources: &[Source]) -> Result<Option<String>, Error> {
                     error(
                         span,
                         format!(
-                            "`{declared}` is not a Haxe package name: dotted parts that each start with a lowercase letter, and not `hxn`"
+                            "`{declared}` is not a Haxe package name: dotted parts that each start with a lowercase letter, and not `hxn`, `hxn.native` or `hxn.reactive`"
                         ),
                     ),
                     source,

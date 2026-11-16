@@ -3004,10 +3004,29 @@ fn a_declared_package_holds_every_class() {
     .unwrap();
     assert!(top.package.is_none() && !hxn_gen::manifest(&top).contains("\"package\""));
     assert!(classes(&top).iter().all(|file| !file.path.contains('/')));
+    // A package inside hxn's, but not inside one of hxn's own.
+    let inside = parse(
+        "sound",
+        &source.replace(
+            "hxn::package!(\"sound.devices\");",
+            "hxn::package!(\"hxn.sound\");",
+        ),
+    )
+    .unwrap();
+    assert!(
+        classes(&inside)
+            .iter()
+            .all(|file| file.path.starts_with("hxn/sound/"))
+    );
 
     for (declared, why) in [
         ("hxn::package!(\"Sound\");", "not a Haxe package name"),
-        ("hxn::package!(\"hxn.sound\");", "not a Haxe package name"),
+        ("hxn::package!(\"hxn\");", "not a Haxe package name"),
+        ("hxn::package!(\"hxn.native\");", "not a Haxe package name"),
+        (
+            "hxn::package!(\"hxn.reactive.sound\");",
+            "not a Haxe package name",
+        ),
         (
             "hxn::package!(sound);",
             "takes the package's name as a string",

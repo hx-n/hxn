@@ -178,8 +178,8 @@ mod tests {
             "--macro hxn.Bind.lib(\"metal\")\n"
         );
         assert_eq!(
-            extra_params("metal", &[String::from("gpu.metal.Shaders.register()")]),
-            "--macro hxn.Bind.lib(\"metal\")\n--macro gpu.metal.Shaders.register()\n"
+            extra_params("metal", &[String::from("hxn.gpu.metal.Shaders.register()")]),
+            "--macro hxn.Bind.lib(\"metal\")\n--macro hxn.gpu.metal.Shaders.register()\n"
         );
     }
 

@@ -48,7 +48,7 @@ name classes in `sources/`:
 
 ```toml
 [package.metadata.hxn]
-init = ["gpu.metal.Shaders.register()"]
+init = ["hxn.gpu.metal.Shaders.register()"]
 ```
 
 `hxn package` writes each into `extraParams.hxml` as `--macro <call>`, and
