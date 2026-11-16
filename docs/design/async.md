@@ -14,6 +14,12 @@ never touch the runtime or its heap.
 Repeated future settlement returns false. `send` and `set` return false when
 the reader is gone.
 
+`map`, `flatMap` and `recover` derive a future from another, and it
+settles during the source's delivery. `Future.resolved` and
+`Future.rejected` create settled futures. `await` on a derived future waits
+for the native future at its root, and `then` on one that has already
+settled calls back at once.
+
 Futures and streams carry scalars, text, bytes, data, objects, object lists,
 optional objects or `()` (`hxn.Unit`). Signals carry scalars, text and
 cloneable data. Taking objects transfers ownership to Haxe; object lists

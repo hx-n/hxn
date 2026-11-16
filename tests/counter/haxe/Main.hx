@@ -122,6 +122,19 @@ class Main {
 		check("and finishes while it is awaited", sum.await() == 200010000);
 		check("work that finishes in its first step is ready at once", Counter.sumLater(0).isReady());
 		throws("a step can fail", () -> Counter.sumLater(70000).await(), "counter overflow");
+
+		// Futures made in Haxe from others.
+		check("a resolved future has its value", hxn.Future.resolved(3).isReady() && hxn.Future.resolved(3).await() == 3);
+		throws("a rejected future throws its failure", () -> hxn.Future.rejected(new haxe.Exception("refused")).await(), "refused");
+		check("map applies to a native future's value", Counter.squareLater(7, 1).map(v -> v + 1).await() == 50);
+		throws("map passes a failure on", () -> Counter.squareLater(100000, 1).map(v -> v + 1).await(), "counter overflow");
+		throws("map fails with what its function throws", () -> Counter.squareLater(2, 1).map(v -> throw "mapped away").await(), "mapped away");
+		check("flatMap chains native futures", Counter.squareLater(3, 1).flatMap(v -> Counter.squareLater(v, 1)).await() == 81);
+		check("recover replaces a failure", Counter.squareLater(100000, 1).recover(_ -> hxn.Future.resolved(-1)).await() == -1);
+		check("recover keeps a value", Counter.squareLater(4, 1).recover(_ -> hxn.Future.resolved(-1)).await() == 16);
+		var immediate = 0;
+		hxn.Future.resolved(5).map(v -> v * 2).then(v -> immediate = v);
+		check("then on a settled future calls at once", immediate == 10);
 		var sums = [for (i in 0...20) Counter.sumLater(1000 + i)];
 		var all = 0;
 		for (future in sums)
@@ -265,10 +278,24 @@ class Main {
 		var doubled = promise.doubled();
 		doubled.then(value -> {
 			check("async work is woken by a later settle", value == 14);
-			listened();
+			composed();
 		});
 		check("and was waiting until then", !doubled.isReady());
 		sys.thread.Thread.current().events.run(() -> check("the loop settles what it awaits", promise.resolve(7)));
+	}
+
+	// Futures made in Haxe from native ones, delivered by the event loop.
+	static function composed() {
+		Counter.squareLater(6, 10).map(v -> v + 1).flatMap(v -> Counter.squareLater(v, 10)).then(value -> {
+			check("a composed future is delivered", value == 1369);
+			Counter.squareLater(100000, 1).map(v -> v).recover(e -> hxn.Future.resolved(e.message.length)).then(length -> {
+				check("and a recovered failure", length > 0);
+				Counter.squareLater(100000, 1).map(v -> v).then(_ -> check("a mapped failure delivered as a value", false), error -> {
+					check('a mapped failure is delivered as one: ${error.message}', error.message.indexOf("counter overflow") >= 0);
+					listened();
+				});
+			});
+		});
 	}
 
 	// Items sent by later iterations of the event loop, each passed to the

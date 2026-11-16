@@ -85,7 +85,9 @@ pub struct Item { pub name: String, pub count: i32 }
 - Every interface object holds its Rust value until `close()`; call it when
   done. A class with a `close` method of its own is released by the
   collector instead.
-- `Future`: `await()` or `then(callback)`. `Stream`: iterate or `listen`.
+- `Future`: `await()` or `then(callback)`; `map`, `flatMap` and `recover`
+  compose futures, and `Future.resolved` and `Future.rejected` make settled
+  ones. `Stream`: iterate or `listen`.
   `Signal`: `Reactive.follow`. Results arrive through `hxn.Loop` on the
   Haxe event loop; an application with its own loop sets `Loop.manual` and
   calls `Loop.sync()`.
