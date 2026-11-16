@@ -540,6 +540,14 @@ fn program(
                 ]);
             }
             make::run(&mut haxe)?;
+            // A threaded library may start a browser agent, as under Ash: its
+            // page files go beside the page Emscripten writes.
+            if target.wasm
+                && target.threads
+                && let Some(page) = &project.page
+            {
+                make::copy_page(page, &out)?;
+            }
             // hxcpp names the executable after the main class, without its
             // package.
             let name = project.main.rsplit('.').next().unwrap_or(&project.main);

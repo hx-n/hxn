@@ -111,6 +111,17 @@ class Bind {
 				// hxcpp builds a program for Emscripten single-threaded unless told.
 				if (threaded)
 					Compiler.define("HXCPP_MULTI_THREADED_APP");
+				// A threaded build's library may start a browser agent, as under
+				// Ash: its page files go beside the page Emscripten writes.
+				var page = Path.join([root, "page"]);
+				if (threaded && FileSystem.isDirectory(page))
+					Context.onAfterGenerate(() -> {
+						var dir = FileSystem.absolutePath(Compiler.getOutput());
+						FileSystem.createDirectory(dir);
+						for (entry in FileSystem.readDirectory(page))
+							if (!FileSystem.isDirectory(Path.join([page, entry])))
+								File.copy(Path.join([page, entry]), Path.join([dir, entry]));
+					});
 				var include = Path.join([root, "include"]);
 				Compiler.define("HXN_INCLUDE", include);
 				Compiler.define('${upper}_INCLUDE', include);
