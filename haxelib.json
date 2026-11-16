@@ -4,8 +4,8 @@
   "license": "Apache",
   "tags": ["ffi", "rust", "native", "hashlink", "ash", "hxcpp"],
   "description": "The Haxe classes of libraries built with hxn: futures, streams, signals, reactive values, atomics, and the macro that binds a packaged library.",
-  "version": "0.3.3",
-  "releasenote": "Under Emscripten, futures settled by a JavaScript callback are delivered from the page's event loop, and Haxe events queued after main returns run; hxn run and check take --browser for a cpp --wasm program; link-args passes linker arguments by target triple.",
+  "version": "0.3.4",
+  "releasenote": "Ash wasm libraries are static archives that Ash links with --native-lib; cpp --wasm --threads builds threaded hxcpp programs on Emscripten's pthreads, with main on a pthread; hxn run and check take --browser for Ash wasm programs too.",
   "contributors": ["darmie"],
   "classPath": "haxe",
   "dependencies": {}
