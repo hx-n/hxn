@@ -41,14 +41,17 @@ import hxn.Native;
 		external("release", [{name: "self", type: Native.type(RAW)}], Native.type("Void"));
 		out.push(Native.method("hxnFinalize", [{name: "self", type: Native.type("hxn.Handle")}], Native.type("Void"),
 			Native.call(glue, "release", [macro self.raw]), [], [AStatic]));
-		// A value the library returned, released by the collector.
+		// A value the library returned, released by the collector. Inlined
+		// rather than emitted: a CPPIA host wraps every static function it
+		// emits, passing its pointer argument as a Dynamic.
 		out.push(Native.method("hxnOwn", [{name: "raw", type: Native.type(RAW)}], Native.type("hxn.Handle"), macro {
 			if (raw == null)
 				return null;
-			var handle = new hxn.Handle(raw);
+			var handle = new hxn.Handle();
+			handle.raw = raw;
 			cpp.vm.Gc.setFinalizer(handle, cpp.Function.fromStaticFunction(hxnFinalize));
 			return handle;
-		}, [], [APublic, AStatic]));
+		}, [], [APublic, AStatic, AInline, AExtern]));
 		for (declaration in declared) {
 			var f = Native.functionOf(declaration);
 			var args:Array<FunctionArg> = [];

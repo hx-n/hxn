@@ -15,8 +15,9 @@ typedef Handle = hl.Abstract<"hxn_handle">;
 @:noCompletion class Handle {
 	@:unreflective public var raw:cpp.RawPointer<cpp.Void>;
 
-	public function new(raw:cpp.RawPointer<cpp.Void>)
-		this.raw = raw;
+	// No argument: hxcpp's reflective constructor and CPPIA's would pass a
+	// Dynamic, which some hxcpp releases cannot convert to a pointer.
+	public function new() {}
 }
 #else
 /** On a target hxn does not bind, only for typing: in an editor, say. **/
