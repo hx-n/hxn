@@ -35,7 +35,7 @@ Each library has an agent skill: a SKILL.md whose frontmatter says when to use i
 - [hxn-window](https://raw.githubusercontent.com/hx-n/hxn-window/main/README.md): Windows and input over winit, for HashLink, Ash, hxcpp and CPPIA.
 - [hxn-av](https://raw.githubusercontent.com/hx-n/hxn-av/main/README.md): Audio and video over AVFoundation, Media Foundation and GStreamer.
 - [hxnsl](https://raw.githubusercontent.com/hx-n/hxnsl/main/README.md): HXSL shaders for every GPU API, and how hxnsl differs from Heaps.
-- [hxn-gpu](https://raw.githubusercontent.com/hx-n/hxn-gpu/main/README.md): One GPU API in Haxe over the hxn drivers, with one barrier tracker for Vulkan and Direct3D 12.
+- [hxn-gpu](https://raw.githubusercontent.com/hx-n/hxn-gpu/main/README.md): One GPU API in Haxe over the hxn GPU drivers, with one barrier tracker for Vulkan and Direct3D 12.
 - [hxn-gpu-metal](https://raw.githubusercontent.com/hx-n/hxn-gpu-metal/main/README.md): A Metal driver over Apple's framework, binding by hxnsl's slots.
 - [hxn-gpu-vulkan](https://raw.githubusercontent.com/hx-n/hxn-gpu-vulkan/main/README.md): A Vulkan driver over the ash crate, binding by hxnsl's descriptor sets.
 - [hxn-gpu-d3d12](https://raw.githubusercontent.com/hx-n/hxn-gpu-d3d12/main/README.md): A Direct3D 12 driver over the windows crate, binding by hxnsl's HLSL registers.
