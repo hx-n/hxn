@@ -180,3 +180,44 @@ footer p { margin: 0; }
 .lesson-table-wrap td code { font-size: 11px; white-space: nowrap; }
 .lesson-table-wrap tr:last-child td { border-bottom: 0; }
 .tutorial-card:last-child:nth-child(odd) { grid-column: 1 / -1; }
+
+/* The API reference uses the tutorials' layout, with a type list per library. */
+.api-sidebar nav { max-height: calc(100svh - 64px); overflow-y: auto; gap: 0; padding-right: 8px; }
+.api-sidebar a { padding: 4px 0; overflow-wrap: anywhere; }
+.api-sidebar a span { margin: 0 0 0 6px; }
+.api-sidebar .api-sidebar-library { color: #ddd; margin-bottom: 10px; }
+.api-links { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; margin: 22px 0 0; font-size: 12px; color: #a0a0a0; }
+.api-links code { padding: 6px 10px; background: #101010; border: 1px solid #2a2a2a; border-radius: 6px; }
+.api-links a:hover { color: #fff; }
+.api-facts { display: flex; flex-wrap: wrap; gap: 8px 22px; margin: 20px 0 0; padding: 0; list-style: none; color: #aaa; font-size: 13px; }
+.api-facts code, .api-list code, .api-signature code { font-size: 12px; color: #ddd; }
+.api-facts a, .api-signature a, .api-doc a, .api-member a, .api-list span a { color: #7dcfff; }
+.api-facts a:hover, .api-signature a:hover, .api-doc a:hover, .api-member a:hover, .api-list span a:hover { color: #fff; }
+.api-doc { max-width: 740px; }
+.api-doc p, .api-member p, .api-doc li, .api-member li { color: #aaa; font-size: 14px; line-height: 1.85; }
+.api-doc code, .api-member p code, .api-member li code { font-size: 12px; color: #ddd; overflow-wrap: anywhere; }
+.api-doc ul, .api-doc ol, .api-member ul, .api-member ol { padding-left: 20px; }
+.api-list { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; border-top: 1px solid #1d1d1d; }
+.api-list li { display: grid; grid-template-columns: minmax(150px, 240px) minmax(0, 1fr); gap: 4px 24px; padding: 11px 0; border-bottom: 1px solid #1d1d1d; font-size: 13px; line-height: 1.7; color: #999; }
+.api-list li > a:hover code { color: #fff; text-decoration: underline; text-underline-offset: 4px; }
+.api-list li[hidden] { display: none; }
+.api-member { padding: 18px 0; border-top: 1px solid #1d1d1d; scroll-margin-top: 24px; }
+.api-member p { margin: 10px 0 0; max-width: 740px; }
+.api-member .code-panel, .api-doc .code-panel { margin: 14px 0; }
+.api-signature { margin: 0; padding: 12px 16px; background: #0c0c0c; border: 1px solid #262626; border-radius: 6px; overflow-x: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.api-signature code { line-height: 1.7; }
+.api-filter input { width: 100%; margin: 0 0 18px; padding: 12px 14px; color: #eee; background: #0c0c0c; border: 1px solid #2a2a2a; border-radius: 6px; font: 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+.api-filter input:focus-visible { outline: 2px solid #aaa; outline-offset: 2px; }
+.api-layout .tutorial-card:last-child:nth-child(odd) { grid-column: auto; }
+@media (max-width: 760px) {
+  .api-sidebar nav { max-height: 260px; display: block; }
+  .api-sidebar a { display: block; }
+  .api-list li { grid-template-columns: minmax(0, 1fr); }
+}
+.api-doc a code, .api-member a code, .api-list span a code, .api-values div a code { color: #7dcfff; }
+.api-values li { grid-template-columns: minmax(200px, 360px) minmax(0, 1fr); scroll-margin-top: 24px; }
+.api-values li > code { overflow-wrap: anywhere; }
+.api-values li > div p { margin: 0; font-size: 13px; line-height: 1.7; }
+.api-values li > div p + p { margin-top: 8px; }
+.api-breadcrumb a { color: #a0a0a0; }
+.api-breadcrumb a:hover { color: #fff; }

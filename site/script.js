@@ -34,3 +34,15 @@ for (const button of document.querySelectorAll('[data-copy-target]')) {
     }
   });
 }
+
+// The API reference's type filter: hides the entries whose text lacks every word typed.
+for (const input of document.querySelectorAll('[data-api-filter]')) {
+  const entries = [...document.querySelectorAll('[data-api-entry]')];
+  input.addEventListener('input', () => {
+    const words = input.value.toLowerCase().split(/\s+/).filter(Boolean);
+    for (const entry of entries) {
+      const text = entry.textContent.toLowerCase();
+      entry.hidden = !words.every((word) => text.includes(word));
+    }
+  });
+}

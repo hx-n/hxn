@@ -28,4 +28,14 @@ reads checkouts beside this one) and commit `site/`. `tests/site/check.py`
 fails when a copy's digest, name or description disagrees with the index, or
 when `site/`'s hxn skill differs from `skills/hxn/SKILL.md`.
 
+## API reference
+
+hxn.dev's API reference, `site/api/`, documents each library at the version
+`scripts/build_api_docs.py` lists in `LIBRARIES`. After a library's release
+reaches haxelib, set its version there, run
+`python3 scripts/build_api_docs.py`, and commit `site/`. The script installs
+each version into `target/api-haxelib`, describes it with `haxe -xml`, writes
+a page per library and per type, and lists the pages in `site/sitemap.xml`
+and `site/llms.txt`.
+
 See [CLI usage](../cli.md) and [packaging](../packaging.md).

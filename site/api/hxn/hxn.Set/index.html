@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en" prefix="og: https://ogp.me/ns#">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#000000">
+  <title>Set (hxn) · hxn API — hxn</title>
+  <meta name="description" content="A mutable set of values exchanged with Rust. Set is a Haxe abstract in hxn, from the hxn 0.3.5 haxelib.">
+  <meta name="robots" content="index, follow, max-image-preview:large">
+  <link rel="canonical" href="https://hxn.dev/api/hxn/hxn.Set/">
+  <link rel="describedby" href="/llms.txt" type="text/markdown">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="hxn">
+  <meta property="og:locale" content="en_GB">
+  <meta property="og:title" content="Set (hxn) · hxn API — hxn">
+  <meta property="og:description" content="A mutable set of values exchanged with Rust. Set is a Haxe abstract in hxn, from the hxn 0.3.5 haxelib.">
+  <meta property="og:url" content="https://hxn.dev/api/hxn/hxn.Set/">
+  <meta property="og:image" content="https://hxn.dev/og-hero.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="2400">
+  <meta property="og:image:height" content="1260">
+  <meta property="og:image:alt" content="hxn — Native Rust bindings for Haxe">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Set (hxn) · hxn API — hxn">
+  <meta name="twitter:description" content="A mutable set of values exchanged with Rust. Set is a Haxe abstract in hxn, from the hxn 0.3.5 haxelib.">
+  <meta name="twitter:image" content="https://hxn.dev/og-hero.png">
+  <meta name="twitter:image:alt" content="hxn — Native Rust bindings for Haxe">
+  <link rel="icon" href="/logo.png" type="image/png">
+  <link rel="apple-touch-icon" href="/logo.png">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/script.js" defer></script>
+  <script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "APIReference", "@id": "https://hxn.dev/api/hxn/hxn.Set/#page", "url": "https://hxn.dev/api/hxn/hxn.Set/", "name": "Set (hxn) \u00b7 hxn API \u2014 hxn", "headline": "Set (hxn) \u00b7 hxn API", "description": "A mutable set of values exchanged with Rust. Set is a Haxe abstract in hxn, from the hxn 0.3.5 haxelib.", "inLanguage": "en", "isPartOf": {"@id": "https://hxn.dev/#website"}, "image": "https://hxn.dev/og-hero.png", "programmingLanguage": "Haxe", "executableLibraryName": "hxn", "assemblyVersion": "0.3.5", "targetPlatform": "HashLink, Ash, hxcpp", "about": "hxn.Set"}, {"@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "hxn", "item": "https://hxn.dev/"}, {"@type": "ListItem", "position": 2, "name": "API", "item": "https://hxn.dev/api/"}, {"@type": "ListItem", "position": 3, "name": "hxn", "item": "https://hxn.dev/api/hxn/"}, {"@type": "ListItem", "position": 4, "name": "Set", "item": "https://hxn.dev/api/hxn/hxn.Set/"}]}]}</script>
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="header">
+    <a class="wordmark" href="/" aria-label="hxn home">hxn<span aria-hidden="true"> /</span></a>
+    <nav class="header-links" aria-label="Main"><a href="/tutorials/">Tutorials</a><a href="/api/" aria-current="true">API</a><a class="source-link" href="https://github.com/hx-n/hxn">GitHub ↗</a></nav>
+  </header>
+  <main class="tutorial-layout api-layout">
+    <aside class="tutorial-sidebar api-sidebar"><nav aria-label="hxn types"><a class="tutorial-index-link" href="/api/">API reference</a><a class="api-sidebar-library" href="/api/hxn/">hxn <span>0.3.5</span></a><a href="/api/hxn/hxn.AtomicBool/">AtomicBool</a><a href="/api/hxn/hxn.AtomicInt/">AtomicInt</a><a href="/api/hxn/hxn.Callback/">Callback</a><a href="/api/hxn/hxn.Computed/">Computed</a><a href="/api/hxn/hxn.Future/">Future</a><a href="/api/hxn/hxn.Gc/">Gc</a><a href="/api/hxn/hxn.Inbox/">Inbox</a><a href="/api/hxn/hxn.Loop/">Loop</a><a href="/api/hxn/hxn.Meter/">Meter</a><a href="/api/hxn/hxn.Reactive/">Reactive</a><a href="/api/hxn/hxn.Set/" aria-current="page">Set</a><a href="/api/hxn/hxn.Signal/">Signal</a><a href="/api/hxn/hxn.Stream/">Stream</a><a href="/api/hxn/hxn.Tuple/">Tuple</a><a href="/api/hxn/hxn.Unit/">Unit</a></nav></aside>
+    <article id="content" class="lesson"><header class="lesson-heading"><nav class="eyebrow api-breadcrumb" aria-label="Breadcrumb"><a href="/api/">API</a> / <a href="/api/hxn/">hxn</a> / abstract in hxn</nav><h1>Set</h1><ul class="api-facts"><li>Type parameters: <code>T</code></li><li>Over <code>SetValues&lt;T&gt;</code></li></ul></header><div class="api-doc"><p>A mutable set of values exchanged with Rust.</p><p>Array literals are accepted as sets. Construction copies the elements; <code>toArray</code> also returns a copy. Iteration preserves insertion order, or the order received from Rust. Adding an element does not sort the set.</p><p>Membership uses Haxe <code>==</code> by default, including identity for objects. Pass an equality function when values need a different comparison. Rust applies its own <code>Eq</code> or <code>Ord</code> when it receives the set.</p></div><section class="lesson-section" id="methods"><h2>Fields and methods</h2><div class="api-member" id="fromArray"><pre class="api-signature"><code>function fromArray(values:Array&lt;T&gt;):<a href="/api/hxn/hxn.Set/">Set</a>&lt;T&gt;</code></pre></div></section></article>
+  </main>
+  <footer><p>HashLink · Ash · hxcpp</p><a href="https://github.com/hx-n/hxn/blob/main/LICENSE">Open source · Apache 2.0</a></footer>
+</body>
+</html>
