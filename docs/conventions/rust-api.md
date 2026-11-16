@@ -22,7 +22,7 @@
   `name`. Declare it once in the crate. Each dot-separated part of the name
   starts with a lowercase letter or an underscore. The package cannot be
   `hxn`, `hxn.native` or `hxn.reactive`, which hold hxn's own classes, or
-  be inside the last two. The hx-n libraries use `hxn.<name>`, such as
+  be inside the last two. The hxn libraries use `hxn.<name>`, such as
   `hxn.window` and `hxn.gpu.metal`.
 - The build script can write part of the API. The library includes the
   file it writes with `include!(concat!(env!("OUT_DIR"), "/name.rs"))` at the

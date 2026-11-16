@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Copy the hx-n agent skills into site/.well-known/agent-skills/ and write its index.json.
+"""Copy the hxn agent skills into site/.well-known/agent-skills/ and write its index.json.
 
 Each skill is read from a checkout beside this one (../hxn-window/skills/hxn-window/SKILL.md),
 or from the repository's main branch on GitHub with --github. The index follows the Agent

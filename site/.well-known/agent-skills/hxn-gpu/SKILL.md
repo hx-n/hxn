@@ -1,6 +1,6 @@
 ---
 name: hxn-gpu
-description: Drive the GPU from Haxe with one API on Metal, Vulkan, Direct3D 12, OpenGL ES, WebGPU and WebGL2, using the hxn-gpu haxelib (package `hxn.gpu`) over the hx-n driver haxelibs, on HashLink, Ash and hxcpp, natively and in the browser. Use when a Haxe program renders or computes on whatever GPU the platform has, checks device features and limits, falls back between backends, or uses HXSL shaders from hxnsl on several backends at once.
+description: Drive the GPU from Haxe with one API on Metal, Vulkan, Direct3D 12, OpenGL ES, WebGPU and WebGL2, using the hxn-gpu haxelib (package `hxn.gpu`) over the hxn driver haxelibs, on HashLink, Ash and hxcpp, natively and in the browser. Use when a Haxe program renders or computes on whatever GPU the platform has, checks device features and limits, falls back between backends, or uses HXSL shaders from hxnsl on several backends at once.
 ---
 
 # hxn-gpu

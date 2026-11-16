@@ -19,7 +19,7 @@ using local archives without network access.
 
 ## Agent skills
 
-Each hx-n library keeps its agent skill in `skills/<name>/SKILL.md`, and its
+Each hxn library keeps its agent skill in `skills/<name>/SKILL.md`, and its
 release puts `skills/` in the haxelib. hxn.dev serves copies of all of them
 from `site/.well-known/agent-skills/`, with the discovery index beside them,
 and lists them in `site/llms.txt`. After a library's skill changes on main,

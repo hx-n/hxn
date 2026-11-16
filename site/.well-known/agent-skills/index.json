@@ -32,9 +32,9 @@
     {
       "name": "hxn-gpu",
       "type": "skill-md",
-      "description": "Drive the GPU from Haxe with one API on Metal, Vulkan, Direct3D 12, OpenGL ES, WebGPU and WebGL2, using the hxn-gpu haxelib (package `hxn.gpu`) over the hx-n driver haxelibs, on HashLink, Ash and hxcpp, natively and in the browser. Use when a Haxe program renders or computes on whatever GPU the platform has, checks device features and limits, falls back between backends, or uses HXSL shaders from hxnsl on several backends at once.",
+      "description": "Drive the GPU from Haxe with one API on Metal, Vulkan, Direct3D 12, OpenGL ES, WebGPU and WebGL2, using the hxn-gpu haxelib (package `hxn.gpu`) over the hxn driver haxelibs, on HashLink, Ash and hxcpp, natively and in the browser. Use when a Haxe program renders or computes on whatever GPU the platform has, checks device features and limits, falls back between backends, or uses HXSL shaders from hxnsl on several backends at once.",
       "url": "/.well-known/agent-skills/hxn-gpu/SKILL.md",
-      "digest": "sha256:ac6b36679005429cc744c57023efd8dfd1826d2ee38fed8d974bd8458c655b79"
+      "digest": "sha256:d50ef224a335177d6417c3448c24c953ed15e8030c3132d109a034440a0d4245"
     },
     {
       "name": "hxn-gpu-metal",
