@@ -146,8 +146,18 @@ try {
   }
   if (written.length === 0)
     err(`no console output from the web page: ${attached.length} targets followed (${attached.join(", ") || "none"}), title "${title}"`);
-  if (/ — done$/.test(title)) status = 0;
-  else if (!/ — trapped$/.test(title))
+  if (/ — done$/.test(title)) {
+    // The title says done however the program ended; the page's log, which it
+    // keeps in the document whether or not it shows it, has the exit status.
+    const log = await send("Runtime.evaluate", {
+      expression: `document.getElementById("out")?.textContent ?? ""`,
+      returnByValue: true,
+    });
+    const exited = [...(log.result?.result?.value ?? "").matchAll(/exited with (-?\d+)/g)].pop();
+    const code = exited ? Number(exited[1]) : 0;
+    if (code === 0) status = 0;
+    else err(`the program exited with ${code}`);
+  } else if (!/ — trapped$/.test(title))
     err(`the web page did not finish in ${timeout / 1000} s (HXN_PAGE_TIMEOUT)`);
 } catch (e) {
   err(e.message);
