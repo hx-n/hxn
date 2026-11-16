@@ -58,7 +58,9 @@ Run build, run, check and package commands in the library crate. See the
   on the web page's thread and delivers a future with `then`: the browser
   settles it only while that thread's event loop is free, and `await` blocks
   it. A threaded hxcpp program, like an Ash one, runs on a thread of its own,
-  where `await` works.
+  where `await` works on a future the library's threads settle. A future the
+  browser settles on that same thread, such as the promise of a browser API
+  called from it, still needs `then`.
 - `--target <triple>` makes `build` and `package` build the binding for
   another platform, such as `aarch64-linux-android`, as a static library.
   Install that triple's Rust standard library first with

@@ -109,7 +109,9 @@ pub struct Item { pub name: String, pub count: i32 }
   selects that library), and runs the program on a thread of its own;
   `--browser` runs the program in a web page in headless Chrome. An hxcpp
   program built without `--threads` runs on the web page's thread, where it
-  delivers futures with `then`: `await` blocks that thread.
+  delivers futures with `then`: `await` blocks that thread. A threaded hxcpp
+  program can `await` a future its library's threads settle, but still needs
+  `then` for one the browser settles on its own thread, such as WebGPU's.
 - iOS and Android: `hxn package cpp --target aarch64-apple-ios` (or
   `aarch64-linux-android`, `aarch64-apple-ios-sim`) after
   `rustup target add <triple>`. For HashLink the package holds

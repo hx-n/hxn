@@ -205,7 +205,9 @@ ash --build main.wasm --target wasm32-wasip1 --native-lib libgreeter.a main.hl
 threaded wasm libraries, which `-D hxn_threads` selects: Ash builds those
 programs for `wasm32-wasip1-threads`, and hxcpp compiles and links them with
 Emscripten's pthreads. Either way the program runs on a thread of its own,
-not the web page's, so `await` works in a web page.
+not the web page's, so `await` works in a web page on a future the library's
+threads settle. Under hxcpp, a future the browser settles on the program's
+own thread, such as a WebGPU promise, still needs `then`.
 
 `haxelib submit` requires a few more fields. Set `repository` and `license`
 in Cargo.toml, and the haxelib contributors and a release note under
