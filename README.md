@@ -229,16 +229,25 @@ hxn import vendor/tally.h --source vendor/tally.c
 cd tally
 ```
 
-The crate's API is in `tally.webidl`, generated from the header. Review it and
-add what a header cannot express: `[HxnStatus]` on a function whose `int`
-return value is a status code, `[HxnFree=function]` where returned text or an
-object must be freed. Each `hxn build` regenerates `src/bindings.rs` from it.
-A C callback the library calls during the call is passed a Haxe function; one
-it keeps to call later, such as the one `sqlite3_update_hook` registers, is
-returned as a stream of its calls. Use `--link <library>` instead of
-`--source` to link a library that is already built. See
-[Importing C libraries](https://github.com/hx-n/hxn/blob/main/docs/design/c-import.md) for supported declarations
-and import restrictions.
+`hxn import` writes the library's API to `tally.webidl`. A header doesn't say
+which `int` is an error code or who frees a returned pointer, so annotate
+those before you build:
+
+- `[HxnStatus]` on a function that returns a status code: a non-zero result
+  throws in Haxe.
+- `[HxnFree=function]` on returned text or an object the caller must free,
+  naming the C function that frees it.
+
+`hxn build` regenerates `src/bindings.rs` from the WebIDL on every build.
+
+Callbacks map by lifetime. A callback the C function calls before it returns
+takes a Haxe function. One that C stores and calls later, such as the hook
+`sqlite3_update_hook` registers, comes back as a stream of its calls.
+
+To link a prebuilt library instead of compiling C sources, pass
+`--link <library>` in place of `--source`.
+[Importing C libraries](https://github.com/hx-n/hxn/blob/main/docs/design/c-import.md)
+lists the supported declarations and what the import can't handle.
 
 ## Examples
 
