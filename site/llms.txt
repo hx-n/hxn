@@ -21,17 +21,17 @@ Each library has an agent skill: a SKILL.md whose frontmatter says when to use i
 ## API reference
 
 - [API reference](https://hxn.dev/api/): Every type of every hxn library, at its released version.
-- [hxn 0.3.5](https://hxn.dev/api/hxn/): Futures, streams, signals, reactive values, atomics and callbacks: the Haxe classes every hxn library uses.
+- [hxn 0.3.6](https://hxn.dev/api/hxn/): Futures, streams, signals, reactive values, atomics and callbacks: the Haxe classes every hxn library uses.
 - [hxn-window 0.2.0](https://hxn.dev/api/hxn-window/): Windows, input, monitors, gamepads and the clipboard over winit, with native handles for GPU surfaces.
 - [hxn-av 0.2.0](https://hxn.dev/api/hxn-av/): Audio and video with the platform's codecs: playback, frames, PCM audio, an equalizer, AAC, H.264 and MP4.
 - [hxnsl 0.2.0](https://hxn.dev/api/hxnsl/): Shaders written in HXSL and translated at compile time to WGSL, MSL, HLSL, SPIR-V and GLSL ES.
-- [hxn-gpu 0.2.0](https://hxn.dev/api/hxn-gpu/): One GPU API over every hxn GPU driver, with features and limits per device and a default backend per platform.
+- [hxn-gpu 0.2.1](https://hxn.dev/api/hxn-gpu/): One GPU API over every hxn GPU driver, with features and limits per device and a default backend per platform.
 - [hxn-gpu-metal 0.2.0](https://hxn.dev/api/hxn-gpu-metal/): Metal on macOS and iOS: compute and render passes, with hxnsl shaders compiled into Metal libraries.
 - [hxn-gpu-vulkan 0.3.0](https://hxn.dev/api/hxn-gpu-vulkan/): Vulkan on Linux, Windows, Android and macOS: compute, rendering, explicit barriers and swapchains.
 - [hxn-gpu-d3d12 0.2.0](https://hxn.dev/api/hxn-gpu-d3d12/): Direct3D 12 on Windows: compute, rendering, textures and swapchains, with transitions or enhanced barriers.
 - [hxn-gpu-gles 0.3.0](https://hxn.dev/api/hxn-gpu-gles/): OpenGL ES 3.0 over EGL on Android, Linux, macOS and Windows: rendering, textures and windows.
-- [hxn-gpu-webgpu 0.3.1](https://hxn.dev/api/hxn-gpu-webgpu/): WebGPU in the browser, on hxcpp and Ash compiled to wasm: compute, rendering and the web page's canvas.
-- [hxn-gpu-webgl2 0.3.0](https://hxn.dev/api/hxn-gpu-webgl2/): WebGL2 in the browser, on hxcpp and Ash compiled to wasm, for browsers without WebGPU.
+- [hxn-gpu-webgpu 0.3.2](https://hxn.dev/api/hxn-gpu-webgpu/): WebGPU in the browser, on hxcpp and Ash compiled to wasm: compute, rendering and the web page's canvas.
+- [hxn-gpu-webgl2 0.3.1](https://hxn.dev/api/hxn-gpu-webgl2/): WebGL2 in the browser, on hxcpp and Ash compiled to wasm, for browsers without WebGPU.
 
 ## Docs
 

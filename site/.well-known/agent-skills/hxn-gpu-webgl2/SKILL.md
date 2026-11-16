@@ -30,8 +30,8 @@ ash serve out          # sends the cross-origin isolation headers shared memory 
 ```
 
 The compile copies the library, `libgpu_webgl2.a`, and its `.mjs` files
-beside `main.hl`. Under Ash the WebGL2 context is held by a browser agent: a
-Worker the web page starts with those files. The haxelib carries the
+beside `main.hl`. In a threaded build, under Ash or hxcpp, the WebGL2 context
+is held by a browser agent: a Worker the web page starts with those files. The haxelib carries the
 Emscripten and Ash builds prebuilt, so a program needs no Rust toolchain.
 
 ## Use
@@ -91,9 +91,10 @@ context.bindUniformBuffer(bindings.uniformBlock(Tinted.PARAMS_GROUP, Tinted.PARA
   canvas before `present` and before returning to the browser.
 - Draws and copies run in the order they are made. Wait only to read on the
   CPU: `completed()` (an `hxn.Future`, settled once the GPU has finished every
-  command issued before the call) or `finish()`. Under Ash `await` works,
-  since the browser agent holds the context. Under hxcpp, threaded or not,
-  use `then`: the context's thread checks the fence only while not blocked.
+  command issued before the call) or `finish()`. In a threaded hxcpp build
+  `await` works, since a browser agent holds the context and a thread of the
+  library settles the future. Without threads or under Ash, use `then`: the
+  program's own thread settles it, which `await` would block.
 - Binding points and texture units come from `Bindings`, keyed by hxnsl's
   group and binding; `Shaders.program` assigns them by name.
 - `Program.uniformBlock` and `Program.sampler` assign bindings by name;
@@ -101,7 +102,7 @@ context.bindUniformBuffer(bindings.uniformBlock(Tinted.PARAMS_GROUP, Tinted.PARA
   that program in use: call `useProgram` again before drawing with another.
 - Per-call errors are not checked; `context.error()` is `getError`.
   Compile and link failures throw with WebGL's log.
-- Under Ash, a call that returns a value (`readPixels`, `Buffer.read`,
+- In a threaded build, a call that returns a value (`readPixels`, `Buffer.read`,
   `error`, `createProgram`'s compile and link checks) waits for the browser
   agent to run every call before it: make those calls once a frame's drawing
   is done.

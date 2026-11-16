@@ -70,7 +70,7 @@ Canvas: claim it, `instance.claimCanvas().then(...)`, which fails when another
 browser agent holds it, then `var surface = instance.createCanvasSurface()` and
 `surface.configure(device, surface.preferredFormat(adapter), TextureUsage.RenderAttachment, w, h)`;
 each frame, render into `surface.currentTexture()` and call `surface.present()`.
-Under hxcpp the browser also shows the frame when the program returns to its
+Without threads the browser also shows the frame when the program returns to its
 event loop, so read a frame back before then.
 
 Compute: `createComputePipeline(module, "compute_main", layout, constants)`,
@@ -81,10 +81,10 @@ bytesPerRow)`, `device.createSampler(Filter.Linear, AddressMode.ClampToEdge)`,
 
 ## Rules
 
-- Under hxcpp, threaded or not, deliver a future with `then`, never `await`:
-  the browser resolves WebGPU's promises on the program's thread, and only
-  while that thread is not blocked. Under Ash `await` works, since WebGPU runs
-  in a browser agent of its own.
+- In a threaded hxcpp build `await` works: WebGPU runs in a browser agent, a
+  Worker of its own, and a thread of the library settles futures. Otherwise,
+  without threads or under Ash, deliver a future with `then`, never `await`:
+  the program's own thread settles it, which `await` would block.
 - Synchronization is WebGPU's: no barriers. `device.completed()` settles when
   submitted work has finished.
 - `Device.submit(encoder)` finishes the encoder; record a new one after.
