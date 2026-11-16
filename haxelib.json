@@ -2,7 +2,7 @@
   "name": "hxn",
   "url": "https://github.com/hx-n/hxn",
   "license": "Apache",
-  "tags": ["ffi", "rust", "native", "hashlink", "ash", "hxcpp"],
+  "tags": ["ffi", "rust", "native", "hashlink", "ash", "hxcpp", "cross", "wasm"],
   "description": "The Haxe classes of libraries built with hxn: futures, streams, signals, reactive values, atomics, and the macro that binds a packaged library.",
   "version": "0.3.5",
   "releasenote": "hxn.Future gains map, flatMap and recover, and Future.resolved and Future.rejected for settled futures; a library's package may sit under hxn, such as hxn.window.",
