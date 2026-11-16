@@ -174,7 +174,7 @@ jobs:
             "$cdb" -G -cf "$(cygpath -w "$RUNNER_TEMP/crash.cdb")" target/counter-gen-cppia/host/Host.exe target/counter-gen-cppia/generated.cppia || true
           fi
 
-  # hxcpp through Emscripten, run by node and as a page in the runner's Chrome,
+  # hxcpp compiled to wasm, run by node and in a web page in the runner's Chrome,
   # against Rust's prebuilt standard library for Emscripten, which unwinds
   # with wasm exceptions as hxcpp does; and threaded, with the standard library
   # rebuilt with atomics, the program linked with Emscripten's pthreads and its

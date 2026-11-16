@@ -4,7 +4,7 @@
 #   run.sh hl [vm]     on HashLink, or the VM named with its options
 #   run.sh cpp
 #   run.sh cppia
-#   run.sh emcc        hxcpp through Emscripten, run by node; needs emcc on PATH
+#   run.sh emcc        hxcpp compiled to wasm, run by node; needs emcc on PATH
 #
 # It checks that the importer writes imported.webidl exactly, and that the
 # program prints expected.txt. Where sqlite3 is installed, it also imports

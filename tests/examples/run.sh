@@ -10,7 +10,7 @@
 #                      the same, threaded: wasm32-wasip1-threads over shared memory
 #   run.sh wasm-page [ash] and wasm-threads-page [ash]
 #                      the same, in a page Ash serves, in headless Chrome
-#   run.sh emcc        hxcpp through Emscripten, run by node; needs emcc on PATH
+#   run.sh emcc        hxcpp compiled to wasm, run by node; needs emcc on PATH
 #   run.sh emcc-threads the same, threaded: Emscripten's pthreads over shared memory
 #   run.sh emcc-page and emcc-threads-page
 #                      the same, in a page emrun serves, in headless Chrome

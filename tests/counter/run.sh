@@ -5,7 +5,7 @@
 #   run.sh wasm [ash]  linked into an Ash wasm program, run by `ash run`
 #   run.sh wasm-threads [ash]
 #                      the same, threaded: wasm32-wasip1-threads over shared memory
-#   run.sh emcc        hxcpp through Emscripten, run by node; needs emcc on PATH
+#   run.sh emcc        hxcpp compiled to wasm, run by node; needs emcc on PATH
 #   run.sh emcc-threads the same, threaded: Emscripten's pthreads over shared memory
 #
 # The same for the binding hxn-gen generates from the library's source,

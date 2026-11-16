@@ -6,7 +6,7 @@
 #   run.sh cpp
 #   run.sh cppia       as a CPPIA script, in an hxcpp host that contains the library
 #   run.sh wasm [ash]  built and run by Ash
-#   run.sh emcc        hxcpp through Emscripten, run by node; needs emcc on PATH
+#   run.sh emcc        hxcpp compiled to wasm, run by node; needs emcc on PATH
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"

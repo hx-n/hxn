@@ -25,7 +25,7 @@ features.
 | Ash wasm | Static library linked by Ash, using the program's allocator; Haxe fibers, or threads with `--threads`. |
 | hxcpp | Static C adapter and C++ glue, with threads. |
 | CPPIA | Script in an hxcpp host built with `-D scriptable` and DCE off. |
-| hxcpp / Emscripten | C adapter compiled to wasm; threads with `--threads`, through Emscripten's pthreads; no forced GC. Requires wasm-exception-compatible hxcpp. |
+| hxcpp wasm | C adapter compiled with Emscripten; threads with `--threads`, on Emscripten's pthreads; no forced GC. Requires wasm-exception-compatible hxcpp. |
 | hxcpp / iOS | Rust merged into the app's static library. Examples tested on simulator only; panics untested. |
 | hxcpp / Android | Rust linked into the shared library; output through logcat. Examples tested on emulator only; panics untested. |
 | Ash / iOS, Android | Rust static library linked into the program with `--native-lib`, with threads. Examples and the generated fixture tested on simulator and emulator only. |
