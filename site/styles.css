@@ -221,3 +221,14 @@ footer p { margin: 0; }
 .api-values li > div p + p { margin-top: 8px; }
 .api-breadcrumb a { color: #a0a0a0; }
 .api-breadcrumb a:hover { color: #fff; }
+/* On wider screens the API reference reads at 16px, its code at 14px. */
+@media (min-width: 761px) {
+  .api-doc p, .api-member p, .api-doc li, .api-member li, .api-list li, .api-facts, .api-values li > div p, .api-filter input { font-size: 16px; }
+  .api-doc code, .api-member p code, .api-member li code, .api-facts code, .api-list code, .api-signature code, .api-links, .api-layout .code-panel code { font-size: 14px; }
+  .api-sidebar a, .api-layout .lesson-toc a { font-size: 14px; }
+  .api-sidebar .tutorial-index-link { font-size: 15px; }
+  .api-list li { grid-template-columns: minmax(170px, 280px) minmax(0, 1fr); padding: 13px 0; }
+  .api-values li { grid-template-columns: minmax(220px, 400px) minmax(0, 1fr); }
+  .api-layout .tutorial-card p { font-size: 15px; }
+}
+.api-values div p a, .api-member p a, .api-doc p a { text-decoration: none; }
