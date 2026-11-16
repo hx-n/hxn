@@ -40,13 +40,13 @@ Git Bash, or download the zip from the
 choose another directory, for example:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/hx-n/hxn/main/install.sh | HXN_VERSION=v0.3.4 HXN_INSTALL_DIR="$HOME/.local/bin" bash
+curl -fsSL https://raw.githubusercontent.com/hx-n/hxn/main/install.sh | HXN_VERSION=v0.3.5 HXN_INSTALL_DIR="$HOME/.local/bin" bash
 ```
 
 To build the command from source, use Cargo:
 
 ```
-cargo install --git https://github.com/hx-n/hxn --tag v0.3.4 hxn-cli
+cargo install --git https://github.com/hx-n/hxn --tag v0.3.5 hxn-cli
 ```
 
 Create a library with `hxn new`:
