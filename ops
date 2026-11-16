@@ -1,1 +1,1 @@
-{"author":{"id":"585844baa6074d44d241f46aa7c9f21ff46653adf617d7f070fbfe327626c989"},"ops":[{"type":4,"timestamp":1794745167,"nonce":"7oHy2gD4S8mCdnu+aFk/XJD7U0k=","status":2}]}
+{"author":{"id":"585844baa6074d44d241f46aa7c9f21ff46653adf617d7f070fbfe327626c989"},"ops":[{"type":3,"timestamp":1794834361,"nonce":"U2n+oPC2ee5sYRH8twMs+weU1tA=","message":"Released 0.2.0 (2026-11-16) on GitHub and haxelib, in the hxn.gpu.\u003cdriver\u003e package on hxn 0.3.5, with every release job passing.","files":null}]}
