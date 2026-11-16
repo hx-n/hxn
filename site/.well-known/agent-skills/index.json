@@ -56,6 +56,20 @@
       "description": "Drive the GPU from Haxe through OpenGL ES 3.0 over EGL with the hxn-gpu-gles haxelib (package `gpu.gles`) on Ash, HashLink, hxcpp and CPPIA, on Android, Linux through Mesa, and macOS and Windows through ANGLE. Use when a Haxe program renders with OpenGL ES, samples textures, presents to a window with EGL, or uses HXSL shaders from hxnsl as GLSL ES 3.00.",
       "url": "/.well-known/agent-skills/hxn-gpu-gles/SKILL.md",
       "digest": "sha256:2797eda158fbeadd37f3126e1386ec4012e8efcfeed0ce18150524d1533b01dc"
+    },
+    {
+      "name": "hxn-gpu-webgpu",
+      "type": "skill-md",
+      "description": "Drive the GPU from Haxe in the browser through WebGPU with the hxn-gpu-webgpu haxelib (package `gpu.webgpu`), for hxcpp programs compiled to wasm with `-D emscripten`, threaded or not, and threaded Ash programs (`-D wasm -D hxn_threads`); HashLink and CPPIA do not run in a browser. Use when a Haxe program in a web page runs compute shaders or renders with WebGPU, reads buffers back, or uses HXSL shaders from hxnsl as WGSL.",
+      "url": "/.well-known/agent-skills/hxn-gpu-webgpu/SKILL.md",
+      "digest": "sha256:b8d6e26ae1f7f22d37d7d2e7deb05d28cc507bfe6946d4e69a4ebe0ce821d216"
+    },
+    {
+      "name": "hxn-gpu-webgl2",
+      "type": "skill-md",
+      "description": "Drive the GPU from Haxe in the browser through WebGL2 with the hxn-gpu-webgl2 haxelib (package `gpu.webgl2`), for hxcpp programs compiled to wasm with `-D emscripten`, threaded or not, and threaded Ash programs (`-D wasm -D hxn_threads`); HashLink and CPPIA do not run in a browser. Use when a Haxe program in a web page renders with WebGL2, for browsers without WebGPU, or uses HXSL shaders from hxnsl as GLSL ES 3.00.",
+      "url": "/.well-known/agent-skills/hxn-gpu-webgl2/SKILL.md",
+      "digest": "sha256:fdd39c89a6ea936ecdc427f4a899180035e7d6d4c322b29171a94aaea49bafea"
     }
   ]
 }
