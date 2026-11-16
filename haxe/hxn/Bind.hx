@@ -42,6 +42,7 @@ class Bind {
 			fail('$manifest is not the manifest of a library named $name');
 		if (read.hxn != VERSION)
 			fail('$manifest is version ${read.hxn} of the manifest and this hxn reads version $VERSION: package the library and compile with the same hxn');
+		compatible(name, root);
 
 		var runtime = if (Context.defined("hl")) "hl" else if (Context.defined("cpp")) "cpp" else null;
 		if (runtime == null)
@@ -170,6 +171,29 @@ class Bind {
 			case "Linux": '$arch-unknown-linux-gnu';
 			case other: fail('hxn does not know what Rust calls $other: name what to build for with -D hxn_triple=<triple>');
 		}
+	}
+
+	// Haxelib resolves one hxn for the whole compile, from whichever -lib names
+	// it first. A package generated for a newer hxn, or another minor version,
+	// fails here rather than with a missing type later.
+	static function compatible(name:String, root:String):Void {
+		var have = Context.definedValue("hxn");
+		var listing = Path.join([root, "haxelib.json"]);
+		if (have == null || !FileSystem.exists(listing))
+			return;
+		var read:{?name:String, ?dependencies:haxe.DynamicAccess<String>} = try haxe.Json.parse(File.getContent(listing)) catch (_:Dynamic) null;
+		var want = read != null && read.dependencies != null ? read.dependencies.get("hxn") : null;
+		var a = version(have), b = version(want);
+		// A dev checkout or an unpinned dependency has no version to compare.
+		if (a == null || b == null)
+			return;
+		if (a[0] != b[0] || a[1] != b[1] || a[2] < b[2])
+			fail('${read.name != null ? read.name : name} was packaged for hxn $want, and this compile uses hxn $have, which haxelib took from the first -lib that names hxn: give -lib hxn:$want before the other libraries, or use releases of them built for one hxn');
+	}
+
+	static function version(text:Null<String>):Null<Array<Int>> {
+		var parts = text == null ? [] : text.split(".").map(Std.parseInt);
+		return parts.length == 3 && !parts.contains(null) ? parts : null;
 	}
 
 	static function fail(message:String):Dynamic {

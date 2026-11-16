@@ -33,7 +33,10 @@ links into the program with `--native-lib`, since those programs cannot open
 an `.hdll`. A host `.hdll` must be built on the system it runs on.
 
 `hxn.Bind.lib` selects the host, wasm or mobile library from Haxe defines.
-Use `-D hxn_triple=<triple>` to override the selection. CPPIA scripts use
+Use `-D hxn_triple=<triple>` to override the selection. Haxelib gives a
+program one hxn, from the first `-lib` that depends on it; `hxn.Bind.lib`
+fails when that hxn is older than the one a package names, or another minor
+version. CPPIA scripts use
 an hxcpp host containing the binding. See [binding generation](design/generation.md).
 
 ## Hand-written Haxe
