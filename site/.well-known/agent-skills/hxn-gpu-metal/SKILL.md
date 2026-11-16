@@ -1,6 +1,6 @@
 ---
 name: hxn-gpu-metal
-description: Drive the GPU from Haxe through Apple's Metal with the hxn-gpu-metal haxelib (package `gpu.metal`) on Ash, HashLink, hxcpp and CPPIA, on macOS and iOS. Use when a Haxe program runs compute shaders, renders to a texture or a window, or uses shaders written in HXSL with hxnsl on Metal.
+description: Drive the GPU from Haxe through Apple's Metal with the hxn-gpu-metal haxelib (package `hxn.gpu.metal`) on Ash, HashLink, hxcpp and CPPIA, on macOS and iOS. Use when a Haxe program runs compute shaders, renders to a texture or a window, or uses shaders written in HXSL with hxnsl on Metal.
 ---
 
 # hxn-gpu-metal
@@ -19,14 +19,14 @@ only), iOS and the iOS simulator. A program needs no Rust.
 
 ## Use
 
-Write the shader as an hxnsl class implementing `gpu.metal.Shader`; it gets
+Write the shader as an hxnsl class implementing `hxn.gpu.metal.Shader`; it gets
 `MSL`, `MSL_SLOTS`, and `metallib()`, the shader compiled to a Metal library
 at compile time (null where the compiling machine has no Metal compiler). Load
-it with `gpu.metal.Shaders.library(device, Shader.metallib(), Shader.MSL)`,
+it with `hxn.gpu.metal.Shaders.library(device, Shader.metallib(), Shader.MSL)`,
 which compiles the MSL only when there is no metallib.
 
 ```haxe
-import gpu.metal.*;
+import hxn.gpu.metal.*;
 
 var device = Device.systemDefault();             // throws without a Metal device
 var queue = device.newCommandQueue();

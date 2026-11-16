@@ -1,6 +1,6 @@
 ---
 name: hxn-gpu-gles
-description: Drive the GPU from Haxe through OpenGL ES 3.0 over EGL with the hxn-gpu-gles haxelib (package `gpu.gles`) on Ash, HashLink, hxcpp and CPPIA, on Android, Linux through Mesa, and macOS and Windows through ANGLE. Use when a Haxe program renders with OpenGL ES, samples textures, presents to a window with EGL, or uses HXSL shaders from hxnsl as GLSL ES 3.00.
+description: Drive the GPU from Haxe through OpenGL ES 3.0 over EGL with the hxn-gpu-gles haxelib (package `hxn.gpu.gles`) on Ash, HashLink, hxcpp and CPPIA, on Android, Linux through Mesa, and macOS and Windows through ANGLE. Use when a Haxe program renders with OpenGL ES, samples textures, presents to a window with EGL, or uses HXSL shaders from hxnsl as GLSL ES 3.00.
 ---
 
 # hxn-gpu-gles
@@ -23,17 +23,17 @@ it); `libGLESv2` loads from beside it, or from `HXN_GPU_GLES_GLES`.
 
 ## Use
 
-Shaders are hxnsl classes implementing `gpu.gles.Shader`; they get
+Shaders are hxnsl classes implementing `hxn.gpu.gles.Shader`; they get
 `GLSL_VERTEX`, `GLSL_FRAGMENT` and `GLSL_BINDINGS`. Compute shaders and
 storage buffers have `GLSL_MISSING` instead: OpenGL ES 3.0 cannot run them.
 
 ```haxe
-import gpu.gles.*;
+import hxn.gpu.gles.*;
 
 var display = Display.headless();                 // Mesa surfaceless, else the default display
 var context = display.createContext();            // no default framebuffer; current on this thread
 var bindings = new Bindings(Textured.GLSL_BINDINGS);
-var program = gpu.gles.Shaders.program(context, Textured.GLSL_VERTEX, Textured.GLSL_FRAGMENT, bindings);
+var program = hxn.gpu.gles.Shaders.program(context, Textured.GLSL_VERTEX, Textured.GLSL_FRAGMENT, bindings);
 
 var vertices = context.createVertexArray();
 var corners = context.createBufferWith(BufferTarget.Array, bytes, Usage.StaticDraw);

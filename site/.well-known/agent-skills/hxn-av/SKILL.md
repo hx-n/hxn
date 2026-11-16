@@ -1,6 +1,6 @@
 ---
 name: hxn-av
-description: Audio and video in Haxe with the hxn-av haxelib (package `media`) on HashLink, Ash, hxcpp and CPPIA, using the platform's own codecs rather than FFmpeg. Use when a Haxe program plays a media file, works with video frames or PCM audio, applies an equalizer, encodes or decodes AAC or H.264, or reads or writes MP4.
+description: Audio and video in Haxe with the hxn-av haxelib (package `hxn.av`) on HashLink, Ash, hxcpp and CPPIA, using the platform's own codecs rather than FFmpeg. Use when a Haxe program plays a media file, works with video frames or PCM audio, applies an equalizer, encodes or decodes AAC or H.264, or reads or writes MP4.
 ---
 
 # hxn-av
@@ -29,7 +29,7 @@ playback. `VideoFrame`, `AudioData` and `AudioEqualizer` need none of them.
 ## Use
 
 ```haxe
-import media.*;
+import hxn.av.*;
 
 var player = MediaPlayer.open("clip.mp4");
 player.play();

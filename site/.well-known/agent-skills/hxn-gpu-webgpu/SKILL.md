@@ -1,6 +1,6 @@
 ---
 name: hxn-gpu-webgpu
-description: Drive the GPU from Haxe in the browser through WebGPU with the hxn-gpu-webgpu haxelib (package `gpu.webgpu`), for hxcpp programs compiled to wasm with `-D emscripten`, threaded or not, and threaded Ash programs (`-D wasm -D hxn_threads`); HashLink and CPPIA do not run in a browser. Use when a Haxe program in a web page runs compute shaders or renders with WebGPU, reads buffers back, or uses HXSL shaders from hxnsl as WGSL.
+description: Drive the GPU from Haxe in the browser through WebGPU with the hxn-gpu-webgpu haxelib (package `hxn.gpu.webgpu`), for hxcpp programs compiled to wasm with `-D emscripten`, threaded or not, and threaded Ash programs (`-D wasm -D hxn_threads`); HashLink and CPPIA do not run in a browser. Use when a Haxe program in a web page runs compute shaders or renders with WebGPU, reads buffers back, or uses HXSL shaders from hxnsl as WGSL.
 ---
 
 # hxn-gpu-webgpu
@@ -33,16 +33,16 @@ Rust needed.
 
 ## Use
 
-Shaders are hxnsl classes implementing `gpu.webgpu.Shader`; they get `WGSL`
+Shaders are hxnsl classes implementing `hxn.gpu.webgpu.Shader`; they get `WGSL`
 and `LAYOUT` only. Entry points are `vertex_main`, `fragment_main` and
 `compute_main`. A texture's sampler is at `TEXTURE_<name> + 1`.
 
 ```haxe
-import gpu.webgpu.*;
+import hxn.gpu.webgpu.*;
 
 Instance.create().requestAdapter().then(adapter -> adapter.requestDevice().then(device -> {
 	var module = device.createShaderModule(Tinted.WGSL);
-	var layouts = gpu.webgpu.Shaders.bindGroupLayouts(device, Tinted.LAYOUT);
+	var layouts = hxn.gpu.webgpu.Shaders.bindGroupLayouts(device, Tinted.LAYOUT);
 	var layout = device.createPipelineLayout(layouts);
 	var pipeline = device.createRenderPipeline(module, "vertex_main", "fragment_main", layout,
 		Format.Rgba8Unorm, Topology.TriangleStrip, 8,

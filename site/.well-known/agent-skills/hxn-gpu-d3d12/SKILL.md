@@ -1,6 +1,6 @@
 ---
 name: hxn-gpu-d3d12
-description: Drive the GPU from Haxe through Direct3D 12 with the hxn-gpu-d3d12 haxelib (package `gpu.d3d12`) on Ash, HashLink, hxcpp and CPPIA, on Windows. Use when a Haxe program runs compute shaders, renders, samples textures or presents to a window with Direct3D 12, records resource transitions or enhanced barriers, or uses HXSL shaders from hxnsl as HLSL or DXIL.
+description: Drive the GPU from Haxe through Direct3D 12 with the hxn-gpu-d3d12 haxelib (package `hxn.gpu.d3d12`) on Ash, HashLink, hxcpp and CPPIA, on Windows. Use when a Haxe program runs compute shaders, renders, samples textures or presents to a window with Direct3D 12, records resource transitions or enhanced barriers, or uses HXSL shaders from hxnsl as HLSL or DXIL.
 ---
 
 # hxn-gpu-d3d12
@@ -21,17 +21,17 @@ compiled at load time.
 
 ## Use
 
-Shaders are hxnsl classes implementing `gpu.d3d12.Shader`; they get `HLSL`,
+Shaders are hxnsl classes implementing `hxn.gpu.d3d12.Shader`; they get `HLSL`,
 `HLSL_SLOTS`, `LAYOUT` and `dxil(entry)`. Entry points are `vertex_main`,
 `fragment_main` and `compute_main`; stages are `"vertex"`, `"fragment"` and
 `"compute"`.
 
 ```haxe
-import gpu.d3d12.*;
+import hxn.gpu.d3d12.*;
 
 var factory = Factory.create();
 var device = factory.createDevice(0);            // isSoftware(i) tells WARP apart
-var cs = gpu.d3d12.Shaders.bytecode(device, Tripled.dxil("compute_main"), Tripled.HLSL, "compute_main", "compute");
+var cs = hxn.gpu.d3d12.Shaders.bytecode(device, Tripled.dxil("compute_main"), Tripled.HLSL, "compute_main", "compute");
 var layout = new RootLayout(Tripled.HLSL_SLOTS, Tripled.LAYOUT);
 var signature = device.createRootSignature(layout.parameters);
 var pipeline = device.createComputePipeline(cs, signature);

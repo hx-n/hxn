@@ -1,6 +1,6 @@
 ---
 name: hxn-gpu-vulkan
-description: Drive the GPU from Haxe through Vulkan with the hxn-gpu-vulkan haxelib (package `gpu.vulkan`) on Ash, HashLink, hxcpp and CPPIA, on Linux, Windows, Android and macOS through MoltenVK. Use when a Haxe program runs compute shaders or renders with Vulkan, records barriers and image layout transitions, or uses HXSL shaders from hxnsl as SPIR-V.
+description: Drive the GPU from Haxe through Vulkan with the hxn-gpu-vulkan haxelib (package `hxn.gpu.vulkan`) on Ash, HashLink, hxcpp and CPPIA, on Linux, Windows, Android and macOS through MoltenVK. Use when a Haxe program runs compute shaders or renders with Vulkan, records barriers and image layout transitions, or uses HXSL shaders from hxnsl as SPIR-V.
 ---
 
 # hxn-gpu-vulkan
@@ -22,17 +22,17 @@ not found).
 
 ## Use
 
-Shaders are hxnsl classes implementing `gpu.vulkan.Shader`; they get
+Shaders are hxnsl classes implementing `hxn.gpu.vulkan.Shader`; they get
 `spirv()` and `LAYOUT`. Entry points are `vertex_main`, `fragment_main` and
 `compute_main`.
 
 ```haxe
-import gpu.vulkan.*;
+import hxn.gpu.vulkan.*;
 
 var instance = Instance.create("app");
 var device = instance.createDevice(0);                 // instance.adapterNames() lists GPUs
 var module = device.createShaderModule(Tripled.spirv());
-var sets = gpu.vulkan.Shaders.setLayouts(device, Tripled.LAYOUT);  // one per bind group
+var sets = hxn.gpu.vulkan.Shaders.setLayouts(device, Tripled.LAYOUT);  // one per bind group
 var layout = device.createPipelineLayout(sets);
 var pipeline = device.createComputePipeline(module, "compute_main", layout);
 var data = device.createBufferWith(bytes, BufferUsage.Storage);

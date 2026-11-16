@@ -1,6 +1,6 @@
 ---
 name: hxn-gpu-webgl2
-description: Drive the GPU from Haxe in the browser through WebGL2 with the hxn-gpu-webgl2 haxelib (package `gpu.webgl2`), for hxcpp programs compiled to wasm with `-D emscripten`, threaded or not, and threaded Ash programs (`-D wasm -D hxn_threads`); HashLink and CPPIA do not run in a browser. Use when a Haxe program in a web page renders with WebGL2, for browsers without WebGPU, or uses HXSL shaders from hxnsl as GLSL ES 3.00.
+description: Drive the GPU from Haxe in the browser through WebGL2 with the hxn-gpu-webgl2 haxelib (package `hxn.gpu.webgl2`), for hxcpp programs compiled to wasm with `-D emscripten`, threaded or not, and threaded Ash programs (`-D wasm -D hxn_threads`); HashLink and CPPIA do not run in a browser. Use when a Haxe program in a web page renders with WebGL2, for browsers without WebGPU, or uses HXSL shaders from hxnsl as GLSL ES 3.00.
 ---
 
 # hxn-gpu-webgl2
@@ -40,14 +40,14 @@ The classes are those of hxn-gpu-gles (https://github.com/hx-n/hxn-gpu-gles)
 for OpenGL ES 3.0: `Context`, `Buffer`, `Texture`, `Sampler`, `Program`,
 `VertexArray`, `Framebuffer` and `Bindings`. `Context.create()` makes the
 context on the web page's canvas. Shaders are hxnsl classes implementing
-`gpu.webgl2.Shader`; they get `GLSL_VERTEX`, `GLSL_FRAGMENT`,
+`hxn.gpu.webgl2.Shader`; they get `GLSL_VERTEX`, `GLSL_FRAGMENT`,
 `GLSL_BINDINGS` and constants such as `INPUT_<name>`, `TEXTURE_<name>`,
 `TEXTURE_<name>_GROUP`, `PARAMS_GROUP` and `PARAMS_BINDING`. A shader that
 uses compute or storage buffers gets `GLSL_MISSING`, a string saying why,
 and no GLSL: WebGL2 cannot run it.
 
 ```haxe
-import gpu.webgl2.*;
+import hxn.gpu.webgl2.*;
 
 var context = Context.create();                   // throws without WebGL2 or a canvas
 context.setSize(w, h);                            // the canvas's drawing buffer

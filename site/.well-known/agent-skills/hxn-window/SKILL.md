@@ -1,6 +1,6 @@
 ---
 name: hxn-window
-description: Open and drive native windows from Haxe with the hxn-window haxelib (package `window`, over winit) on HashLink, Ash, hxcpp and CPPIA. Use when a Haxe program needs a window, its events (keyboard, mouse, touch, IME, resize, close), monitors, gamepads, the clipboard, or the native window handles for creating a GPU surface.
+description: Open and drive native windows from Haxe with the hxn-window haxelib (package `hxn.window`, over winit) on HashLink, Ash, hxcpp and CPPIA. Use when a Haxe program needs a window, its events (keyboard, mouse, touch, IME, resize, close), monitors, gamepads, the clipboard, or the native window handles for creating a GPU surface.
 ---
 
 # hxn-window
@@ -24,8 +24,8 @@ install `libudev-dev`. wasm is not set up yet. A
 ## Use
 
 ```haxe
-import window.Window;
-import window.WindowAttributes;
+import hxn.window.Window;
+import hxn.window.WindowAttributes;
 
 var attributes = new WindowAttributes();
 attributes.title("Hello");
