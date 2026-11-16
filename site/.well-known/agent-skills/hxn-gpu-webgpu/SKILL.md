@@ -81,10 +81,10 @@ bytesPerRow)`, `device.createSampler(Filter.Linear, AddressMode.ClampToEdge)`,
 
 ## Rules
 
-- In a threaded hxcpp build `await` works: WebGPU runs in a browser agent, a
-  Worker of its own, and a thread of the library settles futures. Otherwise,
-  without threads or under Ash, deliver a future with `then`, never `await`:
-  the program's own thread settles it, which `await` would block.
+- In a threaded build `await` works (under Ash, from 0.1.21): WebGPU runs in
+  a browser agent, a Worker of its own. Without threads, deliver a future with
+  `then`, never `await`: the browser resolves WebGPU's promises on the
+  program's thread, and only while that thread is not blocked.
 - Synchronization is WebGPU's: no barriers. `device.completed()` settles when
   submitted work has finished.
 - `Device.submit(encoder)` finishes the encoder; record a new one after.

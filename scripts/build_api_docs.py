@@ -37,7 +37,7 @@ LIBRARIES = [
          summary='Audio and video with the platform\'s codecs: playback, frames, PCM audio, an equalizer, AAC, H.264 and MP4.'),
     dict(name='hxnsl', version='0.2.0', prefix='hxnsl.', roots=['hxnsl.Shader', 'hxnsl.Layout'],
          summary='Shaders written in HXSL and translated at compile time to WGSL, MSL, HLSL, SPIR-V and GLSL ES.'),
-    dict(name='hxn-gpu', version='0.2.1', prefix='hxn.gpu.', roots=['--macro', "include('hxn.gpu', true, ['hxn.gpu.backend'])"],
+    dict(name='hxn-gpu', version='0.2.2', prefix='hxn.gpu.', roots=['--macro', "include('hxn.gpu', true, ['hxn.gpu.backend'])"],
          hide=[r'^hxn\.gpu\.(backend|metal|vulkan|d3d12|gles|webgpu|webgl2)\.', r'^hxn\.gpu\.Setup$'],
          summary='One GPU API over every hxn GPU driver, with features and limits per device and a default backend per platform.'),
     dict(name='hxn-gpu-metal', version='0.2.0', prefix='hxn.gpu.metal.', roots=['--macro', "include('hxn.gpu.metal')"],
@@ -48,9 +48,9 @@ LIBRARIES = [
          summary='Direct3D 12 on Windows: compute, rendering, textures and swapchains, with transitions or enhanced barriers.'),
     dict(name='hxn-gpu-gles', version='0.3.0', prefix='hxn.gpu.gles.', roots=['--macro', "include('hxn.gpu.gles')"],
          summary='OpenGL ES 3.0 over EGL on Android, Linux, macOS and Windows: rendering, textures and windows.'),
-    dict(name='hxn-gpu-webgpu', version='0.3.2', prefix='hxn.gpu.webgpu.', roots=['--macro', "include('hxn.gpu.webgpu')"], defines=['wasm', 'hxn_threads'],
+    dict(name='hxn-gpu-webgpu', version='0.3.3', prefix='hxn.gpu.webgpu.', roots=['--macro', "include('hxn.gpu.webgpu')"], defines=['wasm', 'hxn_threads'],
          summary='WebGPU in the browser, on hxcpp and Ash compiled to wasm: compute, rendering and the web page\'s canvas.'),
-    dict(name='hxn-gpu-webgl2', version='0.3.1', prefix='hxn.gpu.webgl2.', roots=['--macro', "include('hxn.gpu.webgl2')"], defines=['wasm', 'hxn_threads'],
+    dict(name='hxn-gpu-webgl2', version='0.3.2', prefix='hxn.gpu.webgl2.', roots=['--macro', "include('hxn.gpu.webgl2')"], defines=['wasm', 'hxn_threads'],
          summary='WebGL2 in the browser, on hxcpp and Ash compiled to wasm, for browsers without WebGPU.'),
 ]
 

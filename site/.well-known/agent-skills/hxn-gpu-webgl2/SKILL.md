@@ -91,10 +91,10 @@ context.bindUniformBuffer(bindings.uniformBlock(Tinted.PARAMS_GROUP, Tinted.PARA
   canvas before `present` and before returning to the browser.
 - Draws and copies run in the order they are made. Wait only to read on the
   CPU: `completed()` (an `hxn.Future`, settled once the GPU has finished every
-  command issued before the call) or `finish()`. In a threaded hxcpp build
-  `await` works, since a browser agent holds the context and a thread of the
-  library settles the future. Without threads or under Ash, use `then`: the
-  program's own thread settles it, which `await` would block.
+  command issued before the call) or `finish()`. In a threaded build `await`
+  works (under Ash, from 0.1.21), since a browser agent holds the context.
+  Without threads, use `then`: the context's thread checks the fence only
+  while not blocked.
 - Binding points and texture units come from `Bindings`, keyed by hxnsl's
   group and binding; `Shaders.program` assigns them by name.
 - `Program.uniformBlock` and `Program.sampler` assign bindings by name;

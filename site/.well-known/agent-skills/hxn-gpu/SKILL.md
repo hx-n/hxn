@@ -66,8 +66,8 @@ Render: `createRenderPipeline({shader, format, topology, vertexBuffers})`,
   that shader; give an entry for every binding the shader's `LAYOUT` lists.
 - Synchronization is implicit. Writes take effect before later submissions;
   reads return an `hxn.Future` once earlier submissions have run.
-- In a browser, deliver futures with `then`, never `await`, except in a
-  threaded hxcpp build, where `await` works.
+- In a browser without threads, deliver futures with `then`, never `await`.
+  With threads `await` works (under Ash, from 0.1.21).
 - `readTexture` returns rows top first, `width * bytesPerPixel` long; on GLES
   and WebGL2 only RGBA8, with rendered rows bottom first.
 

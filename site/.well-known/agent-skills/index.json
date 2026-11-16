@@ -34,7 +34,7 @@
       "type": "skill-md",
       "description": "Drive the GPU from Haxe with one API on Metal, Vulkan, Direct3D 12, OpenGL ES, WebGPU and WebGL2, using the hxn-gpu haxelib (package `hxn.gpu`) over the hxn GPU driver haxelibs, on HashLink, Ash and hxcpp, natively and in the browser. Use when a Haxe program renders or computes on whatever GPU the platform has, checks device features and limits, falls back between backends, or uses HXSL shaders from hxnsl on several backends at once.",
       "url": "/.well-known/agent-skills/hxn-gpu/SKILL.md",
-      "digest": "sha256:75f5dcb7b0e95a8b627540496cad712be7368ba7142c73c9cc400d453a1a801c"
+      "digest": "sha256:cf43969197a46159b01afdb9997786a8f0ef1ff4baf4634dc97f20078049bd10"
     },
     {
       "name": "hxn-gpu-metal",
@@ -69,14 +69,14 @@
       "type": "skill-md",
       "description": "Drive the GPU from Haxe in the browser through WebGPU with the hxn-gpu-webgpu haxelib (package `hxn.gpu.webgpu`), for hxcpp programs compiled to wasm with `-D emscripten`, threaded or not, and threaded Ash programs (`-D wasm -D hxn_threads`); HashLink and CPPIA do not run in a browser. Use when a Haxe program in a web page runs compute shaders or renders with WebGPU, reads buffers back, or uses HXSL shaders from hxnsl as WGSL.",
       "url": "/.well-known/agent-skills/hxn-gpu-webgpu/SKILL.md",
-      "digest": "sha256:e27d456215cc1786049f74214d83a4e8c4eb2350e2f51fd425a2b0d3f369dece"
+      "digest": "sha256:aad9824e86988acc074ed32fc56b83c1523d8f01a55f8353b1b8ac4e3ba380a0"
     },
     {
       "name": "hxn-gpu-webgl2",
       "type": "skill-md",
       "description": "Drive the GPU from Haxe in the browser through WebGL2 with the hxn-gpu-webgl2 haxelib (package `hxn.gpu.webgl2`), for hxcpp programs compiled to wasm with `-D emscripten`, threaded or not, and threaded Ash programs (`-D wasm -D hxn_threads`); HashLink and CPPIA do not run in a browser. Use when a Haxe program in a web page renders with WebGL2, for browsers without WebGPU, or uses HXSL shaders from hxnsl as GLSL ES 3.00.",
       "url": "/.well-known/agent-skills/hxn-gpu-webgl2/SKILL.md",
-      "digest": "sha256:6afae1f9025eecc1ccbb0cb51382cf1eb6767c1727747862c346425c8f598d5b"
+      "digest": "sha256:994abb1eb2093ca72612040b0a37c066e8e541e229c44c6962a0f12cdc7b0ac6"
     }
   ]
 }
