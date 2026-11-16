@@ -74,8 +74,10 @@ The haxelib is named after the library unless `haxelib` there names it; the
 native library and `hxn.Bind.lib` keep the library's name.
 `hxn package` lists fields still required by `haxelib submit`.
 
-The hxn libraries' keywords include `hxcpp`, `hashlink`, `native`, `cross`
-and `wasm`, so a haxelib search for any of them finds every hxn library.
+The hxn libraries' keywords include `hxcpp`, `hashlink`, `native` and
+`cross`, so a haxelib search for any of them finds every hxn library, and
+`wasm` unless the library cannot run in a browser, as the Metal, Vulkan,
+Direct3D 12 and GLES drivers cannot.
 
 `link-args` passes arguments to the program's link for hxcpp, by target
 triple, for what a static library cannot carry, such as an Emscripten port:
