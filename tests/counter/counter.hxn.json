@@ -1585,6 +1585,15 @@
           "blocking": false
         },
         {
+          "name": "louder_waiting",
+          "docs": "The mode one step louder, from a call that may block: its data\nargument is decoded before the call leaves the runtime.",
+          "kind": "static",
+          "params": [{ "name": "mode", "type": "Mode" }],
+          "returns": "Mode",
+          "fallible": true,
+          "blocking": true
+        },
+        {
           "name": "named",
           "docs": "An enum taken by reference.",
           "kind": "static",

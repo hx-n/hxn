@@ -243,6 +243,13 @@ impl Shapes {
         }
     }
 
+    /// The mode one step louder, from a call that may block: its data
+    /// argument is decoded before the call leaves the runtime.
+    #[hxn(blocking)]
+    pub fn louder_waiting(mode: Mode) -> Result<Mode, String> {
+        Ok(Self::louder(mode))
+    }
+
     /// An enum taken by reference.
     pub fn named(mode: &Mode) -> String {
         format!("{mode:?}")

@@ -40,6 +40,7 @@ class Generated {
 	// the other.
 	static function data() {
 		check("an enum crosses as itself", Shapes.louder(Mode.Off) == Mode.Quiet && Shapes.louder(Mode.Quiet) == Mode.Loud);
+		check("a blocking call takes an enum", Shapes.louderWaiting(Mode.Off) == Mode.Quiet);
 		check("with the numbers the library gave it", (Mode.Quiet : Int) == 3 && (Mode.Loud : Int) == 9 && (Mode.Off : Int) == 10);
 		check("and by reference", Shapes.named(Mode.Loud) == "Loud");
 		throws("a number that names none is refused", () -> Shapes.louder((77 : Mode)), "number out of range");

@@ -1986,6 +1986,8 @@ impl Thing {
     pub fn names() -> Vec<String> { todo!() }
     pub fn mode(&self) -> Result<Mode, String> { todo!() }
     pub async fn later(options: Options) -> i32 { todo!() }
+    #[hxn(blocking)]
+    pub fn settle(&self, mode: Mode) -> Result<i32, String> { todo!() }
 }
 "#;
     let library = parse("thing", source).unwrap();
@@ -2037,7 +2039,8 @@ impl Thing {
         // Deserialized with no bytes left over, and passed by value or by
         // reference as the function declares.
         assert!(adapter.contains("let value = hxn_read_options(input)?; input.end()?; value };"));
-        assert!(adapter.contains("Thing::open(&options, hxn_read_mode(mode)?)"));
+        assert!(adapter.contains("let mode = hxn_read_mode(mode)?;"));
+        assert!(adapter.contains("Thing::open(&options, mode)"));
         assert!(adapter.contains("Thing::find(&points, limit)"));
         assert!(adapter.contains("hxn_write_mode(&this.mode()?)"));
         // An async function owns its data arguments.
@@ -2048,6 +2051,9 @@ impl Thing {
         "fn hxn_thing_thing_open(options: Slice<'_>, mode: i32, out: *mut Buf, err: *mut Buf)"
     ));
     let hl = hxn_gen::hl_adapter(&library, "thing");
+    // A blocking call decodes its data before the closure, whose `?` converts
+    // only the function's own error.
+    assert!(hl.contains("blocking(|| this.settle(mode))?"), "{hl}");
     assert!(hl.contains("fn hxn_thing_thing_open(options: *mut vbyte, options_length: i32, mode: i32, out: *mut i32) -> *mut vbyte"));
 
     // The Haxe classes of data are plain Haxe, the same for every runtime.

@@ -283,8 +283,12 @@ fn lent_allow(method: &Method) -> &'static str {
 fn decoded(param: &Param, data: &Data, bytes: &str) -> (Option<String>, String) {
     let name = &param.name;
     let reference = if param.borrowed { "&" } else { "" };
+    // Decoded into a local, so a blocking call's closure reads it without a `?` of its own.
     match data {
-        Data::Enum(known) => (None, format!("{reference}{}({name})?", data::reader(known))),
+        Data::Enum(known) => (
+            Some(format!("let {name} = {}({name})?;", data::reader(known))),
+            format!("{reference}{name}"),
+        ),
         _ => (
             Some(format!("let {name} = {};", data::rust_decoded(data, bytes))),
             format!("{reference}{name}"),
