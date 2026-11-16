@@ -21,7 +21,7 @@ HTML page has; a page of your own needs a `<canvas id="canvas">`. Add
 canvas, and the web page needs cross-origin isolation headers (COOP/COEP),
 which `emrun out/Main.html` sends.
 
-Ash (0.1.19 or later), threaded:
+Ash (0.1.20 or later), threaded:
 
 ```
 haxe -lib hxn-gpu-webgl2 -lib hxnsl -main Main -hl out/main.hl -D wasm -D hxn_threads
@@ -85,9 +85,10 @@ context.bindUniformBuffer(bindings.uniformBlock(Tinted.PARAMS_GROUP, Tinted.PARA
 
 ## Rules
 
-- The browser shows what was drawn on the canvas once the code that drew it
-  returns to the browser, and clears the canvas after: call `readPixels` on
-  the canvas before returning.
+- Claim the canvas before drawing on it: `context.claimCanvas().then(...)`,
+  which fails when another browser agent holds it. Each frame, draw into the
+  default framebuffer and call `context.present()`. Call `readPixels` on the
+  canvas before `present` and before returning to the browser.
 - Draws and copies run in the order they are made. Wait only to read on the
   CPU: `completed()` (an `hxn.Future`, settled once the GPU has finished every
   command issued before the call) or `finish()`. Under Ash `await` works,

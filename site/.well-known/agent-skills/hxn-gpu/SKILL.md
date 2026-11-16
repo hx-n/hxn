@@ -57,8 +57,11 @@ Render: `createRenderPipeline({shader, format, topology, vertexBuffers})`,
 - Check `device.features` before an optional call. A call that lacks a feature
   throws and names the feature and the backend. GLES and WebGL2 have no
   compute; Vulkan has no `TextureWrites` yet.
-- Rendering is offscreen, into textures. There is no presenting to a window
-  or canvas yet.
+- Present with a `GpuSurface`: `GpuDevice.open({surface: target})` with
+  `SurfaceTargets.ofWindow(window)` (an hxn-window window) or `Canvas`, then
+  `device.createSurface(target)`, `surface.configure(w, h)`, and each frame
+  render into `surface.currentTexture()` and call `surface.present()`. Make
+  the render pipeline with `format: surface.format`.
 - A bind group is made for one pipeline's shader and used with pipelines of
   that shader; give an entry for every binding the shader's `LAYOUT` lists.
 - Synchronization is implicit. Writes take effect before later submissions;

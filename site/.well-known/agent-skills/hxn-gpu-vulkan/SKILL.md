@@ -64,6 +64,14 @@ commands.copyImageToBuffer(target, readback);
 commands.bufferBarrier(readback, Stage.Transfer, Access.TransferWrite, Stage.Host, Access.HostRead);
 ```
 
+## Windows
+
+`instance.createSurface(window.platform(), window.raw(0), window.raw(1), window.raw(2), window.raw(3))`
+with an hxn-window window, then `device.createSwapchain(surface, w, h, Format.Bgra8Unorm, vsync)`.
+Each frame: `var image = swapchain.acquire()`, render into it, barrier it to
+`Layout.Present`, submit, then `if (!swapchain.present()) swapchain.resize(w, h)`.
+The images take the window's size in pixels: read `swapchain.width()`.
+
 ## Rules
 
 - Synchronization is explicit. Record a barrier between a write and any

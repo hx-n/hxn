@@ -62,8 +62,11 @@ Window: `Display.native(platform, display)` and
 `swapBuffers`. With hxn-window on Xlib (`platform() == 3`):
 `Display.native(0x31D5, window.raw(2))` and
 `createWindowContext(window.raw(0), haxe.Int64.toInt(window.raw(1)))`. On
-Android: `Display.native(0, 0)` and the `ANativeWindow*` with visual 0.
-Wayland needs a `wl_egl_window`, which hxn-window does not make.
+Android, Windows and macOS through ANGLE: `Display.native(0, 0)` and
+`createWindowContext(window.raw(0), 0)`; on macOS that is the `NSView`, which
+gets a `CAMetalLayer`. Wayland (`platform() == 4`): `Display.native(0x31D8,
+window.raw(2))` and `createWaylandContext(window.raw(0), w, h)`, then
+`context.resizeWindow(w, h)` when the window is resized.
 
 ## Rules
 

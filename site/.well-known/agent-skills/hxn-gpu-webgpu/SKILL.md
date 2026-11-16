@@ -19,7 +19,7 @@ browser with WebGPU. Add `-D hxn_threads` for threads: `main` then runs on a
 pthread that holds the canvas, and the web page needs cross-origin isolation
 headers (COOP/COEP), which `emrun out/Main.html` sends.
 
-Ash (0.1.19 or later), threaded:
+Ash (0.1.20 or later), threaded:
 
 ```
 haxe -lib hxn-gpu-webgpu -lib hxnsl -main Main -hl out/main.hl -D wasm -D hxn_threads
@@ -66,10 +66,12 @@ Instance.create().requestAdapter().then(adapter -> adapter.requestDevice().then(
 }));
 ```
 
-Canvas: `var surface = instance.createCanvasSurface()`, then
+Canvas: claim it, `instance.claimCanvas().then(...)`, which fails when another
+browser agent holds it, then `var surface = instance.createCanvasSurface()` and
 `surface.configure(device, surface.preferredFormat(adapter), TextureUsage.RenderAttachment, w, h)`;
-each frame, render into `surface.currentTexture()`. The frame is shown when
-the program returns to the browser's event loop.
+each frame, render into `surface.currentTexture()` and call `surface.present()`.
+Under hxcpp the browser also shows the frame when the program returns to its
+event loop, so read a frame back before then.
 
 Compute: `createComputePipeline(module, "compute_main", layout, constants)`,
 `encoder.beginComputePass()`, `setPipeline`, `setBindGroup`,

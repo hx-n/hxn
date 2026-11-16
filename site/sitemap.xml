@@ -147,6 +147,7 @@
   <url><loc>https://hxn.dev/api/hxn-gpu/hxn.gpu.Filter/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-gpu/hxn.gpu.OpenOptions/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-gpu/hxn.gpu.GpuDevice/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn-gpu/hxn.gpu.GpuSurface/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-gpu/hxn.gpu.IndexFormat/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-gpu/hxn.gpu.Limits/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-gpu/hxn.gpu.DefaultLimits/</loc></url>
@@ -157,6 +158,9 @@
   <url><loc>https://hxn.dev/api/hxn-gpu/hxn.gpu.ShaderModule/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-gpu/hxn.gpu.ShaderCode/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-gpu/hxn.gpu.ShaderSource/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn-gpu/hxn.gpu.SurfaceTarget/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn-gpu/hxn.gpu.NativeWindow/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn-gpu/hxn.gpu.SurfaceTargets/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-gpu/hxn.gpu.Texture/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-gpu/hxn.gpu.TextureFormat/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-gpu/hxn.gpu.TextureUsage/</loc></url>
