@@ -56,9 +56,10 @@ const cleanup = () => {
 };
 
 let status = 1;
-// What goes to stdout and stderr, written once the run is over.
-let out = "";
-let err = "";
+// What goes to stdout and stderr, in the order it was written, printed once the run is over.
+const lines = [];
+const out = (text) => lines.push({ error: false, text });
+const err = (text) => lines.push({ error: true, text });
 try {
   let target;
   for (let i = 0; i < 150 && !target; i++) {
@@ -140,22 +141,27 @@ try {
   // Ash's runtime writes its own notes to stdout, prefixed `[ash] `; they go
   // to stderr, as under `ash run`.
   for (const { error, text } of written) {
-    if (!error && !text.startsWith("[ash] ")) out += text + "\n";
-    else err += text + "\n";
+    if (!error && !text.startsWith("[ash] ")) out(text);
+    else err(text);
   }
   if (written.length === 0)
-    err += `no console output from the web page: ${attached.length} targets followed (${attached.join(", ") || "none"}), title "${title}"\n`;
+    err(`no console output from the web page: ${attached.length} targets followed (${attached.join(", ") || "none"}), title "${title}"`);
   if (/ — done$/.test(title)) status = 0;
   else if (!/ — trapped$/.test(title))
-    err += `the web page did not finish in ${timeout / 1000} s (HXN_PAGE_TIMEOUT)\n`;
+    err(`the web page did not finish in ${timeout / 1000} s (HXN_PAGE_TIMEOUT)`);
 } catch (e) {
-  err += `${e.message}\n`;
+  err(e.message);
 } finally {
   cleanup();
 }
 // Writes to a pipe are asynchronous on macOS, and exiting before they finish
-// loses them, so the exit waits for both.
+// loses them, so each write is awaited. Each run of lines to one stream is
+// written whole, so the two streams stay in the order the page wrote them.
 const flush = (stream, text) => new Promise((resolve) => stream.write(text, resolve));
-await flush(process.stderr, err);
-await flush(process.stdout, out);
+for (let i = 0; i < lines.length; ) {
+  const error = lines[i].error;
+  let text = "";
+  for (; i < lines.length && lines[i].error === error; i++) text += lines[i].text + "\n";
+  await flush(error ? process.stderr : process.stdout, text);
+}
 process.exit(status);
