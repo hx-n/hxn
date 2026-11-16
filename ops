@@ -1,1 +1,1 @@
-{"author":{"id":"585844baa6074d44d241f46aa7c9f21ff46653adf617d7f070fbfe327626c989"},"ops":[{"type":5,"timestamp":1794843416,"nonce":"okZo4h0+x4grWEEkY0Xalf3zjJM=","added":["debt","area:me","priority:high"],"removed":null}]}
+{"author":{"id":"585844baa6074d44d241f46aa7c9f21ff46653adf617d7f070fbfe327626c989"},"ops":[{"type":3,"timestamp":1794843417,"nonce":"3bzAbZZwUWb0iEUJOoWe8Eguh6Q=","message":"M0 issues: hxn-window in the browser 68a2308, hxn-audio c878f2a, hxn-text 9729a3b, file access 49624d3.","files":null}]}
