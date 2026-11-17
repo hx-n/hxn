@@ -2,11 +2,22 @@
   "name": "hxn",
   "url": "https://github.com/hx-n/hxn",
   "license": "Apache",
-  "tags": ["ffi", "rust", "native", "hashlink", "ash", "hxcpp", "cross", "wasm"],
+  "tags": [
+    "ffi",
+    "rust",
+    "native",
+    "hashlink",
+    "ash",
+    "hxcpp",
+    "cross",
+    "wasm"
+  ],
   "description": "The Haxe classes of libraries built with hxn: futures, streams, signals, reactive values, atomics, and the macro that binds a packaged library.",
-  "version": "0.3.6",
-  "releasenote": "A threaded hxcpp web page gets a library's page files, so its browser agent runs as under Ash. A compile fails, naming both versions, when a package needs a newer hxn. hxn's hxcpp classes compile with hxcpp 4.3.2, a blocking method taking a data enum compiles, and hxn check fails an Ash web page whose program exits non-zero.",
-  "contributors": ["darmie"],
+  "version": "0.3.7",
+  "releasenote": "Installed hxn-* libraries can register lifecycle hooks and namespaced CLI commands. Packaging includes their tools and assets; plugin build defines also reach CPPIA scripts.",
+  "contributors": [
+    "darmie"
+  ],
   "classPath": "haxe",
   "dependencies": {}
 }
