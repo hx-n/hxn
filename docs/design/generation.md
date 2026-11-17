@@ -58,6 +58,9 @@ left out, since every program links them, and so is an MSVC C runtime, since
 hxcpp links its own. In a package, a library found in a build script's
 directory, such as the import library the `windows` crate ships, is copied
 beside `link.xml` and named from there; the others are the system's.
+Cross builds use only build-script output beneath the selected target's
+directory. Host build dependencies can run the same scripts for another
+platform; their libraries and search paths do not belong in the target link.
 
 Libraries maintaining adapters themselves call `hxn-gen` from build scripts,
 as in `tests/counter`.

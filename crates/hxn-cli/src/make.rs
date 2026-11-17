@@ -238,13 +238,20 @@ pub struct Linked {
 impl Linked {
     // Reads cargo's `build-script-executed` messages. A static library is
     // already inside the archive cargo builds, so it is left out.
-    fn read(messages: &str) -> Self {
+    fn read(messages: &str, target_dir: Option<&Path>) -> Self {
         let mut out = Self::default();
         for line in messages.lines() {
             let Ok(message) = serde_json::from_str::<serde_json::Value>(line) else {
                 continue;
             };
             if message.get("reason").and_then(|r| r.as_str()) != Some("build-script-executed") {
+                continue;
+            }
+            if let Some(target_dir) = target_dir
+                && !message["out_dir"]
+                    .as_str()
+                    .is_some_and(|dir| Path::new(dir).starts_with(target_dir))
+            {
                 continue;
             }
             let strings = |key: &str| -> Vec<String> {
@@ -406,7 +413,7 @@ fn escape(text: &str) -> String {
 
 // Runs cargo with `--message-format=json-render-diagnostics` and reads what
 // its build scripts link. Diagnostics still go to standard error.
-fn linked_by(cargo: &mut Command) -> Result<Linked, String> {
+fn linked_by(cargo: &mut Command, target_dir: Option<&Path>) -> Result<Linked, String> {
     let output = cargo
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::inherit())
@@ -415,7 +422,10 @@ fn linked_by(cargo: &mut Command) -> Result<Linked, String> {
     if !output.status.success() {
         return Err(String::from("cargo failed"));
     }
-    Ok(Linked::read(&String::from_utf8_lossy(&output.stdout)))
+    Ok(Linked::read(
+        &String::from_utf8_lossy(&output.stdout),
+        target_dir,
+    ))
 }
 
 // The `out_dir` of the build script of the package `id`, from cargo's
@@ -813,7 +823,8 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
             .arg("--message-format=json-render-diagnostics")
             .arg("--")
             .arg(format!("--print=native-static-libs={}", text(&native)));
-        let mut linked = linked_by(&mut cargo)?;
+        let cross_dir = target.triple().map(|triple| project.target.join(triple));
+        let mut linked = linked_by(&mut cargo, cross_dir.as_deref())?;
         // Kept from the last build that compiled the crate: an unchanged
         // crate is not compiled again.
         if let Ok(listed) = std::fs::read_to_string(&native) {
@@ -980,13 +991,29 @@ mod tests {
     }
 
     #[test]
+    fn cross_linking_excludes_host_build_dependencies() {
+        let messages = [
+            serde_json::json!({"reason":"build-script-executed", "out_dir":"/build/release/build/codec/out", "linked_libs":["framework=AudioToolbox"], "linked_paths":["native=/host/lib"]}),
+            serde_json::json!({"reason":"build-script-executed", "out_dir":"/build/wasm32-unknown-emscripten/release/build/codec/out", "linked_libs":["dylib=target_codec"], "linked_paths":["native=/target/lib"]}),
+            serde_json::json!({"reason":"build-script-executed", "out_dir":"/build/wasm32-unknown-emscripten-other/release/build/codec/out", "linked_libs":["wrong_target"]}),
+        ].map(|message| message.to_string()).join("\n");
+        let linked = Linked::read(
+            &messages,
+            Some(Path::new("/build/wasm32-unknown-emscripten")),
+        );
+        assert_eq!(linked.libraries, ["target_codec"]);
+        assert_eq!(linked.paths, ["/target/lib"]);
+        assert!(linked.frameworks.is_empty());
+    }
+
+    #[test]
     fn what_build_scripts_link_is_read_from_cargo() {
         let messages = concat!(
             "{\"reason\":\"compiler-artifact\"}\n",
             "{\"reason\":\"build-script-executed\",\"linked_libs\":[\"sqlite3\",\"static=tally_c\",\"dylib=z\",\"framework=Security\"],\"linked_paths\":[\"native=/opt/lib\"]}\n",
             "not json\n",
         );
-        let mut linked = Linked::read(messages);
+        let mut linked = Linked::read(messages, None);
         assert_eq!(linked.libraries, ["sqlite3", "z"]);
         linked.add_native(
             "-framework CoreVideo -lobjc -lsqlite3 -lSystem -lc -lm kernel32.lib msvcrt.lib",
