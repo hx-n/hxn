@@ -7,6 +7,10 @@
   normally as Haxe under `sources/`, or declare native tool/assets paths in
   `files`. Consumers use `hxn <namespace>`, without
   a source checkout or repository shell helpers.
+- Keep repository-only test runners, app hosts and fixtures under `tests/`,
+  outside published extension commands and `files`. Run those tests against
+  installed packages. A mobile test host does not define general hxn app
+  packaging or deployment tooling.
 - Keep namespaces library-owned. Do not replace built-in commands, load
   extensions from arbitrary PATH executables, or run unselected libraries'
   hooks. Discovery must read metadata without executing the extension.

@@ -151,6 +151,9 @@ expands to the package directory. Ship a Haxe tool in `sources/`, for example
 Packaging preserves this as `hxn.cli` in `haxelib.json`. Optional `files`
 lists relative tool files/directories to ship, including native executables.
 Binary page assets can ship through `files` and build-hook `page_files`.
+Keep test-only runners, mobile app hosts and fixtures under `tests/`, outside
+published CLI commands and assets. Run these tests against installed packages;
+keep library test hosts distinct from application packaging/deployment tooling.
 Also test direct `haxe -lib` use: an installed library must arrange its
 assets through an init macro when it needs them without CLI hooks, including
 unthreaded Emscripten.
