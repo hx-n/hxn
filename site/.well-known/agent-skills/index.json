@@ -13,7 +13,7 @@
       "type": "skill-md",
       "description": "Open and drive native and browser windows from Haxe with the hxn-window haxelib (package `hxn.window`) on HashLink, Ash, hxcpp and CPPIA. Use when a Haxe program needs a window, its events (keyboard, mouse, touch, IME, resize, close), monitors, gamepads, the clipboard, the native window handles for creating a GPU surface, or the installed hxn window CLI tools.",
       "url": "/.well-known/agent-skills/hxn-window/SKILL.md",
-      "digest": "sha256:c0448bf0137f778e07032c38d31b2223163562b8e953e4615e5168e0598a2768"
+      "digest": "sha256:175cb4193baf1792e62bf2aa8779a78f181cef5d5cd3a36adf446af68b9752b7"
     },
     {
       "name": "hxn-av",

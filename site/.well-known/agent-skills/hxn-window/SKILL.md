@@ -99,7 +99,7 @@ in `wait`; schedule turns with `hxn.native.Emscripten.later` and return to
 the page. The GPU owns rendering and its drawing-buffer size; the window
 agent keeps DOM events and CSS sizing on the page.
 
-The installed package registers the `window` namespace with hxn:
+The installed package registers the `window` namespace with hxn 0.3.7 or later:
 `hxn window doctor` lists its prebuilt targets. Run `hxn window check hl
 --wasm --threads --browser --vm ash`, `hxn window check cpp --wasm --browser`,
 or add `--threads` for threaded hxcpp. Native checks omit the wasm/browser

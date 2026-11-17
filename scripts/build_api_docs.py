@@ -28,16 +28,17 @@ ORIGIN = 'https://hxn.dev'
 # to type. hide: type paths left out, as regular expressions. defines: for a
 # binding without a HashLink library for this machine, a platform it has one for.
 LIBRARIES = [
-    dict(name='hxn', version='0.3.6', prefix='hxn.', roots=['--macro', "include('hxn', true, ['hxn.native'])"],
+    dict(name='hxn', version='0.3.7', prefix='hxn.', roots=['--macro', "include('hxn', true, ['hxn.native'])"],
          hide=[r'^hxn\.(Wire|Native|Bind|Handle|TupleMacro)$', r'^hxn\.native\.', r'^hxn\.reactive\.'],
          summary='Futures, streams, signals, reactive values, atomics and callbacks: the Haxe classes every hxn library uses.'),
-    dict(name='hxn-window', version='0.2.0', prefix='hxn.window.', roots=['--macro', "include('hxn.window')"],
-         summary='Windows, input, monitors, gamepads and the clipboard over winit, with native handles for GPU surfaces.'),
+    dict(name='hxn-window', version='0.2.1', prefix='hxn.window.', roots=['--macro', "include('hxn.window')"],
+         hide=[r'^hxn\.window\.cli\.'],
+         summary='Native and browser windows, input, monitors, gamepads and the clipboard, with handles for GPU surfaces.'),
     dict(name='hxn-av', version='0.2.0', prefix='hxn.av.', roots=['--macro', "include('hxn.av')"],
          summary='Audio and video with the platform\'s codecs: playback, frames, PCM audio, an equalizer, AAC, H.264 and MP4.'),
     dict(name='hxnsl', version='0.2.0', prefix='hxnsl.', roots=['hxnsl.Shader', 'hxnsl.Layout'],
          summary='Shaders written in HXSL and translated at compile time to WGSL, MSL, HLSL, SPIR-V and GLSL ES.'),
-    dict(name='hxn-gpu', version='0.2.2', prefix='hxn.gpu.', roots=['--macro', "include('hxn.gpu', true, ['hxn.gpu.backend'])"],
+    dict(name='hxn-gpu', version='0.2.3', prefix='hxn.gpu.', roots=['--macro', "include('hxn.gpu', true, ['hxn.gpu.backend'])"],
          hide=[r'^hxn\.gpu\.(backend|metal|vulkan|d3d12|gles|webgpu|webgl2)\.', r'^hxn\.gpu\.Setup$'],
          summary='One GPU API over every hxn GPU driver, with features and limits per device and a default backend per platform.'),
     dict(name='hxn-gpu-metal', version='0.2.0', prefix='hxn.gpu.metal.', roots=['--macro', "include('hxn.gpu.metal')"],
