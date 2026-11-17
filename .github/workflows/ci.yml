@@ -105,7 +105,7 @@ jobs:
           git clone --depth 1 --branch "$HXN_HASHLINK" https://github.com/HaxeFoundation/hashlink "$RUNNER_TEMP/hashlink"
           make -C "$RUNNER_TEMP/hashlink" libhl hl
           echo "$RUNNER_TEMP/hashlink" >> "$GITHUB_PATH"
-          echo "LD_LIBRARY_PATH=$RUNNER_TEMP/hashlink" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=$RUNNER_TEMP/hashlink${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
       - name: Fetch HashLink
         if: runner.os == 'Windows'
         env:
