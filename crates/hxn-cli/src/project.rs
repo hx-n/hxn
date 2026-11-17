@@ -44,6 +44,8 @@ pub struct Project {
     /// Init macros a program using the package runs after `hxn.Bind.lib`, such as one that
     /// registers the library's own macros: `init` under `[package.metadata.hxn]`.
     pub init: Vec<String>,
+    /// The library's versioned CLI extension, carried into its haxelib.
+    pub cli: Option<Value>,
     /// Arguments for the program's link, by target triple: `link-args` under
     /// `[package.metadata.hxn]`, such as `--use-port=emdawnwebgpu` for
     /// `wasm32-unknown-emscripten`. hxcpp passes them to its linker.
@@ -430,6 +432,7 @@ impl Project {
             sources: Some(dir.join("sources")).filter(|sources| sources.is_dir()),
             page: Some(dir.join("page")).filter(|page| page.is_dir()),
             init: init(settings)?,
+            cli: settings.and_then(|settings| settings.get("cli")).cloned(),
             link_args: link_args(settings)?,
             target: PathBuf::from(
                 text(&metadata, "target_directory")

@@ -9,6 +9,7 @@ the implementation.
 - [C ABI and generated names](conventions/boundary.md)
 - [Rust API](conventions/rust-api.md)
 - [Runtime bindings](conventions/bindings.md)
+- [CLI extensions](conventions/cli-extensions.md)
 - [Threads and delivery](conventions/threads.md)
 
 ## Contribution

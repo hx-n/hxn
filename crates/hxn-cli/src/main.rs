@@ -10,6 +10,7 @@ mod import;
 mod make;
 mod new;
 mod package;
+mod plugins;
 mod project;
 mod script;
 mod support;
@@ -63,6 +64,10 @@ is compiled as a script and run by that host.
 
   hxn version
       Prints this program's version, the tag `hxn new` depends on.
+
+  hxn plugins
+      Lists CLI extensions provided by installed hxn-* haxelibs.
+      Run an extension with hxn <namespace> [arguments...].
 
   hxn package [hl] [cpp] [--wasm] [--target <triple>] [--release] [--out <directory>]
       Builds the library for both runtimes, or only the ones listed, and
@@ -411,10 +416,15 @@ fn run(project: &Project, target: Target, arguments: Arguments) -> Result<u8, St
     }
     let script = script(&arguments);
     let mut program = program(project, target, script, &arguments)?;
+    let plugins = plugins::for_project(project)?;
+    let context = plugins::context(project, Some(target), None, None);
+    plugins::hooks(&plugins, "before-run", &context, &project.dir)?;
     let code = exit(&mut program.command)?;
     if let Some(text) = program.page_output() {
         print!("{text}");
     }
+    let context = plugins::context(project, Some(target), None, Some(code));
+    plugins::hooks(&plugins, "after-run", &context, &project.dir)?;
     Ok(code)
 }
 
@@ -548,6 +558,13 @@ fn program(
             {
                 make::copy_page(page, &out)?;
             }
+            if target.wasm {
+                for page in &built.plugin_page {
+                    let into = out.join(page.file_name().ok_or("plugin page file has no name")?);
+                    std::fs::copy(page, &into)
+                        .map_err(|error| format!("{}: {error}", into.display()))?;
+                }
+            }
             // hxcpp names the executable after the main class, without its
             // package.
             let name = project.main.rsplit('.').next().unwrap_or(&project.main);
@@ -580,6 +597,9 @@ fn program(
 // Runs the same program on each runtime. Every run must succeed, and all
 // runs must print the same output.
 fn check(project: &Project, arguments: &Arguments) -> Result<u8, String> {
+    let plugins = plugins::for_project(project)?;
+    let context = plugins::context(project, None, None, None);
+    plugins::hooks(&plugins, "before-check", &context, &project.dir)?;
     let name = &project.library;
     if let Some(webidl) = &project.webidl {
         import::sync(name, webidl, &project.bindings)?;
@@ -649,11 +669,21 @@ fn check(project: &Project, arguments: &Arguments) -> Result<u8, String> {
             }
         }
         let mut program = program(project, target, script, arguments)?;
+        let plugins = plugins::for_project(project)?;
+        let context = plugins::context(project, Some(target), None, None);
+        plugins::hooks(&plugins, "before-run", &context, &project.dir)?;
         let output = program
             .command
             .stderr(std::process::Stdio::inherit())
             .output()
             .map_err(|error| format!("running the program on {label}: {error}"))?;
+        let code = output
+            .status
+            .code()
+            .and_then(|code| u8::try_from(code).ok())
+            .unwrap_or(1);
+        let context = plugins::context(project, Some(target), None, Some(code));
+        plugins::hooks(&plugins, "after-run", &context, &project.dir)?;
         let stdout = program
             .page_output()
             .unwrap_or_else(|| String::from_utf8_lossy(&output.stdout).into_owned());
@@ -888,11 +918,34 @@ Not imported (listed at the end of {name}.webidl):"
             println!("{USAGE}");
             Ok(0)
         }
+        "plugins" => {
+            if given.next().is_some() {
+                return Err("plugins takes no arguments".into());
+            }
+            for plugin in plugins::installed(&here)? {
+                println!(
+                    "{}\t{}\t{}",
+                    plugin.namespace,
+                    plugin.library,
+                    plugin.root.display()
+                );
+            }
+            Ok(0)
+        }
         "version" | "--version" | "-V" => {
             println!("hxn {}", env!("CARGO_PKG_VERSION"));
             Ok(0)
         }
-        other => Err(format!("unknown command `{other}`\n\n{USAGE}")),
+        other => {
+            if let Some(plugin) = plugins::installed(&here)?
+                .into_iter()
+                .find(|plugin| plugin.namespace == other)
+            {
+                plugin.command(&here, &given.collect::<Vec<_>>())
+            } else {
+                Err(format!("unknown command `{other}`\n\n{USAGE}"))
+            }
+        }
     }
 }
 

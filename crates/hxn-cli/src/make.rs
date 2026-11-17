@@ -169,6 +169,10 @@ fn check_version(package: &str, hxn: &str) -> Result<(), String> {
 
 /// The outputs of a build that a Haxe compile uses.
 pub struct Built {
+    /// Plugin arguments also needed when compiling a CPPIA script.
+    pub plugin_haxe: Vec<(&'static str, String)>,
+    /// Extra browser files contributed by CLI plugins, copied beside the build.
+    pub plugin_page: Vec<PathBuf>,
     /// The runtime's output directory: it holds the built library, and a
     /// compiled program is written there.
     pub dir: PathBuf,
@@ -666,6 +670,9 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
             "`emcc` was not found: hxcpp builds for wasm with the Emscripten SDK, which has to be installed and on PATH",
         ));
     }
+    let plugins = crate::plugins::for_project(project)?;
+    let context = crate::plugins::context(project, Some(target), None, None);
+    let before = crate::plugins::hooks(&plugins, "before-build", &context, &project.dir)?;
     if let Some(webidl) = &project.webidl {
         crate::import::sync(name, webidl, &project.bindings)?;
     }
@@ -922,7 +929,9 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
         .collect();
     write(&hxml, &lines.concat())?;
 
-    Ok(Built {
+    let mut result = Built {
+        plugin_haxe: Vec::new(),
+        plugin_page: Vec::new(),
         dir,
         arguments,
         hxml,
@@ -930,7 +939,12 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
         include: out.join("include"),
         library: built,
         linked,
-    })
+    };
+    before.apply(&mut result, &project.dir)?;
+    let context = crate::plugins::context(project, Some(target), Some(&result.dir), None);
+    crate::plugins::hooks(&plugins, "after-build", &context, &project.dir)?
+        .apply(&mut result, &project.dir)?;
+    Ok(result)
 }
 
 #[cfg(test)]

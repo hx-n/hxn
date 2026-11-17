@@ -146,6 +146,11 @@ changes.
 name, and passes only if their output is identical. `hxn doctor` lists the
 targets your machine can build for and what is missing for the others.
 
+Installed `hxn-*` libraries can add CLI commands and workflow hooks.
+`hxn plugins` lists their namespaces, such as `hxn window doctor`.
+Library tools ship in the haxelib; consumers need no source checkout.
+See [CLI extensions](docs/design/cli-extensions.md).
+
 `hxn package` builds the library for both runtimes and collects the Haxe
 classes, headers and native libraries into a haxelib directory. Haxe projects
 can compile against this package without the library's Rust source:

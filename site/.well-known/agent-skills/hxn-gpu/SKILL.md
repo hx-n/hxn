@@ -58,7 +58,7 @@ Render: `createRenderPipeline({shader, format, topology, vertexBuffers})`,
   throws and names the feature and the backend. GLES and WebGL2 have no
   compute; Vulkan has no `TextureWrites` yet.
 - Present with a `GpuSurface`: `GpuDevice.open({surface: target})` with
-  `SurfaceTargets.ofWindow(window)` (an hxn-window window) or `Canvas`, then
+  `SurfaceTargets.ofWindow(window)` (a native or browser hxn-window window) or `Canvas`, then
   `device.createSurface(target)`, `surface.configure(w, h)`, and each frame
   render into `surface.currentTexture()` and call `surface.present()`. Make
   the render pipeline with `format: surface.format`.

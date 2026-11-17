@@ -1,6 +1,6 @@
 ---
 name: hxn-window
-description: Open and drive native windows from Haxe with the hxn-window haxelib (package `hxn.window`, over winit) on HashLink, Ash, hxcpp and CPPIA. Use when a Haxe program needs a window, its events (keyboard, mouse, touch, IME, resize, close), monitors, gamepads, the clipboard, or the native window handles for creating a GPU surface.
+description: Open and drive native and browser windows from Haxe with the hxn-window haxelib (package `hxn.window`) on HashLink, Ash, hxcpp and CPPIA. Use when a Haxe program needs a window, its events (keyboard, mouse, touch, IME, resize, close), monitors, gamepads, the clipboard, the native window handles for creating a GPU surface, or the installed hxn window CLI tools.
 ---
 
 # hxn-window
@@ -17,7 +17,7 @@ The haxelib carries prebuilt native libraries for Linux x86-64 and ARM64,
 macOS arm64 and Windows x86-64, and static libraries for Intel macOS (hxcpp
 only), iOS, the iOS simulator and Android arm64; a program needs no Rust. For HashLink the `.hdll` is copied
 beside the `.hl` output. On Linux, hxcpp links libudev for gamepads, so
-install `libudev-dev`. wasm is not set up yet. A
+install `libudev-dev`. Browser builds support threaded Ash wasm and hxcpp/Emscripten with or without threads. A
 `haxelib git` install has no native libraries until a release ZIP's
 `native/` directory is copied into it.
 
@@ -72,7 +72,7 @@ window.close();
 ## GPU surfaces
 
 `window.platform()` returns the platform: 1 AppKit, 2 Win32, 3 Xlib,
-4 Wayland, 5 Android, 6 UIKit. `window.raw(0)` to `window.raw(3)` return the
+4 Wayland, 5 Android, 6 UIKit, 7 the browser canvas. `window.raw(0)` to `window.raw(3)` return the
 native window and display handles. A GPU API's surface constructor takes the
 code and the four handles in that order.
 
@@ -89,3 +89,25 @@ The API is declared in xwindow; changing it means changing xwindow and the
 revision `Cargo.toml` pins. Test with the hxn CLI:
 `hxn check hl --vm ash` and `hxn check cpp cppia`, which run
 `examples/headless` and compare the output across runtimes.
+
+## Browser windows
+
+The DOM agent is shared with xwindow. Ash loads it through `ash_host_agent`
+using its wasm build and serving tools; threaded Emscripten uses a page
+bridge. Unthreaded Emscripten runs the commands directly and never blocks
+in `wait`; schedule turns with `hxn.native.Emscripten.later` and return to
+the page. The GPU owns rendering and its drawing-buffer size; the window
+agent keeps DOM events and CSS sizing on the page.
+
+The installed package registers the `window` namespace with hxn:
+`hxn window doctor` lists its prebuilt targets. Run `hxn window check hl
+--wasm --threads --browser --vm ash`, `hxn window check cpp --wasm --browser`,
+or add `--threads` for threaded hxcpp. Native checks omit the wasm/browser
+flags. These commands use packaged tools and checks, without Rust or a source
+checkout. `hxn plugins` lists registrations.
+
+For maintainers, `[package.metadata.hxn.cli]` registers before-check and before-build hooks
+that regenerates the shared browser modules. `hxn package` preserves the
+registration and ships the Haxe tool under `sources/`. See hxn's CLI extension
+protocol and conventions when changing hooks. Build threaded packages with
+`--release` when linking them with released GPU libraries.

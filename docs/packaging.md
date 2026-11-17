@@ -104,3 +104,12 @@ so a library that draws on the web page's canvas there adds
 wasm32-unknown-emscripten = ["-sMIN_WEBGL_VERSION=2", "-sMAX_WEBGL_VERSION=2"]
 wasm32-unknown-emscripten-threads = ["-sOFFSCREENCANVAS_SUPPORT"]
 ```
+
+## CLI extensions
+
+`[package.metadata.hxn.cli]` registers a library's CLI namespace and lifecycle
+hooks. Packaging preserves it as `hxn.cli` in `haxelib.json`; Haxe tools in
+`sources/` travel with the library. Extra tool files/directories listed in
+`cli.files` are copied as bytes and retain executable permissions. Consumers discover them with `hxn plugins`
+and invoke `hxn <namespace> ...`, without repository scripts or Rust sources.
+See the [versioned extension protocol](design/cli-extensions.md).

@@ -1,6 +1,6 @@
 ---
 name: hxn
-description: Expose a Rust library to Haxe with hxn, so one set of generated Haxe classes runs on HashLink, Ash, hxcpp and CPPIA, natively and on wasm. Use when writing or changing a crate annotated with #[hxn::interface], #[hxn::methods], #[hxn::function] or #[hxn::data], running the hxn command (new, build, run, check, package, import, doctor), packaging an hxn library as a haxelib, or binding a C header with hxn import.
+description: Expose a Rust library to Haxe with hxn, so one set of generated Haxe classes runs on HashLink, Ash, hxcpp and CPPIA, natively and on wasm. Use when writing or changing a crate annotated with #[hxn::interface], #[hxn::methods], #[hxn::function] or #[hxn::data], running the hxn command (new, build, run, check, package, import, doctor), packaging an hxn library as a haxelib, binding a C header with hxn import, or extending the hxn CLI with haxelib plugins.
 ---
 
 # hxn
@@ -130,6 +130,29 @@ write a Rust crate and `<name>.webidl`. Review the WebIDL and add what a
 header cannot say: `[HxnStatus]` on an `int` status return,
 `[HxnFree=function]` on a result that must be freed. `hxn build` regenerates
 the bindings from it.
+
+## CLI extensions
+
+`hxn plugins` lists extensions from installed `hxn-*` haxelibs. A library
+owns a namespace, such as `hxn window ...`; consumers need no source checkout
+or shell helpers. Workflow hooks activate only for the source library and
+haxelibs selected by its `haxe-flags`, including resolved dependencies.
+
+For a provider, declare `[package.metadata.hxn.cli]` with `version = 1`,
+`namespace`, an argv-array `command`, and `hooks`. `{root}` in an argument
+expands to the package directory. Ship a Haxe tool in `sources/`, for example
+`command = ["haxe", "-cp", "{root}/sources", "--run", "assets.Tool"]`.
+Packaging preserves this as `hxn.cli` in `haxelib.json`. Optional `files`
+lists relative tool files/directories to ship, including native executables.
+
+Tools receive one versioned JSON request on stdin. Commands print ordinary
+output and return their exit status. Hooks log to stderr and return JSON
+with `version: 1`; build hooks may add `haxe_args` pairs (`-D`, `-cp`,
+`--macro`) and `page_files`. Hooks are `before-check`, `before-build`, `after-build`,
+`before-run`, `after-run`, `before-package` and `after-package`. Built-in
+namespaces are reserved, providers run in haxelib-name order, and failures
+stop the workflow. Read `docs/design/cli-extensions.md` and
+`docs/conventions/cli-extensions.md` for the protocol and testing rules.
 
 ## Reference
 

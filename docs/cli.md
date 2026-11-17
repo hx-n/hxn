@@ -16,6 +16,8 @@ Run build, run, check and package commands in the library crate. See the
 | `hxn package [hl] [cpp]` | Create a [haxelib package](packaging.md). |
 | `hxn doctor [--target <triple>]` | Check runtime prerequisites or a Rust binding target. |
 | `hxn import <header.h>` | [Import a C library](design/c-import.md). |
+| `hxn plugins` | List commands supplied by installed hxn libraries. |
+| `hxn <namespace> ...` | Run an installed library's CLI extension. |
 | `hxn version` | Print the command version. |
 
 ## Targets and settings
@@ -87,3 +89,12 @@ the committed API manifest to match the source before building.
 
 `doctor --target` checks Cargo and the target's `std` archive in the active
 rustc sysroot. It does not check the application's SDKs or dependencies.
+
+## Library extensions
+
+Installed hxn libraries can provide commands such as `hxn window ...` and
+hooks for build, run and package. `hxn plugins` lists the active haxelib
+repository's registrations. Commands work without a Rust source checkout;
+hooks activate only for the source library and libraries selected by its
+Haxe flags. See the [extension protocol](design/cli-extensions.md) and
+[conventions](conventions/cli-extensions.md) when implementing one.

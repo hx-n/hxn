@@ -96,6 +96,13 @@ pub fn host(project: &Project, built: &Built) -> Result<Host, String> {
         .filter(|(flag, _)| *flag == "-cp" || *flag == "--macro")
         .cloned()
         .collect();
+    arguments.extend(
+        built
+            .plugin_haxe
+            .iter()
+            .filter(|(flag, _)| *flag == "-D")
+            .cloned(),
+    );
     arguments.push(("-D", format!("dll_import={}", text(&held))));
     let hxml = dir.join("build.hxml");
     let lines: Vec<String> = arguments

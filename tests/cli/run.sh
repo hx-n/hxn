@@ -247,3 +247,68 @@ for refused in "run cpp" "run hl" "check"; do
 	fi
 done
 echo "PASS"
+
+# Source hooks and the same extension from a packaged haxelib.
+sed 's/haxelib = "greeter-haxe"/haxelib = "hxn-cli-fixture"/' Cargo.toml >Cargo.toml.plugin
+mv Cargo.toml.plugin Cargo.toml
+mkdir -p sources cli-assets
+printf '\000\377plugin\n' >cli-assets/fixture.bin
+cp "$here/plugin/Tool.hx" "$here/plugin/plugin-agent.mjs" sources/
+cat >>Cargo.toml <<'PLUGIN'
+
+[package.metadata.hxn.cli]
+version = 1
+namespace = "fixture"
+files = ["cli-assets"]
+command = ["haxe", "-cp", "{root}/sources", "--run", "Tool"]
+hooks = ["before-check", "before-build", "after-build", "before-run", "after-run", "before-package", "after-package"]
+PLUGIN
+cat >haxe/Other.hx <<'PLUGIN'
+class Other {
+    static function main() {
+        Sys.println('plugin: ${haxe.macro.Compiler.getDefine("plugin_fixture")}');
+    }
+}
+PLUGIN
+export HXN_PLUGIN_LOG="$work/plugin.log"
+"$hxn" run "${arguments[@]}" >"$work/plugin-out.txt"
+grep -q '^plugin: ready' "$work/plugin-out.txt" || { cat "$work/plugin-out.txt" >&2; exit 1; }
+expected_hooks=$'before-build\nafter-build\nbefore-run\nafter-run'
+[ "$(tr -d '\r' <"$HXN_PLUGIN_LOG")" = "$expected_hooks" ] || { cat "$HXN_PLUGIN_LOG" >&2; exit 1; }
+if HXN_PLUGIN_FAIL=before-run "$hxn" run "${arguments[@]}" >"$work/plugin-failed.txt" 2>&1; then
+    echo 'FAILED: hook failure did not stop the run' >&2; exit 1
+fi
+grep -q 'hxn-cli-fixture: before-run hook failed' "$work/plugin-failed.txt" || { cat "$work/plugin-failed.txt" >&2; exit 1; }
+"$hxn" package "${packaged[@]}" --out "$work/plugin-package"
+grep -q '"namespace":"fixture"' "$work/plugin-package/haxelib.json" || { echo 'FAILED: plugin metadata was not packaged' >&2; exit 1; }
+test -f "$work/plugin-package/sources/Tool.hx"
+test -f "$work/plugin-package/page/plugin-agent.mjs"
+cmp cli-assets/fixture.bin "$work/plugin-package/cli-assets/fixture.bin"
+mkdir "$work/plugin-client"
+(
+    cd "$work/plugin-client"
+    haxelib newrepo
+    haxelib dev hxn-cli-fixture "$work/plugin-package"
+    "$hxn" plugins >plugins.txt
+    grep -q '^fixture[[:space:]]hxn-cli-fixture' plugins.txt || { cat plugins.txt >&2; exit 1; }
+    "$hxn" fixture echo 'two words' '$(literal)' | tr -d '\r' >command.txt
+    grep -Fqx 'echo|two words|$(literal)' command.txt || { cat command.txt >&2; exit 1; }
+    set +e
+    "$hxn" fixture fail >/dev/null
+    status=$?
+    set -e
+    [ "$status" = 7 ] || { echo "FAILED: plugin exit status was $status" >&2; exit 1; }
+    haxelib dev hxn "$root"
+    "$hxn" new consumer --hxn "$root"
+    cd consumer
+    : >"$HXN_PLUGIN_LOG"
+    if "$hxn" check hl --target not-a-target >/dev/null 2>&1; then exit 1; fi
+    [ ! -s "$HXN_PLUGIN_LOG" ] || { echo 'FAILED: an unselected installed plugin ran' >&2; exit 1; }
+    cat >>Cargo.toml <<'PLUGIN'
+
+[package.metadata.hxn]
+haxe-flags = ["-lib", "hxn", "-lib", "hxn-cli-fixture"]
+PLUGIN
+    if "$hxn" check hl --target not-a-target >/dev/null 2>&1; then exit 1; fi
+    [ "$(tr -d '\r' <"$HXN_PLUGIN_LOG")" = before-check ] || { echo 'FAILED: the selected installed plugin did not run' >&2; cat "$HXN_PLUGIN_LOG" >&2; exit 1; }
+)
