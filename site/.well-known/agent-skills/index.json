@@ -6,7 +6,7 @@
       "type": "skill-md",
       "description": "Expose a Rust library to Haxe with hxn, so one set of generated Haxe classes runs on HashLink, Ash, hxcpp and CPPIA, natively and on wasm. Use when writing or changing a crate annotated with #[hxn::interface], #[hxn::methods], #[hxn::function] or #[hxn::data], running the hxn command (new, build, run, check, package, import, doctor), packaging an hxn library as a haxelib, binding a C header with hxn import, or extending the hxn CLI with haxelib plugins.",
       "url": "/.well-known/agent-skills/hxn/SKILL.md",
-      "digest": "sha256:6e9b0746785d47f066a9d132e3e7e4d1bbeeff9eb693d715ab97cd23dd1e5fb3"
+      "digest": "sha256:1798924de24d1fdded883d0dd4b6dd64b0d47f4e2355a959de976f42eeb493dc"
     },
     {
       "name": "hxn-window",
@@ -20,7 +20,7 @@
       "type": "skill-md",
       "description": "Audio and video in Haxe with the hxn-av haxelib (package `hxn.av`) on HashLink, Ash, hxcpp and CPPIA, using the platform's own codecs rather than FFmpeg. Use when a Haxe program plays a media file, works with video frames or PCM audio, applies an equalizer, encodes or decodes AAC or H.264, or reads or writes MP4.",
       "url": "/.well-known/agent-skills/hxn-av/SKILL.md",
-      "digest": "sha256:b5d862e76706383f37fa96796570806c9d674951139a967272d312bb1d405128"
+      "digest": "sha256:833d09a38cc4a703353a03bee2b6c3a2eee971a3f60f06bfd14f097e5617baf7"
     },
     {
       "name": "hxnsl",

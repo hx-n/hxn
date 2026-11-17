@@ -16,7 +16,10 @@ haxe -lib hxn-av -main Main -cpp out        # then: out/Main
 The haxelib carries prebuilt native libraries for Linux x86-64 and ARM64,
 macOS arm64 and Windows x86-64, and static libraries for Intel macOS (hxcpp
 only), iOS, the iOS simulator and Android arm64; a program needs no Rust. It
-installs the `hxn` haxelib with it. wasm is not set up yet. A `haxelib git` install has
+installs the `hxn` haxelib with it. Browser builds provide CPU media operations
+and bounded AAC-LC AudioDecoder through WebCodecs on Ash wasm and both
+hxcpp wasm modes. Browser file access/player, video decoding and encoding
+remain unavailable. A `haxelib git` install has
 no native libraries until a release ZIP's `native/` directory is copied into
 it.
 
@@ -82,3 +85,22 @@ The API is declared in xavi; changing it means changing xavi and the
 revision `Cargo.toml` pins. Test with the hxn CLI:
 `hxn check hl --vm ash` and `hxn check cpp cppia`, which run
 `examples/check` and compare the output across runtimes.
+
+## Browser and streamed output
+
+Use `hxn package hl --wasm --threads` or `hxn package cpp --wasm`
+(with optional `--threads`). Page agents ship in the haxelib; its init macro
+also copies them for direct `haxe -lib` builds. Use Ash's wasm build/serve
+workflow for HashLink programs. Test with `hxn check` in all three browser
+modes; the check covers CPU data/conversion, AAC backpressure, EOF and close.
+
+`AudioDecoder` accepts AAC-LC (`mp4a.40.2`/`aac`), mono/stereo 8–96 kHz,
+where the secure browser supports WebCodecs. Limits are 1–128 items and
+16 KiB–16 MiB. Retry a false `tryDecode` without closing that chunk. Poll
+from the event loop, read/close every block, and finish/drain before closing
+the decoder. Asynchronous codec callbacks own page data only and never
+retain guest pointers. Unthreaded hxcpp uses `then` for media-copy futures.
+
+Feed decoded blocks to hxn-audio's `DecoderStream`; PCM conversion belongs
+here, and device output/mixing belongs there. Keep native/mobile codec
+behavior passing. Read docs/design.md and docs/conventions.md when editing.

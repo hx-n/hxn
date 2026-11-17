@@ -7,6 +7,14 @@
 - A reactive graph belongs to one thread.
 - A library's results are delivered on one thread: the one that first
   requested delivery, or the one that calls `Loop.sync()`.
+- Device render callbacks use preallocated native data. Do not allocate,
+  free the last resource reference, take locks, log or call Haxe there.
+  Send bounded commands and retire resources on the control side. A browser
+  AudioWorklet keeps rendering independent of the Haxe event loop,
+  including when hxcpp is built without threads.
+- Device libraries expose suspend/resume and pollable device failures.
+  Check mobile interruptions and browser playback activation as well as
+  desktop output; compiling an adapter does not verify its device lifecycle.
 - Waiting from Haxe is done in bounded slices with a short sleep between, so
   runtimes whose other threads run only while one sleeps still make progress.
 - Where two threads each write one atomic and then read the other's, every

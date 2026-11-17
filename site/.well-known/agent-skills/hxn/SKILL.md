@@ -131,6 +131,12 @@ header cannot say: `[HxnStatus]` on an `int` status return,
 `[HxnFree=function]` on a result that must be freed. `hxn build` regenerates
 the bindings from it.
 
+For real-time audio, inspect hxn-av's existing PCM/decoder support before
+adding conversion or codec code. Keep rendering and resource retirement
+independent of Haxe callbacks and scheduling. Validate browser activation,
+mobile suspend/resume and device changes on the actual platforms; a native
+or compile-only pass does not cover them.
+
 ## CLI extensions
 
 `hxn plugins` lists extensions from installed `hxn-*` haxelibs. A library
@@ -144,6 +150,10 @@ expands to the package directory. Ship a Haxe tool in `sources/`, for example
 `command = ["haxe", "-cp", "{root}/sources", "--run", "assets.Tool"]`.
 Packaging preserves this as `hxn.cli` in `haxelib.json`. Optional `files`
 lists relative tool files/directories to ship, including native executables.
+Binary page assets can ship through `files` and build-hook `page_files`.
+Also test direct `haxe -lib` use: an installed library must arrange its
+assets through an init macro when it needs them without CLI hooks, including
+unthreaded Emscripten.
 
 Tools receive one versioned JSON request on stdin. Commands print ordinary
 output and return their exit status. Hooks log to stderr and return JSON
