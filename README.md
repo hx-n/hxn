@@ -285,3 +285,6 @@ agents. The haxelib includes it.
 ## License
 
 Licensed under Apache-2.0. See [LICENSE](https://github.com/hx-n/hxn/blob/main/LICENSE).
+
+Third-party license and attribution notices are included in
+[third-party/NOTICES.md](third-party/NOTICES.md) with the release archives.

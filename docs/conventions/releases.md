@@ -19,6 +19,9 @@ using local archives without network access.
 
 ## Agent skills
 
+Documentation links in skills use absolute HTTPS URLs, so they work from
+installed packages and the discovery site as well as source checkouts.
+
 Each hxn library keeps its agent skill in `skills/<name>/SKILL.md`, and its
 release puts `skills/` in the haxelib. hxn.dev serves copies of all of them
 from `site/.well-known/agent-skills/`, with the discovery index beside them,
@@ -39,3 +42,7 @@ a page per library and per type, and lists the pages in `site/sitemap.xml`
 and `site/llms.txt`.
 
 See [CLI usage](../cli.md) and [packaging](../packaging.md).
+
+Redistribution includes `third-party/` with pinned dependency license and
+notice texts. Refresh it when Cargo manifests or the lock file change; the
+release workflow checks its recorded input hashes before packaging.

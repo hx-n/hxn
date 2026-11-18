@@ -55,6 +55,7 @@ jobs:
           name="hxn-${GITHUB_REF_NAME}-${{ matrix.target }}"
           mkdir -p "dist/$name"
           cp README.md LICENSE "dist/$name/"
+          cp -R third-party "dist/$name/"
           cd dist
           if [[ "${{ matrix.target }}" == *windows* ]]; then
             cp "../target/${{ matrix.target }}/release/hxn.exe" "$name/"
@@ -84,7 +85,8 @@ jobs:
             exit 1
           fi
           echo "ZIP=hxn-haxelib-$version.zip" >> "$GITHUB_ENV"
-      - run: zip -qr "$ZIP" haxelib.json haxe README.md LICENSE skills
+      - run: python3 scripts/third_party_notices.py --check
+      - run: zip -qr "$ZIP" haxelib.json haxe README.md LICENSE skills third-party
       - uses: actions/upload-artifact@v4
         with:
           name: haxelib
