@@ -28,7 +28,7 @@ ORIGIN = 'https://hxn.dev'
 # to type. hide: type paths left out, as regular expressions. defines: for a
 # binding without a HashLink library for this machine, a platform it has one for.
 LIBRARIES = [
-    dict(name='hxn', version='0.3.7', prefix='hxn.', roots=['--macro', "include('hxn', true, ['hxn.native'])"],
+    dict(name='hxn', version='0.3.8', prefix='hxn.', roots=['--macro', "include('hxn', true, ['hxn.native'])"],
          hide=[r'^hxn\.(Wire|Native|Bind|Handle|TupleMacro)$', r'^hxn\.native\.', r'^hxn\.reactive\.'],
          summary='Futures, streams, signals, reactive values, atomics and callbacks: the Haxe classes every hxn library uses.'),
     dict(name='hxn-window', version='0.2.1', prefix='hxn.window.', roots=['--macro', "include('hxn.window')"],
@@ -36,6 +36,10 @@ LIBRARIES = [
          summary='Native and browser windows, input, monitors, gamepads and the clipboard, with handles for GPU surfaces.'),
     dict(name='hxn-av', version='0.2.0', prefix='hxn.av.', roots=['--macro', "include('hxn.av')"],
          summary='Audio and video with the platform\'s codecs: playback, frames, PCM audio, an equalizer, AAC, H.264 and MP4.'),
+    dict(name='hxn-audio', version='0.1.0', prefix='hxn.audio.', roots=['--macro', "include('hxn.audio', true, ['hxn.audio.cli'])"],
+         libs=['hxn-av:0.2.0'],
+         hide=[r'^hxn\.audio\.(cli\.|Init$)'],
+         summary='Audio output and mixing: voices, bounded PCM streams, buses and effects on native and browser runtimes. The Av and DecoderStream helpers require hxn-av.'),
     dict(name='hxnsl', version='0.2.0', prefix='hxnsl.', roots=['hxnsl.Shader', 'hxnsl.Layout'],
          summary='Shaders written in HXSL and translated at compile time to WGSL, MSL, HLSL, SPIR-V and GLSL ES.'),
     dict(name='hxn-gpu', version='0.2.3', prefix='hxn.gpu.', roots=['--macro', "include('hxn.gpu', true, ['hxn.gpu.backend'])"],
@@ -56,7 +60,7 @@ LIBRARIES = [
 ]
 
 # Generated helpers every binding has, which programs do not use.
-HIDDEN = [r'Wire$', r'\.Hxn\w+(Native|Future|Inbox)$', r'_Impl_$']
+HIDDEN = [r'Wire$', r'\.Hxn\w+(Native|Future|Inbox|Memory)$', r'_Impl_$']
 
 KINDS = [('class', 'Classes'), ('interface', 'Interfaces'), ('enum', 'Enums'), ('abstract', 'Abstracts'), ('typedef', 'Typedefs')]
 
@@ -75,7 +79,8 @@ def describe(repo, lib, offline):
         run(['haxelib', 'install', lib['name'], lib['version'], '--always', '--quiet'], repo)
     out = repo / f'{lib["name"]}.xml'
     defines = [a for d in lib.get('defines', []) for a in ('-D', d)]
-    run(['haxe', '-lib', spec, *lib['roots'], *defines, '-xml', str(out), '-hl', str(repo / 'out.hl'), '--no-output'], repo)
+    libraries = [a for name in lib.get('libs', []) for a in ('-lib', name)]
+    run(['haxe', '-lib', spec, *libraries, *lib['roots'], *defines, '-xml', str(out), '-hl', str(repo / 'out.hl'), '--no-output'], repo)
     return ET.parse(out).getroot()
 
 
@@ -571,7 +576,7 @@ def build(repo, offline):
         for t in sorted(everything.values(), key=lambda t: (t['name'].lower(), t['lib'])))
     sidebar = '    <aside class="tutorial-sidebar api-sidebar"><nav aria-label="Libraries"><a class="tutorial-index-link" href="/api/" aria-current="page">API reference</a>' + ''.join(
         f'<a href="{lib_url(lib["name"])}">{escape(lib["name"])} <span>{escape(lib["version"])}</span></a>' for lib in LIBRARIES) + '</nav></aside>'
-    description = 'The Haxe API of every hxn library at its released version: hxn, hxn-window, hxn-av, hxnsl, hxn-gpu and the hxn GPU drivers.'
+    description = 'The Haxe API of every hxn library at its released version: hxn, hxn-window, hxn-av, hxn-audio, hxnsl, hxn-gpu and the hxn GPU drivers.'
     body = (sidebar + '\n    <article id="content" class="lesson"><header class="lesson-heading"><p class="eyebrow">API</p>'
             f'<h1>API reference</h1><p class="lesson-description">{escape(description)}</p></header>'
             f'<div class="tutorial-cards">{cards}</div>'

@@ -21,4 +21,4 @@ When redistributing binaries, retain the applicable notices and license texts.
 | syn 2.0.119 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/syn-2.0.119/LICENSE-APACHE), [LICENSE-MIT](licenses/syn-2.0.119/LICENSE-MIT) |
 | syn 3.0.10 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/syn-3.0.10/LICENSE-APACHE), [LICENSE-MIT](licenses/syn-3.0.10/LICENSE-MIT) |
 | unicode-ident 1.0.27 | (MIT OR Apache-2.0) AND Unicode-3.0 | [LICENSE-UNICODE](licenses/unicode-ident-1.0.27/LICENSE-UNICODE), [LICENSE-APACHE](licenses/unicode-ident-1.0.27/LICENSE-APACHE), [LICENSE-MIT](licenses/unicode-ident-1.0.27/LICENSE-MIT) |
-| zmij 1.0.23 | MIT | [LICENSE-MIT](licenses/zmij-1.0.23/LICENSE-MIT) |
+| zmij 1.0.23 | MIT | [LICENSE-MIT](licenses/zmij-1.0.23/LICENSE-MIT), [UPSTREAM-MANIFEST.txt](licenses/zmij-1.0.23/UPSTREAM-MANIFEST.txt) |

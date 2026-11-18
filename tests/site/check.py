@@ -141,6 +141,8 @@ for skill in index['skills']:
     assert f'\nname: {name}\n' in head, f'skills index: {name} SKILL.md names another skill'
     assert f'\ndescription: {skill["description"]}' in head, f'skills index: {name} description differs from its SKILL.md'
     assert len(skill['description']) <= 1024, f'skills index: {name} description is too long'
+    for link in re.findall(r'\[[^\]]*\]\(([^)]+)\)', data.decode()):
+        assert urlsplit(link).scheme in ('https', 'http', 'mailto'), f'skills index: {name} has a relative documentation link: {link}'
     assert 'https://hxn.dev' + skill['url'] in listed_links, f'llms.txt: {name} skill is not listed'
 assert (SITE / '.well-known/agent-skills/hxn/SKILL.md').read_bytes() == (ROOT / 'skills/hxn/SKILL.md').read_bytes(), \
     'site: the hxn skill differs from skills/hxn/SKILL.md; run scripts/sync_site_skills.py'

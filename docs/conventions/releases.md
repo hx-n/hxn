@@ -39,10 +39,15 @@ reaches haxelib, set its version there, run
 `python3 scripts/build_api_docs.py`, and commit `site/`. The script installs
 each version into `target/api-haxelib`, describes it with `haxe -xml`, writes
 a page per library and per type, and lists the pages in `site/sitemap.xml`
-and `site/llms.txt`.
+and `site/llms.txt`. Include optional haxelibs in a library's `libs` entry
+when they enable public integration types, and document that requirement.
 
 See [CLI usage](../cli.md) and [packaging](../packaging.md).
 
 Redistribution includes `third-party/` with pinned dependency license and
-notice texts. Refresh it when Cargo manifests or the lock file change; the
-release workflow checks its recorded input hashes before packaging.
+notice texts. Refresh the CLI inventory with
+`python3 scripts/third_party_notices.py --package hxn-cli` when Cargo
+manifests or the lock file change; the release workflow checks its recorded input hashes before packaging. Preserve
+upstream files byte-for-byte with the attributes in `.gitattributes`. An
+undeclared upstream license is recorded as `NOASSERTION` and prevents release
+until its terms are resolved; retaining a manifest does not grant a license.

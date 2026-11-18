@@ -26,7 +26,6 @@
   <url><loc>https://hxn.dev/api/hxn/hxn.Unit/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-window/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-window/hxn.window.Attention/</loc></url>
-  <url><loc>https://hxn.dev/api/hxn-window/hxn.window.HxnXwindowMemory/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-window/hxn.window.ClipboardItems/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-window/hxn.window.CursorGrab/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-window/hxn.window.CursorIcon/</loc></url>
@@ -69,7 +68,6 @@
   <url><loc>https://hxn.dev/api/hxn-window/hxn.window.WindowAttributes/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-window/hxn.window.WindowLevel/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-av/</loc></url>
-  <url><loc>https://hxn.dev/api/hxn-av/hxn.av.HxnXaviMemory/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-av/hxn.av.AudioData/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-av/hxn.av.AudioDataCopyToOptions/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-av/hxn.av.AudioDataInit/</loc></url>
@@ -110,6 +108,26 @@
   <url><loc>https://hxn.dev/api/hxn-av/hxn.av.VideoMatrixCoefficients/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-av/hxn.av.VideoPixelFormat/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-av/hxn.av.VideoTransferCharacteristics/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn-audio/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn-audio/hxn.audio.Audio/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn-audio/hxn.audio.AudioBuffer/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn-audio/hxn.audio.AudioBufferWeak/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn-audio/hxn.audio.AudioBus/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn-audio/hxn.audio.AudioBusWeak/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn-audio/hxn.audio.AudioDevice/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn-audio/hxn.audio.AudioDeviceEvent/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn-audio/hxn.audio.AudioMetrics/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn-audio/hxn.audio.AudioOptions/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn-audio/hxn.audio.AudioOutput/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn-audio/hxn.audio.AudioOutputWeak/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn-audio/hxn.audio.AudioState/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn-audio/hxn.audio.AudioStream/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn-audio/hxn.audio.AudioStreamWeak/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn-audio/hxn.audio.AudioVoice/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn-audio/hxn.audio.AudioVoiceWeak/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn-audio/hxn.audio.Av/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn-audio/hxn.audio.DecoderStream/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn-audio/hxn.audio.PlayOptions/</loc></url>
   <url><loc>https://hxn.dev/api/hxnsl/</loc></url>
   <url><loc>https://hxn.dev/api/hxnsl/hxnsl.LayoutEntry/</loc></url>
   <url><loc>https://hxn.dev/api/hxnsl/hxnsl.EntryPoint/</loc></url>
@@ -168,7 +186,6 @@
   <url><loc>https://hxn.dev/api/hxn-gpu/hxn.gpu.VertexFormat/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-gpu-metal/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-gpu-metal/hxn.gpu.metal.AddressMode/</loc></url>
-  <url><loc>https://hxn.dev/api/hxn-gpu-metal/hxn.gpu.metal.HxnGpuMetalMemory/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-gpu-metal/hxn.gpu.metal.Buffer/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-gpu-metal/hxn.gpu.metal.CommandBuffer/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-gpu-metal/hxn.gpu.metal.CommandQueue/</loc></url>
@@ -199,7 +216,6 @@
   <url><loc>https://hxn.dev/api/hxn-gpu-vulkan/hxn.gpu.vulkan.Access/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-gpu-vulkan/hxn.gpu.vulkan.AddressMode/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-gpu-vulkan/hxn.gpu.vulkan.BindPoint/</loc></url>
-  <url><loc>https://hxn.dev/api/hxn-gpu-vulkan/hxn.gpu.vulkan.HxnGpuVulkanMemory/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-gpu-vulkan/hxn.gpu.vulkan.Buffer/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-gpu-vulkan/hxn.gpu.vulkan.BufferUsage/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-gpu-vulkan/hxn.gpu.vulkan.CommandBuffer/</loc></url>
@@ -233,7 +249,6 @@
   <url><loc>https://hxn.dev/api/hxn-gpu-d3d12/hxn.gpu.d3d12.Access/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-gpu-d3d12/hxn.gpu.d3d12.AddressMode/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-gpu-d3d12/hxn.gpu.d3d12.BarrierSync/</loc></url>
-  <url><loc>https://hxn.dev/api/hxn-gpu-d3d12/hxn.gpu.d3d12.HxnGpuD3d12Memory/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-gpu-d3d12/hxn.gpu.d3d12.Buffer/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-gpu-d3d12/hxn.gpu.d3d12.CommandList/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-gpu-d3d12/hxn.gpu.d3d12.DescriptorHeap/</loc></url>
@@ -260,7 +275,6 @@
   <url><loc>https://hxn.dev/api/hxn-gpu-d3d12/hxn.gpu.d3d12.VertexAttribute/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-gpu-d3d12/hxn.gpu.d3d12.Visibility/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-gpu-gles/</loc></url>
-  <url><loc>https://hxn.dev/api/hxn-gpu-gles/hxn.gpu.gles.HxnGpuGlesMemory/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-gpu-gles/hxn.gpu.gles.Buffer/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-gpu-gles/hxn.gpu.gles.BufferTarget/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-gpu-gles/hxn.gpu.gles.ClearBits/</loc></url>
@@ -279,7 +293,6 @@
   <url><loc>https://hxn.dev/api/hxn-gpu-gles/hxn.gpu.gles.VertexArray/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-gpu-gles/hxn.gpu.gles.Wrap/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-gpu-webgpu/</loc></url>
-  <url><loc>https://hxn.dev/api/hxn-gpu-webgpu/hxn.gpu.webgpu.HxnGpuWebgpuMemory/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-gpu-webgpu/hxn.gpu.webgpu.Adapter/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-gpu-webgpu/hxn.gpu.webgpu.AddressMode/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-gpu-webgpu/hxn.gpu.webgpu.BindGroup/</loc></url>
@@ -315,7 +328,6 @@
   <url><loc>https://hxn.dev/api/hxn-gpu-webgpu/hxn.gpu.webgpu.VertexFormat/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-gpu-webgpu/hxn.gpu.webgpu.ViewDimension/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-gpu-webgl2/</loc></url>
-  <url><loc>https://hxn.dev/api/hxn-gpu-webgl2/hxn.gpu.webgl2.HxnGpuWebgl2Memory/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-gpu-webgl2/hxn.gpu.webgl2.Buffer/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-gpu-webgl2/hxn.gpu.webgl2.BufferTarget/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-gpu-webgl2/hxn.gpu.webgl2.ClearBits/</loc></url>

@@ -1,3 +1,4 @@
 # Checked out with the line endings they are compared with, on every system.
 * text=auto eol=lf
 *.png binary
+third-party/licenses/** -text -whitespace

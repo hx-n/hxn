@@ -172,3 +172,9 @@ stop the workflow. Read `docs/design/cli-extensions.md` and
 In the hxn repository: `docs/cli.md`, `docs/packaging.md`,
 `docs/conventions/rust-api.md` (the full rules), `docs/design/` (data,
 handles, async, callbacks) and `examples/`, each a crate with a Haxe program.
+
+## Redistribution
+
+Retain the applicable [dependency licenses and notices](https://github.com/hx-n/hxn/blob/main/third-party/NOTICES.md)
+when redistributing the CLI or other bundled binaries. Keep each library's
+notices with that library's package.

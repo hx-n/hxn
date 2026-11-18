@@ -219,7 +219,8 @@
       "repository": "https://github.com/dtolnay/zmij",
       "source": "registry+https://github.com/rust-lang/crates.io-index",
       "files": [
-        "licenses/zmij-1.0.23/LICENSE-MIT"
+        "licenses/zmij-1.0.23/LICENSE-MIT",
+        "licenses/zmij-1.0.23/UPSTREAM-MANIFEST.txt"
       ]
     }
   ]
