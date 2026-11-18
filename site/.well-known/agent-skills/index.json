@@ -30,6 +30,20 @@
       "digest": "sha256:afa98ab8e1aee4024663a5f0399990e502c0f57fde03180e056460f1370cc354"
     },
     {
+      "name": "hxn-file",
+      "type": "skill-md",
+      "description": "Use or change hxn-file bundled reads, application saves, preferences, native roots and browser persistence across hxn runtimes.",
+      "url": "/.well-known/agent-skills/hxn-file/SKILL.md",
+      "digest": "sha256:678049d124d76647ac4eb9b1059f9a252191718024f7c529f2b3333271032e95"
+    },
+    {
+      "name": "hxn-assets",
+      "type": "skill-md",
+      "description": "Use or change hxn-assets typed embedded and dynamic values, metadata catalogs, HTTP/WS streams, content identity, byte caching and the hxn assets CLI.",
+      "url": "/.well-known/agent-skills/hxn-assets/SKILL.md",
+      "digest": "sha256:2f645d40ad51cf389a366013701c64e5c11b3b2cc2654bcd6804833c1e6a51d5"
+    },
+    {
       "name": "hxnsl",
       "type": "skill-md",
       "description": "Write GPU shaders in Haxe with the hxnsl haxelib, which translates HXSL (Heaps' shader language) at compile time to WGSL, MSL, HLSL, SPIR-V and GLSL ES with their bind group layout and binding slots as class constants. Use when writing an HXSL shader class, reading its generated fields to build pipelines or bind resources, setting @const values, or extending hxnsl with a framework Extension or a driver Target.",

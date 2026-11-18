@@ -42,7 +42,7 @@ LIBRARIES = [
          summary='Audio output and mixing: voices, bounded PCM streams, buses and effects on native and browser runtimes. The Av and DecoderStream helpers require hxn-av.'),
     dict(name='hxnsl', version='0.2.1', prefix='hxnsl.', roots=['hxnsl.Shader', 'hxnsl.Layout'],
          summary='Shaders written in HXSL and translated at compile time to WGSL, MSL, HLSL, SPIR-V and GLSL ES.'),
-    dict(name='hxn-gpu', version='0.2.3', prefix='hxn.gpu.', roots=['--macro', "include('hxn.gpu', true, ['hxn.gpu.backend'])"],
+    dict(name='hxn-gpu', version='0.2.4', prefix='hxn.gpu.', roots=['--macro', "include('hxn.gpu', true, ['hxn.gpu.backend'])"],
          hide=[r'^hxn\.gpu\.(backend|metal|vulkan|d3d12|gles|webgpu|webgl2)\.', r'^hxn\.gpu\.Setup$'],
          summary='One GPU API over every hxn GPU driver, with features and limits per device and a default backend per platform.'),
     dict(name='hxn-gpu-metal', version='0.2.1', prefix='hxn.gpu.metal.', roots=['--macro', "include('hxn.gpu.metal')"],
