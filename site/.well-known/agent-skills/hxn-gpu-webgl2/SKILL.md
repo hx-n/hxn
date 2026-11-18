@@ -124,3 +124,8 @@ The Ash backend's calls are encoded by `src/agent/wire.rs` and made by the
 browser agent's `page/gpu_webgl2_service.mjs`, both generated from the WebGL
 IDL in `tools/wire/idl/`; `cargo run --manifest-path tools/wire/Cargo.toml`
 regenerates them.
+
+## Redistribution
+
+Retain the applicable [dependency licenses and notices](https://github.com/hx-n/hxn-gpu-webgl2/blob/main/third-party/NOTICES.md)
+when distributing binaries. Release packages include `third-party/`.

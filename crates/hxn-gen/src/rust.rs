@@ -619,6 +619,7 @@ pub fn c_adapter(library: &Library, core: &str) -> String {
         ));
     }
     out.push_str(&later::c_adapter(library));
+    out.push_str(&crate::logging::c_adapter(library));
     if !library.errors().is_empty() {
         out.push_str(&format!(
             "\n// The value of the failure this thread just met, for the binding to throw as\n// what it is: 1 and the bytes, or 0 if it had none.\n#[unsafe(no_mangle)]\npub unsafe extern \"C\" fn {}(out: *mut Buf) -> i32 {{\n    let value = hxn_abi::thrown::take();\n    if value.is_empty() || out.is_null() {{\n        return 0;\n    }}\n    unsafe {{ out.write(Buf::from(value)) }};\n    1\n}}\n",
@@ -944,6 +945,7 @@ fn hl_exports(library: &Library, core: &str) -> String {
         ));
     }
     out.push_str(&later::hl_adapter(library));
+    out.push_str(&crate::logging::hl_adapter(library));
     if !library.errors().is_empty() {
         let name = thrown_export(library);
         out.push_str(&format!(

@@ -124,3 +124,8 @@ Windows only. Test with the hxn CLI, hxnsl and DXC: `hxn check hl --vm ash`
 and `hxn check cpp cppia`. On another platform, `cargo check --target
 x86_64-pc-windows-msvc` and `hxn build hl --target x86_64-pc-windows-msvc`
 compile it.
+
+## Redistribution
+
+Retain the applicable [dependency licenses and notices](https://github.com/hx-n/hxn-gpu-d3d12/blob/main/third-party/NOTICES.md)
+when distributing binaries. Release packages include `third-party/`.

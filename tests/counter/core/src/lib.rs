@@ -19,10 +19,12 @@ use hxn_future::{
 // the adapters look for them.
 mod blob;
 mod events;
+mod logging;
 mod numbers;
 mod shapes;
 pub use blob::Blob;
 pub use events::{CountError, Event, Events, Refusal, Trouble};
+pub use logging::{emit_logs, log_failure, log_large, log_work};
 // Functions defined in submodules are re-exported at the root as well.
 pub use numbers::{Numbers, halve};
 pub use shapes::{Choices, Defaults, Empty, Mode, Point, Settings, Shapes, TupleData};

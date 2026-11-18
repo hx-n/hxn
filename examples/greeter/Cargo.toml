@@ -5,5 +5,5 @@ edition = "2024"
 publish = false
 
 [dependencies]
-# In a library of your own: hxn = { git = "https://github.com/hx-n/hxn", tag = "v0.3.8" }
+# In a library of your own: hxn = { git = "https://github.com/hx-n/hxn", tag = "v0.3.9" }
 hxn = { path = "../../crates/hxn" }

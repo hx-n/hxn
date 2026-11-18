@@ -113,3 +113,8 @@ haxe -lib hxnsl-framework -cp test --interp -main Main
 also runs the define, clash and missing-constant cases in
 `.github/workflows/ci.yml`, and compiles the output with spirv-val,
 glslangValidator, DXC and the Metal compiler. Open issues are in git-bug.
+
+## Redistribution
+
+Retain the applicable [dependency licenses and notices](https://github.com/hx-n/hxnsl/blob/main/third-party/NOTICES.md)
+when distributing binaries. Release packages include `third-party/`.

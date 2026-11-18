@@ -12,9 +12,9 @@
     "cross",
     "wasm"
   ],
-  "description": "The Haxe classes of libraries built with hxn: futures, streams, signals, reactive values, atomics, and the macro that binds a packaged library.",
-  "version": "0.3.8",
-  "releasenote": "Cross-target packages exclude host build-script linker metadata. Updated audio lifecycle, packaged assets and CLI extension conventions.",
+  "description": "The Haxe classes of libraries built with hxn: futures, streams, signals, reactive values, shared logging, atomics, and the macro that binds a packaged library.",
+  "version": "0.3.9",
+  "releasenote": "Shared Rust and Haxe logging with a configurable application sink, bounded native delivery and platform-console defaults on native and wasm runtimes.",
   "contributors": [
     "darmie"
   ],

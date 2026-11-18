@@ -77,6 +77,8 @@ jobs:
           components: miri, rust-src
       - uses: Swatinem/rust-cache@v2
       - run: cargo miri test -p hxn-abi
+        env:
+          MIRIFLAGS: -Zmiri-disable-isolation
       # The workers live as long as the process.
       - run: cargo miri test -p hxn-future
         env:

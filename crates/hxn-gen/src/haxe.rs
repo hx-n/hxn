@@ -197,7 +197,7 @@ fn close_docs(interface: &Interface) -> &'static str {
 // whichever class a program uses.
 pub(crate) fn meter(library: &Library) -> String {
     format!(
-        "\t@:noCompletion static final hxnMemory = {}.meter;\n",
+        "\t@:keep @:noCompletion static final hxnMemory = {}.meter;\n",
         memory_class(library)
     )
 }

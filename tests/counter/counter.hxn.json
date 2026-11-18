@@ -1824,6 +1824,45 @@
           "blocking": false
         }
       ]
+    },
+    {
+      "name": "Diagnostics",
+      "namespace": true,
+      "methods": [
+        {
+          "name": "emit_logs",
+          "kind": "static",
+          "params": [{ "name": "count", "type": "i32" }],
+          "returns": "i32",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "log_failure",
+          "kind": "static",
+          "params": [],
+          "returns": "void",
+          "throws": "CountError",
+          "fallible": true,
+          "blocking": false
+        },
+        {
+          "name": "log_work",
+          "kind": "static",
+          "params": [],
+          "returns": "future<i32>",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "log_large",
+          "kind": "static",
+          "params": [],
+          "returns": "void",
+          "fallible": false,
+          "blocking": false
+        }
+      ]
     }
   ]
 }

@@ -1346,7 +1346,9 @@ fn located<T>(result: Result<T, Error>, source: &Source) -> Result<T, Error> {
 }
 
 // Names the adapters use for their own exports.
-const RESERVED: [&str; 6] = ["Atomic", "Memory", "Future", "Stream", "Signal", "Outbox"];
+const RESERVED: [&str; 7] = [
+    "Atomic", "Memory", "Future", "Stream", "Signal", "Outbox", "Log",
+];
 
 // The types of Haxe's top-level package. A generated class of the same name
 // would shadow Haxe's type in its package, for the program and for the

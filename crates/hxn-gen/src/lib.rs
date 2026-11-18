@@ -24,6 +24,7 @@ mod data;
 mod haxe;
 mod later;
 mod lent;
+mod logging;
 mod manifest;
 mod model;
 mod names;

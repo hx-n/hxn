@@ -31,6 +31,7 @@ mod buf;
 mod callback;
 mod guard;
 mod handle;
+pub mod log;
 pub mod memory;
 mod slice;
 mod status;

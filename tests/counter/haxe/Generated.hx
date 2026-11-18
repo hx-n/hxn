@@ -35,6 +35,111 @@ class Generated {
 		second.close();
 	}
 
+	static function logging() {
+		final previous = hxn.Log.sink;
+		var records:Array<hxn.LogRecord> = [];
+		hxn.Log.sink = record -> records.push(record);
+		hxn.Log.level = Info;
+		hxn.Log.debug("hidden");
+		hxn.Log.info("frontend naïve ☃", "fixture.frontend");
+		check("frontend level and metadata", records.length == 1
+			&& records[0].origin == "haxe"
+			&& records[0].target == "fixture.frontend"
+			&& records[0].file.indexOf("Generated.hx") >= 0
+			&& records[0].line > 0);
+		check("native return unchanged by delivery", Diagnostics.emitLogs(1) == 1);
+		check("native filtering, UTF-8 and source metadata", records.length == 2
+			&& records[1].origin == "rust"
+			&& records[1].message == "native naïve ☃ 0"
+			&& records[1].file.indexOf("logging.rs") >= 0
+			&& records[1].timestamp > 0);
+		check("native and frontend timestamps share Unix milliseconds", Math.abs(records[0].timestamp - records[1].timestamp) < 60000);
+		records = [];
+		hxn.Log.level = Trace;
+		Diagnostics.emitLogs(1);
+		check("filter propagates to native library", records.length == 3 && records[0].level == Debug && records[1].level == Trace);
+		records = [];
+		hxn.Log.level = Info;
+		Diagnostics.logLarge();
+		check("native long UTF-8 messages are bounded", records.length == 1 && records[0].truncated && haxe.io.Bytes.ofString(records[0].message)
+			.length <= 8192);
+		records = [];
+		Diagnostics.emitLogs(300);
+		check("native overflow is bounded and reported", records.length == 257 && records[256].message.indexOf("Dropped 44") >= 0);
+		records = [];
+		// A sink may make another failing native call: the original typed error must already be owned.
+		hxn.Log.sink = record -> {
+			records.push(record);
+			try
+				Events.checked(0)
+			catch (_:haxe.Exception) {}
+		};
+		var typed = false;
+		try
+			Diagnostics.logFailure()
+		catch (error:CountException) {
+			typed = switch (error.error) {
+				case Unknown("logging"): true;
+				case _: false;
+			};
+		}
+		check("logging preserves the original typed failure", typed && records.length == 1 && records[0].level == Error);
+		hxn.Log.sink = record -> records.push(record);
+		records = [];
+		check("worker result", Diagnostics.logWork().await() == 42);
+		hxn.Log.flush();
+		check("worker log delivered on Haxe side", records.length == 1 && records[0].message == "worker record");
+		// hxcpp cannot create Haxe threads on Emscripten; Rust worker delivery is tested above.
+		#if (!hxn_no_threads && !emscripten)
+		records = [];
+		final owner = sys.thread.Thread.current(), done = new sys.thread.Lock();
+		var wrongThread = false;
+		hxn.Log.sink = record -> {
+			wrongThread = !(sys.thread.Thread.current() == owner);
+			records.push(record);
+		};
+		sys.thread.Thread.create(() -> {
+			hxn.Log.info("Haxe worker", "fixture");
+			done.release();
+		});
+		check("Haxe logging worker finishes", done.wait(5));
+		check("worker never calls the sink", records.length == 0);
+		hxn.Loop.sync();
+		check("Haxe worker is delivered by app sync", records.length == 1 && !wrongThread);
+		#end
+		var handled = 0;
+		hxn.Log.sink = _ -> {
+			handled++;
+			throw new haxe.Exception("sink failed");
+		};
+		check("sink failure preserves native result", Diagnostics.emitLogs(1) == 1 && handled == 1);
+		records = [];
+		hxn.Log.sink = record -> {
+			records.push(record);
+			hxn.Log.info("sink recursion", "fixture");
+		};
+		hxn.Log.info("outer", "fixture");
+		hxn.Log.flush();
+		check("a recursive sink is not called recursively", records.length == 1);
+		hxn.Log.sink = record -> records.push(record);
+
+		records = [];
+		hxn.Loop.manual = true;
+		Diagnostics.emitLogs(1);
+		hxn.Log.info("manual frontend", "fixture");
+		check("manual loops defer diagnostics", records.length == 0);
+		hxn.Loop.sync();
+		check("manual sync delivers both origins", records.length == 2 && records[0].origin == "haxe" && records[1].origin == "rust");
+		hxn.Loop.manual = false;
+		records = [];
+		hxn.Log.level = Off;
+		Diagnostics.emitLogs(2);
+		hxn.Log.error("also hidden");
+		check("off disables both sides", records.length == 0);
+		hxn.Log.level = Info;
+		hxn.Log.sink = previous;
+	}
+
 	// Plain data: an enum is passed as its discriminant, and a struct, an
 	// option or a list is serialized to bytes on one side and deserialized on
 	// the other.
@@ -55,7 +160,15 @@ class Generated {
 		check("defaulting does not mutate the input", omitted.origin == null && Shapes.defaultOrigins() == before + 1);
 		var again = Shapes.defaults(defaults);
 		check("returned defaults are present on the next call", again.origin.x == 3 && Shapes.defaultOrigins() == before + 1);
-		var provided = Shapes.defaults({name: "provided", retries: 0, enabled: false, tags: [], limit: 0, origin: {x: 0, y: 0}, note: "kept"});
+		var provided = Shapes.defaults({
+			name: "provided",
+			retries: 0,
+			enabled: false,
+			tags: [],
+			limit: 0,
+			origin: {x: 0, y: 0},
+			note: "kept"
+		});
 		check("false, zero and empty values override defaults", provided.limit == 0 && provided.origin.x == 0 && provided.note == "kept" && Shapes.defaultOrigins() == before + 1);
 		defaults.origin = null;
 		defaults.limit = null;
@@ -92,9 +205,17 @@ class Generated {
 		inferred[1].push(3);
 		check("a tuple factory respects the expected type", inferred[1][0] == 3);
 
-		var tuples = Shapes.tupleData({pair: {_0: "naïve ☃", _1: 7}, nested: {_0: {_0: true, _1: 255}, _1: {_0: "nested", _1: 2.5}}, listed: [{_0: true}, {_0: false}]});
-		check("tuple fields keep their types and read order", tuples.pair[0] == "naïve ☃" && tuples.pair[1] == 7
-			&& tuples.nested[0][0] && tuples.nested[0][1] == 255 && tuples.nested[1][0] == "nested" && tuples.nested[1][1] == 2.5);
+		var tuples = Shapes.tupleData({
+			pair: {_0: "naïve ☃", _1: 7},
+			nested: {_0: {_0: true, _1: 255}, _1: {_0: "nested", _1: 2.5}},
+			listed: [{_0: true}, {_0: false}]
+		});
+		check("tuple fields keep their types and read order", tuples.pair[0] == "naïve ☃"
+			&& tuples.pair[1] == 7
+			&& tuples.nested[0][0]
+			&& tuples.nested[0][1] == 255
+			&& tuples.nested[1][0] == "nested"
+			&& tuples.nested[1][1] == 2.5);
 		check("one-byte tuples work inside a list", tuples.listed.length == 2 && tuples.listed[0][0] && !tuples.listed[1][0]);
 		check("a one-element tuple is distinct from its element", !Shapes.tupleOne({_0: false})[0]);
 		var pairs = Shapes.tupleValues([{_0: "first", _1: 0}, {_0: "second", _1: 255}]);
@@ -103,11 +224,18 @@ class Generated {
 		var optional = Shapes.tupleOptional({_0: Mode.Loud, _1: {x: 3.5, y: -1}});
 		check("an optional tuple may contain data", optional[0] == Mode.Loud && optional[1].x == 3.5 && Shapes.tupleOptional(null) == null);
 		var wide = haxe.Int64.make(0x12345678, 0x76543210);
-		var bytesTuple = Shapes.tupleBytes({_0: wide, _1: haxe.io.Bytes.ofString("hello"), _2: Mode.Quiet, _3: 255});
+		var bytesTuple = Shapes.tupleBytes({
+			_0: wide,
+			_1: haxe.io.Bytes.ofString("hello"),
+			_2: Mode.Quiet,
+			_3: 255
+		});
 		check("a tuple copy keeps wide integers", haxe.Int64.compare(bytesTuple.copy().at(0), wide) == 0);
 		check("a tuple array keeps wide integers", haxe.Int64.compare(cast bytesTuple.toArray()[0], wide) == 0);
-		check("tuples preserve bytes, enum and wide-number values", haxe.Int64.compare(bytesTuple.at(0), wide) == 0 && bytesTuple.at(1).toString() == "hello"
-			&& bytesTuple[2] == Mode.Quiet && bytesTuple[3] == 255);
+		check("tuples preserve bytes, enum and wide-number values", haxe.Int64.compare(bytesTuple.at(0), wide) == 0
+			&& bytesTuple.at(1).toString() == "hello"
+			&& bytesTuple[2] == Mode.Quiet
+			&& bytesTuple[3] == 255);
 		throws("tuple elements keep their range checks", () -> Shapes.tupleValues([{_0: "bad", _1: 256}]), "number out of range");
 		throws("a null tuple is refused", () -> Shapes.tupleOne(null), "null where a tuple is needed");
 		var tupleSet = Shapes.tupleSet([{_0: 2, _1: "b"}, {_0: 1, _1: "a"}, {_0: 2, _1: "b"}]).toArray();
@@ -132,7 +260,10 @@ class Generated {
 		made[cursor++] = 43;
 		check("an indexed tuple assignment uses one index", cursor == 2 && made.at(1) == 43);
 		var receivers = 0;
-		var receiver = () -> { receivers++; return made; };
+		var receiver = () -> {
+			receivers++;
+			return made;
+		};
 		receiver()[1] += 2;
 		check("compound tuple indexing evaluates its receiver once", receivers == 1 && made.at(1) == 45);
 		var typedNumber:Int = receiver().at(1);
@@ -165,8 +296,11 @@ class Generated {
 		check("empty records remain distinct list elements", Shapes.emptyValues([{}, {}]).length == 2);
 		check("and collapse to one set element", Shapes.emptySet([{}, {}]).length == 1 && Shapes.emptySet([]).length == 0);
 		var choices = Shapes.choices({selected: [Mode.Quiet, Mode.Quiet, Mode.Loud], groups: [[3, 1, 3], [], [2, -1]]});
-		check("sets nested in data keep their element types", choices.selected.length == 2 && choices.selected.has(Mode.Quiet)
-			&& choices.selected.has(Mode.Loud) && choices.groups[0].toArray().join(",") == "1,3" && choices.groups[1].length == 0
+		check("sets nested in data keep their element types", choices.selected.length == 2
+			&& choices.selected.has(Mode.Quiet)
+			&& choices.selected.has(Mode.Loud)
+			&& choices.groups[0].toArray().join(",") == "1,3"
+			&& choices.groups[1].length == 0
 			&& choices.groups[2].toArray().join(",") == "-1,2");
 		check("sets remove duplicate elements and preserve sorted order", Shapes.uniqueValues([3, -1, 3, 2, -1]).toArray().join(",") == "-1,2,3");
 		check("sets can be empty", Shapes.uniqueValues([]).length == 0);
@@ -221,22 +355,40 @@ class Generated {
 		check('every kind of field arrives: $described',
 			described == 'naïve ☃ x41 wide=4294967298 ratio=0.25 small=200 flags=4026531840 on Quiet at (0.5, -0.5) note=Some("kept") limit=None fallback=Some(Off) path=3 tags=a+𝄞 payload=[0, 255, 16] grid=[[1, 2, 3], [], [-4]]');
 		var bumped = Shapes.bumped(settings);
-		check("and comes back",
-			bumped.title == "naïve ☃!" && bumped.count == 42 && bumped.wide == haxe.Int64.make(257, 2) && bumped.ratio == 0.25 && bumped.small == 200
-			&& bumped.enabled && bumped.mode == Mode.Loud && bumped.origin.x == 0.5 && bumped.origin.y == -0.5);
+		check("and comes back", bumped.title == "naïve ☃!"
+			&& bumped.count == 42
+			&& bumped.wide == haxe.Int64.make(257, 2)
+			&& bumped.ratio == 0.25
+			&& bumped.small == 200
+			&& bumped.enabled
+			&& bumped.mode == Mode.Loud
+			&& bumped.origin.x == 0.5
+			&& bumped.origin.y == -0.5);
 		check("with what may be missing", bumped.note == "KEPT" && bumped.limit == null && bumped.fallback == Mode.Off);
 		check("an unsigned field keeps its bits", (bumped.flags : UInt) == (0xF0000000 : UInt));
-		check("and its lists",
-			bumped.path.length == 3 && bumped.path[0].x == 3 && bumped.path[2].x == 1 && bumped.tags.join(",") == "a,𝄞,bumped"
-			&& bumped.payload.toHex() == "00ff10" && bumped.grid.length == 3 && bumped.grid[0].join(",") == "1,2,3" && bumped.grid[1].length == 0
+		check("and its lists", bumped.path.length == 3
+			&& bumped.path[0].x == 3
+			&& bumped.path[2].x == 1
+			&& bumped.tags.join(",") == "a,𝄞,bumped"
+			&& bumped.payload.toHex() == "00ff10"
+			&& bumped.grid.length == 3
+			&& bumped.grid[0].join(",") == "1,2,3"
+			&& bumped.grid[1].length == 0
 			&& bumped.grid[2][0] == -4);
 		check("the record that went in is as it was", settings.count == 41 && settings.tags.length == 2);
 
 		var preset = Shapes.preset(Mode.Loud);
-		check("a record the library made",
-			preset.title == "preset" && preset.wide == haxe.Int64.make(-1, -1) && preset.small == 255 && preset.mode == Mode.Loud && preset.note == null
-			&& preset.limit == 7 && preset.fallback == Mode.Quiet && preset.path.length == 0 && preset.tags[1] == "naïve ☃"
-			&& preset.payload.toHex() == "00ff" && preset.grid[1].length == 0);
+		check("a record the library made", preset.title == "preset"
+			&& preset.wide == haxe.Int64.make(-1, -1)
+			&& preset.small == 255
+			&& preset.mode == Mode.Loud
+			&& preset.note == null
+			&& preset.limit == 7
+			&& preset.fallback == Mode.Quiet
+			&& preset.path.length == 0
+			&& preset.tags[1] == "naïve ☃"
+			&& preset.payload.toHex() == "00ff"
+			&& preset.grid[1].length == 0);
 		throws("or a failure in its place", () -> Shapes.preset(Mode.Off), "nothing is preset for off");
 		settings.small = 256;
 		throws("a field that does not fit its number is refused", () -> Shapes.describe(settings), "number out of range");
@@ -246,8 +398,8 @@ class Generated {
 		throws("and a record that is", () -> Shapes.describe(null), "null where a Settings is needed");
 		settings.title = "";
 
-		check("a list from a slice, and a record that may be missing",
-			Shapes.rightOf([{x: 1, y: 0}, {x: 5, y: 9}], 2).y == 9 && Shapes.rightOf([], 0) == null);
+		check("a list from a slice, and a record that may be missing", Shapes.rightOf([{x: 1, y: 0}, {x: 5, y: 9}], 2).y == 9
+			&& Shapes.rightOf([], 0) == null);
 		check("a list of numbers", Shapes.total([1, 2, 3, 4]) == 10 && Shapes.total([]) == 0);
 		check("a number that may be missing", Shapes.doubled(21) == 42 && Shapes.doubled(null) == null);
 		check("a list of text out", Shapes.words(" one  two ☃ ").join("|") == "one|two|☃" && Shapes.words("").length == 0);
@@ -258,8 +410,10 @@ class Generated {
 	}
 
 	static function numbers() {
-		check("narrow numbers come back as they went",
-			Numbers.byte(200) == 200 && Numbers.small(-100) == -100 && Numbers.word(60000) == 60000 && Numbers.short(-30000) == -30000);
+		check("narrow numbers come back as they went", Numbers.byte(200) == 200
+			&& Numbers.small(-100) == -100
+			&& Numbers.word(60000) == 60000
+			&& Numbers.short(-30000) == -30000);
 		throws("one too large for its type is refused", () -> Numbers.byte(256), "out of range");
 		throws("and one too small", () -> Numbers.small(-129), "out of range");
 		throws("an unsigned one is not negative", () -> Numbers.word(-1), "out of range");
@@ -270,7 +424,8 @@ class Generated {
 		throws("and the library can still refuse it", () -> Numbers.sized(101), "too many");
 		var all:UInt = Numbers.inverted(0);
 		var low:UInt = Numbers.inverted(0xF0000000);
-		check('an unsigned 32-bit number keeps its bits: $all', (all : Int) == -1 && (low : Int) == 0x0FFFFFFF && Std.string(all) == "4294967295");
+		check('an unsigned 32-bit number keeps its bits: $all', (all : Int) == -1
+			&& (low : Int) == 0x0FFFFFFF && Std.string(all) == "4294967295");
 		var big = haxe.Int64.make(0x12345678, 0x9ABCDEF0);
 		check('a 64-bit number comes back as it went: $big', Numbers.wide(big) == big && Numbers.wide(-big) == -big && Numbers.wide(7) == 7);
 		var squared = Numbers.squared(100000);
@@ -427,8 +582,13 @@ class Generated {
 	// Haxe functions passed as callbacks, borrowed for the duration of the
 	// call.
 	static function callbacks() {
-		var wide = [haxe.Int64.make(0x12345678, 0x76543210), haxe.Int64.make(0x7fffffff, -1), haxe.Int64.make(-2147483648, 0),
-			haxe.Int64.make(-1, -1), haxe.Int64.make(0, 0)];
+		var wide = [
+			haxe.Int64.make(0x12345678, 0x76543210),
+			haxe.Int64.make(0x7fffffff, -1),
+			haxe.Int64.make(-2147483648, 0),
+			haxe.Int64.make(-1, -1),
+			haxe.Int64.make(0, 0)
+		];
 		for (value in wide) {
 			check('all 64 bits reach a callback and return: $value', Numbers.mapWide(value, n -> n) == value);
 			check('a callback computes on all 64 bits: $value', Numbers.mapWide(value, n -> ~n) == ~value);
@@ -470,8 +630,8 @@ class Generated {
 		throws("and cannot give null", () -> Counter.titled(() -> null), "returned null");
 
 		var chunks = [];
-		check("bytes go to a lent function", counter.chunks(3, (bytes, index) -> chunks.push('$index:${bytes.toHex()}')) == 4
-			&& chunks.join(" ") == "0:300000 1:00 -1:");
+		check("bytes go to a lent function", counter.chunks(3,
+			(bytes, index) -> chunks.push('$index:${bytes.toHex()}')) == 4 && chunks.join(" ") == "0:300000 1:00 -1:");
 		var live = Counter.live();
 		var kept = [];
 		check("an object given to a lent function is its to keep", Counter.spawnEach(3, (made, word) -> {
@@ -546,7 +706,8 @@ class Generated {
 		check("an async function is a future of what it gives", Later.squared(7, 20).await() == 49);
 		throws("and of how it fails", () -> Later.squared(100000, 1).await(), "counter overflow");
 		check("what it was passed is its own by then", Later.shout("wörld ☃", haxe.io.Bytes.ofHex("010203")).await() == "hello wörld ☃! 3");
-		check("one that gives nothing is still waited for", Later.settle(5).await() == hxn.Unit.Nothing && Later.agree(true).await() == hxn.Unit.Nothing);
+		check("one that gives nothing is still waited for", Later.settle(5).await() == hxn.Unit.Nothing
+			&& Later.agree(true).await() == hxn.Unit.Nothing);
 		throws("or fails", () -> Later.agree(false).await(), "refused later");
 		var counted = Later.counted(8).await();
 		check("an object made by async work", counted.add(1) == 9);
@@ -559,7 +720,9 @@ class Generated {
 		var one = new Counter(3), two = new Counter(4);
 		var summed = Later.totalLater(one, two);
 		throws("an async function that takes an object by value closes it at once", () -> one.add(1), "closed");
-		check("and the work owns it", summed.await() == 7 && Later.totalLater(new Counter(1), null).await() == 1 && Counter.live() == before);
+		check("and the work owns it", summed.await() == 7
+			&& Later.totalLater(new Counter(1), null).await() == 1
+			&& Counter.live() == before);
 		var batch = Later.counterBatch(3).await();
 		check("a future transfers a batch in order", [for (counter in batch) counter.add(0)].join(",") == "1,2,3"
 			&& Counter.live() == before + 3);
@@ -582,7 +745,8 @@ class Generated {
 		throws("a stream of batches fails after its batches", () -> {
 			for (batch in Later.counterBatches()) {
 				batchSizes.push(batch.length);
-				check("a stream batch keeps its order", [for (counter in batch) counter.add(0)].join(",") == (batch.length == 0 ? "" : batch.length == 1 ? "1" : "1,2"));
+				check("a stream batch keeps its order",
+					[for (counter in batch) counter.add(0)].join(",") == (batch.length == 0 ? "" : batch.length == 1 ? "1" : "1,2"));
 				for (counter in batch)
 					counter.close();
 			}
@@ -661,12 +825,15 @@ class Generated {
 		var odometer = Later.odometer(7);
 		var far = haxe.Int64.make(256, 7);
 		var waited = 0;
-		while ((deliveredBatch < 0 || batchesFailed == "" || squared < 0 || refused == "" || !ended || ramp.peek() != 50 || label.peek() != "3" || odometer.peek() != far) && waited++ < 5000) {
+		while ((deliveredBatch < 0 || batchesFailed == "" || squared < 0 || refused == "" || !ended || ramp.peek() != 50 || label.peek() != "3"
+			|| odometer.peek() != far)
+			&& waited++ < 5000) {
 			hxn.Loop.sync();
 			Sys.sleep(0.001);
 		}
 		check("a continuation gets the complete owned batch", deliveredBatch == 3);
-		check("a listener gets batches before failure", listenedBatches.join(",") == "0,1,2" && batchesFailed.indexOf("batches ended") >= 0);
+		check("a listener gets batches before failure", listenedBatches.join(",") == "0,1,2"
+			&& batchesFailed.indexOf("batches ended") >= 0);
 		check("delivered batch objects are released", Counter.live() == before);
 		check("a continuation is called with the value", squared == 36);
 		check('or with the failure: $refused', refused.indexOf("counter overflow") >= 0);
@@ -729,10 +896,12 @@ class Generated {
 		} catch (error:CountException) {
 			caught = error;
 		}
-		check("a failure with data is an exception that holds it", caught != null && caught.message == "9 is more than 3" && switch (caught.error) {
-			case TooMany(limit, given): limit == 3 && given == 9;
-			case _: false;
-		});
+		check("a failure with data is an exception that holds it", caught != null
+			&& caught.message == "9 is more than 3"
+			&& switch (caught.error) {
+				case TooMany(limit, given): limit == 3 && given == 9;
+				case _: false;
+			});
 		caught = null;
 		try {
 			Events.checked(0);
@@ -755,8 +924,10 @@ class Generated {
 		} catch (error:RefusalException) {
 			refusal = error;
 		}
-		check("an error that is a record",
-			refusal != null && refusal.error.code == 7 && refusal.error.reason == "not today ☃" && refusal.message == "refused (7): not today ☃");
+		check("an error that is a record", refusal != null
+			&& refusal.error.code == 7
+			&& refusal.error.reason == "not today ☃"
+			&& refusal.message == "refused (7): not today ☃");
 		var trouble:TroubleException = null;
 		try {
 			Events.trouble(5);
@@ -787,26 +958,43 @@ class Generated {
 		var received:Array<Int> = [];
 		var streamError:CountException = null;
 		try {
-			for (item in checked) received.push(item);
-		} catch (error:CountException) { streamError = error; }
-		check("stream values precede their typed error", received.join(",") == "1,2" && streamError != null
-			&& streamError.error.match(Unknown("stream ☃")) && streamError.message == "unknown: stream ☃");
+			for (item in checked)
+				received.push(item);
+		} catch (error:CountException) {
+			streamError = error;
+		}
+		check("stream values precede their typed error", received.join(",") == "1,2"
+			&& streamError != null
+			&& streamError.error.match(Unknown("stream ☃"))
+			&& streamError.message == "unknown: stream ☃");
 		check("a typed stream error ends the stream", !checked.hasNext());
 		throws("a typed stream error is consumed once", () -> checked.next(), "closed");
 		check("a fallible stream can end successfully", [for (value in Events.checkedFeed(false)) value].join(",") == "1,2,99");
 		var points = Events.checkedPoints();
 		check("a fallible stream carries records", points.hasNext() && points.next().y == 4);
 		var pointError:RefusalException = null;
-		try { points.next(); } catch (error:RefusalException) { pointError = error; }
+		try {
+			points.next();
+		} catch (error:RefusalException) {
+			pointError = error;
+		}
 		check("a stream error can be a record", pointError != null && pointError.error.code == 8 && pointError.error.reason == "stream refused" && !points.hasNext());
 		var ticks = Events.checkedTicks();
 		check("a fallible stream carries unit", ticks.next() == hxn.Unit.Nothing);
 		var tickError:TroubleException = null;
-		try { ticks.next(); } catch (error:TroubleException) { tickError = error; }
+		try {
+			ticks.next();
+		} catch (error:TroubleException) {
+			tickError = error;
+		}
 		check("a stream error can be a C-like enum", tickError != null && tickError.error == Trouble.Major && !ticks.hasNext());
 		var chunks = Events.checkedBytes();
 		check("a fallible stream carries bytes", chunks.next().toString() == "hello");
-		try { chunks.next(); } catch (error:CountException) { check("a bytes stream has a typed error", error.error.match(Empty)); }
+		try {
+			chunks.next();
+		} catch (error:CountException) {
+			check("a bytes stream has a typed error", error.error.match(Empty));
+		}
 		check("a bytes stream ends after its error", !chunks.hasNext());
 
 		hxn.Loop.manual = true;
@@ -825,12 +1013,13 @@ class Generated {
 		var delivered:Array<Int> = [];
 		var deliveredError:CountException = null;
 		var ended = false;
-		Events.checkedFeed(true).listen(item -> delivered.push(item), () -> ended = true,
-			error -> deliveredError = Std.downcast(error, CountException));
+		Events.checkedFeed(true).listen(item -> delivered.push(item), () -> ended = true, error -> deliveredError = Std.downcast(error, CountException));
 		waited = 0;
-		while (deliveredError == null && waited++ < 5000) { hxn.Loop.sync(); Sys.sleep(0.001); }
-		check("listen delivers values then the typed failure", delivered.join(",") == "1,2" && deliveredError != null
-			&& deliveredError.error.match(Unknown("stream ☃")) && !ended);
+		while (deliveredError == null && waited++ < 5000) {
+			hxn.Loop.sync();
+			Sys.sleep(0.001);
+		}
+		check("listen delivers values then the typed failure", delivered.join(",") == "1,2" && deliveredError != null && deliveredError.error.match(Unknown("stream ☃")) && !ended);
 
 		hxn.Loop.manual = false;
 
@@ -839,8 +1028,8 @@ class Generated {
 		var reshaped = Events.reshaped(Progress(1, 2), event -> Batch([event, Started]));
 		check("takes and gives an enum that holds values", reshaped.match(Batch([Progress(1, 2), Started])));
 		var picked = Events.picked([{x: 1, y: 1}, {x: 2, y: 2}], (points, mode) -> mode == Mode.Loud ? points[points.length - 1] : null);
-		check("takes a list and gives what may be missing",
-			picked.x == 2 && Events.picked([], (points, _) -> points.length == 0 ? null : points[0]) == null);
+		check("takes a list and gives what may be missing", picked.x == 2
+			&& Events.picked([], (points, _) -> points.length == 0 ? null : points[0]) == null);
 		check("gives bytes", Events.stamped(n -> haxe.io.Bytes.ofHex(n == 1 ? "0a0b" : "")).toHex() == "0a0b");
 		check("an enum each way", Events.graded(mode -> mode == Mode.Quiet ? Mode.Off : Mode.Loud) == Mode.Off);
 		throws("what one throws reaches the caller", () -> Events.reshaped(Started, _ -> throw new haxe.Exception("no shape")), "no shape");
@@ -908,7 +1097,9 @@ class Generated {
 		var objects = Events.checkedObjects();
 		var owned = objects.next();
 		check("a fallible stream transfers object ownership", owned.add(0) == 7 && Counter.live() == live + 2);
-		try { objects.next(); } catch (error:CountException) {}
+		try {
+			objects.next();
+		} catch (error:CountException) {}
 		check("objects queued after an error are dropped", !objects.hasNext() && Counter.live() == live + 1);
 		owned.close();
 		var nullable = Events.checkedOptional();
@@ -916,15 +1107,19 @@ class Generated {
 		owned = nullable.next();
 		check("a fallible stream carries optional objects", owned.add(0) == 8);
 		owned.close();
-		try { nullable.next(); } catch (error:CountException) {}
+		try {
+			nullable.next();
+		} catch (error:CountException) {}
 		var batches = Events.checkedBatches();
 		var batch = batches.next();
 		check("a fallible stream carries batches of objects", batch.length == 2 && batch[0].add(0) == 5 && batch[1].add(0) == 6);
-		for (item in batch) item.close();
+		for (item in batch)
+			item.close();
 		check("an empty batch is still an item", batches.next().length == 0);
-		try { batches.next(); } catch (error:CountException) {}
+		try {
+			batches.next();
+		} catch (error:CountException) {}
 		check("batches after an error are dropped", !batches.hasNext() && Counter.live() == live);
-
 	}
 
 	static function main() {
@@ -973,6 +1168,7 @@ class Generated {
 		throws("use after close", () -> counter.add(1), "closed");
 
 		handles();
+		logging();
 		functions();
 		numbers();
 		data();

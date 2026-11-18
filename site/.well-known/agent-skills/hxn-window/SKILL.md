@@ -111,3 +111,8 @@ that regenerates the shared browser modules. `hxn package` preserves the
 registration and ships the Haxe tool under `sources/`. See hxn's CLI extension
 protocol and conventions when changing hooks. Build threaded packages with
 `--release` when linking them with released GPU libraries.
+
+## Redistribution
+
+Retain the applicable [dependency licenses and notices](https://github.com/hx-n/hxn-window/blob/main/third-party/NOTICES.md)
+when distributing binaries. Release packages include `third-party/`.

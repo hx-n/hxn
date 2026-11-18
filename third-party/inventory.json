@@ -2,11 +2,11 @@
   "inputs": [
     {
       "path": "Cargo.lock",
-      "sha256": "b4cdfa97dccec1cb51b4a814e090a36efebfaa9f9a4faf1a04fc78bdafee929c"
+      "sha256": "442dc578b1b892c679f7f3dda367118b7578f0bdd12dc04cf752dd78c05af8eb"
     },
     {
       "path": "crates/hxn/Cargo.toml",
-      "sha256": "e10cc2cc97dbb34e442128a19a83caf025c701e1f6b59f891ed9759e2fb05ccf"
+      "sha256": "5e6a50e9ffbdd189209a0f91ebc2ebfc14210997a20da3f3e8879fc528c6cf5e"
     },
     {
       "path": "crates/hxn-abi/Cargo.toml",
@@ -38,31 +38,31 @@
     },
     {
       "path": "examples/document/Cargo.toml",
-      "sha256": "26f0974e03804fd9830ec4f6e7c13c9881d402d7517b25ddad0ae27c89b93305"
+      "sha256": "5d9f7168f7ad3bb8c7725a4c79292bf98869a2214489bd4e916d559398919b5b"
     },
     {
       "path": "examples/downloads/Cargo.toml",
-      "sha256": "07995066292ee54610aebb60fb97eef10a370c0684562954d491ed32f5700ba9"
+      "sha256": "f35491f97cab321a1337839b97775c2dd4791850e13299e1c6e16f86e0a08688"
     },
     {
       "path": "examples/greeter/Cargo.toml",
-      "sha256": "abe7d97b7df0d1dc825984720da8a0436a01d8bbba98b705718cda2784c191f6"
+      "sha256": "2bcb8fd533b271be6817e23a7b461409be3d19e91dd9cf2193a73c572d2a35cf"
     },
     {
       "path": "examples/pantry/Cargo.toml",
-      "sha256": "ef8c49136a2fc2ef09b33239924baa5412fc792632bcbfb9dd25e49f014fd128"
+      "sha256": "90fd85c507bd25724a40cc9f997ee17e4ad83c4d0b1020e98853b5dd3705aebf"
     },
     {
       "path": "examples/picture/Cargo.toml",
-      "sha256": "ecc7bdda7d5ef62c112b6aa817481c9c9529051f7d9825bb0824f5ca206f2e28"
+      "sha256": "deb469ef65d21ec54584b9bd45e678e206cbcecae35827f7bde04fb4807ddc77"
     },
     {
       "path": "examples/primes/Cargo.toml",
-      "sha256": "8672300ad1788b25bce3fae778016552c25871a61fcf38e4f1cdaa72d62346f1"
+      "sha256": "88bbf492dc767f2211ba523b5f62c87ea4a217eedc47f79078816ec53280e0aa"
     },
     {
       "path": "examples/thermostat/Cargo.toml",
-      "sha256": "43741ce0bee6f7b26e65aa1c969d74f0607c619236809820186c4b9703ee4ba9"
+      "sha256": "048f8a621d2a92bb43bd78435ec7dfa5b6f2567ea62888d24b86840edf3b2b7e"
     },
     {
       "path": "tests/counter/c/Cargo.toml",

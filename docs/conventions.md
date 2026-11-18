@@ -11,6 +11,7 @@ the implementation.
 - [Runtime bindings](conventions/bindings.md)
 - [CLI extensions](conventions/cli-extensions.md)
 - [Threads and delivery](conventions/threads.md)
+- [Logging](conventions/logging.md)
 
 ## Contribution
 

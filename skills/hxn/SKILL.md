@@ -120,8 +120,25 @@ pub struct Item { pub name: String, pub count: i32 }
   `lib<library>.a`, which Ash links:
   `ash --build main --target <triple> --native-lib lib<library>.a main.hl`,
   with `-D hxn_triple=<triple>` when compiling the Haxe.
+
 - `hxn run cppia` builds an hxcpp host with the binding and runs the program
   as a script.
+
+## Core logging
+
+Use `hxn::log::info!`/`warn!`/`error!`/`debug!`/`trace!` in Rust and
+`hxn.Log` in Haxe. Logging is part of core, not a separate library.
+The application owns `Log.level` and `Log.sink`; libraries use stable targets
+and leave configuration to it. Generated bindings pull bounded native records
+and deliver them to the shared Haxe sink only after boundary bookkeeping.
+Keep native workers independent of Haxe callbacks and real-time callbacks free
+of logging. A frame loop calls `Loop.sync`; otherwise idle background logs need
+an application-driven `Log.flush`, without a permanent logging timer/thread.
+With `Loop.manual`, both frontends batch diagnostics at the explicit sync;
+keep native log polling out of each frame-loop call.
+Read the [logging contract](https://github.com/hx-n/hxn/blob/main/docs/design/logging.md)
+and [logging conventions](https://github.com/hx-n/hxn/blob/main/docs/conventions/logging.md).
+Retain source metadata, UTF-8 bounds, drop accounting and older-binding support.
 
 ## Binding a C library
 

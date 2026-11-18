@@ -34,6 +34,7 @@ class Loop {
 		// Each inbox checks the meters in its sync. With no inbox, they are checked here.
 		if (inboxes.length == 0)
 			Gc.check();
+		Log.flush();
 		return watching;
 	}
 
@@ -52,6 +53,7 @@ class Loop {
 		`Sys.exit`.
 	**/
 	public static function exit(code:Int):Void {
+		Log.flush();
 		#if (cpp && !emscripten)
 		Sys.stdout().flush();
 		Sys.stderr().flush();

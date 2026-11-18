@@ -105,4 +105,11 @@ retain guest pointers. Unthreaded hxcpp uses `then` for media-copy futures.
 
 Feed decoded blocks to hxn-audio's `DecoderStream`; PCM conversion belongs
 here, and device output/mixing belongs there. Keep native/mobile codec
-behavior passing. Read docs/design.md and docs/conventions.md when editing.
+behavior passing. Read [design](https://github.com/hx-n/hxn-av/blob/main/docs/design.md) and
+[conventions](https://github.com/hx-n/hxn-av/blob/main/docs/conventions.md) when editing.
+
+## Redistribution
+
+Retain the applicable [dependency licenses and notices](https://github.com/hx-n/hxn-av/blob/main/third-party/NOTICES.md)
+when distributing binaries. Release packages include `third-party/`.
+Resolve the pinned xavi crates' missing upstream license before releasing.

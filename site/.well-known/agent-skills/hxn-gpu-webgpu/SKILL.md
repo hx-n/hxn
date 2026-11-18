@@ -108,3 +108,8 @@ Test with the hxn CLI, hxnsl, the Emscripten SDK, Ash and Chrome, with
 `hxn check cpp --wasm --threads --browser` and
 `hxn check hl --wasm --threads --browser`.
 `src/ffi.rs` is generated from emdawnwebgpu's webgpu.h by bindgen.
+
+## Redistribution
+
+Retain the applicable [dependency licenses and notices](https://github.com/hx-n/hxn-gpu-webgpu/blob/main/third-party/NOTICES.md)
+when distributing binaries. Release packages include `third-party/`.

@@ -18,4 +18,5 @@ For usage, see [CLI commands](cli.md), [packaging](packaging.md) and
 - [Futures, streams and scheduling](design/async.md)
 - [Reactivity](design/reactivity.md)
 - [Binding generation](design/generation.md)
+- [Logging](design/logging.md)
 - [CLI extensions](design/cli-extensions.md)

@@ -166,6 +166,13 @@ fn natives(library: &Library) -> String {
     );
     out.push_str(&declaration("memory_held", &[], &Type::F64, &[]));
     out.push_str(&declaration("memory_wanted", &[], &Type::Bool, &[]));
+    out.push_str(&declaration(
+        "log_level",
+        &[(String::from("level"), Type::I32)],
+        &Type::Void,
+        &[],
+    ));
+    out.push_str("\tpublic static function log_take():Null<haxe.io.Bytes>;\n");
     for interface in &library.interfaces {
         let name = &interface.name;
         for method in &interface.methods {
@@ -407,7 +414,10 @@ fn module(library: &Library, interface: &Interface) -> String {
     let native = native_class(library);
     let mut out = String::from(HEADER);
     if interface.namespace {
-        out.push_str(&format!("{NAMESPACE_DOCS}class {name} {{"));
+        out.push_str(&format!(
+            "{NAMESPACE_DOCS}@:build(hxn.Log.bind())\nclass {name} {{\n{}",
+            meter(library)
+        ));
         for (index, m) in interface.methods.iter().enumerate() {
             out.push_str(if index == 0 { "\n" } else { "\n\n" });
             out.push_str(method(library, interface, m).trim_end());
@@ -422,7 +432,7 @@ fn module(library: &Library, interface: &Interface) -> String {
         ""
     };
     out.push_str(&format!(
-        "class {name} {{\n\t@:noCompletion public var hxnRaw:hxn.Handle;\n{meter}\n\t/** An object for a value the library returned. **/\n\t@:noCompletion public static function hxnAdopt(hxnRaw:hxn.Handle):{name} {{\n\t\tvar made:{name} = Type.createEmptyInstance({name});\n\t\tmade.hxnRaw = hxnRaw;\n{check}\t\treturn made;\n\t}}\n",
+        "@:build(hxn.Log.bind())\nclass {name} {{\n\t@:noCompletion public var hxnRaw:hxn.Handle;\n{meter}\n\t/** An object for a value the library returned. **/\n\t@:noCompletion public static function hxnAdopt(hxnRaw:hxn.Handle):{name} {{\n\t\tvar made:{name} = Type.createEmptyInstance({name});\n\t\tmade.hxnRaw = hxnRaw;\n{check}\t\treturn made;\n\t}}\n",
         meter = meter(library),
     ));
     for m in &interface.methods {
@@ -467,7 +477,7 @@ fn thrown_file(library: &Library) -> String {
 
 fn memory(library: &Library) -> String {
     format!(
-        "{HEADER}/**\n\t{MEMORY_DOCS}\n**/\nclass {name} {{\n\tpublic static final meter = new hxn.Gc.Meter(() -> {native}.memory_held(), () -> {native}.memory_wanted());\n}}\n",
+        "{HEADER}/**\n\t{MEMORY_DOCS}\n**/\nclass {name} {{\n\t@:keep static final logging = hxn.Log.attach(level -> {native}.log_level(level), () -> {native}.log_take());\n\tpublic static final meter = new hxn.Gc.Meter(() -> {native}.memory_held(), () -> {native}.memory_wanted());\n}}\n",
         native = native_class(library),
         name = memory_class(library),
     )

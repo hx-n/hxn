@@ -6,6 +6,7 @@
 
 - Interfaces and data are public, reachable at the crate root and uniquely
   named across the library. `#[hxn::methods]` uses the bare interface name.
+  Adapter names Atomic, Memory, Future, Stream, Signal, Outbox and Log are reserved.
 - Receivers are `&self`, `&mut self`, `self` or absent; `new` is the constructor.
   Moving `self` closes the Haxe object. Exposed APIs have no general generics.
 - Every class gets a `close()` that releases its value, unless the interface

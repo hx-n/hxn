@@ -25,6 +25,15 @@ pub const HAXE: &[(&str, &str)] = &[
     ("hxn/Gc.hx", include_str!("../../../haxe/hxn/Gc.hx")),
     ("hxn/Handle.hx", include_str!("../../../haxe/hxn/Handle.hx")),
     ("hxn/Inbox.hx", include_str!("../../../haxe/hxn/Inbox.hx")),
+    ("hxn/Log.hx", include_str!("../../../haxe/hxn/Log.hx")),
+    (
+        "hxn/LogLevel.hx",
+        include_str!("../../../haxe/hxn/LogLevel.hx"),
+    ),
+    (
+        "hxn/LogRecord.hx",
+        include_str!("../../../haxe/hxn/LogRecord.hx"),
+    ),
     ("hxn/Loop.hx", include_str!("../../../haxe/hxn/Loop.hx")),
     ("hxn/Native.hx", include_str!("../../../haxe/hxn/Native.hx")),
     (

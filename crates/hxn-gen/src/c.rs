@@ -111,6 +111,7 @@ pub fn c_header(library: &Library) -> String {
         ));
     }
     out.push_str(&later::c_header(library));
+    out.push_str(&crate::logging::c_header(library));
     if !library.errors().is_empty() {
         out.push_str(&format!(
             "\n/* The value of the failure this thread just met, where the library failed with\n * data of its own: 1 and the bytes, which start with which error it is, or 0. */\nint32_t {}(hxn_buf *out);\n",
@@ -278,6 +279,7 @@ pub fn cpp_glue(library: &Library) -> String {
         library.name, library.name
     ));
     out.push_str(&lent::cpp_trampolines(library));
+    out.push_str(&crate::logging::cpp_glue(library));
     out.push_str(&format!(
         "\n// What a finalizer calls: it frees, and touches nothing of the runtime's.\ninline void release(void *self) {{\n\t{release}((hxn_handle *)self);\n}}\n\ninline double memory_held() {{\n\treturn {held}();\n}}\n\ninline bool memory_wanted() {{\n\treturn {wanted}() != 0;\n}}\n",
         release = release(library),

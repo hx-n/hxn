@@ -98,3 +98,8 @@ compute and render program.
 
 Test with the hxn CLI and hxnsl: `hxn check hl --vm ash` and
 `hxn check cpp cppia` run `examples/check` and compare output across runtimes.
+
+## Redistribution
+
+Retain the applicable [dependency licenses and notices](https://github.com/hx-n/hxn-gpu-metal/blob/main/third-party/NOTICES.md)
+when distributing binaries. Release packages include `third-party/`.

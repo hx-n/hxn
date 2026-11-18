@@ -95,6 +95,7 @@ class Future<T> {
 			}
 			lock.release();
 		}
+		Log.boundary();
 		if (failure != null)
 			throw failure;
 		return value;

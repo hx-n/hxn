@@ -101,3 +101,8 @@ complete compute and render program with its barriers.
 Test with the hxn CLI, hxnsl and a Vulkan driver: `hxn check hl --vm ash`
 and `hxn check cpp cppia`. Run with `VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation`
 to have Vulkan check every call.
+
+## Redistribution
+
+Retain the applicable [dependency licenses and notices](https://github.com/hx-n/hxn-gpu-vulkan/blob/main/third-party/NOTICES.md)
+when distributing binaries. Release packages include `third-party/`.

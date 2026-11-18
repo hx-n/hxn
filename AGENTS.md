@@ -80,7 +80,7 @@ for the area you are changing:
 
 | Path | What it is |
 |---|---|
-| `crates/hxn` | The crate a library depends on: the marker attributes. |
+| `crates/hxn` | The crate a library depends on: the marker attributes and shared logging API. |
 | `crates/hxn-abi` | The runtime-neutral core: the types passed across the boundary, and their ownership. |
 | `crates/hxn-hl` | HashLink support: handles with finalizers, string conversion, exceptions thrown after the Rust call returns. |
 | `crates/hxn-future` | Futures, streams, signals, and running work with or without threads. |
@@ -88,7 +88,7 @@ for the area you are changing:
 | `crates/hxn-c` | Imports a C header as WebIDL, and generates a Rust crate from the WebIDL. |
 | `crates/hxn-cli` | The `hxn` command: creates a library, builds its binding for a runtime, and runs its Haxe program. |
 | `include/hxn.h` | The `hxn-abi` layouts as C declarations, and the helpers the hxcpp glue uses. |
-| `haxe/hxn` | The Haxe side: `Future`, `Stream`, `Signal`, `Computed`, `Reactive`, `Inbox`, `Loop`, `Callback`, `AtomicInt`, `AtomicBool`, `Gc`, `Unit`, `Wire`, and the macro `Bind`. |
+| `haxe/hxn` | The Haxe side: `Future`, `Stream`, `Signal`, `Computed`, `Reactive`, `Inbox`, `Loop`, `Log`, `LogLevel`, `LogRecord`, `Callback`, `AtomicInt`, `AtomicBool`, `Gc`, `Unit`, `Wire`, and the macro `Bind`. |
 | `examples` | Small example libraries: each a crate, a Haxe program and its expected output. |
 | `tests/counter` | The test fixture: a small library with bindings for every runtime, and the Haxe test that runs on all of them. |
 | `tests/cli` | Creates a library with `hxn new`, runs it as the readme describes, and packages it. |

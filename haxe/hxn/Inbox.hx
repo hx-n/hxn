@@ -130,6 +130,7 @@ class Inbox {
 		});
 		// The delivery may have dropped the last reference to a large native value.
 		Gc.check();
+		Log.flush();
 		if (failure != null)
 			throw failure;
 		return watching > 0;

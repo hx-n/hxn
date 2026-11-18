@@ -40,13 +40,13 @@ Git Bash, or download the zip from the
 choose another directory, for example:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/hx-n/hxn/main/install.sh | HXN_VERSION=v0.3.8 HXN_INSTALL_DIR="$HOME/.local/bin" bash
+curl -fsSL https://raw.githubusercontent.com/hx-n/hxn/main/install.sh | HXN_VERSION=v0.3.9 HXN_INSTALL_DIR="$HOME/.local/bin" bash
 ```
 
 To build the command from source, use Cargo:
 
 ```
-cargo install --git https://github.com/hx-n/hxn --tag v0.3.8 hxn-cli
+cargo install --git https://github.com/hx-n/hxn --tag v0.3.9 hxn-cli
 ```
 
 Create a library with `hxn new`:
@@ -223,6 +223,13 @@ in Cargo.toml, and the haxelib contributors and a release note under
 contributors = ["your-haxelib-name"]
 releasenote = "First release."
 ```
+
+## Logging
+
+Core logging uses `hxn.Log.info("message", "target")` in Haxe and
+`hxn::log::info!("message")` in Rust. Both feed an application-configurable
+Haxe sink, with console output by default. See [logging](https://github.com/hx-n/hxn/blob/main/docs/design/logging.md)
+for filters, worker delivery and record metadata.
 
 ## Binding a C library
 

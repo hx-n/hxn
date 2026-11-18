@@ -40,6 +40,7 @@ macro_rules! package {
     ($name:literal) => {};
 }
 
+pub use hxn_abi::log;
 pub use hxn_abi::memory::collect_soon;
 pub use hxn_abi::{AtomicFlag, Weight};
 pub use hxn_macros::{data, function, interface, methods};

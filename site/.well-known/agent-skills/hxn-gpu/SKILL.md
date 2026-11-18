@@ -75,3 +75,8 @@ Render: `createRenderPipeline({shader, format, topology, vertexBuffers})`,
 
 https://github.com/hx-n/hxn-gpu. `examples/check/Main.hx` computes, renders,
 samples a texture and reads a buffer back on each backend.
+
+## Redistribution
+
+Retain the applicable [dependency licenses and notices](https://github.com/hx-n/hxn-gpu/blob/main/third-party/NOTICES.md)
+when distributing binaries. Release packages include `third-party/`.

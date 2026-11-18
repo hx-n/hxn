@@ -98,3 +98,8 @@ Test with the hxn CLI and hxnsl: `hxn check hl --vm ash` and
 `hxn check cpp cppia`. On macOS, point `HXN_GPU_GLES_EGL` at an ANGLE
 `libEGL.dylib`, such as the one in an Electron app's
 `Electron Framework.framework/Versions/A/Libraries/`.
+
+## Redistribution
+
+Retain the applicable [dependency licenses and notices](https://github.com/hx-n/hxn-gpu-gles/blob/main/third-party/NOTICES.md)
+when distributing binaries. Release packages include `third-party/`.
