@@ -79,4 +79,9 @@ The [CI workflows](https://github.com/hx-n/hxn-assets/tree/main/.github/workflow
 run Rust/macro checks, native file/asset/remote fixtures on Linux, macOS and
 Windows, and real Chrome pages in Ash and both hxcpp wasm modes. Reuse the
 bounded runners under tests/ci; they are repository test tooling, not consumer
-commands. Mobile bundle/APK persistence still requires device verification.
+commands. For mobile bundle/APK reads, persistence across fresh app processes,
+shared logging and real URI traffic, use the bounded
+[mobile fixture](https://github.com/hx-n/hxn-assets/blob/main/tests/mobile/run.py)
+with both hl (Ash AOT) and cpp on iOS simulator and Android emulator. Its app
+hosts and Android context shim are test-only; keep them out of consumer tooling.
+Physical-device lifecycle and network-transition checks are separate coverage.

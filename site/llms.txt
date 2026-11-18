@@ -7,6 +7,7 @@ Each library has an agent skill: a SKILL.md whose frontmatter says when to use i
 ## Agent skills
 
 - [hxn](https://hxn.dev/.well-known/agent-skills/hxn/SKILL.md): Write a Rust library for Haxe with hxn's attributes, and build, test and package it with the hxn command.
+- [hxn-log](https://hxn.dev/.well-known/agent-skills/hxn-log/SKILL.md): Core Haxe/Rust logging, application-owned shared sinks, severity filtering and native delivery.
 - [hxn-window](https://hxn.dev/.well-known/agent-skills/hxn-window/SKILL.md): Native windows from Haxe: events, monitors, gamepads, the clipboard and GPU surface handles.
 - [hxn-av](https://hxn.dev/.well-known/agent-skills/hxn-av/SKILL.md): Audio and video from Haxe with the platform's codecs: playback, frames, PCM audio, an equalizer, AAC and H.264, and MP4.
 - [hxn-audio](https://hxn.dev/.well-known/agent-skills/hxn-audio/SKILL.md): Audio output, voices, bounded PCM streams, buses and effects on native and browser runtimes.

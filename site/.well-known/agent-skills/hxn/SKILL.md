@@ -139,6 +139,8 @@ keep native log polling out of each frame-loop call.
 Read the [logging contract](https://github.com/hx-n/hxn/blob/main/docs/design/logging.md)
 and [logging conventions](https://github.com/hx-n/hxn/blob/main/docs/conventions/logging.md).
 Retain source metadata, UTF-8 bounds, drop accounting and older-binding support.
+For focused application and adapter guidance, use the
+[core logging skill](https://github.com/hx-n/hxn/blob/main/skills/hxn-log/SKILL.md).
 
 ## Binding a C library
 

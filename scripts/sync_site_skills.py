@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'site' / '.well-known' / 'agent-skills'
 SCHEMA = 'https://schemas.agentskills.io/discovery/0.2.0/schema.json'
 # (repository, skill name), in the order the index lists them.
-SKILLS = [('hxn', 'hxn'), ('hxn-window', 'hxn-window'), ('hxn-av', 'hxn-av'), ('hxn-audio', 'hxn-audio'), ('hxn-assets', 'hxn-file'), ('hxn-assets', 'hxn-assets'), ('hxnsl', 'hxnsl'), ('hxn-gpu', 'hxn-gpu'), ('hxn-gpu-metal', 'hxn-gpu-metal'), ('hxn-gpu-vulkan', 'hxn-gpu-vulkan'), ('hxn-gpu-d3d12', 'hxn-gpu-d3d12'), ('hxn-gpu-gles', 'hxn-gpu-gles'), ('hxn-gpu-webgpu', 'hxn-gpu-webgpu'), ('hxn-gpu-webgl2', 'hxn-gpu-webgl2')]
+SKILLS = [('hxn', 'hxn'), ('hxn', 'hxn-log'), ('hxn-window', 'hxn-window'), ('hxn-av', 'hxn-av'), ('hxn-audio', 'hxn-audio'), ('hxn-assets', 'hxn-file'), ('hxn-assets', 'hxn-assets'), ('hxnsl', 'hxnsl'), ('hxn-gpu', 'hxn-gpu'), ('hxn-gpu-metal', 'hxn-gpu-metal'), ('hxn-gpu-vulkan', 'hxn-gpu-vulkan'), ('hxn-gpu-d3d12', 'hxn-gpu-d3d12'), ('hxn-gpu-gles', 'hxn-gpu-gles'), ('hxn-gpu-webgpu', 'hxn-gpu-webgpu'), ('hxn-gpu-webgl2', 'hxn-gpu-webgl2')]
 
 
 def frontmatter(text):

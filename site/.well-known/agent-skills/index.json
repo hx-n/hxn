@@ -6,7 +6,14 @@
       "type": "skill-md",
       "description": "Expose a Rust library to Haxe with hxn, so one set of generated Haxe classes runs on HashLink, Ash, hxcpp and CPPIA, natively and on wasm. Use when writing or changing a crate annotated with #[hxn::interface], #[hxn::methods], #[hxn::function] or #[hxn::data], running the hxn command (new, build, run, check, package, import, doctor), packaging an hxn library as a haxelib, binding a C header with hxn import, or extending the hxn CLI with haxelib plugins.",
       "url": "/.well-known/agent-skills/hxn/SKILL.md",
-      "digest": "sha256:24a00322966461fe0de6209311a1bb27b6424f710365b87bdf4f1387c868ba68"
+      "digest": "sha256:29ad68abd37f24abf407b4cfb5a0aeb84ddff60f12a0a2f889e02fd3132b8a10"
+    },
+    {
+      "name": "hxn-log",
+      "type": "skill-md",
+      "description": "Use or change hxn core logging from Haxe and Rust, including shared sinks, severity filters, native record delivery and platform-console output. Use for app consoles or overlays and library diagnostics; logging is part of hxn, not a separate haxelib.",
+      "url": "/.well-known/agent-skills/hxn-log/SKILL.md",
+      "digest": "sha256:4ebe03a6ead32553307c0687167b2fe2a33417280f879fab2b733bc8f660bd53"
     },
     {
       "name": "hxn-window",
@@ -34,14 +41,14 @@
       "type": "skill-md",
       "description": "Use or change hxn-file bundled reads, application saves, preferences, native roots and browser persistence across hxn runtimes.",
       "url": "/.well-known/agent-skills/hxn-file/SKILL.md",
-      "digest": "sha256:678049d124d76647ac4eb9b1059f9a252191718024f7c529f2b3333271032e95"
+      "digest": "sha256:8634dd2c58a9d6238dbae659cb74d11e7438503538f890c886659364a4b8ce14"
     },
     {
       "name": "hxn-assets",
       "type": "skill-md",
       "description": "Use or change hxn-assets typed embedded and dynamic values, metadata catalogs, HTTP/WS streams, content identity, byte caching and the hxn assets CLI.",
       "url": "/.well-known/agent-skills/hxn-assets/SKILL.md",
-      "digest": "sha256:2f645d40ad51cf389a366013701c64e5c11b3b2cc2654bcd6804833c1e6a51d5"
+      "digest": "sha256:7aeb11a2931687d0b3c00cf44423d326ea4d8762b076a96ec07833a1b91b2a02"
     },
     {
       "name": "hxnsl",
