@@ -25,7 +25,7 @@ Each library has an agent skill: a SKILL.md whose frontmatter says when to use i
 - [hxn 0.3.8](https://hxn.dev/api/hxn/): Futures, streams, signals, reactive values, atomics and callbacks: the Haxe classes every hxn library uses.
 - [hxn-window 0.2.1](https://hxn.dev/api/hxn-window/): Native and browser windows, input, monitors, gamepads and the clipboard, with handles for GPU surfaces.
 - [hxn-av 0.2.0](https://hxn.dev/api/hxn-av/): Audio and video with the platform's codecs: playback, frames, PCM audio, an equalizer, AAC, H.264 and MP4.
-- [hxn-audio 0.1.0](https://hxn.dev/api/hxn-audio/): Audio output and mixing: voices, bounded PCM streams, buses and effects on native and browser runtimes. The Av and DecoderStream helpers require hxn-av.
+- [hxn-audio 0.1.1](https://hxn.dev/api/hxn-audio/): Audio output and mixing: voices, bounded PCM streams, buses and effects on native and browser runtimes. The Av and DecoderStream helpers require hxn-av.
 - [hxnsl 0.2.0](https://hxn.dev/api/hxnsl/): Shaders written in HXSL and translated at compile time to WGSL, MSL, HLSL, SPIR-V and GLSL ES.
 - [hxn-gpu 0.2.3](https://hxn.dev/api/hxn-gpu/): One GPU API over every hxn GPU driver, with features and limits per device and a default backend per platform.
 - [hxn-gpu-metal 0.2.0](https://hxn.dev/api/hxn-gpu-metal/): Metal on macOS and iOS: compute and render passes, with hxnsl shaders compiled into Metal libraries.

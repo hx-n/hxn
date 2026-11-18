@@ -36,7 +36,7 @@ LIBRARIES = [
          summary='Native and browser windows, input, monitors, gamepads and the clipboard, with handles for GPU surfaces.'),
     dict(name='hxn-av', version='0.2.0', prefix='hxn.av.', roots=['--macro', "include('hxn.av')"],
          summary='Audio and video with the platform\'s codecs: playback, frames, PCM audio, an equalizer, AAC, H.264 and MP4.'),
-    dict(name='hxn-audio', version='0.1.0', prefix='hxn.audio.', roots=['--macro', "include('hxn.audio', true, ['hxn.audio.cli'])"],
+    dict(name='hxn-audio', version='0.1.1', prefix='hxn.audio.', roots=['--macro', "include('hxn.audio', true, ['hxn.audio.cli'])"],
          libs=['hxn-av:0.2.0'],
          hide=[r'^hxn\.audio\.(cli\.|Init$)'],
          summary='Audio output and mixing: voices, bounded PCM streams, buses and effects on native and browser runtimes. The Av and DecoderStream helpers require hxn-av.'),
