@@ -118,3 +118,10 @@ glslangValidator, DXC and the Metal compiler. Open issues are in git-bug.
 
 Retain the applicable [dependency licenses and notices](https://github.com/hx-n/hxnsl/blob/main/third-party/NOTICES.md)
 when distributing binaries. Release packages include `third-party/`.
+
+## Logging
+
+The compiler tool uses `hxn::log` with target `hxnsl`. It runs in a separate
+process, so diagnostics go to its stderr and become Haxe compiler errors;
+it does not configure the application runtime sink.
+Read the [core logging contract](https://github.com/hx-n/hxn/blob/main/docs/design/logging.md).

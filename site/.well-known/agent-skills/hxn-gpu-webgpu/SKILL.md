@@ -91,7 +91,8 @@ bytesPerRow)`, `device.createSampler(Filter.Linear, AddressMode.ClampToEdge)`,
   End each pass before the next command on its encoder.
 - Copies from textures need rows a multiple of 256 bytes apart; buffer sizes
   and `writeBuffer` lengths a multiple of 4.
-- Validation errors are logged in the browser console. Failures making
+- Unthreaded hxcpp routes uncaptured validation/device-loss diagnostics through
+  `hxn.Log`. Threaded agent diagnostics remain browser-owned. Failures making
   objects are thrown.
 - Every object holds its WebGPU object until `close()`.
 
@@ -113,3 +114,12 @@ Test with the hxn CLI, hxnsl, the Emscripten SDK, Ash and Chrome, with
 
 Retain the applicable [dependency licenses and notices](https://github.com/hx-n/hxn-gpu-webgpu/blob/main/third-party/NOTICES.md)
 when distributing binaries. Release packages include `third-party/`.
+
+## Logging
+
+Use core `hxn.Log` / `hxn::log`, with stable target `hxn.gpu.webgpu`.
+The application owns levels and the shared sink; libraries never replace it.
+Generated adapters deliver native records after calls return. Custom frame loops
+call `hxn.Loop.sync()`; otherwise idle background diagnostics need `hxn.Log.flush()`.
+Keep real-time callbacks free of logging and leave returned errors as exceptions.
+Read the [core logging contract](https://github.com/hx-n/hxn/blob/main/docs/design/logging.md).

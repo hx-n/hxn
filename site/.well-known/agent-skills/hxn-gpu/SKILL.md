@@ -53,7 +53,7 @@ Render: `createRenderPipeline({shader, format, topology, vertexBuffers})`,
   elsewhere; WebGPU, then WebGL2 in the browser. Override it with
   `{backends: [...]}`, `HXN_GPU_BACKEND=vulkan,gles` or
   `-D hxn_gpu_backend=...`. A fallback after a failed backend prints a
-  warning to standard error, or to `OpenOptions.warn`.
+  warning through `hxn.Log` (target `hxn.gpu`), or to `OpenOptions.warn`.
 - Check `device.features` before an optional call. A call that lacks a feature
   throws and names the feature and the backend. GLES and WebGL2 have no
   compute; Vulkan has no `TextureWrites` yet.
@@ -80,3 +80,15 @@ samples a texture and reads a buffer back on each backend.
 
 Retain the applicable [dependency licenses and notices](https://github.com/hx-n/hxn-gpu/blob/main/third-party/NOTICES.md)
 when distributing binaries. Release packages include `third-party/`.
+
+## Logging
+
+Use core `hxn.Log` / `hxn::log`, with stable target `hxn.gpu`.
+The application owns levels and the shared sink; libraries never replace it.
+Generated adapters deliver native records after calls return. Custom frame loops
+call `hxn.Loop.sync()`; otherwise idle background diagnostics need `hxn.Log.flush()`.
+Keep real-time callbacks free of logging and leave returned errors as exceptions.
+Read the [core logging contract](https://github.com/hx-n/hxn/blob/main/docs/design/logging.md).
+
+Mac native and browser CI use macOS 15 and consume released driver
+haxelibs.

@@ -13,77 +13,77 @@
       "type": "skill-md",
       "description": "Open and drive native and browser windows from Haxe with the hxn-window haxelib (package `hxn.window`) on HashLink, Ash, hxcpp and CPPIA. Use when a Haxe program needs a window, its events (keyboard, mouse, touch, IME, resize, close), monitors, gamepads, the clipboard, the native window handles for creating a GPU surface, or the installed hxn window CLI tools.",
       "url": "/.well-known/agent-skills/hxn-window/SKILL.md",
-      "digest": "sha256:8beda83df13512bbd63c42160723d97c37eb8828567496c3ff511b2e37c4a8fc"
+      "digest": "sha256:13940736f9ba224bd383b91cb06d983b6a8f71bd83af1624f9480c36472bcf2c"
     },
     {
       "name": "hxn-av",
       "type": "skill-md",
       "description": "Audio and video in Haxe with the hxn-av haxelib (package `hxn.av`) on HashLink, Ash, hxcpp and CPPIA, using the platform's own codecs rather than FFmpeg. Use when a Haxe program plays a media file, works with video frames or PCM audio, applies an equalizer, encodes or decodes AAC or H.264, or reads or writes MP4.",
       "url": "/.well-known/agent-skills/hxn-av/SKILL.md",
-      "digest": "sha256:4ee1773604b9c9e4c463937a09da9066df80bdeacd646ee8be99268d5eedca23"
+      "digest": "sha256:e1195c23536f49f5f888fd4e378d2f76e2e21fa71bd381dd68b95222d08a016b"
     },
     {
       "name": "hxn-audio",
       "type": "skill-md",
       "description": "Use or change hxn-audio audio output, voices, PCM streams, bus routing and effects in Haxe on native, mobile and browser runtimes, including its installed hxn audio CLI commands.",
       "url": "/.well-known/agent-skills/hxn-audio/SKILL.md",
-      "digest": "sha256:7bb95c5747e3c8f1adabddf7adf386eaa550c66f0f744698f66c1ede0aa00e5b"
+      "digest": "sha256:afa98ab8e1aee4024663a5f0399990e502c0f57fde03180e056460f1370cc354"
     },
     {
       "name": "hxnsl",
       "type": "skill-md",
       "description": "Write GPU shaders in Haxe with the hxnsl haxelib, which translates HXSL (Heaps' shader language) at compile time to WGSL, MSL, HLSL, SPIR-V and GLSL ES with their bind group layout and binding slots as class constants. Use when writing an HXSL shader class, reading its generated fields to build pipelines or bind resources, setting @const values, or extending hxnsl with a framework Extension or a driver Target.",
       "url": "/.well-known/agent-skills/hxnsl/SKILL.md",
-      "digest": "sha256:eda094b2bff8ed04d508f928686958b86f6671040a51d62d3e6873e270bdb45c"
+      "digest": "sha256:99c52bea75ec714f55f02fa54aa3eed0bee1745cf462480ca69455e116fe2d43"
     },
     {
       "name": "hxn-gpu",
       "type": "skill-md",
       "description": "Drive the GPU from Haxe with one API on Metal, Vulkan, Direct3D 12, OpenGL ES, WebGPU and WebGL2, using the hxn-gpu haxelib (package `hxn.gpu`) over the hxn GPU driver haxelibs, on HashLink, Ash and hxcpp, natively and in the browser. Use when a Haxe program renders or computes on whatever GPU the platform has, checks device features and limits, falls back between backends, or uses HXSL shaders from hxnsl on several backends at once.",
       "url": "/.well-known/agent-skills/hxn-gpu/SKILL.md",
-      "digest": "sha256:dabee75de0887f8f2092dc6c336418ffcf40dcbbb13389ff7de64c2cfb811544"
+      "digest": "sha256:ced21be78ea9b9e25ff2b4b9547d57176ff0f70a86381dd7084632888c3de1e2"
     },
     {
       "name": "hxn-gpu-metal",
       "type": "skill-md",
       "description": "Drive the GPU from Haxe through Apple's Metal with the hxn-gpu-metal haxelib (package `hxn.gpu.metal`) on Ash, HashLink, hxcpp and CPPIA, on macOS and iOS. Use when a Haxe program runs compute shaders, renders to a texture or a window, or uses shaders written in HXSL with hxnsl on Metal.",
       "url": "/.well-known/agent-skills/hxn-gpu-metal/SKILL.md",
-      "digest": "sha256:86963322c9e6471fa30620e3417402074f5daa627d296b17587b1d228c071af5"
+      "digest": "sha256:8f677199c0f65310b29ccc9c4413fe301d66c1ae7d7480f58bbdcb81cc01801d"
     },
     {
       "name": "hxn-gpu-vulkan",
       "type": "skill-md",
       "description": "Drive the GPU from Haxe through Vulkan with the hxn-gpu-vulkan haxelib (package `hxn.gpu.vulkan`) on Ash, HashLink, hxcpp and CPPIA, on Linux, Windows, Android and macOS through MoltenVK. Use when a Haxe program runs compute shaders or renders with Vulkan, records barriers and image layout transitions, or uses HXSL shaders from hxnsl as SPIR-V.",
       "url": "/.well-known/agent-skills/hxn-gpu-vulkan/SKILL.md",
-      "digest": "sha256:9781c17eac9cabe7fc29a09cbdf3f6e032fd2ab3b9f5765684fcf09a9b7182c8"
+      "digest": "sha256:e75f09d99ad31b3fa6754b8a80675a2007a786c0592d5601efbe30bd212eaa4e"
     },
     {
       "name": "hxn-gpu-d3d12",
       "type": "skill-md",
       "description": "Drive the GPU from Haxe through Direct3D 12 with the hxn-gpu-d3d12 haxelib (package `hxn.gpu.d3d12`) on Ash, HashLink, hxcpp and CPPIA, on Windows. Use when a Haxe program runs compute shaders, renders, samples textures or presents to a window with Direct3D 12, records resource transitions or enhanced barriers, or uses HXSL shaders from hxnsl as HLSL or DXIL.",
       "url": "/.well-known/agent-skills/hxn-gpu-d3d12/SKILL.md",
-      "digest": "sha256:1b3a0cb88d992a583823a009a68e5532798d43c24911e8d5a7b292fbaa84e194"
+      "digest": "sha256:bc80a847969288f7e6bae810fa294f7c12fdce6f60054308040caf89a5794272"
     },
     {
       "name": "hxn-gpu-gles",
       "type": "skill-md",
       "description": "Drive the GPU from Haxe through OpenGL ES 3.0 over EGL with the hxn-gpu-gles haxelib (package `hxn.gpu.gles`) on Ash, HashLink, hxcpp and CPPIA, on Android, Linux through Mesa, and macOS and Windows through ANGLE. Use when a Haxe program renders with OpenGL ES, samples textures, presents to a window with EGL, or uses HXSL shaders from hxnsl as GLSL ES 3.00.",
       "url": "/.well-known/agent-skills/hxn-gpu-gles/SKILL.md",
-      "digest": "sha256:d1a14532a481cee35310cc6a454ce000b48d3542a4a441c2bf50792783bf8b73"
+      "digest": "sha256:21303e2b4dcb52f2a88b9e6b1f025b161874aedc3b4a4c6d7f99753e5abed58f"
     },
     {
       "name": "hxn-gpu-webgpu",
       "type": "skill-md",
       "description": "Drive the GPU from Haxe in the browser through WebGPU with the hxn-gpu-webgpu haxelib (package `hxn.gpu.webgpu`), for hxcpp programs compiled to wasm with `-D emscripten`, threaded or not, and threaded Ash programs (`-D wasm -D hxn_threads`); HashLink and CPPIA do not run in a browser. Use when a Haxe program in a web page runs compute shaders or renders with WebGPU, reads buffers back, or uses HXSL shaders from hxnsl as WGSL.",
       "url": "/.well-known/agent-skills/hxn-gpu-webgpu/SKILL.md",
-      "digest": "sha256:1f74a14bc5696e6241ff81cfc6596239f789ac6ec387663047ae958fa1e9dfbc"
+      "digest": "sha256:723b921bd2811a34eef9e2221cdf1f24ce34d065af0f209efb6306cdc0e26ff7"
     },
     {
       "name": "hxn-gpu-webgl2",
       "type": "skill-md",
       "description": "Drive the GPU from Haxe in the browser through WebGL2 with the hxn-gpu-webgl2 haxelib (package `hxn.gpu.webgl2`), for hxcpp programs compiled to wasm with `-D emscripten`, threaded or not, and threaded Ash programs (`-D wasm -D hxn_threads`); HashLink and CPPIA do not run in a browser. Use when a Haxe program in a web page renders with WebGL2, for browsers without WebGPU, or uses HXSL shaders from hxnsl as GLSL ES 3.00.",
       "url": "/.well-known/agent-skills/hxn-gpu-webgl2/SKILL.md",
-      "digest": "sha256:c07a798e7157f95198d957cb0de3cc7b89803570750d0d4cfa309c7a64e982cd"
+      "digest": "sha256:0e765b71bcbae9ac4c4b02bcb1dbe4d9faaae900976523b5422a1bdbe0baa62d"
     }
   ]
 }

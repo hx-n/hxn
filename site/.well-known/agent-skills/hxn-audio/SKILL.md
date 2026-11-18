@@ -60,3 +60,12 @@ Rust and rust-src; haxelib consumers receive the compiled module.
 Retain the applicable [dependency licenses and notices](https://github.com/hx-n/hxn-audio/blob/main/third-party/NOTICES.md)
 when distributing binaries, including the bundled unchanged MPL dependency source.
 Release packages include `third-party/`.
+
+## Logging
+
+Use core `hxn.Log` / `hxn::log`, with stable target `hxn.audio`.
+The application owns levels and the shared sink; libraries never replace it.
+Generated adapters deliver native records after calls return. Custom frame loops
+call `hxn.Loop.sync()`; otherwise idle background diagnostics need `hxn.Log.flush()`.
+Keep real-time callbacks free of logging and leave returned errors as exceptions.
+Read the [core logging contract](https://github.com/hx-n/hxn/blob/main/docs/design/logging.md).

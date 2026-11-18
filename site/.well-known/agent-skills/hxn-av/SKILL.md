@@ -16,9 +16,7 @@ haxe -lib hxn-av -main Main -cpp out        # then: out/Main
 The haxelib carries prebuilt native libraries for Linux x86-64 and ARM64,
 macOS arm64 and Windows x86-64, and static libraries for Intel macOS (hxcpp
 only), iOS, the iOS simulator and Android arm64; a program needs no Rust. It
-installs the `hxn` haxelib with it. The published 0.2.0 haxelib predates the
-browser updates described here; they require a package built from the updated
-source. Those browser builds provide CPU media operations
+installs the `hxn` haxelib with it. Browser builds provide CPU media operations
 and bounded AAC-LC AudioDecoder through WebCodecs on Ash wasm and both
 hxcpp wasm modes. Browser file access/player, video decoding and encoding
 remain unavailable. A `haxelib git` install has
@@ -112,4 +110,12 @@ behavior passing. Read [design](https://github.com/hx-n/hxn-av/blob/main/docs/de
 
 Retain the applicable [dependency licenses and notices](https://github.com/hx-n/hxn-av/blob/main/third-party/NOTICES.md)
 when distributing binaries. Release packages include `third-party/`.
-Resolve the pinned xavi crates' missing upstream license before releasing.
+
+## Logging
+
+Use core `hxn.Log` / `hxn::log`, with stable target `hxn.av`.
+The application owns levels and the shared sink; libraries never replace it.
+Generated adapters deliver native records after calls return. Custom frame loops
+call `hxn.Loop.sync()`; otherwise idle background diagnostics need `hxn.Log.flush()`.
+Keep real-time callbacks free of logging and leave returned errors as exceptions.
+Read the [core logging contract](https://github.com/hx-n/hxn/blob/main/docs/design/logging.md).

@@ -17,6 +17,9 @@
   <url><loc>https://hxn.dev/api/hxn/hxn.Gc/</loc></url>
   <url><loc>https://hxn.dev/api/hxn/hxn.Meter/</loc></url>
   <url><loc>https://hxn.dev/api/hxn/hxn.Inbox/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn/hxn.Log/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn/hxn.LogLevel/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn/hxn.LogRecord/</loc></url>
   <url><loc>https://hxn.dev/api/hxn/hxn.Loop/</loc></url>
   <url><loc>https://hxn.dev/api/hxn/hxn.Reactive/</loc></url>
   <url><loc>https://hxn.dev/api/hxn/hxn.Set/</loc></url>
