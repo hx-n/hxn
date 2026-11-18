@@ -46,9 +46,9 @@
     {
       "name": "hxn-assets",
       "type": "skill-md",
-      "description": "Use or change hxn-assets typed embedded and dynamic values, metadata catalogs, HTTP/WS streams, content identity, byte caching and the hxn assets CLI.",
+      "description": "Use or change hxn-assets typed embedded and dynamic values, metadata catalogs, HTTP/WS streams, content identity, byte caching, semantic knowledge metadata and the hxn assets CLI.",
       "url": "/.well-known/agent-skills/hxn-assets/SKILL.md",
-      "digest": "sha256:7aeb11a2931687d0b3c00cf44423d326ea4d8762b076a96ec07833a1b91b2a02"
+      "digest": "sha256:e85cf1668b8e2b14766ffcdd53ae12d02e5a70166fcd36730748fc74decca960"
     },
     {
       "name": "hxnsl",

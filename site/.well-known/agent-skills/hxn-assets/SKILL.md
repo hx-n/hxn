@@ -1,6 +1,6 @@
 ---
 name: hxn-assets
-description: Use or change hxn-assets typed embedded and dynamic values, metadata catalogs, HTTP/WS streams, content identity, byte caching and the hxn assets CLI.
+description: Use or change hxn-assets typed embedded and dynamic values, metadata catalogs, HTTP/WS streams, content identity, byte caching, semantic knowledge metadata and the hxn assets CLI.
 ---
 
 Author assets in a class with `@:build(hxn.assets.Assets.build())`.
@@ -47,9 +47,36 @@ use hxn and installed haxelibs, without repository shell helpers.
 Read the [asset API](https://github.com/hx-n/hxn-assets/blob/main/packages/hxn-assets/README.md),
 [design](https://github.com/hx-n/hxn-assets/blob/main/docs/design.md) and
 [conventions](https://github.com/hx-n/hxn-assets/blob/main/docs/conventions.md).
-Use this repository's git-bug tracker. Graph projection annotations and the
-hosted assets service remain separate issue plans; do not describe them as
-implemented APIs or add graph/service requirements to basic asset loading.
+Use this repository's git-bug tracker. The hosted assets service remains a
+separate issue plan; basic loading has no service dependency.
+
+## Knowledge metadata
+
+Use `@:knowledge("Type", 1)` on a class/typedef, one `@:identity` String field,
+selected `@:fact` fields, `@:relation("NAME")` fields with KnowledgeRef<T>, and
+optional `@:spatial("world", "unit")` point/AABB data. These describe domain
+meaning: lore, progress, NPC knowledge/behavior, world state and entity relations.
+Knowledge.capture reads selected typed values; unannotated fields are excluded.
+Capture dynamic assets after loading. Direct asset-field captures retain only
+logical address/content-ID provenance, excluding transport URIs and credentials.
+
+Publish complete selected snapshots with Knowledge and a configured KnowledgeSink
+using explicit increasing source revisions. Outgoing relations are replaced;
+Knowledge.remove emits a tombstone. Semantic IDs are independent of byte hashes.
+Retry the failed batch's identical bytes before publishing another revision.
+The publisher has no durable outbox and implements no CRDT merging. Namespaces
+organize player/campaign data; authorization and authority policy belong to the app.
+
+MemoryKnowledgeSink supplies portable relationship/AABB queries. The optional
+native adapter under adapters/kyugraph consumes the same versioned JSON and
+persists revision/replay checks. Keep its JIT/storage dependencies out of
+mobile/browser packages and serialize writes off render/event threads. Scalar
+arrays use JSON text columns for KyuGraph 0.4 DDL. Follow the
+[knowledge contract](https://github.com/hx-n/hxn-assets/blob/main/docs/knowledge.md)
+and [runnable model](https://github.com/hx-n/hxn-assets/tree/main/examples/knowledge).
+tests/knowledge/run.py checks schemas/full DCE/compiler reuse; --adapter or
+--kyugraph <checkout> adds actual engine queries and restart. Native graph notices
+belong to the optional adapter's workspace, not core hxn or portable hxn-file.
 
 For macro changes run the annotation suite under tests/assets/run.py, including
 compilation-server reuse, asset edits and full DCE. Compare staged descriptors
