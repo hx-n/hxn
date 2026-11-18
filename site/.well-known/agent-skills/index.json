@@ -27,7 +27,7 @@
       "type": "skill-md",
       "description": "Use or change hxn-audio audio output, voices, PCM streams, bus routing and effects in Haxe on native, mobile and browser runtimes, including its installed hxn audio CLI commands.",
       "url": "/.well-known/agent-skills/hxn-audio/SKILL.md",
-      "digest": "sha256:be703ac8378f84a1267b62b18bb79efdd200e6584623fafceaa2e5b439720754"
+      "digest": "sha256:7bb95c5747e3c8f1adabddf7adf386eaa550c66f0f744698f66c1ede0aa00e5b"
     },
     {
       "name": "hxnsl",

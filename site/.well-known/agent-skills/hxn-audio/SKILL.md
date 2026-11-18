@@ -6,7 +6,9 @@ description: Use or change hxn-audio audio output, voices, PCM streams, bus rout
 # hxn-audio
 
 Use `-lib hxn-audio`; packaged adapters and the AudioWorklet DSP require no
-Rust in an application. `new AudioOutput({})` opens default output;
+Rust in an application. Linux hxcpp builds need the ALSA development
+package for linking; HashLink/Ash need its runtime library.
+`new AudioOutput({})` opens default output;
 `AudioOutput.offline({})` provides explicit render-to-Bytes for device-free
 tests. Options are records, not constructed classes.
 
@@ -44,7 +46,8 @@ excluded from haxelib assets and public CLI commands. For contributor runtime,
 AAC and physical-device checks, read [testing](https://github.com/hx-n/hxn-audio/blob/main/tests/README.md); those
 hosts validate this library and do not define standard hxn iOS tooling.
 
-When editing, read docs/design.md and docs/conventions.md. Keep rendering
+When editing, read [design](https://github.com/hx-n/hxn-audio/blob/main/docs/design.md)
+and [conventions](https://github.com/hx-n/hxn-audio/blob/main/docs/conventions.md). Keep rendering
 allocation/free/lock/callback-free; defer retirement to the controller.
 Run the Rust tests and allocation audit, hxn check on every native runtime,
 actual output checks on mobile and all three browser modes (including local
