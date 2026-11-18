@@ -13,8 +13,8 @@
     "wasm"
   ],
   "description": "The Haxe classes of libraries built with hxn: futures, streams, signals, reactive values, atomics, and the macro that binds a packaged library.",
-  "version": "0.3.7",
-  "releasenote": "Installed hxn-* libraries can register lifecycle hooks and namespaced CLI commands. Packaging includes their tools and assets; plugin build defines also reach CPPIA scripts.",
+  "version": "0.3.8",
+  "releasenote": "Cross-target packages exclude host build-script linker metadata. Updated audio lifecycle, packaged assets and CLI extension conventions.",
   "contributors": [
     "darmie"
   ],
