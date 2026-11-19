@@ -52,7 +52,11 @@ jobs:
         shell: [powershell, pwsh]
     steps:
       - uses: actions/checkout@v4
-      - shell: ${{ matrix.shell }}
+      - if: matrix.shell == 'powershell'
+        shell: powershell
+        run: ./tests/install/run.ps1
+      - if: matrix.shell == 'pwsh'
+        shell: pwsh
         run: ./tests/install/run.ps1
 
   rust:
