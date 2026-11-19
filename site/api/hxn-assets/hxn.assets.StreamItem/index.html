@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en" prefix="og: https://ogp.me/ns#">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#000000">
+  <title>StreamItem (hxn.assets) · hxn-assets API — hxn</title>
+  <meta name="description" content="A stream boundary separate from a nullable payload and an empty message.">
+  <meta name="robots" content="index, follow, max-image-preview:large">
+  <link rel="canonical" href="https://hxn.dev/api/hxn-assets/hxn.assets.StreamItem/">
+  <link rel="describedby" href="/llms.txt" type="text/markdown">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="hxn">
+  <meta property="og:locale" content="en_GB">
+  <meta property="og:title" content="StreamItem (hxn.assets) · hxn-assets API — hxn">
+  <meta property="og:description" content="A stream boundary separate from a nullable payload and an empty message.">
+  <meta property="og:url" content="https://hxn.dev/api/hxn-assets/hxn.assets.StreamItem/">
+  <meta property="og:image" content="https://hxn.dev/og-hero.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="2400">
+  <meta property="og:image:height" content="1260">
+  <meta property="og:image:alt" content="hxn — Native Rust bindings for Haxe">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="StreamItem (hxn.assets) · hxn-assets API — hxn">
+  <meta name="twitter:description" content="A stream boundary separate from a nullable payload and an empty message.">
+  <meta name="twitter:image" content="https://hxn.dev/og-hero.png">
+  <meta name="twitter:image:alt" content="hxn — Native Rust bindings for Haxe">
+  <link rel="icon" href="/logo.png" type="image/png">
+  <link rel="apple-touch-icon" href="/logo.png">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/script.js" defer></script>
+  <script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "APIReference", "@id": "https://hxn.dev/api/hxn-assets/hxn.assets.StreamItem/#page", "url": "https://hxn.dev/api/hxn-assets/hxn.assets.StreamItem/", "name": "StreamItem (hxn.assets) \u00b7 hxn-assets API \u2014 hxn", "headline": "StreamItem (hxn.assets) \u00b7 hxn-assets API", "description": "A stream boundary separate from a nullable payload and an empty message.", "inLanguage": "en", "isPartOf": {"@id": "https://hxn.dev/#website"}, "image": "https://hxn.dev/og-hero.png", "programmingLanguage": "Haxe", "executableLibraryName": "hxn-assets", "assemblyVersion": "0.1.0", "targetPlatform": "HashLink, Ash, hxcpp", "about": "hxn.assets.StreamItem"}, {"@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "hxn", "item": "https://hxn.dev/"}, {"@type": "ListItem", "position": 2, "name": "API", "item": "https://hxn.dev/api/"}, {"@type": "ListItem", "position": 3, "name": "hxn-assets", "item": "https://hxn.dev/api/hxn-assets/"}, {"@type": "ListItem", "position": 4, "name": "StreamItem", "item": "https://hxn.dev/api/hxn-assets/hxn.assets.StreamItem/"}]}]}</script>
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="header">
+    <a class="wordmark" href="/" aria-label="hxn home">hxn<span aria-hidden="true"> /</span></a>
+    <nav class="header-links" aria-label="Main"><a href="/tutorials/">Tutorials</a><a href="/api/" aria-current="true">API</a><a class="source-link" href="https://github.com/hx-n/hxn">GitHub ↗</a></nav>
+  </header>
+  <main class="tutorial-layout api-layout">
+    <aside class="tutorial-sidebar api-sidebar"><nav aria-label="hxn-assets types"><a class="tutorial-index-link" href="/api/">API reference</a><a class="api-sidebar-library" href="/api/hxn-assets/">hxn-assets <span>0.1.0</span></a><a href="/api/hxn-assets/hxn.assets.AssetCatalog/">AssetCatalog</a><a href="/api/hxn-assets/hxn.assets.AssetInfo/">AssetInfo</a><a href="/api/hxn-assets/hxn.assets.AssetLoader/">AssetLoader</a><a href="/api/hxn-assets/hxn.assets.Assets/">Assets</a><a href="/api/hxn-assets/hxn.assets.AssetSource/">AssetSource</a><a href="/api/hxn-assets/hxn.assets.AssetStream/">AssetStream</a><a href="/api/hxn-assets/hxn.assets.AssetStreamDriver/">AssetStreamDriver</a><a href="/api/hxn-assets/hxn.assets.Build/">Build</a><a href="/api/hxn-assets/hxn.assets.CatalogSource/">CatalogSource</a><a href="/api/hxn-assets/hxn.assets.FileSource/">FileSource</a><a href="/api/hxn-assets/hxn.assets.ImageData/">ImageData</a><a href="/api/hxn-assets/hxn.assets.Knowledge/">Knowledge</a><a href="/api/hxn-assets/hxn.assets.knowledge.KnowledgeAssetOrigin/">KnowledgeAssetOrigin</a><a href="/api/hxn-assets/hxn.assets.knowledge.KnowledgeBatch/">KnowledgeBatch</a><a href="/api/hxn-assets/hxn.assets.knowledge.KnowledgeBatchData/">KnowledgeBatchData</a><a href="/api/hxn-assets/hxn.assets.knowledge.KnowledgeBounds/">KnowledgeBounds</a><a href="/api/hxn-assets/hxn.assets.knowledge.KnowledgeData/">KnowledgeData</a><a href="/api/hxn-assets/hxn.assets.knowledge.KnowledgeFact/">KnowledgeFact</a><a href="/api/hxn-assets/hxn.assets.KnowledgeRef/">KnowledgeRef</a><a href="/api/hxn-assets/hxn.assets.knowledge.KnowledgeRelation/">KnowledgeRelation</a><a href="/api/hxn-assets/hxn.assets.knowledge.KnowledgeSchema/">KnowledgeSchema</a><a href="/api/hxn-assets/hxn.assets.knowledge.KnowledgeSink/">KnowledgeSink</a><a href="/api/hxn-assets/hxn.assets.knowledge.KnowledgeSnapshot/">KnowledgeSnapshot</a><a href="/api/hxn-assets/hxn.assets.knowledge.KnowledgeSpatialSelection/">KnowledgeSpatialSelection</a><a href="/api/hxn-assets/hxn.assets.knowledge.MemoryKnowledgeSink/">MemoryKnowledgeSink</a><a href="/api/hxn-assets/hxn.assets.RemoteOptions/">RemoteOptions</a><a href="/api/hxn-assets/hxn.assets.RemoteSource/">RemoteSource</a><a href="/api/hxn-assets/hxn.assets.StaticCatalog/">StaticCatalog</a><a href="/api/hxn-assets/hxn.assets.StreamingAssetSource/">StreamingAssetSource</a><a href="/api/hxn-assets/hxn.assets.StreamItem/" aria-current="page">StreamItem</a></nav></aside>
+    <article id="content" class="lesson"><header class="lesson-heading"><nav class="eyebrow api-breadcrumb" aria-label="Breadcrumb"><a href="/api/">API</a> / <a href="/api/hxn-assets/">hxn-assets</a> / typedef in hxn.assets</nav><h1>StreamItem</h1><ul class="api-facts"><li>Type parameters: <code>T</code></li></ul></header><div class="api-doc"><p>A stream boundary separate from a nullable payload and an empty message.</p></div><section class="lesson-section" id="fields"><h2>Fields</h2><div class="api-member" id="value"><pre class="api-signature"><code>var value:Null&lt;T&gt;</code></pre></div><div class="api-member" id="text"><pre class="api-signature"><code>var text:Bool</code></pre></div><div class="api-member" id="done"><pre class="api-signature"><code>var done:Bool</code></pre></div></section></article>
+  </main>
+  <footer><p>HashLink · Ash · hxcpp</p><a href="https://github.com/hx-n/hxn/blob/main/LICENSE">Open source · Apache 2.0</a></footer>
+</body>
+</html>

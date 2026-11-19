@@ -40,6 +40,14 @@ LIBRARIES = [
          libs=['hxn-av:0.2.1'],
          hide=[r'^hxn\.audio\.(cli\.|Init$)'],
          summary='Audio output and mixing: voices, bounded PCM streams, buses and effects on native and browser runtimes. The Av and DecoderStream helpers require hxn-av.'),
+    dict(name='hxn-file', version='0.1.0', prefix='hxn.file.', roots=['--macro', "include('hxn.file')"],
+         repository='https://github.com/hx-n/hxn-assets/tree/v0.1.0/packages/hxn-file',
+         hide=[r'^hxn\.file\.Init$'],
+         summary='Scoped asynchronous files, saves, preferences and bounded HTTP(S)/WS(S) transport on desktop, mobile and browser runtimes.'),
+    dict(name='hxn-assets', version='0.1.0', prefix='hxn.assets.', roots=['--macro', "include('hxn.assets', true, ['hxn.assets.macros', 'hxn.assets.cli'])"],
+         repository='https://github.com/hx-n/hxn-assets/tree/v0.1.0/packages/hxn-assets',
+         hide=[r'^hxn\.assets\.(macros|cli)\.'],
+         summary='Typed annotated assets, asynchronous loading, remote streams, content identity and opt-in knowledge metadata with relationships and spatial bounds.'),
     dict(name='hxnsl', version='0.2.1', prefix='hxnsl.', roots=['hxnsl.Shader', 'hxnsl.Layout'],
          summary='Shaders written in HXSL and translated at compile time to WGSL, MSL, HLSL, SPIR-V and GLSL ES.'),
     dict(name='hxn-gpu', version='0.2.4', prefix='hxn.gpu.', roots=['--macro', "include('hxn.gpu', true, ['hxn.gpu.backend'])"],
@@ -538,7 +546,7 @@ def build(repo, offline):
         linker.local = {t['name']: t for t in types.values()}
         url = lib_url(lib['name'])
         urls.append(url)
-        repo_url = f'https://github.com/hx-n/{lib["name"]}'
+        repo_url = lib.get('repository', f'https://github.com/hx-n/{lib["name"]}')
         heading = (f'<header class="lesson-heading">{breadcrumb([("API", "/api/"), (lib["name"] + " " + lib["version"], None)])}'
                    f'<h1>{escape(lib["name"])}</h1><p class="lesson-description">{escape(lib["summary"])}</p>'
                    f'<p class="api-links"><code>haxelib install {escape(lib["name"])} {escape(lib["version"])}</code>'
@@ -576,7 +584,7 @@ def build(repo, offline):
         for t in sorted(everything.values(), key=lambda t: (t['name'].lower(), t['lib'])))
     sidebar = '    <aside class="tutorial-sidebar api-sidebar"><nav aria-label="Libraries"><a class="tutorial-index-link" href="/api/" aria-current="page">API reference</a>' + ''.join(
         f'<a href="{lib_url(lib["name"])}">{escape(lib["name"])} <span>{escape(lib["version"])}</span></a>' for lib in LIBRARIES) + '</nav></aside>'
-    description = 'The Haxe API of every hxn library at its released version: hxn, hxn-window, hxn-av, hxn-audio, hxnsl, hxn-gpu and the hxn GPU drivers.'
+    description = 'The Haxe API of every hxn library at its released version: hxn, hxn-window, hxn-av, hxn-audio, hxn-file, hxn-assets, hxnsl, hxn-gpu and the hxn GPU drivers.'
     body = (sidebar + '\n    <article id="content" class="lesson"><header class="lesson-heading"><p class="eyebrow">API</p>'
             f'<h1>API reference</h1><p class="lesson-description">{escape(description)}</p></header>'
             f'<div class="tutorial-cards">{cards}</div>'

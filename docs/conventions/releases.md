@@ -32,10 +32,11 @@ fails when a copy's digest, name or description disagrees with the index, or
 when `site/`'s hxn skill differs from `skills/hxn/SKILL.md`.
 
 Core logging has its own `skills/hxn-log/SKILL.md` discovery entry while its
-API types remain under the hxn core reference. After file/assets publication,
-sync both monorepo skills (`hxn-file` and `hxn-assets`), register their released
-versions in `scripts/build_api_docs.py` and regenerate both package references.
-Source publication alone does not make a package a released haxelib reference.
+API types remain under the hxn core reference. hxn-file and hxn-assets share
+the hxn-assets repository; register each released haxelib version and its
+package source URL in `scripts/build_api_docs.py`. Sync both monorepo skills
+and regenerate both package references after publication. Source publication
+alone does not make a package a released haxelib reference.
 Register additional core capability skills in
 `scripts/sync_site_skills.py` and `site/llms.txt` so they are discoverable.
 
