@@ -42,6 +42,19 @@ jobs:
       - run: bash -n install.sh tests/install/run.sh
       - run: tests/install/run.sh
 
+  installer-windows:
+    name: installer, Windows ${{ matrix.shell }}
+    runs-on: windows-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        shell: [powershell, pwsh]
+    steps:
+      - uses: actions/checkout@v4
+      - shell: ${{ matrix.shell }}
+        run: ./tests/install/run.ps1
+
   rust:
     name: rust, ${{ matrix.os }}
     runs-on: ${{ matrix.os }}

@@ -9,6 +9,11 @@ hxn reads a Rust crate's annotated types and functions, generates Haxe
 classes shared by every runtime, and builds a native adapter for each
 runtime. Run every `hxn` command in the library crate's directory.
 
+Install the released CLI with `curl -fsSL https://hxn.dev/install.sh | bash`
+on macOS or Linux, or `irm https://hxn.dev/install.ps1 | iex` in Windows
+PowerShell. Both verify release checksums and accept `HXN_VERSION` and
+`HXN_INSTALL_DIR`. See the [installation guide](https://hxn.dev/#install-command).
+
 ## Workflow
 
 1. `hxn new <name>` makes a crate and a Haxe program from the greeter

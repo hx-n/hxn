@@ -11,6 +11,11 @@ import xml.etree.ElementTree as ET
 ROOT = Path(__file__).resolve().parents[2]
 SITE = ROOT / 'site'
 
+# Hosted installers must be the same bytes as the versions covered by CI.
+for installer in ('install.sh', 'install.ps1'):
+    assert (SITE / installer).read_bytes() == (ROOT / installer).read_bytes(), \
+        f'site: {installer} differs from the tested root installer'
+
 
 class Page(HTMLParser):
     def __init__(self, path):

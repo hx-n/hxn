@@ -4,6 +4,11 @@
 
 Each library has an agent skill: a SKILL.md whose frontmatter says when to use it, followed by instructions. They are listed below and in the Agent Skills discovery index at https://hxn.dev/.well-known/agent-skills/index.json, so `npx skills add https://hxn.dev` installs them. Released haxelibs also contain their skills under `skills/`.
 
+## Installation
+
+- [Unix installer](https://hxn.dev/install.sh): `curl -fsSL https://hxn.dev/install.sh | bash` on macOS or Linux.
+- [Windows installer](https://hxn.dev/install.ps1): `irm https://hxn.dev/install.ps1 | iex` in PowerShell.
+
 ## Agent skills
 
 - [hxn](https://hxn.dev/.well-known/agent-skills/hxn/SKILL.md): Write a Rust library for Haxe with hxn's attributes, and build, test and package it with the hxn command.

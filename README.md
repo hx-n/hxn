@@ -28,19 +28,25 @@ cd "$(haxelib libpath hxcpp)/tools/hxcpp" && haxe compile.hxml
 Install the `hxn` command from the latest release:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/hx-n/hxn/main/install.sh | bash
+curl -fsSL https://hxn.dev/install.sh | bash
 ```
 
-The script selects the macOS, Linux or Windows binary for x86-64 or ARM64,
-verifies its SHA-256 checksum, and installs it in `~/.local/bin`. Add that
-directory to your `PATH` if it is not already there. On Windows, run it in
-Git Bash, or download the zip from the
-[releases](https://github.com/hx-n/hxn/releases) and put `hxn.exe` on your
-`PATH`. Set `HXN_VERSION` to select a release tag or `HXN_INSTALL_DIR` to
-choose another directory, for example:
+On Windows, run this command in PowerShell:
+
+```powershell
+irm https://hxn.dev/install.ps1 | iex
+```
+
+Both installers select the x86-64 or ARM64 binary and verify its SHA-256
+checksum. The Unix installer uses `~/.local/bin`. Add that directory to your
+`PATH` if needed. The PowerShell installer uses `%LOCALAPPDATA%\hxn\bin`
+and adds it to the current and future terminals' user `PATH`.
+You can also [download a release](https://github.com/hx-n/hxn/releases).
+Set `HXN_VERSION` to select a release tag or `HXN_INSTALL_DIR` to choose
+another directory, for example:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/hx-n/hxn/main/install.sh | HXN_VERSION=v0.3.10 HXN_INSTALL_DIR="$HOME/.local/bin" bash
+curl -fsSL https://hxn.dev/install.sh | HXN_VERSION=v0.3.10 HXN_INSTALL_DIR="$HOME/.local/bin" bash
 ```
 
 To build the command from source, use Cargo:

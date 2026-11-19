@@ -12,10 +12,20 @@
 haxelib as `darmie`; it fails if `haxelib.json`, the crates and the tag
 name different versions. Manual runs build only.
 
-`install.sh` verifies the selected archive before extracting it. Defaults are
-the latest release and `~/.local/bin`; override with `HXN_VERSION` and
-`HXN_INSTALL_DIR`. `tests/install/run.sh` checks platforms and failure paths
-using local archives without network access.
+`install.sh` and `install.ps1` verify the selected archive before extracting
+the CLI. hxn.dev serves identical copies from `site/`; update both copies
+when changing an installer. `tests/site/check.py` rejects differing copies.
+Serve them as plain text with a five-minute cache lifetime.
+
+Both installers default to the latest release. Override the tag with
+`HXN_VERSION` or the destination with `HXN_INSTALL_DIR`. Unix uses
+`~/.local/bin`; PowerShell uses `%LOCALAPPDATA%\hxn\bin` and adds it to the
+current and persistent user `PATH`. Neither installer requires administrator
+access for its default directory.
+
+`tests/install/run.sh` and `tests/install/run.ps1` exercise platforms,
+checksum failures and archive errors with local fixtures. CI runs Bash on
+Linux and macOS, and Windows PowerShell and PowerShell 7 on Windows.
 
 ## Agent skills
 

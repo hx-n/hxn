@@ -6,6 +6,16 @@
   Content-Type: text/markdown; charset=utf-8
   Access-Control-Allow-Origin: *
 
+/install.sh
+  Content-Type: text/plain; charset=utf-8
+  Cache-Control: public, max-age=300
+  X-Content-Type-Options: nosniff
+
+/install.ps1
+  Content-Type: text/plain; charset=utf-8
+  Cache-Control: public, max-age=300
+  X-Content-Type-Options: nosniff
+
 # The Agent Skills discovery index and its skills, readable from any origin.
 /.well-known/agent-skills/*
   Access-Control-Allow-Origin: *

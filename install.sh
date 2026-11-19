@@ -12,7 +12,7 @@ main() {
             'Usage: bash install.sh' \
             '  HXN_VERSION       Release tag to install (default: latest).' \
             '  HXN_INSTALL_DIR   Destination (default: $HOME/.local/bin).' \
-            'Windows requires Git Bash; otherwise download the release zip.'
+            'Windows PowerShell: irm https://hxn.dev/install.ps1 | iex'
         return
     fi
     [[ $# == 0 ]] || fail 'unexpected arguments; use --help for usage'

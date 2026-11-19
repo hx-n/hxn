@@ -29,6 +29,7 @@ h1 { font-size: clamp(38px, 5.5vw, 58px); font-weight: 550; line-height: 1.09; l
 .install-heading { display: flex; align-items: center; justify-content: space-between; padding: 0 2px; margin-bottom: 12px; }
 .install-heading h2 { margin: 0; font-size: 12px; font-weight: 500; color: #c6c6c6; }
 .install-heading > span { font: 11px ui-monospace, SFMono-Regular, Consolas, monospace; color: #777; }
+.install-platform { margin: 16px 2px 8px; font-size: 11px; color: #999; }
 .command-box { display: flex; align-items: center; gap: 14px; padding: 17px 18px; background: #101010; border: 1px solid #2a2a2a; border-radius: 8px; }
 .prompt { font: 14px ui-monospace, SFMono-Regular, Consolas, monospace; color: #666; user-select: none; }
 pre { flex: 1; min-width: 0; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
