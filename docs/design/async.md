@@ -47,9 +47,12 @@ step. Use `spawn` for work that waits. Tasks never call Haxe functions.
 
 ## Delivery
 
-Each library has one outbox and one `hxn.Inbox`. Watched result ids are
-queued once until read; unwatched results add no entries. The inbox takes
-all entries, then runs watchers in production order as one batch.
+Each binding has one `hxn.Inbox`. Statically linked adapters can share their
+native outbox. Watched result ids are queued once until read; unwatched results
+add no entries. An inbox forwards consumed ids to other interested inboxes,
+which check their own values on their delivery thread. Independently allocated
+ids can overlap; a notification is a readiness hint, not permission to take a
+pending value. Watchers run in production order as one batch per inbox.
 
 `hxn.Loop` delivers through the Haxe event loop on the thread that first
 requested delivery. For an application-owned loop, set `Loop.manual` and

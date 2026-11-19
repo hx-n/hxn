@@ -6,7 +6,7 @@
       "type": "skill-md",
       "description": "Expose a Rust library to Haxe with hxn, so one set of generated Haxe classes runs on HashLink, Ash, hxcpp and CPPIA, natively and on wasm. Use when writing or changing a crate annotated with #[hxn::interface], #[hxn::methods], #[hxn::function] or #[hxn::data], running the hxn command (new, build, run, check, package, import, doctor), packaging an hxn library as a haxelib, binding a C header with hxn import, or extending the hxn CLI with haxelib plugins.",
       "url": "/.well-known/agent-skills/hxn/SKILL.md",
-      "digest": "sha256:29ad68abd37f24abf407b4cfb5a0aeb84ddff60f12a0a2f889e02fd3132b8a10"
+      "digest": "sha256:cc5f78aca8d9bd6b64cffcbff054e38b5669f647f0929168d2c2f073056e4aa7"
     },
     {
       "name": "hxn-log",

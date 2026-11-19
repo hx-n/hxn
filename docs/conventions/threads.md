@@ -7,6 +7,10 @@
 - A reactive graph belongs to one thread.
 - A library's results are delivered on one thread: the one that first
   requested delivery, or the one that calls `Loop.sync()`.
+- Static adapters can share an outbox. Forward consumed notifications to other
+  interested inboxes and schedule their checks on their own delivery thread.
+  Watchers check readiness before taking a value; ids from independent queues
+  can overlap. Never discard another binding's notification while draining.
 - Device render callbacks use preallocated native data. Do not allocate,
   free the last resource reference, take locks, log or call Haxe there.
   Send bounded commands and retire resources on the control side. A browser

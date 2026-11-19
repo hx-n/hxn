@@ -39,6 +39,7 @@ class Main {
 	}
 
 	static function main() {
+		SharedInbox.run(check);
 		values();
 		Signals.run(check);
 		futures();
@@ -286,16 +287,22 @@ class Main {
 
 	// Futures made in Haxe from native ones, delivered by the event loop.
 	static function composed() {
-		Counter.squareLater(6, 10).map(v -> v + 1).flatMap(v -> Counter.squareLater(v, 10)).then(value -> {
-			check("a composed future is delivered", value == 1369);
-			Counter.squareLater(100000, 1).map(v -> v).recover(e -> hxn.Future.resolved(e.message.length)).then(length -> {
-				check("and a recovered failure", length > 0);
-				Counter.squareLater(100000, 1).map(v -> v).then(_ -> check("a mapped failure delivered as a value", false), error -> {
-					check('a mapped failure is delivered as one: ${error.message}', error.message.indexOf("counter overflow") >= 0);
-					listened();
-				});
+		Counter.squareLater(6, 10)
+			.map(v -> v + 1)
+			.flatMap(v -> Counter.squareLater(v, 10))
+			.then(value -> {
+				check("a composed future is delivered", value == 1369);
+				Counter.squareLater(100000, 1)
+					.map(v -> v)
+					.recover(e -> hxn.Future.resolved(e.message.length))
+					.then(length -> {
+						check("and a recovered failure", length > 0);
+						Counter.squareLater(100000, 1).map(v -> v).then(_ -> check("a mapped failure delivered as a value", false), error -> {
+							check('a mapped failure is delivered as one: ${error.message}', error.message.indexOf("counter overflow") >= 0);
+							listened();
+						});
+					});
 			});
-		});
 	}
 
 	// Items sent by later iterations of the event loop, each passed to the
@@ -321,7 +328,8 @@ class Main {
 	static function listenedToFailure() {
 		var got = [];
 		Counter.countUp(2, true).listen(item -> got.push(item), () -> check("a failed stream does not also end", false), error -> {
-			check('listen delivers a failure after the items: $got', got.join(",") == "1,2" && error.message.indexOf("counter overflow") >= 0);
+			check('listen delivers a failure after the items: $got', got.join(",") == "1,2"
+				&& error.message.indexOf("counter overflow") >= 0);
 			followed();
 		});
 	}

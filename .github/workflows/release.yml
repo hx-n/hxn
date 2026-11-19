@@ -120,4 +120,4 @@ jobs:
       - name: Submit the haxelib
         env:
           HAXELIB_PASSWORD: ${{ secrets.HAXELIB_PASSWORD }}
-        run: haxelib submit dist/hxn-haxelib-*.zip darmie "$HAXELIB_PASSWORD" --never < /dev/null
+        run: haxelib submit dist/hxn-haxelib-*.zip "$HAXELIB_PASSWORD" --never < /dev/null

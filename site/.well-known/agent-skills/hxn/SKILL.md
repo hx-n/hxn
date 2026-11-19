@@ -91,6 +91,10 @@ pub struct Item { pub name: String, pub count: i32 }
   `Signal`: `Reactive.follow`. Results arrive through `hxn.Loop` on the
   Haxe event loop; an application with its own loop sets `Loop.manual` and
   calls `Loop.sync()`.
+  Static adapters can share a native outbox. Preserve consumed notification IDs
+  for other interested inboxes and deliver on each inbox's event thread.
+  Watchers must check readiness because IDs from independent queues can overlap.
+  See the [delivery contract](https://github.com/hx-n/hxn/blob/main/docs/design/async.md).
 - A packaged library is used with `-lib <library>`; its `extraParams.hxml`
   runs `hxn.Bind.lib`, which adds the classes, passes hxcpp its paths, and
   copies the `.hdll` beside the `.hl` output. It depends on the `hxn`

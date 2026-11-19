@@ -32,6 +32,8 @@ class Inbox {
 	var due:Array<Int> = [];
 	var driven = false;
 	var looking = false;
+	var sharedScheduled = false;
+	var ownerPost:Null<(() -> Void)->Void>;
 
 	public function new(wait:Int->Bool, next:() -> Int) {
 		this.wait = wait;
@@ -88,6 +90,30 @@ class Inbox {
 		lock.release();
 	}
 
+	// Static adapters can share an outbox. Preserve its notifications for
+	// this inbox, then arrange delivery on the event thread that owns it.
+	function enqueue(id:Int):Void {
+		lock.acquire();
+		if (!watchers.exists(id)) {
+			lock.release();
+			return;
+		}
+		if (due.indexOf(id) < 0)
+			due.push(id);
+		final post = !Loop.manual && !sharedScheduled ? ownerPost : null;
+		if (post != null)
+			sharedScheduled = true;
+		lock.release();
+		if (post != null)
+			post(() -> {
+				lock.acquire();
+				sharedScheduled = false;
+				lock.release();
+				if (!Loop.manual)
+					sync();
+			});
+	}
+
 	/**
 		Delivers this library's ready results on the calling thread. Returns
 		whether anything is still being watched. `Loop.sync` calls this for
@@ -124,6 +150,9 @@ class Inbox {
 			wait(0);
 			var id = next();
 			while (id >= 0) {
+				for (inbox in Loop.inboxes.copy())
+					if (inbox != this)
+						inbox.enqueue(id);
 				look(id);
 				id = next();
 			}
@@ -152,6 +181,9 @@ class Inbox {
 		#else
 		var post = events.run;
 		#end
+		lock.acquire();
+		ownerPost = post;
+		lock.release();
 		var turn:Null<() -> Void> = null;
 		turn = () -> {
 			if (Loop.manual) {
@@ -184,6 +216,9 @@ class Inbox {
 		if (driven)
 			return;
 		driven = true;
+		lock.acquire();
+		ownerPost = events.run;
+		lock.release();
 		// Keeps the event loop alive while anything is watched.
 		events.promise();
 		var handled = new sys.thread.Lock();

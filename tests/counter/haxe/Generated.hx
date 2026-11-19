@@ -1123,6 +1123,7 @@ class Generated {
 	}
 
 	static function main() {
+		SharedInbox.run(check);
 		typedStreamObjects();
 		var counter = new Counter(40);
 		check("an int in and out", counter.add(2) == 42);
