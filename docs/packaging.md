@@ -6,6 +6,27 @@
 one. Use `--release --out <directory>` to create the distributable haxelib.
 Haxe programs use it with `-lib <library>` and need no Rust source.
 
+## Library repository layout
+
+A library for Haxe consumers keeps its generated `binding/`, `include/`,
+`haxelib.json`, `extraParams.hxml` and API manifest in its package directory.
+For a single-package repository this is the repository root. Regenerate those
+files with `hxn package hl cpp --release --out .` and check their drift in CI.
+Keep `native/` ignored in Git; CI builds and combines the platform binaries in
+the installed release ZIP. Generated files under `target/` alone are development
+output and do not complete a distributable Haxelib.
+
+Haxe consumers install the prebuilt Haxelib and compile with `-lib`. They do not
+build Rust, generate adapters or fork the repository to run packaging scripts.
+Release checks install the actual ZIP into an isolated Haxelib repository and
+compile examples with Rust disabled. Keep source-build instructions in the
+contributor guide and retain licenses and packaged skills with the library.
+
+Produce wasm archives on the common pinned Linux/toolchain setup used by the
+other hxn libraries. Rebuilt Rust standard-library identities can differ across
+producer hosts, even at the same compiler version. Installed consumer checks
+must link composed SDKs with their published dependencies before release.
+
 ## Package contents
 
 | Path | Contents |

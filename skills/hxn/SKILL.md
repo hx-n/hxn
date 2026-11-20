@@ -31,7 +31,14 @@ PowerShell. Both verify release checksums and accept `HXN_VERSION` and
    library; CI runs it per runtime. It also fails when the committed API
    manifest (`<library>.hxn.json`) does not match the source.
 5. `hxn package [hl] [cpp] --release --out <dir>` writes a haxelib that
-   needs no Rust. Running it again into the same directory on another
+   needs no Rust. A published library keeps binding/, include/, haxelib.json,
+   extraParams.hxml and its API manifest checked into its package directory.
+   Regenerate that layout with `--out .`; keep native/ ignored and include its
+   CI-built platform libraries in the release ZIP. Test installed ZIP consumers
+   with Rust disabled. Build outputs under target/ alone do not satisfy this
+   distribution contract. Use the common pinned Linux producer for wasm parts
+   and check composition with published SDKs; a compiler version alone does not
+   establish rebuilt standard-library compatibility. Running it again into the same directory on another
    machine, or with `--wasm` or `--target <triple>`, adds that platform.
 6. `hxn doctor` reports what this machine can build for.
 
