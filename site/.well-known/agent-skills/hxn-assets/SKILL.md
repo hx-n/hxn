@@ -38,7 +38,12 @@ Use AssetLoader for asynchronous byte loading and FileSource to borrow hxn.file.
 AssetSource and CatalogSource providers return hxn.Future. Loader-returned bytes
 are owned copies; unloading must also invalidate stale in-flight cache writes.
 
-The installed haxelib supplies `hxn assets catalog` and `hxn assets stage`, each
+The installed haxelib supplies `hxn assets build [--jit|--no-jit] app.hxml` to
+select a packaged graph build without Rust tooling. Direct Haxe compilation uses
+`-D hxn_assets_jit=on|off|auto`. Default auto selects available JIT, otherwise
+scalar. Explicit unsupported JIT fails. CPPIA scripts must match their native
+host. These flags select KyuGraph independently of Ash execution mode.
+It also supplies `hxn assets catalog` and `hxn assets stage`, each
 with `--source`, `--out` and optional `--content-addressed`. Compiler integration
 uses `hxn_assets_dir` and stages the generated declaration catalog. Whole-directory
 imports without declarations can use `hxn_assets_content_addressed`. Consumers
@@ -67,16 +72,29 @@ Retry the failed batch's identical bytes before publishing another revision.
 The publisher has no durable outbox and implements no CRDT merging. Namespaces
 organize player/campaign data; authorization and authority policy belong to the app.
 
-MemoryKnowledgeSink supplies portable relationship/AABB queries. The optional
-native adapter under adapters/kyugraph consumes the same versioned JSON and
-persists revision/replay checks. Keep its JIT/storage dependencies out of
-mobile/browser packages and serialize writes off render/event threads. Scalar
-arrays use JSON text columns for KyuGraph 0.4 DDL. Follow the
+KnowledgeGraph is included in the normal hxn-assets package with native bindings
+and prebuilt scalar/JIT binaries. Metadata and explicit publication opt in to
+projection; do not make the engine a separate optional dependency or ask Haxe
+consumers to compile Rust. Desktop and Android include JIT and scalar; iOS and
+wasm use scalar/vectorized evaluation. KnowledgeGraph.open returns a future and
+implements KnowledgeSink; query returns owned typed rows with named parameters.
+The jit property reports the chosen build. Native operations are serialized;
+non-threaded wasm runs CPU work without starting threads. Graph programs
+configure an 8 MiB native Emscripten stack; applications can override it with
+`hxn_assets_stack_size=<bytes>`. Keep that link setting on the graph class so
+byte-only asset consumers retain their own stack policy.
+
+Use save/load with hxn.file.Storage for explicit application-scoped checkpoints,
+including browser IndexedDB. snapshot/restore transfer the same portable bytes
+between scalar and JIT builds. Native open(directory) also supports filesystem
+persistence. Await pending work before close. MemoryKnowledgeSink remains a
+lightweight sink for portable relationship/AABB queries.
+Scalar arrays use JSON text columns for KyuGraph 0.4 DDL. Follow the
 [knowledge contract](https://github.com/hx-n/hxn-assets/blob/main/docs/knowledge.md)
 and [runnable model](https://github.com/hx-n/hxn-assets/tree/main/examples/knowledge).
-tests/knowledge/run.py checks schemas/full DCE/compiler reuse; --adapter or
---kyugraph <checkout> adds actual engine queries and restart. Native graph notices
-belong to the optional adapter's workspace, not core hxn or portable hxn-file.
+tests/knowledge/run.py checks schemas/full DCE/compiler reuse and --adapter adds
+engine replay checks. tests/release/run.py checks installed graph builds with
+Rust disabled. Native graph notices belong to hxn-assets, not core or hxn-file.
 
 For macro changes run the annotation suite under tests/assets/run.py, including
 compilation-server reuse, asset edits and full DCE. Compare staged descriptors

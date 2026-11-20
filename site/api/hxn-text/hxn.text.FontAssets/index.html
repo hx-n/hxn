@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en" prefix="og: https://ogp.me/ns#">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#000000">
+  <title>FontAssets (hxn.text) · hxn-text API — hxn</title>
+  <meta name="description" content="Decodes font assets while leaving byte caching and transport with hxn-assets.">
+  <meta name="robots" content="index, follow, max-image-preview:large">
+  <link rel="canonical" href="https://hxn.dev/api/hxn-text/hxn.text.FontAssets/">
+  <link rel="describedby" href="/llms.txt" type="text/markdown">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="hxn">
+  <meta property="og:locale" content="en_GB">
+  <meta property="og:title" content="FontAssets (hxn.text) · hxn-text API — hxn">
+  <meta property="og:description" content="Decodes font assets while leaving byte caching and transport with hxn-assets.">
+  <meta property="og:url" content="https://hxn.dev/api/hxn-text/hxn.text.FontAssets/">
+  <meta property="og:image" content="https://hxn.dev/og-hero.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="2400">
+  <meta property="og:image:height" content="1260">
+  <meta property="og:image:alt" content="hxn — Native Rust bindings for Haxe">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="FontAssets (hxn.text) · hxn-text API — hxn">
+  <meta name="twitter:description" content="Decodes font assets while leaving byte caching and transport with hxn-assets.">
+  <meta name="twitter:image" content="https://hxn.dev/og-hero.png">
+  <meta name="twitter:image:alt" content="hxn — Native Rust bindings for Haxe">
+  <link rel="icon" href="/logo.png" type="image/png">
+  <link rel="apple-touch-icon" href="/logo.png">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/script.js" defer></script>
+  <script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "APIReference", "@id": "https://hxn.dev/api/hxn-text/hxn.text.FontAssets/#page", "url": "https://hxn.dev/api/hxn-text/hxn.text.FontAssets/", "name": "FontAssets (hxn.text) \u00b7 hxn-text API \u2014 hxn", "headline": "FontAssets (hxn.text) \u00b7 hxn-text API", "description": "Decodes font assets while leaving byte caching and transport with hxn-assets.", "inLanguage": "en", "isPartOf": {"@id": "https://hxn.dev/#website"}, "image": "https://hxn.dev/og-hero.png", "programmingLanguage": "Haxe", "executableLibraryName": "hxn-text", "assemblyVersion": "0.1.0", "targetPlatform": "HashLink, Ash, hxcpp", "about": "hxn.text.FontAssets"}, {"@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "hxn", "item": "https://hxn.dev/"}, {"@type": "ListItem", "position": 2, "name": "API", "item": "https://hxn.dev/api/"}, {"@type": "ListItem", "position": 3, "name": "hxn-text", "item": "https://hxn.dev/api/hxn-text/"}, {"@type": "ListItem", "position": 4, "name": "FontAssets", "item": "https://hxn.dev/api/hxn-text/hxn.text.FontAssets/"}]}]}</script>
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="header">
+    <a class="wordmark" href="/" aria-label="hxn home">hxn<span aria-hidden="true"> /</span></a>
+    <nav class="header-links" aria-label="Main"><a href="/tutorials/">Tutorials</a><a href="/api/" aria-current="true">API</a><a class="source-link" href="https://github.com/hx-n/hxn">GitHub ↗</a></nav>
+  </header>
+  <main class="tutorial-layout api-layout">
+    <aside class="tutorial-sidebar api-sidebar"><nav aria-label="hxn-text types"><a class="tutorial-index-link" href="/api/">API reference</a><a class="api-sidebar-library" href="/api/hxn-text/">hxn-text <span>0.1.0</span></a><a href="/api/hxn-text/hxn.text.AtlasKind/">AtlasKind</a><a href="/api/hxn-text/hxn.text.AtlasUpdate/">AtlasUpdate</a><a href="/api/hxn-text/hxn.text.Font/">Font</a><a href="/api/hxn-text/hxn.text.FontAssets/" aria-current="page">FontAssets</a><a href="/api/hxn-text/hxn.text.FontMetrics/">FontMetrics</a><a href="/api/hxn-text/hxn.text.FontOptions/">FontOptions</a><a href="/api/hxn-text/hxn.text.FontWeak/">FontWeak</a><a href="/api/hxn-text/hxn.text.GlyphBitmap/">GlyphBitmap</a><a href="/api/hxn-text/hxn.text.GlyphRun/">GlyphRun</a><a href="/api/hxn-text/hxn.text.PreparedText/">PreparedText</a><a href="/api/hxn-text/hxn.text.ShapedGlyph/">ShapedGlyph</a><a href="/api/hxn-text/hxn.text.TextAlignment/">TextAlignment</a><a href="/api/hxn-text/hxn.text.TextEngine/">TextEngine</a><a href="/api/hxn-text/hxn.text.TextError/">TextError</a><a href="/api/hxn-text/hxn.text.TextErrorCode/">TextErrorCode</a><a href="/api/hxn-text/hxn.text.TextException/">TextException</a><a href="/api/hxn-text/hxn.text.TextGlyph/">TextGlyph</a><a href="/api/hxn-text/hxn.text.TextOptions/">TextOptions</a><a href="/api/hxn-text/hxn.text.TextWrap/">TextWrap</a></nav></aside>
+    <article id="content" class="lesson"><header class="lesson-heading"><nav class="eyebrow api-breadcrumb" aria-label="Breadcrumb"><a href="/api/">API</a> / <a href="/api/hxn-text/">hxn-text</a> / class in hxn.text</nav><h1>FontAssets</h1></header><div class="api-doc"><p>Decodes font assets while leaving byte caching and transport with hxn-assets.</p></div><section class="lesson-section" id="static-methods"><h2>Static methods</h2><div class="api-member" id="decode"><pre class="api-signature"><code>function decode(bytes:Bytes, ?options:<a href="/api/hxn-text/hxn.text.FontOptions/">FontOptions</a>):<a href="/api/hxn-text/hxn.text.Font/">Font</a></code></pre><p>Runtime decoder for a typed @:dynamicAsset Font field. The caller owns the font.</p></div><div class="api-member" id="load"><pre class="api-signature"><code>function load(loader:<a href="/api/hxn-assets/hxn.assets.AssetLoader/">AssetLoader</a>, address:String, ?options:<a href="/api/hxn-text/hxn.text.FontOptions/">FontOptions</a>):<a href="/api/hxn/hxn.Future/">Future</a>&lt;<a href="/api/hxn-text/hxn.text.Font/">Font</a>&gt;</code></pre><p>Loads verified asset bytes and creates a new caller-owned font for this request.</p></div></section></article>
+  </main>
+  <footer><p>HashLink · Ash · hxcpp</p><a href="https://github.com/hx-n/hxn/blob/main/LICENSE">Open source · Apache 2.0</a></footer>
+</body>
+</html>

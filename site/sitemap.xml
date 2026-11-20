@@ -153,6 +153,8 @@
   <url><loc>https://hxn.dev/api/hxn-assets/hxn.assets.FileSource/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-assets/hxn.assets.ImageData/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-assets/hxn.assets.Knowledge/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn-assets/hxn.assets.knowledge.KnowledgeSink/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn-assets/hxn.assets.KnowledgeGraph/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-assets/hxn.assets.KnowledgeRef/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-assets/hxn.assets.RemoteOptions/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-assets/hxn.assets.StreamingAssetSource/</loc></url>
@@ -162,15 +164,35 @@
   <url><loc>https://hxn.dev/api/hxn-assets/hxn.assets.knowledge.KnowledgeBatch/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-assets/hxn.assets.knowledge.KnowledgeBatchData/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-assets/hxn.assets.knowledge.KnowledgeBounds/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn-assets/hxn.assets.knowledge.KnowledgeQuery/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-assets/hxn.assets.knowledge.KnowledgeSchema/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-assets/hxn.assets.knowledge.KnowledgeFact/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-assets/hxn.assets.knowledge.KnowledgeRelation/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-assets/hxn.assets.knowledge.KnowledgeSpatialSelection/</loc></url>
-  <url><loc>https://hxn.dev/api/hxn-assets/hxn.assets.knowledge.KnowledgeSink/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-assets/hxn.assets.knowledge.KnowledgeSnapshot/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-assets/hxn.assets.knowledge.KnowledgeData/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-assets/hxn.assets.knowledge.KnowledgeAssetOrigin/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-assets/hxn.assets.knowledge.MemoryKnowledgeSink/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn-text/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn-text/hxn.text.AtlasKind/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn-text/hxn.text.AtlasUpdate/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn-text/hxn.text.Font/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn-text/hxn.text.FontAssets/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn-text/hxn.text.FontMetrics/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn-text/hxn.text.FontOptions/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn-text/hxn.text.FontWeak/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn-text/hxn.text.GlyphBitmap/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn-text/hxn.text.GlyphRun/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn-text/hxn.text.PreparedText/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn-text/hxn.text.ShapedGlyph/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn-text/hxn.text.TextAlignment/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn-text/hxn.text.TextEngine/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn-text/hxn.text.TextError/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn-text/hxn.text.TextErrorCode/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn-text/hxn.text.TextException/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn-text/hxn.text.TextGlyph/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn-text/hxn.text.TextOptions/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn-text/hxn.text.TextWrap/</loc></url>
   <url><loc>https://hxn.dev/api/hxnsl/</loc></url>
   <url><loc>https://hxn.dev/api/hxnsl/hxnsl.LayoutEntry/</loc></url>
   <url><loc>https://hxn.dev/api/hxnsl/hxnsl.EntryPoint/</loc></url>

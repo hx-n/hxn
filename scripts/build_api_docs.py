@@ -28,7 +28,7 @@ ORIGIN = 'https://hxn.dev'
 # to type. hide: type paths left out, as regular expressions. defines: for a
 # binding without a HashLink library for this machine, a platform it has one for.
 LIBRARIES = [
-    dict(name='hxn', version='0.3.9', prefix='hxn.', roots=['--macro', "include('hxn', true, ['hxn.native'])"],
+    dict(name='hxn', version='0.3.10', prefix='hxn.', roots=['--macro', "include('hxn', true, ['hxn.native'])"],
          hide=[r'^hxn\.(Wire|Native|Bind|Handle|TupleMacro)$', r'^hxn\.native\.', r'^hxn\.reactive\.'],
          summary='Shared logging, futures, streams, signals, reactive values, atomics and callbacks: the Haxe classes every hxn library uses.'),
     dict(name='hxn-window', version='0.2.2', prefix='hxn.window.', roots=['--macro', "include('hxn.window')"],
@@ -40,14 +40,18 @@ LIBRARIES = [
          libs=['hxn-av:0.2.1'],
          hide=[r'^hxn\.audio\.(cli\.|Init$)'],
          summary='Audio output and mixing: voices, bounded PCM streams, buses and effects on native and browser runtimes. The Av and DecoderStream helpers require hxn-av.'),
-    dict(name='hxn-file', version='0.1.0', prefix='hxn.file.', roots=['--macro', "include('hxn.file')"],
-         repository='https://github.com/hx-n/hxn-assets/tree/v0.1.0/packages/hxn-file',
+    dict(name='hxn-file', version='0.2.0', prefix='hxn.file.', roots=['--macro', "include('hxn.file')"],
+         repository='https://github.com/hx-n/hxn-assets/tree/v0.2.0/packages/hxn-file',
          hide=[r'^hxn\.file\.Init$'],
          summary='Scoped asynchronous files, saves, preferences and bounded HTTP(S)/WS(S) transport on desktop, mobile and browser runtimes.'),
-    dict(name='hxn-assets', version='0.1.0', prefix='hxn.assets.', roots=['--macro', "include('hxn.assets', true, ['hxn.assets.macros', 'hxn.assets.cli'])"],
-         repository='https://github.com/hx-n/hxn-assets/tree/v0.1.0/packages/hxn-assets',
-         hide=[r'^hxn\.assets\.(macros|cli)\.'],
-         summary='Typed annotated assets, asynchronous loading, remote streams, content identity and opt-in knowledge metadata with relationships and spatial bounds.'),
+    dict(name='hxn-assets', version='0.2.0', prefix='hxn.assets.', roots=['--macro', "include('hxn.assets', true, ['hxn.assets.macros', 'hxn.assets.cli'])"],
+         repository='https://github.com/hx-n/hxn-assets/tree/v0.2.0/packages/hxn-assets',
+         hide=[r'^hxn\.assets\.(macros|cli|native)\.', r'^hxn\.assets\.NativeBuild$'],
+         summary='Typed annotated assets, remote streams and semantic knowledge metadata, with a prebuilt KyuGraph engine, selectable JIT and portable checkpoints.'),
+    dict(name='hxn-text', version='0.1.0', prefix='hxn.text.', roots=['--macro', "include('hxn.text')"],
+         libs=['hxn-assets:0.2.0'],
+         hide=[r'^hxn\.text\.(NativeNames|HxnTextThrown)$'],
+         summary='Owned fonts, HarfRust text shaping, glyph masks and revisioned atlas data. FontAssets helpers use hxn-assets annotations and asynchronous loading.'),
     dict(name='hxnsl', version='0.2.1', prefix='hxnsl.', roots=['hxnsl.Shader', 'hxnsl.Layout'],
          summary='Shaders written in HXSL and translated at compile time to WGSL, MSL, HLSL, SPIR-V and GLSL ES.'),
     dict(name='hxn-gpu', version='0.2.4', prefix='hxn.gpu.', roots=['--macro', "include('hxn.gpu', true, ['hxn.gpu.backend'])"],
@@ -584,7 +588,7 @@ def build(repo, offline):
         for t in sorted(everything.values(), key=lambda t: (t['name'].lower(), t['lib'])))
     sidebar = '    <aside class="tutorial-sidebar api-sidebar"><nav aria-label="Libraries"><a class="tutorial-index-link" href="/api/" aria-current="page">API reference</a>' + ''.join(
         f'<a href="{lib_url(lib["name"])}">{escape(lib["name"])} <span>{escape(lib["version"])}</span></a>' for lib in LIBRARIES) + '</nav></aside>'
-    description = 'The Haxe API of every hxn library at its released version: hxn, hxn-window, hxn-av, hxn-audio, hxn-file, hxn-assets, hxnsl, hxn-gpu and the hxn GPU drivers.'
+    description = 'The Haxe API of every hxn library at its released version: hxn, hxn-window, hxn-av, hxn-audio, hxn-file, hxn-assets, hxn-text, hxnsl, hxn-gpu and the hxn GPU drivers.'
     body = (sidebar + '\n    <article id="content" class="lesson"><header class="lesson-heading"><p class="eyebrow">API</p>'
             f'<h1>API reference</h1><p class="lesson-description">{escape(description)}</p></header>'
             f'<div class="tutorial-cards">{cards}</div>'

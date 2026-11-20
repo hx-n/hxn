@@ -60,6 +60,9 @@ each version into `target/api-haxelib`, describes it with `haxe -xml`, writes
 a page per library and per type, and lists the pages in `site/sitemap.xml`
 and `site/llms.txt`. Include optional haxelibs in a library's `libs` entry
 when they enable public integration types, and document that requirement.
+The hxn-text reference includes hxn-assets so it covers the FontAssets helpers.
+Hide bootstrap macros and internal native backend bindings from the reference.
+Document the application-facing classes and their returned data.
 
 See [CLI usage](../cli.md) and [packaging](../packaging.md).
 

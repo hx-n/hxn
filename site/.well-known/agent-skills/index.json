@@ -6,7 +6,7 @@
       "type": "skill-md",
       "description": "Expose a Rust library to Haxe with hxn, so one set of generated Haxe classes runs on HashLink, Ash, hxcpp and CPPIA, natively and on wasm. Use when writing or changing a crate annotated with #[hxn::interface], #[hxn::methods], #[hxn::function] or #[hxn::data], running the hxn command (new, build, run, check, package, import, doctor), packaging an hxn library as a haxelib, binding a C header with hxn import, or extending the hxn CLI with haxelib plugins.",
       "url": "/.well-known/agent-skills/hxn/SKILL.md",
-      "digest": "sha256:d5b8e3a5f915ca17f7ac1e04e0ba0e96eddec53e29e713d836ef75a9739e64c5"
+      "digest": "sha256:a735205c365291dbef233c99e1290e398152edd8d767a8f5ee5496481af0ba0a"
     },
     {
       "name": "hxn-log",
@@ -48,7 +48,14 @@
       "type": "skill-md",
       "description": "Use or change hxn-assets typed embedded and dynamic values, metadata catalogs, HTTP/WS streams, content identity, byte caching, semantic knowledge metadata and the hxn assets CLI.",
       "url": "/.well-known/agent-skills/hxn-assets/SKILL.md",
-      "digest": "sha256:e85cf1668b8e2b14766ffcdd53ae12d02e5a70166fcd36730748fc74decca960"
+      "digest": "sha256:802114d82affd9796d6e8519f812d6a8c658015212e117f7be038b562d69a5e3"
+    },
+    {
+      "name": "hxn-text",
+      "type": "skill-md",
+      "description": "Use or change hxn-text fonts, HarfRust-shaped glyph runs, glyph rasterization and revisioned atlas data from Haxe on native, mobile and browser runtimes. Use for text measurements, font ownership, font assets and integration with an application renderer.",
+      "url": "/.well-known/agent-skills/hxn-text/SKILL.md",
+      "digest": "sha256:85fcf857bc3fb45f19e575954403ad45b9a2340ef96996a8c4887ec9d74d1db7"
     },
     {
       "name": "hxnsl",
