@@ -1,18 +1,19 @@
 package hxn;
 
 /**
-	A fixed number of signed 16-bit integers, stored together in one block of memory.
+	A fixed number of signed 16-bit integers in one block of memory.
 
-	A library function that takes `&[i16]` reads the buffer in place, and one
-	that takes `&mut [i16]` writes it in place, for the duration of the call.
-	Nothing is copied, and the library cannot keep the buffer after the call
-	returns.
+	A library function that takes `&[i16]` reads the buffer for the duration
+	of the call, and a function that takes `&mut [i16]` writes it. When the
+	memory is aligned for `i16`, nothing is copied. The library cannot keep
+	the buffer after the call returns.
 
-	The length never changes. `resized` makes a new buffer, which replaces
-	this one wherever it is used.
-	A value set is truncated to its low 16 bits.
+	The length does not change. `resized` returns a new buffer and does not
+	change this one.
 
-	Indexing is not bounds-checked unless compiled with `-debug`.
+	When you set a value, the buffer keeps only its low 16 bits.
+
+	Indexing checks bounds only when you compile with `-debug`.
 **/
 abstract Int16Buffer(haxe.io.Bytes) {
 	/** The size of one element in bytes. **/
@@ -98,8 +99,8 @@ abstract Int16Buffer(haxe.io.Bytes) {
 	}
 
 	/**
-		A new buffer of `length` elements that starts with this one's. Any
-		elements past this buffer's length are zero.
+		Returns a new buffer of `length` elements. It starts with the elements
+		of this buffer, and any elements after them are zero.
 	**/
 	public function resized(length:Int):Int16Buffer {
 		var out = new Int16Buffer(length);

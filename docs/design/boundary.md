@@ -28,20 +28,26 @@ creating Rust references. Each `Buf` uses its originating allocator.
 ## Typed buffers
 
 `hxn.Float32Buffer`, `Float64Buffer`, `Int32Buffer`, `UInt32Buffer`,
-`Int16Buffer` and `UInt16Buffer` are abstracts over `haxe.io.Bytes`. They
-hold a fixed number of elements in little-endian order, which is native order
-on every supported platform. A library function that takes `&[f32]` or
-`&mut [f32]` borrows the buffer's bytes for the call, as it would borrow
-`Bytes`, and `hxn_abi::Elements` or `ElementsMut` views them as elements. The
-view is in place when the bytes are aligned for the element type. Otherwise
-the call works on a copy, and `ElementsMut` writes the copy back when the call
-returns. Neither collector moves bytes during a call, so no buffer is pinned.
+`Int16Buffer` and `UInt16Buffer` are abstracts over `haxe.io.Bytes`. Each one
+holds a fixed number of elements in little-endian order. That is the native
+order on every supported platform.
 
-Indexing reads `hl.Bytes` directly on HashLink and Ash, and hxcpp's raw
-memory accessors on hxcpp. It is bounds-checked only with `-debug`. A buffer
-never changes length: `resized` makes a new one. An async function copies a
-buffer before the call returns, and cannot take one to write into.
+A library function that takes `&[f32]` or `&mut [f32]` borrows the bytes of
+the buffer for the call, the same way that it borrows `Bytes`.
+`hxn_abi::Elements` and `ElementsMut` give the bytes to the function as
+elements. If the bytes are aligned for the element type, the function reads
+and writes them in place. If they are not aligned, the function works on a
+copy, and `ElementsMut` writes the copy back when the call returns. The
+collectors of HashLink and hxcpp do not move memory during a call, so the
+adapter does not pin the buffer.
 
+On HashLink and Ash, indexing reads `hl.Bytes` directly. On hxcpp, it uses
+the raw memory functions of hxcpp. Indexing checks bounds only when you
+compile with `-debug`. The length of a buffer does not change: `resized`
+returns a new buffer. An async function copies the buffer before the call
+returns. It cannot take a buffer to write into.
+
+## Failures
 
 | Rust failure | Haxe behavior |
 |---|---|

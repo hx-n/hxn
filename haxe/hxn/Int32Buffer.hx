@@ -1,17 +1,17 @@
 package hxn;
 
 /**
-	A fixed number of signed 32-bit integers, stored together in one block of memory.
+	A fixed number of signed 32-bit integers in one block of memory.
 
-	A library function that takes `&[i32]` reads the buffer in place, and one
-	that takes `&mut [i32]` writes it in place, for the duration of the call.
-	Nothing is copied, and the library cannot keep the buffer after the call
-	returns.
+	A library function that takes `&[i32]` reads the buffer for the duration
+	of the call, and a function that takes `&mut [i32]` writes it. When the
+	memory is aligned for `i32`, nothing is copied. The library cannot keep
+	the buffer after the call returns.
 
-	The length never changes. `resized` makes a new buffer, which replaces
-	this one wherever it is used.
+	The length does not change. `resized` returns a new buffer and does not
+	change this one.
 
-	Indexing is not bounds-checked unless compiled with `-debug`.
+	Indexing checks bounds only when you compile with `-debug`.
 **/
 abstract Int32Buffer(haxe.io.Bytes) {
 	/** The size of one element in bytes. **/
@@ -97,8 +97,8 @@ abstract Int32Buffer(haxe.io.Bytes) {
 	}
 
 	/**
-		A new buffer of `length` elements that starts with this one's. Any
-		elements past this buffer's length are zero.
+		Returns a new buffer of `length` elements. It starts with the elements
+		of this buffer, and any elements after them are zero.
 	**/
 	public function resized(length:Int):Int32Buffer {
 		var out = new Int32Buffer(length);
