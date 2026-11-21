@@ -30,6 +30,10 @@ PowerShell. Both verify release checksums and accept `HXN_VERSION` and
    when every run passes and prints the same output. This is the test for a
    library; CI runs it per runtime. It also fails when the committed API
    manifest (`<library>.hxn.json`) does not match the source.
+   A Haxe program that uses installed hxn libraries and has no crate goes in
+   an `.hxml` file with no output line: `hxn run hl app.hxml`,
+   `hxn check hl cpp cppia app.hxml`. hxn adds the output and the defines
+   for each runtime, and takes the same options as for a library.
 5. `hxn package [hl] [cpp] --release --out <dir>` writes a haxelib that
    needs no Rust. A published library keeps binding/, include/, haxelib.json,
    extraParams.hxml and its API manifest checked into its package directory.

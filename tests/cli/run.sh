@@ -181,6 +181,41 @@ EOF
 ) | tr -d '\r' | tee "$work/out.txt"
 greeted "the program built against the package"
 
+# A Haxe program with no crate of its own: a program file names the
+# installed package with -lib, and `hxn run` and `hxn check` compile and run
+# it. The package and hxn are installed in a haxelib repository of the
+# program's directory. The package depends on this version of hxn, which a
+# dev link does not satisfy, so hxn is installed with the layout that
+# `haxelib install` gives.
+mkdir "$work/file"
+# The repository hides the global one, which holds hxcpp.
+hxcpp="$(haxelib libpath hxcpp 2>/dev/null || true)"
+(
+	cd "$work/file"
+	haxelib newrepo >/dev/null
+	if [ -n "$hxcpp" ]; then
+		haxelib dev hxcpp "$hxcpp" >/dev/null
+	fi
+	version="$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$root/haxelib.json")"
+	installed=".haxelib/hxn/${version//./,}"
+	mkdir -p "$installed"
+	cp -R "$root/haxe" "$root/haxelib.json" "$installed/"
+	printf '%s' "$version" >.haxelib/hxn/.current
+	haxelib dev greeter "$work/package" >/dev/null
+	printf '%s\n' "-lib greeter" "-cp $work/greeter/haxe" "-main Main" >greet.hxml
+	"$hxn" run "${arguments[@]}" greet.hxml
+) | tr -d '\r' | tee "$work/out.txt"
+greeted "the program file"
+(cd "$work/file" && "$hxn" check "${arguments[@]}" greet.hxml) | tr -d '\r' | tee "$work/out.txt"
+greeted "the program file under check"
+grep -q '^PASS: greet ran on ' "$work/out.txt" || { echo "FAILED: check did not pass the program file" >&2; exit 1; }
+printf '%s\n' "-lib greeter" "-main Main" "-hl out.hl" >"$work/file/output.hxml"
+if (cd "$work/file" && "$hxn" run hl output.hxml) >/dev/null 2>"$work/refused.txt"; then
+	echo "FAILED: run accepted a program file with an output line" >&2
+	exit 1
+fi
+grep -q 'hxn adds the output' "$work/refused.txt" || { cat "$work/refused.txt" >&2; exit 1; }
+
 # Settings from the crate and the command line are passed through: another
 # main class, a haxe flag, and program arguments.
 cat >haxe/Other.hx <<'EOF'

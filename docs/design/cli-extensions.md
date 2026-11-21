@@ -50,7 +50,9 @@ its output and exit status are the command's output and exit status.
 
 A hook request has `kind: "hook"`, `phase`, and `context`. Context identifies
 the CLI command, the source project's directory, library, haxelib and Cargo
-target directory. Build/run targets include `runtime`, `wasm`, `threads`
+target directory. For a [program file](../cli.md#program-files), the
+project's `library` and `haxelib` are null, `hxml` is the path of the file,
+and the target directory is the file's `bin/<file name>`. Build/run targets include `runtime`, `wasm`, `threads`
 and `triple`. `output` names the build or package directory when available;
 `status` contains the program's exit code after a run.
 
@@ -77,7 +79,9 @@ A hook with no contributions returns `{"version":1}`.
 ## Lifecycle
 
 Hooks run only for the source library and haxelibs selected by its
-`haxe-flags` (`-lib` or `--library`), including their resolved dependencies.
+`haxe-flags` (`-lib`, `-L` or `--library`), including their resolved
+dependencies. For a program file, they run for the haxelibs that the file
+selects.
 Installing a library alone does not activate its hooks. Providers run in
 haxelib-name order; the source registration takes precedence over an
 installed copy of that same library.

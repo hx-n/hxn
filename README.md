@@ -220,6 +220,24 @@ not the web page's, so `await` works in a web page on a future the library's
 threads settle. Under hxcpp, a future the browser settles on the program's
 own thread, such as a WebGPU promise, still needs `then`.
 
+The hxn command runs such a program on every runtime. Put the program's
+flags in an `.hxml` file without an output line:
+
+```
+-lib greeter
+-cp src
+-main Main
+```
+
+`hxn run` and `hxn check` compile it with the output and defines for each
+runtime, and take the same options as for a library:
+
+```
+hxn run hl app.hxml
+hxn run hl --wasm --threads app.hxml
+hxn check hl cpp cppia app.hxml
+```
+
 `haxelib submit` requires a few more fields. Set `repository` and `license`
 in Cargo.toml, and the haxelib contributors and a release note under
 `[package.metadata.hxn]`:

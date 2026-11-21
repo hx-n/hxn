@@ -6,6 +6,7 @@ use std::process::{Command, Stdio};
 
 use serde_json::{Value, json};
 
+use crate::hxml::Program;
 use crate::make::{self, Built, Target};
 use crate::project::Project;
 
@@ -304,34 +305,9 @@ impl Reply {
 
     pub fn apply(self, built: &mut Built, cwd: &Path) -> Result<(), String> {
         built.plugin_haxe.extend(self.haxe.iter().cloned());
-        built.arguments.extend(self.haxe);
-        for (path, origin) in self.page {
-            let from = if path.is_absolute() {
-                path
-            } else {
-                cwd.join(path)
-            };
-            let name = from
-                .file_name()
-                .ok_or_else(|| format!("{origin}: page file has no name"))?;
-            let into = built.dir.join(name);
-            let bytes = std::fs::read(&from)
-                .map_err(|e| format!("{origin}: page file {}: {e}", from.display()))?;
-            if built.plugin_page.contains(&into)
-                && into.is_file()
-                && std::fs::read(&into).ok().as_deref() != Some(bytes.as_slice())
-            {
-                return Err(format!(
-                    "{origin}: page file {} conflicts with {}",
-                    from.display(),
-                    into.display()
-                ));
-            }
-            std::fs::write(&into, bytes).map_err(|e| format!("{}: {e}", into.display()))?;
-            if !built.plugin_page.contains(&into) {
-                built.plugin_page.push(into);
-            }
-        }
+        let Self { haxe, page } = self;
+        built.arguments.extend(haxe);
+        copy_pages(page, &built.dir, &mut built.plugin_page, cwd)?;
         let lines: Vec<String> = built
             .arguments
             .iter()
@@ -339,6 +315,57 @@ impl Reply {
             .collect();
         make::write(&built.hxml, &lines.concat())
     }
+
+    /// Adds the Haxe arguments of the reply to `arguments`. Copies its page
+    /// files into `into` and adds each copy to `copied`.
+    pub fn apply_to(
+        self,
+        arguments: &mut Vec<(&'static str, String)>,
+        into: &Path,
+        copied: &mut Vec<PathBuf>,
+        cwd: &Path,
+    ) -> Result<(), String> {
+        arguments.extend(self.haxe);
+        copy_pages(self.page, into, copied, cwd)
+    }
+}
+
+// Copies page files into `dir`. Two files with the same name and different
+// contents are an error.
+fn copy_pages(
+    page: Vec<(PathBuf, String)>,
+    dir: &Path,
+    copied: &mut Vec<PathBuf>,
+    cwd: &Path,
+) -> Result<(), String> {
+    for (path, origin) in page {
+        let from = if path.is_absolute() {
+            path
+        } else {
+            cwd.join(path)
+        };
+        let name = from
+            .file_name()
+            .ok_or_else(|| format!("{origin}: page file has no name"))?;
+        let into = dir.join(name);
+        let bytes = std::fs::read(&from)
+            .map_err(|e| format!("{origin}: page file {}: {e}", from.display()))?;
+        if copied.contains(&into)
+            && into.is_file()
+            && std::fs::read(&into).ok().as_deref() != Some(bytes.as_slice())
+        {
+            return Err(format!(
+                "{origin}: page file {} conflicts with {}",
+                from.display(),
+                into.display()
+            ));
+        }
+        std::fs::write(&into, bytes).map_err(|e| format!("{}: {e}", into.display()))?;
+        if !copied.contains(&into) {
+            copied.push(into);
+        }
+    }
+    Ok(())
 }
 
 fn from_root(root: &Path) -> Result<Option<Plugin>, String> {
@@ -409,41 +436,60 @@ pub fn installed(cwd: &Path) -> Result<Vec<Plugin>, String> {
 }
 
 pub fn for_project(project: &Project) -> Result<Vec<Plugin>, String> {
-    let mut plugins = BTreeMap::new();
-    let mut args = vec!["path".into()];
-    let mut flags = project.flags.iter();
-    while let Some(flag) = flags.next() {
-        if ["-lib", "--library"].contains(&flag.as_str())
-            && let Some(library) = flags.next()
-        {
-            args.push(library.clone());
-        }
-    }
-    if args.len() > 1 {
-        for line in haxelib(&args, &project.dir)?
-            .lines()
-            .filter(|line| !line.starts_with('-'))
-        {
-            let mut path = Path::new(line.trim());
-            while path.is_dir() {
-                if path.join("haxelib.json").is_file() {
-                    if let Some(plugin) = from_root(path)? {
-                        plugins.insert(plugin.library.clone(), plugin);
-                    }
-                    break;
-                }
-                let Some(parent) = path.parent() else {
-                    break;
-                };
-                path = parent;
-            }
-        }
-    }
+    let mut plugins = selected(&project.flags, &project.dir)?;
     if let Some(config) = &project.cli {
         let plugin = Plugin::parse(&project.haxelib, &project.dir, config)?;
         plugins.insert(plugin.library.clone(), plugin);
     }
     unique(plugins.into_values().collect())
+}
+
+/// The plugins of the libraries a program file selects.
+pub fn for_program(program: &Program) -> Result<Vec<Plugin>, String> {
+    unique(
+        selected(&program.flags, &program.dir)?
+            .into_values()
+            .collect(),
+    )
+}
+
+// The plugins of the libraries `flags` select with `-lib`, `-L` or
+// `--library`, and of the libraries they depend on.
+fn selected(flags: &[String], cwd: &Path) -> Result<BTreeMap<String, Plugin>, String> {
+    let mut plugins = BTreeMap::new();
+    for path in class_paths(flags, cwd)? {
+        let mut path = path.as_path();
+        while path.is_dir() {
+            if path.join("haxelib.json").is_file() {
+                if let Some(plugin) = from_root(path)? {
+                    plugins.insert(plugin.library.clone(), plugin);
+                }
+                break;
+            }
+            let Some(parent) = path.parent() else {
+                break;
+            };
+            path = parent;
+        }
+    }
+    Ok(plugins)
+}
+
+/// The class paths of the libraries `flags` select, and of the libraries
+/// they depend on, as haxelib resolves them in `cwd`.
+pub fn class_paths(flags: &[String], cwd: &Path) -> Result<Vec<PathBuf>, String> {
+    let libraries = crate::hxml::libraries(flags);
+    if libraries.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut args = vec![String::from("path")];
+    args.extend(libraries);
+    Ok(haxelib(&args, cwd)?
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('-'))
+        .map(PathBuf::from)
+        .collect())
 }
 
 pub fn context(
@@ -452,8 +498,38 @@ pub fn context(
     output: Option<&Path>,
     status: Option<u8>,
 ) -> Value {
+    with(
+        json!({"directory": project.dir, "library": project.library, "haxelib": project.haxelib, "target_directory": project.target}),
+        target,
+        output,
+        status,
+    )
+}
+
+/// The hook context for a program file. The program has no library of its
+/// own, so `library` and `haxelib` are null. `hxml` is the path of the file.
+pub fn program_context(
+    program: &Program,
+    target: Option<Target>,
+    output: Option<&Path>,
+    status: Option<u8>,
+) -> Value {
+    with(
+        json!({"directory": program.dir, "library": null, "haxelib": null, "target_directory": program.output(), "hxml": program.file}),
+        target,
+        output,
+        status,
+    )
+}
+
+fn with(
+    project: Value,
+    target: Option<Target>,
+    output: Option<&Path>,
+    status: Option<u8>,
+) -> Value {
     json!({"command": std::env::args().nth(1), "arguments": std::env::args().skip(2).collect::<Vec<_>>(),
-        "project": {"directory": project.dir, "library": project.library, "haxelib": project.haxelib, "target_directory": project.target},
+        "project": project,
         "target": target.map(|t| json!({"runtime": t.runtime.name(), "wasm": t.wasm, "threads": t.threads, "triple": t.triple()})),
         "output": output, "status": status})
 }

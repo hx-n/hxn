@@ -654,6 +654,43 @@ pub struct Options<'a> {
     pub hashlink: Option<&'a Path>,
 }
 
+/// The defines that a program compiled for `target` needs, both for a
+/// library that hxn builds and for installed libraries. `hxn.Bind.lib` uses
+/// them to select the native file of each library.
+pub fn defines(target: Target) -> Vec<(&'static str, String)> {
+    let mut defines = Vec::new();
+    if target.wasm {
+        defines.push(("-D", String::from("wasm")));
+    }
+    if target.threads {
+        defines.push(("-D", String::from("hxn_threads")));
+    }
+    if target.runtime == Runtime::Cpp {
+        // hxcpp builds a program for Emscripten single-threaded unless told.
+        if target.threads {
+            defines.push(("-D", String::from("HXCPP_MULTI_THREADED_APP")));
+        }
+        if target.wasm {
+            // hxcpp assumes the host's 64-bit pointers unless told
+            // otherwise, and its UTF-16 strings call a Windows-only function
+            // under Emscripten.
+            for define in ["emscripten", "HXCPP_M32", "disable_unicode_strings"] {
+                defines.push(("-D", String::from(define)));
+            }
+        } else if cfg!(windows) && target.cross.is_none() {
+            // On Windows hxcpp builds a 32-bit program by default, and the
+            // library is built for the host architecture.
+            let bits = if cfg!(target_arch = "aarch64") {
+                "HXCPP_ARM64"
+            } else {
+                "HXCPP_M64"
+            };
+            defines.push(("-D", String::from(bits)));
+        }
+    }
+    defines
+}
+
 /// Parses the library's marked items, generates its binding for `target`
 /// and builds the adapter.
 pub fn build(project: &Project, target: Target, options: Options) -> Result<Built, String> {
@@ -861,16 +898,7 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
     for call in &project.init {
         arguments.push(("--macro", call.clone()));
     }
-    if target.wasm {
-        arguments.push(("-D", String::from("wasm")));
-    }
-    if target.threads {
-        arguments.push(("-D", String::from("hxn_threads")));
-    }
-    // hxcpp builds a program for Emscripten single-threaded unless told.
-    if target.threads && runtime == Runtime::Cpp {
-        arguments.push(("-D", String::from("HXCPP_MULTI_THREADED_APP")));
-    }
+    arguments.extend(defines(target));
     match runtime {
         Runtime::Hl if target.wasm => {
             // Ash links it into the program it builds, with `--native-lib`.
@@ -906,23 +934,6 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
             built = hdll;
         }
         Runtime::Cpp => {
-            if target.wasm {
-                // hxcpp assumes the host's 64-bit pointers unless told
-                // otherwise, and its UTF-16 strings call a Windows-only
-                // function under Emscripten.
-                for define in ["emscripten", "HXCPP_M32", "disable_unicode_strings"] {
-                    arguments.push(("-D", String::from(define)));
-                }
-            } else if cfg!(windows) && target.cross.is_none() {
-                // On Windows hxcpp builds a 32-bit program by default, and
-                // the library is built for the host architecture.
-                let bits = if cfg!(target_arch = "aarch64") {
-                    "HXCPP_ARM64"
-                } else {
-                    "HXCPP_M64"
-                };
-                arguments.push(("-D", String::from(bits)));
-            }
             let include = text(&out.join("include"));
             let upper = name.to_uppercase();
             arguments.push(("-D", format!("HXN_INCLUDE={include}")));

@@ -10,9 +10,10 @@
 //! | `host.classes` | the list of classes compiled into the host, which a script's compile excludes |
 //! | `build.hxml` | the `haxe` arguments for compiling a script for the host |
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use crate::hxml::Program;
 use crate::make::{self, Built, text, write};
 use crate::project::Project;
 
@@ -117,4 +118,143 @@ pub fn host(project: &Project, built: &Built) -> Result<Host, String> {
         arguments,
         hxml,
     })
+}
+
+/// Builds the host for a program file in `dir`. The host contains the
+/// classes of the libraries that the program uses, and the script contains
+/// the classes of the program's own class paths. A first compile of the
+/// script lists every module it uses and the file of each, so the host gets
+/// only the modules under a library's class path.
+pub fn program_host(
+    program: &Program,
+    defines: &[(&'static str, String)],
+    dir: &Path,
+) -> Result<Host, String> {
+    let source = dir.join("host");
+    write(&source.join("Host.hx"), HOST)?;
+    write(&source.join("HostModules.hx"), MODULES)?;
+    let held = dir.join("host.classes");
+    let out = source.join("out");
+
+    let listed = dir.join("modules.txt");
+    let mut probe = Command::new("haxe");
+    probe.current_dir(&program.dir).arg(&program.file);
+    for (flag, value) in defines {
+        probe.arg(flag).arg(value);
+    }
+    probe
+        .arg("-cp")
+        .arg(&source)
+        .arg("--macro")
+        .arg(format!(
+            "HostModules.list('{}')",
+            text(&listed).replace('\\', "/")
+        ))
+        .arg("-cppia")
+        .arg(dir.join("probe.cppia"))
+        .arg("--no-output");
+    make::run(&mut probe)?;
+    let libraries = canonical(crate::plugins::class_paths(&program.flags, &program.dir)?);
+    let own = canonical(own_class_paths(program));
+    let mut modules = Vec::new();
+    for line in std::fs::read_to_string(&listed)
+        .map_err(|error| format!("{}: {error}", listed.display()))?
+        .lines()
+    {
+        let Some((module, file)) = line.split_once('\t') else {
+            continue;
+        };
+        let Ok(file) = std::fs::canonicalize(file) else {
+            continue;
+        };
+        if libraries.iter().any(|root| file.starts_with(root))
+            && !own.iter().any(|root| file.starts_with(root))
+        {
+            modules.push(module.to_owned());
+        }
+    }
+
+    let mut haxe = Command::new("haxe");
+    haxe.current_dir(&program.dir);
+    // The libraries and defines of the file, without its class paths, main
+    // class or macros, which can name the program's own classes.
+    let mut words = program.flags.iter();
+    while let Some(flag) = words.next() {
+        if ["-lib", "-L", "--library", "-D", "--define"].contains(&flag.as_str())
+            && let Some(value) = words.next()
+        {
+            haxe.arg(flag).arg(value);
+        }
+    }
+    for (flag, value) in defines {
+        haxe.arg(flag).arg(value);
+    }
+    haxe.args(&modules)
+        .arg("-cp")
+        .arg(&source)
+        .args(["-main", "Host", "-cpp"])
+        .arg(&out)
+        // Dead code elimination is off: a script may use code the host
+        // itself does not.
+        .args(["-D", "scriptable", "-dce", "no", "-D"])
+        .arg(format!("dll_export={}", text(&held)));
+    make::run(&mut haxe)?;
+
+    let arguments = vec![("-D", format!("dll_import={}", text(&held)))];
+    let hxml = dir.join("build.hxml");
+    write(&hxml, &format!("-D dll_import={}\n", text(&held)))?;
+    Ok(Host {
+        program: out.join(if cfg!(windows) { "Host.exe" } else { "Host" }),
+        dir: dir.to_owned(),
+        arguments,
+        hxml,
+    })
+}
+
+// A macro that writes each module that a compile generates, with the file
+// of the module, to `path`. Each line holds a module, a tab and the file.
+const MODULES: &str = "// Written by hxn. Do not edit.
+class HostModules {
+\tpublic static function list(path:String) {
+\t\thaxe.macro.Context.onGenerate(function(types) {
+\t\t\tvar lines = new Map<String, String>();
+\t\t\tfor (type in types) {
+\t\t\t\tvar base:haxe.macro.Type.BaseType = switch type {
+\t\t\t\t\tcase TInst(t, _): t.get();
+\t\t\t\t\tcase TEnum(t, _): t.get();
+\t\t\t\t\tcase TAbstract(t, _): t.get();
+\t\t\t\t\tcase TType(t, _): t.get();
+\t\t\t\t\tcase _: null;
+\t\t\t\t}
+\t\t\t\tif (base == null)
+\t\t\t\t\tcontinue;
+\t\t\t\tvar file = haxe.macro.Context.getPosInfos(base.pos).file;
+\t\t\t\tif (sys.FileSystem.exists(file))
+\t\t\t\t\tlines.set(base.module, base.module + '\\t' + sys.FileSystem.fullPath(file));
+\t\t\t}
+\t\t\tsys.io.File.saveContent(path, [for (line in lines) line].join('\\n'));
+\t\t});
+\t}
+}
+";
+
+// The class paths that the file specifies with `-cp`, `-p` or `--class-path`.
+fn own_class_paths(program: &Program) -> Vec<PathBuf> {
+    let mut found = Vec::new();
+    let mut words = program.flags.iter();
+    while let Some(flag) = words.next() {
+        if ["-cp", "-p", "--class-path"].contains(&flag.as_str())
+            && let Some(path) = words.next()
+        {
+            found.push(program.dir.join(path));
+        }
+    }
+    found
+}
+
+fn canonical(paths: Vec<PathBuf>) -> Vec<PathBuf> {
+    paths
+        .into_iter()
+        .filter_map(|path| std::fs::canonicalize(path).ok())
+        .collect()
 }

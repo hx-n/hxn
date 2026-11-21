@@ -6,6 +6,7 @@
 //! run a Haxe program against the result.
 
 mod doctor;
+mod hxml;
 mod import;
 mod make;
 mod new;
@@ -40,9 +41,10 @@ const USAGE: &str = "usage: hxn <command>
       Generates the library's binding for HashLink or hxcpp and builds it.
       Prints the haxe arguments for compiling a program against it.
 
-  hxn run <hl|cpp|cppia> [--wasm] [--threads] [--browser] [--release] [--vm <command>] [-- <arguments>]
+  hxn run <hl|cpp|cppia> [<file.hxml>] [--wasm] [--threads] [--browser] [--release] [--vm <command>] [-- <arguments>]
       Builds the binding, then compiles the Haxe program in haxe/ and runs
-      it. --vm, or the HXN_VM environment variable, sets the
+      it. With a program file, compiles and runs that program and builds no
+      binding. --vm, or the HXN_VM environment variable, sets the
       HashLink-compatible VM to run it with, including any options:
       --vm \"ash --mode jit\".
 
@@ -50,12 +52,12 @@ const USAGE: &str = "usage: hxn <command>
 an hxcpp executable that contains the library's classes. The Haxe program
 is compiled as a script and run by that host.
 
-  hxn check [hl] [cpp] [cppia] [--wasm] [--threads] [--browser] [--release] [--vm <command>]
-      Runs the Haxe program on each runtime listed. With none listed, it
-      runs on whichever of HashLink and hxcpp are installed. Fails unless
-      every run succeeds and all runs print the same output. Before
-      running, it fails if the committed manifest does not match the
-      source.
+  hxn check [hl] [cpp] [cppia] [<file.hxml>] [--wasm] [--threads] [--browser] [--release] [--vm <command>]
+      Runs the Haxe program, or the program file, on each runtime listed.
+      With none listed, it runs on whichever of HashLink and hxcpp are
+      installed. Fails unless every run succeeds and all runs print the same
+      output. For a library, it also fails before running if the committed
+      manifest does not match the source.
 
   hxn doctor [--vm <command>] [--target <triple>]
       Reports which tools are installed, which targets are ready, and what
@@ -101,7 +103,16 @@ which requires a nightly toolchain.
 build accepts --timings, which makes cargo report how long each crate took
 to build.
 
-build and run operate on the crate in the current directory. Under
+A program file is an .hxml file for a Haxe program that uses installed hxn
+libraries and has no crate of its own. The file specifies the class paths,
+the main class, the libraries and the defines, and has no output line. hxn
+compiles it in the directory of the file and writes the output for each
+runtime to bin/<file name>/ there. For `cppia`, the host contains the
+classes of the libraries that the program uses, and the script contains
+the program's own classes.
+
+build, and run and check without a program file, operate on the crate in
+the current directory. Under
 [package.metadata.hxn] in its Cargo.toml, `library`, `source`, `haxe` and
 `main` override the defaults (the crate's name, src/lib.rs, haxe and Main),
 and `haxe-flags` lists extra arguments for haxe: [\"-lib\", \"format\"].";
@@ -407,7 +418,78 @@ fn exit(command: &mut Command) -> Result<u8, String> {
         .map_or(1, |code| u8::try_from(code).unwrap_or(1)))
 }
 
-fn run(project: &Project, target: Target, arguments: Arguments) -> Result<u8, String> {
+/// What `run` and `check` build and run: the library crate in the current
+/// directory with its Haxe program, or a program file that uses installed
+/// libraries.
+enum Source<'a> {
+    Library(&'a Project),
+    File(&'a hxml::Program),
+}
+
+impl Source<'_> {
+    /// The library's name, or the name of the program file.
+    fn name(&self) -> &str {
+        match self {
+            Source::Library(project) => &project.library,
+            Source::File(file) => &file.name,
+        }
+    }
+
+    /// The directory that hooks run in.
+    fn dir(&self) -> &Path {
+        match self {
+            Source::Library(project) => &project.dir,
+            Source::File(file) => &file.dir,
+        }
+    }
+
+    fn plugins(&self) -> Result<Vec<plugins::Plugin>, String> {
+        match self {
+            Source::Library(project) => plugins::for_project(project),
+            Source::File(file) => plugins::for_program(file),
+        }
+    }
+
+    fn context(&self, target: Option<Target>, status: Option<u8>) -> serde_json::Value {
+        match self {
+            Source::Library(project) => plugins::context(project, target, None, status),
+            Source::File(file) => plugins::program_context(file, target, None, status),
+        }
+    }
+
+    /// Builds the program for `target` and returns the command that runs it.
+    fn program(
+        &self,
+        target: Target,
+        script: bool,
+        arguments: &Arguments,
+    ) -> Result<Program, String> {
+        match self {
+            Source::Library(project) => program(project, target, script, arguments),
+            Source::File(file) => file_program(file, target, script, arguments),
+        }
+    }
+}
+
+// Removes the program file from the positional arguments, and reads it.
+fn program_file(arguments: &mut Arguments) -> Result<Option<hxml::Program>, String> {
+    let files: Vec<String> = arguments
+        .positional
+        .iter()
+        .filter(|argument| hxml::is_file(argument))
+        .cloned()
+        .collect();
+    arguments
+        .positional
+        .retain(|argument| !hxml::is_file(argument));
+    match files.as_slice() {
+        [] => Ok(None),
+        [file] => hxml::Program::read(Path::new(file)).map(Some),
+        _ => Err(String::from("give one program file")),
+    }
+}
+
+fn run(source: &Source, target: Target, arguments: Arguments) -> Result<u8, String> {
     if let Some(triple) = target.cross {
         return Err(format!(
             "cannot run a binding built for {triple} on this machine: use `hxn build {} --target {triple}` or `hxn package --target {triple}`",
@@ -415,16 +497,24 @@ fn run(project: &Project, target: Target, arguments: Arguments) -> Result<u8, St
         ));
     }
     let script = script(&arguments);
-    let mut program = program(project, target, script, &arguments)?;
-    let plugins = plugins::for_project(project)?;
-    let context = plugins::context(project, Some(target), None, None);
-    plugins::hooks(&plugins, "before-run", &context, &project.dir)?;
+    let mut program = source.program(target, script, &arguments)?;
+    let plugins = source.plugins()?;
+    plugins::hooks(
+        &plugins,
+        "before-run",
+        &source.context(Some(target), None),
+        source.dir(),
+    )?;
     let code = exit(&mut program.command)?;
     if let Some(text) = program.page_output() {
         print!("{text}");
     }
-    let context = plugins::context(project, Some(target), None, Some(code));
-    plugins::hooks(&plugins, "after-run", &context, &project.dir)?;
+    plugins::hooks(
+        &plugins,
+        "after-run",
+        &source.context(Some(target), Some(code)),
+        source.dir(),
+    )?;
     Ok(code)
 }
 
@@ -474,81 +564,26 @@ fn program(
         .arg("-main")
         .arg(&project.main)
         .args(&project.flags);
-    let vm = |default: &str| vm_command(arguments, default);
     match target.runtime {
-        Runtime::Hl if target.wasm => {
-            let program = built.dir.join("main.hl");
-            haxe.arg("-hl").arg(&program);
-            make::run(&mut haxe)?;
-            let vm = vm("ash");
-            let (ash, options) = words(&vm)?;
-            let module = built.dir.join("main.wasm");
-            // Ash links the library's archive into the program. Without
-            // threads, ASH_WASM_FIBERS makes a waiting Haxe thread suspend so
-            // that the others can run; with them, each Haxe thread is a thread.
-            // The `--vm` options are passed to the build step only.
-            let triple = target.triple().unwrap_or("wasm32-wasip1");
-            make::run(
-                Command::new(ash)
-                    .env("ASH_WASM_FIBERS", if target.threads { "0" } else { "1" })
-                    .args(options)
-                    .arg("--build")
-                    .arg(&module)
-                    .args(["--target", triple])
-                    .arg("--native-lib")
-                    .arg(&built.library)
-                    .arg(&program),
-            )?;
-            if arguments.browser {
-                return ash_page(ash, &built.dir);
-            }
-            let mut command = Command::new(ash);
-            command.arg("run").arg(&module).args(&arguments.rest);
-            Ok(command.into())
-        }
         Runtime::Hl => {
             let program = built.dir.join("main.hl");
             haxe.arg("-hl").arg(&program);
             make::run(&mut haxe)?;
-            let vm = vm("hl");
-            let (vm, options) = words(&vm)?;
-            // The VM loads the binding by name through the system's dynamic
-            // loader, and its own shared library from the VM's directory.
-            // Both directories go on the loader's search path.
-            let mut places = vec![built.dir.clone()];
-            places.extend(directory_of(vm));
-            let mut command = Command::new(vm);
-            command.args(options).arg(&program).args(&arguments.rest);
-            for variable in ["DYLD_LIBRARY_PATH", "LD_LIBRARY_PATH", "PATH"] {
-                if variable == "PATH" && !cfg!(windows) {
-                    continue;
-                }
-                let mut all = places.clone();
-                if let Some(existing) = std::env::var_os(variable) {
-                    all.extend(std::env::split_paths(&existing));
-                }
-                let joined = std::env::join_paths(all).map_err(|error| error.to_string())?;
-                command.env(variable, joined);
+            if target.wasm {
+                return ash_wasm(
+                    arguments,
+                    target,
+                    &program,
+                    std::slice::from_ref(&built.library),
+                    &built.dir,
+                );
             }
-            Ok(command.into())
+            hashlink_vm(arguments, &program, &built.dir)
         }
         Runtime::Cpp => {
             let out = built.dir.join("out");
+            hxcpp_flags(&mut haxe, target, arguments);
             haxe.arg("-cpp").arg(&out);
-            if target.wasm {
-                // hxcpp would use a compiler set in CC or CXX instead of emcc.
-                haxe.env_remove("CC").env_remove("CXX");
-            }
-            if arguments.browser {
-                // hxcpp also writes a web page that loads the program, and links it
-                // with `--emrun`, which sends its output to the emrun server.
-                haxe.args([
-                    "-D",
-                    "HXCPP_LINK_EMSCRIPTEN_EXT=.html",
-                    "-D",
-                    "HXCPP_LINK_EMRUN",
-                ]);
-            }
             make::run(&mut haxe)?;
             // A threaded library may start a browser agent, as under Ash: its
             // page files go beside the page Emscripten writes.
@@ -568,53 +603,246 @@ fn program(
             // hxcpp names the executable after the main class, without its
             // package.
             let name = project.main.rsplit('.').next().unwrap_or(&project.main);
-            if arguments.browser {
-                return browser(arguments, &built.dir, &out.join(format!("{name}.html")));
-            }
-            if target.wasm {
-                // HXN_VM is not read here: it names a HashLink VM, and this
-                // program runs under node.
-                let (node, options) = words(arguments.vm.as_deref().unwrap_or("node"))?;
-                let mut command = Command::new(node);
-                command
-                    .args(options)
-                    .arg(out.join(format!("{name}.js")))
-                    .args(&arguments.rest);
-                return Ok(command.into());
-            }
-            let program = out.join(if cfg!(windows) {
-                format!("{name}.exe")
-            } else {
-                name.to_owned()
-            });
-            let mut command = Command::new(program);
-            command.args(&arguments.rest);
-            Ok(command.into())
+            hxcpp_program(arguments, target, &out, name, &built.dir)
         }
     }
 }
 
+// Compiles a program file for `target`, as a CPPIA script if `script` is
+// set, and returns the command that runs it. hxn builds no binding:
+// `hxn.Bind.lib` copies the native file of each installed library next to
+// the program.
+fn file_program(
+    file: &hxml::Program,
+    target: Target,
+    script: bool,
+    arguments: &Arguments,
+) -> Result<Program, String> {
+    if target.wasm && target.runtime == Runtime::Cpp && !make::on_path("emcc") {
+        return Err(String::from(
+            "`emcc` was not found: hxcpp builds for wasm with the Emscripten SDK, which has to be installed and on PATH",
+        ));
+    }
+    let out = file.output_for(target, script);
+    std::fs::create_dir_all(&out).map_err(|error| format!("{}: {error}", out.display()))?;
+    // The native files of the libraries are copied again on each compile, so
+    // a library that the file no longer selects is not linked.
+    for old in natives(&out)? {
+        let _ = std::fs::remove_file(old);
+    }
+    // The program has no binding to build, so both build hooks run before
+    // the compile, and their Haxe arguments apply to it.
+    let plugins = plugins::for_program(file)?;
+    let mut flags = make::defines(target);
+    let mut pages = Vec::new();
+    for phase in ["before-build", "after-build"] {
+        let context = plugins::program_context(file, Some(target), Some(&out), None);
+        plugins::hooks(&plugins, phase, &context, &file.dir)?
+            .apply_to(&mut flags, &out, &mut pages, &file.dir)?;
+    }
+    let mut haxe = Command::new("haxe");
+    haxe.current_dir(&file.dir).arg(&file.file);
+    for (flag, value) in &flags {
+        haxe.arg(flag).arg(value);
+    }
+    if script {
+        let host = script::program_host(file, &flags, &out)?;
+        let program = out.join("main.cppia");
+        for (flag, value) in &host.arguments {
+            haxe.arg(flag).arg(value);
+        }
+        haxe.arg("-cppia").arg(&program);
+        make::run(&mut haxe)?;
+        let mut command = Command::new(host.program);
+        command.arg(program).args(&arguments.rest);
+        return Ok(command.into());
+    }
+    match target.runtime {
+        Runtime::Hl => {
+            let program = out.join("main.hl");
+            haxe.arg("-hl").arg(&program);
+            make::run(&mut haxe)?;
+            if target.wasm {
+                let archives: Vec<PathBuf> = natives(&out)?
+                    .into_iter()
+                    .filter(|path| path.extension().is_some_and(|extension| extension == "a"))
+                    .collect();
+                return ash_wasm(arguments, target, &program, &archives, &out);
+            }
+            hashlink_vm(arguments, &program, &out)
+        }
+        Runtime::Cpp => {
+            hxcpp_flags(&mut haxe, target, arguments);
+            haxe.arg("-cpp").arg(&out);
+            make::run(&mut haxe)?;
+            hxcpp_program(arguments, target, &out, file.executable(), &out)
+        }
+    }
+}
+
+// The native files of libraries in `dir`, which `hxn.Bind.lib` copied
+// there: `.hdll` files and `lib*.a` archives, in name order.
+fn natives(dir: &Path) -> Result<Vec<PathBuf>, String> {
+    let mut found = Vec::new();
+    for entry in std::fs::read_dir(dir).map_err(|error| format!("{}: {error}", dir.display()))? {
+        let path = entry
+            .map_err(|error| format!("{}: {error}", dir.display()))?
+            .path();
+        let name = path
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        if path.is_file()
+            && (name.ends_with(".hdll") || (name.starts_with("lib") && name.ends_with(".a")))
+        {
+            found.push(path);
+        }
+    }
+    found.sort();
+    Ok(found)
+}
+
+// Builds HashLink bytecode into a wasm module with Ash and links each archive
+// in `natives` into it. Returns the command that runs the module, or its web
+// page with `--browser`. The page goes in `dir`.
+fn ash_wasm(
+    arguments: &Arguments,
+    target: Target,
+    program: &Path,
+    natives: &[PathBuf],
+    dir: &Path,
+) -> Result<Program, String> {
+    let vm = vm_command(arguments, "ash");
+    let (ash, options) = words(&vm)?;
+    let module = program.with_extension("wasm");
+    // Ash links the archives into the program. Without threads,
+    // ASH_WASM_FIBERS makes a waiting Haxe thread suspend so that the others
+    // can run. With threads, each Haxe thread is a thread. The `--vm` options
+    // go to the build step only.
+    let triple = target.triple().unwrap_or("wasm32-wasip1");
+    let mut build = Command::new(ash);
+    build
+        .env("ASH_WASM_FIBERS", if target.threads { "0" } else { "1" })
+        .args(options)
+        .arg("--build")
+        .arg(&module)
+        .args(["--target", triple]);
+    for native in natives {
+        build.arg("--native-lib").arg(native);
+    }
+    make::run(build.arg(program))?;
+    if arguments.browser {
+        return ash_page(ash, dir);
+    }
+    let mut command = Command::new(ash);
+    command.arg("run").arg(&module).args(&arguments.rest);
+    Ok(command.into())
+}
+
+// The command that runs HashLink bytecode with the VM. The VM loads a
+// library by name through the system's dynamic loader, and its own shared
+// library from the VM's directory. `libraries` and the VM's directory go on
+// the loader's search path.
+fn hashlink_vm(arguments: &Arguments, program: &Path, libraries: &Path) -> Result<Program, String> {
+    let vm = vm_command(arguments, "hl");
+    let (vm, options) = words(&vm)?;
+    let mut places = vec![libraries.to_owned()];
+    places.extend(directory_of(vm));
+    let mut command = Command::new(vm);
+    command.args(options).arg(program).args(&arguments.rest);
+    for variable in ["DYLD_LIBRARY_PATH", "LD_LIBRARY_PATH", "PATH"] {
+        if variable == "PATH" && !cfg!(windows) {
+            continue;
+        }
+        let mut all = places.clone();
+        if let Some(existing) = std::env::var_os(variable) {
+            all.extend(std::env::split_paths(&existing));
+        }
+        let joined = std::env::join_paths(all).map_err(|error| error.to_string())?;
+        command.env(variable, joined);
+    }
+    Ok(command.into())
+}
+
+// The flags an hxcpp compile for `target` needs beyond the defines.
+fn hxcpp_flags(haxe: &mut Command, target: Target, arguments: &Arguments) {
+    if target.wasm {
+        // hxcpp would use a compiler set in CC or CXX instead of emcc.
+        haxe.env_remove("CC").env_remove("CXX");
+    }
+    if arguments.browser {
+        // hxcpp also writes a web page that loads the program, and links it
+        // with `--emrun`, which sends its output to the emrun server.
+        haxe.args([
+            "-D",
+            "HXCPP_LINK_EMSCRIPTEN_EXT=.html",
+            "-D",
+            "HXCPP_LINK_EMRUN",
+        ]);
+    }
+}
+
+// The command that runs the program hxcpp wrote to `out` as `name`: the
+// executable, the wasm module under node, or the web page with `--browser`.
+// The output of a web page goes to files in `dir`.
+fn hxcpp_program(
+    arguments: &Arguments,
+    target: Target,
+    out: &Path,
+    name: &str,
+    dir: &Path,
+) -> Result<Program, String> {
+    if arguments.browser {
+        return browser(arguments, dir, &out.join(format!("{name}.html")));
+    }
+    if target.wasm {
+        // HXN_VM is not read here: it names a HashLink VM, and this program
+        // runs under node.
+        let (node, options) = words(arguments.vm.as_deref().unwrap_or("node"))?;
+        let mut command = Command::new(node);
+        command
+            .args(options)
+            .arg(out.join(format!("{name}.js")))
+            .args(&arguments.rest);
+        return Ok(command.into());
+    }
+    let program = out.join(if cfg!(windows) {
+        format!("{name}.exe")
+    } else {
+        name.to_owned()
+    });
+    let mut command = Command::new(program);
+    command.args(&arguments.rest);
+    Ok(command.into())
+}
+
 // Runs the same program on each runtime. Every run must succeed, and all
 // runs must print the same output.
-fn check(project: &Project, arguments: &Arguments) -> Result<u8, String> {
-    let plugins = plugins::for_project(project)?;
-    let context = plugins::context(project, None, None, None);
-    plugins::hooks(&plugins, "before-check", &context, &project.dir)?;
-    let name = &project.library;
-    if let Some(webidl) = &project.webidl {
-        import::sync(name, webidl, &project.bindings)?;
-    }
-    // Checked before any build, because a build overwrites the committed
-    // manifest.
-    let committed = project.dir.join(format!("{name}.hxn.json"));
-    if let Ok(committed) = std::fs::read_to_string(&committed) {
-        let library = make::parse(project)?;
-        // Compared without carriage returns: git may check the file out
-        // with Windows line endings.
-        if hxn_gen::manifest(&library) != committed.replace("\r\n", "\n") {
-            return Err(format!(
-                "{name}.hxn.json is not what the source gives: the library's API changed. Run `hxn build` to regenerate it, then review and commit the change"
-            ));
+fn check(source: &Source, arguments: &Arguments) -> Result<u8, String> {
+    let plugins = source.plugins()?;
+    plugins::hooks(
+        &plugins,
+        "before-check",
+        &source.context(None, None),
+        source.dir(),
+    )?;
+    let name = source.name();
+    if let Source::Library(project) = source {
+        if let Some(webidl) = &project.webidl {
+            import::sync(name, webidl, &project.bindings)?;
+        }
+        // Checked before any build, because a build overwrites the committed
+        // manifest.
+        let committed = project.dir.join(format!("{name}.hxn.json"));
+        if let Ok(committed) = std::fs::read_to_string(&committed) {
+            let library = make::parse(project)?;
+            // Compared without carriage returns: git may check the file out
+            // with Windows line endings.
+            if hxn_gen::manifest(&library) != committed.replace("\r\n", "\n") {
+                return Err(format!(
+                    "{name}.hxn.json is not what the source gives: the library's API changed. Run `hxn build` to regenerate it, then review and commit the change"
+                ));
+            }
         }
     }
 
@@ -668,10 +896,13 @@ fn check(project: &Project, arguments: &Arguments) -> Result<u8, String> {
                 label.push_str(flag);
             }
         }
-        let mut program = program(project, target, script, arguments)?;
-        let plugins = plugins::for_project(project)?;
-        let context = plugins::context(project, Some(target), None, None);
-        plugins::hooks(&plugins, "before-run", &context, &project.dir)?;
+        let mut program = source.program(target, script, arguments)?;
+        plugins::hooks(
+            &plugins,
+            "before-run",
+            &source.context(Some(target), None),
+            source.dir(),
+        )?;
         let output = program
             .command
             .stderr(std::process::Stdio::inherit())
@@ -682,8 +913,12 @@ fn check(project: &Project, arguments: &Arguments) -> Result<u8, String> {
             .code()
             .and_then(|code| u8::try_from(code).ok())
             .unwrap_or(1);
-        let context = plugins::context(project, Some(target), None, Some(code));
-        plugins::hooks(&plugins, "after-run", &context, &project.dir)?;
+        plugins::hooks(
+            &plugins,
+            "after-run",
+            &source.context(Some(target), Some(code)),
+            source.dir(),
+        )?;
         let stdout = program
             .page_output()
             .unwrap_or_else(|| String::from_utf8_lossy(&output.stdout).into_owned());
@@ -788,6 +1023,15 @@ Not imported (listed at the end of {name}.webidl):"
         }
         "build" => {
             let arguments = arguments(given)?;
+            if arguments
+                .positional
+                .iter()
+                .any(|argument| hxml::is_file(argument))
+            {
+                return Err(String::from(
+                    "build builds a library's binding, and a program file has none: compile and run it with `hxn run <runtime> <file.hxml>`",
+                ));
+            }
             let target = target(&arguments)?;
             let project = Project::read(&here)?;
             let built = make::build(
@@ -839,9 +1083,13 @@ Not imported (listed at the end of {name}.webidl):"
             Ok(0)
         }
         "run" => {
-            let arguments = arguments(given)?;
+            let mut arguments = arguments(given)?;
+            let file = program_file(&mut arguments)?;
             let target = target(&arguments)?;
-            run(&Project::read(&here)?, target, arguments)
+            match &file {
+                Some(file) => run(&Source::File(file), target, arguments),
+                None => run(&Source::Library(&Project::read(&here)?), target, arguments),
+            }
         }
         "package" => {
             let arguments = arguments(given)?;
@@ -890,8 +1138,11 @@ Not imported (listed at the end of {name}.webidl):"
             Ok(0)
         }
         "check" => {
-            let arguments = arguments(given)?;
-            check(&Project::read(&here)?, &arguments)
+            let mut arguments = arguments(given)?;
+            match program_file(&mut arguments)? {
+                Some(file) => check(&Source::File(&file), &arguments),
+                None => check(&Source::Library(&Project::read(&here)?), &arguments),
+            }
         }
         "doctor" => {
             let arguments = arguments(given)?;

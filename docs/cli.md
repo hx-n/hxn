@@ -2,8 +2,9 @@
 
 [Design](design.md) · [Conventions](conventions.md)
 
-Run build, run, check and package commands in the library crate. See the
-[README](../README.md#quick-setup) for installation and a first example.
+Run build, run, check and package commands in the library crate. `run`
+and `check` also run a [program file](#program-files) in any directory. See
+the [README](../README.md#quick-setup) for installation and a first example.
 
 ## Commands
 
@@ -11,8 +12,8 @@ Run build, run, check and package commands in the library crate. See the
 |---|---|
 | `hxn new <name>` | Create a library and Haxe program from the greeter template. |
 | `hxn build <hl\|cpp>` | Generate and build a binding. |
-| `hxn run <hl\|cpp\|cppia>` | Build and run the Haxe program. |
-| `hxn check [hl] [cpp] [cppia]` | Compare program output across runtimes; defaults to HashLink and hxcpp. |
+| `hxn run <hl\|cpp\|cppia> [<file.hxml>]` | Build and run the Haxe program, or compile and run a program file. |
+| `hxn check [hl] [cpp] [cppia] [<file.hxml>]` | Compare program output across runtimes; defaults to HashLink and hxcpp. |
 | `hxn package [hl] [cpp]` | Create a [haxelib package](packaging.md). |
 | `hxn doctor [--target <triple>]` | Check runtime prerequisites or a Rust binding target. |
 | `hxn import <header.h>` | [Import a C library](design/c-import.md). |
@@ -89,6 +90,49 @@ the committed API manifest to match the source before building.
 
 `doctor --target` checks Cargo and the target's `std` archive in the active
 rustc sysroot. It does not check the application's SDKs or dependencies.
+
+## Program files
+
+A program file is an `.hxml` file for a Haxe program that uses installed hxn
+libraries and has no crate of its own, such as an application or a test
+program of a Haxe library:
+
+```
+-lib greeter
+-cp src
+-main Main
+```
+
+```
+hxn run hl app.hxml
+hxn run cpp --wasm --threads app.hxml
+hxn check hl cpp cppia app.hxml
+```
+
+The file specifies the class paths, the main class, the libraries and the
+defines. It has no output line, because hxn adds one for each runtime. hxn
+runs haxe in the directory of the file, so relative paths in the file
+resolve there. The output goes to `bin/<file name>/<target>` in that
+directory.
+
+hxn builds no binding for a program file. `hxn.Bind.lib`, which the `-lib`
+of each hxn library runs, copies the library's native file next to the
+program, and hxn adds the defines by which it selects that file:
+
+- `--wasm` and `--threads` work as they do for a library. For `hl --wasm`,
+  hxn gives each `lib*.a` file next to the program to Ash with
+  `--native-lib`.
+- `--browser` and `--vm` work as they do for a library.
+- `--release` and `--timings` apply to a binding, so a program file ignores
+  them.
+- For `cppia`, the host contains the classes of the libraries that the
+  program uses. The script contains the classes of the program's own class
+  paths. hxn finds the library classes with a first compile of the script,
+  which lists every module that the program uses.
+
+The hooks of the libraries that the file selects with `-lib` run as they do
+for a library program. A program has no binding to build, so both build
+hooks run before the compile.
 
 ## Library extensions
 
