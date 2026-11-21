@@ -310,7 +310,7 @@ fn encoded(method: &Method, call: String) -> String {
 // Checks that bytes a call writes through are not also another of its byte
 // arguments, made before any of them is a reference. `addresses` gives the
 // expression for a parameter's address range.
-fn apart_checks(method: &Method, addresses: impl Fn(&str) -> String) -> Vec<String> {
+fn apart_checks(method: &Method, addresses: impl Fn(&Param) -> String) -> Vec<String> {
     let bytes: Vec<&Param> = method
         .params
         .iter()
@@ -328,8 +328,8 @@ fn apart_checks(method: &Method, addresses: impl Fn(&str) -> String) -> Vec<Stri
             }
             out.push(format!(
                 "apart({}, {})?;",
-                addresses(&written.name),
-                addresses(&other.name)
+                addresses(written),
+                addresses(other)
             ));
         }
     }
@@ -351,6 +351,20 @@ fn viewed(param: &Param, bytes: &str) -> (String, String) {
             format!("let {name} = hxn_abi::Elements::<{element}>::new({bytes})?;"),
             format!("&{name}"),
         )
+    }
+}
+
+// A HashLink byte or buffer argument as a `Slice` or `SliceMut`, before any
+// reference to it exists. A buffer's element count is in its header, so it
+// can fail.
+fn hl_slice(param: &Param) -> String {
+    let name = &param.name;
+    let written = param.ty == Type::BytesMut;
+    match (param.elements, written) {
+        (Some(element), false) => format!("elements({name}, {})?", element.size()),
+        (Some(element), true) => format!("elements_mut({name}, {})?", element.size()),
+        (None, false) => format!("slice({name}, {name}_length)"),
+        (None, true) => format!("slice_mut({name}, {name}_length)"),
     }
 }
 
@@ -454,7 +468,7 @@ fn c_method(library: &Library, interface: &Interface, method: &Method) -> String
     }
     body.splice(
         0..0,
-        apart_checks(method, |name| format!("{name}.addresses()")),
+        apart_checks(method, |param| format!("{}.addresses()", param.name)),
     );
     if method.asynchronous {
         body.extend(owned(library, method, &mut arguments));
@@ -772,23 +786,32 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
                 body.push(format!("let {name} = string({name})?.unwrap_or_default();"));
                 arguments.push(format!("&{name}"));
             }
+            // A typed buffer is its `hl.Bytes` alone: the element count is in
+            // its header.
+            Type::Bytes | Type::BytesMut if param.elements.is_some() => {
+                params.push(format!("{name}: *mut vbyte"));
+                signature.push('B');
+                let into = if param.ty == Type::BytesMut {
+                    "into_bytes"
+                } else {
+                    "as_bytes"
+                };
+                let (statement, argument) =
+                    viewed(param, &format!("{}.{into}()?", hl_slice(param)));
+                body.push(statement);
+                arguments.push(argument);
+            }
             Type::Bytes | Type::BytesMut => {
                 params.push(format!("{name}: *mut vbyte"));
                 params.push(format!("{name}_length: i32"));
                 signature.push_str("Bi");
                 let bytes = if param.ty == Type::BytesMut {
-                    format!("slice_mut({name}, {name}_length).into_bytes()?")
+                    format!("{}.into_bytes()?", hl_slice(param))
                 } else {
-                    format!("slice({name}, {name}_length).as_bytes()?")
+                    format!("{}.as_bytes()?", hl_slice(param))
                 };
-                if param.elements.is_some() {
-                    let (statement, argument) = viewed(param, &bytes);
-                    body.push(statement);
-                    arguments.push(argument);
-                } else {
-                    body.push(format!("let {name} = {bytes};"));
-                    arguments.push(name.clone());
-                }
+                body.push(format!("let {name} = {bytes};"));
+                arguments.push(name.clone());
             }
             Type::Handle {
                 interface,
@@ -832,9 +855,7 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
     }
     body.splice(
         0..0,
-        apart_checks(method, |name| {
-            format!("slice({name}, {name}_length).addresses()")
-        }),
+        apart_checks(method, |param| format!("{}.addresses()", hl_slice(param))),
     );
     if method.asynchronous {
         body.extend(owned(library, method, &mut arguments));
@@ -932,7 +953,7 @@ fn hl_exports(library: &Library, core: &str) -> String {
         "#[allow(unused_imports)]\nuse hxn_abi::{AtomicFlag, Callback, Fault, Status, apart, memory};\n",
     );
     out.push_str(
-        "#[allow(unused_imports)]\nuse hxn_hl::{Managed, blocking, box_bool, box_bytes, box_f64, box_i32, buffer, bytes, call, define_prim, handle, manage, prim, slice, slice_mut, string, unbox_bool, unbox_f64, unbox_i32, utf16, vbyte, vclosure, vdynamic, vstring};\n",
+        "#[allow(unused_imports)]\nuse hxn_hl::{Managed, blocking, box_bool, box_bytes, box_f64, box_i32, buffer, bytes, call, define_prim, elements, elements_mut, handle, manage, prim, slice, slice_mut, string, unbox_bool, unbox_f64, unbox_i32, utf16, vbyte, vclosure, vdynamic, vstring};\n",
     );
     out.push_str(&imports(library, core));
     out.push_str(later::imports(library));

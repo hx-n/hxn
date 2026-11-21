@@ -92,6 +92,9 @@ import hxn.Native;
 			case "haxe.io.Bytes":
 				args.push({name: name, type: Native.type("haxe.io.BytesData")});
 				passed.push(macro $i{name}.getData());
+			case buffer if (Native.buffers.exists(buffer)):
+				args.push({name: name, type: Native.type(Native.buffers[buffer])});
+				passed.push(macro $i{name}.hxnData());
 			// Null is passed through; hxcpp does not check an object for null
 			// before reading its field.
 			case "hxn.Handle":

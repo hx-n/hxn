@@ -16,32 +16,38 @@ private typedef Element = #if (hl || cpp) Single #else Float #end;
 
 	Indexing checks bounds only when you compile with `-debug`.
 **/
-abstract Float32Buffer(haxe.io.Bytes) {
+abstract Float32Buffer(#if hl hl.Bytes #elseif cpp Array<Single> #else Array<Float> #end) {
 	/** The size of one element in bytes. **/
 	public static inline final BYTES = 4;
+
+	#if hl
+	// The element count, then padding that keeps the elements 16-byte aligned.
+	// The Rust adapter reads the same layout.
+	static inline final HEADER = 16;
+	#end
 
 	/** The number of elements. **/
 	public var length(get, never):Int;
 
-	/** The bytes that hold the elements, in little-endian order. **/
-	public var bytes(get, never):haxe.io.Bytes;
-
 	/** A buffer of `length` elements, each zero. **/
 	public inline function new(length:Int) {
-		var bytes = haxe.io.Bytes.alloc(length << 2);
-		bytes.fill(0, bytes.length, 0);
-		this = bytes;
-	}
-
-	/**
-		The elements `bytes` holds, without copying them: changes to either
-		are seen by the other. Throws when the length of `bytes` is not a
-		whole number of elements.
-	**/
-	public static function ofBytes(bytes:haxe.io.Bytes):Float32Buffer {
-		if (bytes.length % BYTES != 0)
-			throw new haxe.exceptions.ArgumentException("bytes", 'a length of ${bytes.length} is not a whole number of 4-byte elements');
-		return cast bytes;
+		if (length < 0)
+			throw new haxe.exceptions.ArgumentException("length", 'a buffer cannot have $length elements');
+		#if hl
+		var size = HEADER + (length << 2);
+		var b = new hl.Bytes(size);
+		b.fill(0, size, 0);
+		b.setI32(0, length);
+		this = b;
+		#elseif cpp
+		var a:Array<Single> = cpp.NativeArray.create(length);
+		#if !cppia
+		cpp.NativeArray.zero(a);
+		#end
+		this = a;
+		#else
+		this = [for (_ in 0...length) 0];
+		#end
 	}
 
 	/** A buffer holding a copy of `values`. **/
@@ -52,40 +58,67 @@ abstract Float32Buffer(haxe.io.Bytes) {
 		return out;
 	}
 
+	/**
+		A buffer holding the elements that `bytes` stores in little-endian
+		order. Throws when the length of `bytes` is not a whole number of
+		elements.
+	**/
+	public static function fromBytes(bytes:haxe.io.Bytes):Float32Buffer {
+		if (bytes.length % BYTES != 0)
+			throw new haxe.exceptions.ArgumentException("bytes", 'a length of ${bytes.length} is not a whole number of 4-byte elements');
+		var out = new Float32Buffer(bytes.length >> 2);
+		for (i in 0...out.length)
+			out.set(i, bytes.getFloat(i << 2));
+		return out;
+	}
+
 	/** A copy of the elements. **/
 	public function toArray():Array<Float> {
 		return [for (i in 0...length) get(i)];
 	}
 
+	/** A copy of the elements in little-endian order. **/
+	public function toBytes():haxe.io.Bytes {
+		var out = haxe.io.Bytes.alloc(length << 2);
+		for (i in 0...length)
+			out.setFloat(i << 2, get(i));
+		return out;
+	}
+
 	@:arrayAccess public inline function get(index:Int):Element {
-		var p = at(index);
+		check(index);
 		#if hl
-		var b:hl.Bytes = @:privateAccess this.b;
-		return b.getF32(p);
+		var p = HEADER + (index << 2);
+		return this.getF32(p);
+		#elseif cppia
+		return this[index];
 		#elseif cpp
-		return untyped __global__.__hxcpp_memory_get_float(this.getData(), p);
+		return cpp.NativeArray.unsafeGet(this, index);
 		#else
-		return this.getFloat(p);
+		return this[index];
 		#end
 	}
 
 	@:arrayAccess public inline function set(index:Int, value:Element):Element {
-		var p = at(index);
+		check(index);
 		#if hl
-		var b:hl.Bytes = @:privateAccess this.b;
-		b.setF32(p, value);
+		var p = HEADER + (index << 2);
+		this.setF32(p, value);
+		#elseif cppia
+		this[index] = value;
 		#elseif cpp
-		untyped __global__.__hxcpp_memory_set_float(this.getData(), p, value);
+		cpp.NativeArray.unsafeSet(this, index, value);
 		#else
-		this.setFloat(p, value);
+		this[index] = value;
 		#end
 		return value;
 	}
 
-	/** Sets `count` elements from `start` to `value`, or every element from `start`. **/
-	public function fill(value:Element, start:Int = 0, ?count:Int):Void {
-		var end = count == null ? length : start + count;
-		if (start < 0 || end > length || start > end)
+	/** Sets `count` elements from `start` to `value`. **/
+	// No optional arguments: HashLink boxes an optional Int on every call.
+	public function fill(value:Element, start:Int, count:Int):Void {
+		var end = start + count;
+		if (start < 0 || count < 0 || end > length)
 			throw haxe.io.Error.OutsideBounds;
 		for (i in start...end)
 			set(i, value);
@@ -95,8 +128,24 @@ abstract Float32Buffer(haxe.io.Bytes) {
 		Copies `count` elements of `source`, from `sourceStart`, to this
 		buffer at `start`. The two may be the same buffer.
 	**/
-	public inline function blit(start:Int, source:Float32Buffer, sourceStart:Int, count:Int):Void {
-		this.blit(start << 2, source.bytes, sourceStart << 2, count << 2);
+	public function blit(start:Int, source:Float32Buffer, sourceStart:Int, count:Int):Void {
+		if (start < 0 || sourceStart < 0 || count < 0 || start + count > length || sourceStart + count > source.length)
+			throw haxe.io.Error.OutsideBounds;
+		#if hl
+		this.blit(HEADER + (start << 2), source.hxnData(), HEADER + (sourceStart << 2), count << 2);
+		#elseif (cpp && !cppia)
+		cpp.NativeArray.blit(this, start, source.hxnData(), sourceStart, count);
+		#else
+		var from = source.hxnData();
+		if (start <= sourceStart)
+			for (i in 0...count)
+				this[start + i] = from[sourceStart + i];
+		else {
+			var i = count;
+			while (i-- > 0)
+				this[start + i] = from[sourceStart + i];
+		}
+		#end
 	}
 
 	/**
@@ -105,25 +154,43 @@ abstract Float32Buffer(haxe.io.Bytes) {
 	**/
 	public function resized(length:Int):Float32Buffer {
 		var out = new Float32Buffer(length);
-		var kept = length < this.length >> 2 ? length : this.length >> 2;
-		out.blit(0, cast this, 0, kept);
+		var current = get_length();
+		out.blit(0, cast this, 0, length < current ? length : current);
 		return out;
 	}
 
-	inline function get_length():Int {
-		return this.length >> 2;
-	}
-
-	inline function get_bytes():haxe.io.Bytes {
+	#if hl
+	/**
+		The `hl.Bytes` that hold this buffer on HashLink and Ash, for `ash.simd`
+		loads and stores. `hlOffset` gives the byte offset of an element in it.
+	**/
+	public inline function hlBytes():hl.Bytes {
 		return this;
 	}
 
-	// The byte offset of the element at `index`.
-	inline function at(index:Int):Int {
+	/** The byte offset in `hlBytes()` of the element at `index`. **/
+	public static inline function hlOffset(index:Int):Int {
+		return HEADER + (index << 2);
+	}
+	#end
+
+	/** The storage that the generated bindings pass to native code. **/
+	@:noCompletion public inline function hxnData():#if hl hl.Bytes #elseif cpp Array<Single> #else Array<Float> #end {
+		return this;
+	}
+
+	inline function get_length():Int {
+		#if hl
+		return this.getI32(0);
+		#else
+		return this.length;
+		#end
+	}
+
+	inline function check(index:Int):Void {
 		#if debug
-		if (index < 0 || index >= length)
+		if (index < 0 || index >= get_length())
 			throw haxe.io.Error.OutsideBounds;
 		#end
-		return index << 2;
 	}
 }

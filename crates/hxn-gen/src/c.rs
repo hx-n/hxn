@@ -3,7 +3,7 @@
 
 use crate::later;
 use crate::lent;
-use crate::model::{Interface, Library, Method, Type};
+use crate::model::{Element, Interface, Library, Method, Type};
 use crate::names::{
     c_param, cell_export, export, has_receiver, held_export, local, release, thrown_export,
     wanted_export,
@@ -164,11 +164,17 @@ fn glue(library: &Library, interface: &Interface, method: &Method) -> String {
                 arguments.push(format!("hxn::slice({name}, {name}_storage)"));
             }
             Type::Bytes => {
-                params.push(format!("Array<unsigned char> {name}"));
+                let array = param
+                    .elements
+                    .map_or("Array<unsigned char>", Element::cpp_array);
+                params.push(format!("{array} {name}"));
                 arguments.push(format!("hxn::slice({name})"));
             }
             Type::BytesMut => {
-                params.push(format!("Array<unsigned char> {name}"));
+                let array = param
+                    .elements
+                    .map_or("Array<unsigned char>", Element::cpp_array);
+                params.push(format!("{array} {name}"));
                 arguments.push(format!("hxn::slice_mut({name})"));
             }
             Type::Handle { .. } => {

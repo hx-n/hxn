@@ -341,6 +341,27 @@ impl Element {
         }
     }
 
+    /// Its size in bytes.
+    pub fn size(self) -> usize {
+        match self {
+            Self::F64 => 8,
+            Self::F32 | Self::I32 | Self::U32 => 4,
+            Self::I16 | Self::U16 => 2,
+        }
+    }
+
+    /// The hxcpp array the buffer stores its elements in. A 16-bit buffer
+    /// stores bytes, because CPPIA has no 16-bit arrays.
+    pub fn cpp_array(self) -> &'static str {
+        match self {
+            Self::F32 => "Array<float>",
+            Self::F64 => "Array<double>",
+            Self::I32 => "Array<int>",
+            Self::U32 => "Array<unsigned int>",
+            Self::I16 | Self::U16 => "Array<unsigned char>",
+        }
+    }
+
     /// The Haxe buffer class that holds it.
     pub fn haxe(self) -> &'static str {
         match self {

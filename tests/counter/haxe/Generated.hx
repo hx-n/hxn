@@ -427,9 +427,11 @@ class Generated {
 		var indices = new hxn.UInt16Buffer(3);
 		Buffers.countdown(indices, 1);
 		check("16-bit ones wrap the same way in both languages", indices.toArray().join(",") == "1,0,65535");
-		var raw = haxe.io.Bytes.alloc(8);
-		throws("one block of bytes written through two buffers", () -> Buffers.widen(hxn.Int16Buffer.ofBytes(raw), hxn.Int32Buffer.ofBytes(raw)),
-			"passed as two arguments");
+		var sums:hxn.Int32Buffer = [1, 2];
+		Buffers.add([10, 20], sums);
+		check("a buffer read and another written", sums.toArray().join(",") == "11,22");
+		throws("one buffer read and written by the same call", () -> Buffers.add(sums, sums), "passed as two arguments");
+		check("bytes in and out are copies", hxn.Float32Buffer.fromBytes(values.toBytes()).toArray().join(",") == values.toArray().join(","));
 		var kept:hxn.Float32Buffer = [1, 2];
 		var later = Buffers.laterSum(kept);
 		kept[0] = 100;

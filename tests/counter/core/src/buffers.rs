@@ -45,6 +45,13 @@ impl Buffers {
         }
     }
 
+    /// Adds each of `from` to the element of `into` at the same index.
+    pub fn add(from: &[i32], into: &mut [i32]) {
+        for (out, value) in into.iter_mut().zip(from) {
+            *out = out.wrapping_add(*value);
+        }
+    }
+
     /// Adds `by` to each of `values`, in place.
     pub fn shift(values: &mut [i32], by: i32) {
         for value in values {

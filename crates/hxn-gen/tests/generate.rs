@@ -3172,15 +3172,30 @@ fn a_slice_of_numbers_is_a_typed_buffer_lent_for_the_call() {
     assert!(c.contains("let values = <[i32]>::to_vec(&values);"));
 
     let hl = hxn_gen::hl_adapter(&library, "physics_core");
+    assert!(hl.contains("indices: *mut vbyte)"));
     assert!(hl.contains(
-        "let indices = hxn_abi::Elements::<u16>::new(slice(indices, indices_length).as_bytes()?)?;"
+        "let indices = hxn_abi::Elements::<u16>::new(elements(indices, 2)?.as_bytes()?)?;"
+    ));
+    assert!(hl.contains(
+        "apart(elements_mut(positions, 4)?.addresses(), elements(masses, 8)?.addresses())?;"
     ));
 
     let physics = &classes(&library)[0].text;
     assert!(physics.contains(
         "public static function step(positions:hxn.Float32Buffer, masses:hxn.Float64Buffer, indices:hxn.UInt16Buffer):Void"
     ));
-    assert!(physics.contains("physics_step(positions.bytes, masses.bytes, indices.bytes)"));
+    assert!(physics.contains("physics_step(positions, masses, indices)"));
+    let natives = classes(&library);
+    let native = natives
+        .iter()
+        .find(|file| file.path.ends_with("Native.hx"))
+        .expect("a native class");
+    assert!(native.text.contains(
+        "physics_step(positions:hxn.Float32Buffer, masses:hxn.Float64Buffer, indices:hxn.UInt16Buffer):Void"
+    ));
+    let glue = hxn_gen::cpp_glue(&library);
+    assert!(glue.contains("Array<float> positions"));
+    assert!(glue.contains("Array<unsigned char> indices"));
 
     let manifest = hxn_gen::manifest(&library);
     assert!(manifest.contains("{ \"name\": \"positions\", \"type\": \"buffer_mut<f32>\" }"));

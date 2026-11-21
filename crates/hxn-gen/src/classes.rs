@@ -102,13 +102,27 @@ fn declaration(
     returns: &Type,
     given: &[(String, String)],
 ) -> String {
+    let typed: Vec<(String, String)> = params
+        .iter()
+        .map(|(name, ty)| (name.clone(), native_type(ty)))
+        .collect();
+    declared(name, &typed, returns, given)
+}
+
+// The same, with each parameter's Haxe type already written out.
+fn declared(
+    name: &str,
+    params: &[(String, String)],
+    returns: &Type,
+    given: &[(String, String)],
+) -> String {
     let mut out = String::new();
     for (key, export) in given {
         out.push_str(&format!("\t@:hxn.given(\"{key}\", \"{export}\")\n"));
     }
     let params: Vec<String> = params
         .iter()
-        .map(|(name, ty)| format!("{name}:{}", native_type(ty)))
+        .map(|(name, ty)| format!("{name}:{ty}"))
         .collect();
     // A returned flag is its cell, which the method makes the flag over.
     let returned = match returns {
@@ -126,7 +140,7 @@ fn method_declaration(interface: &Interface, method: &Method) -> String {
     let mut params = Vec::new();
     let mut given = Vec::new();
     if has_receiver(method) {
-        params.push((String::from("self"), handle(&interface.name)));
+        params.push((String::from("self"), native_type(&handle(&interface.name))));
     }
     for param in &method.params {
         let name = haxe_param(&param.name);
@@ -137,9 +151,15 @@ fn method_declaration(interface: &Interface, method: &Method) -> String {
                 }
             }
         }
-        params.push((name, param.ty.clone()));
+        // A typed buffer is declared as itself: each runtime passes its
+        // storage in its own way.
+        let ty = match param.elements {
+            Some(element) => element.haxe().to_owned(),
+            None => native_type(&param.ty),
+        };
+        params.push((name, ty));
     }
-    declaration(
+    declared(
         &local(&interface.name, &method.name),
         &params,
         &method.returns,
@@ -355,8 +375,6 @@ fn method(library: &Library, interface: &Interface, method: &Method) -> String {
                 guards.push(guard(&name, params, returns));
                 arguments.push(lent::guarded(&name));
             }
-            // A typed buffer crosses as its bytes.
-            _ if param.elements.is_some() => arguments.push(format!("{name}.bytes")),
             _ => arguments.push(name),
         }
     }

@@ -250,6 +250,49 @@ pub unsafe fn slice_mut<'a>(data: *mut vbyte, length: c_int) -> SliceMut<'a> {
     unsafe { SliceMut::from_raw(data, usize::try_from(length).unwrap_or(0)) }
 }
 
+/// The bytes before a typed buffer's elements in its `hl.Bytes`: the element
+/// count as an `i32`, then padding that keeps the elements 16-byte aligned.
+/// `hxn.Float32Buffer` and the other buffers write the same layout.
+pub const BUFFER_HEADER: usize = 16;
+
+// The element count in a typed buffer's header, as a byte length.
+unsafe fn buffer_length(data: *const vbyte, element: usize) -> Result<usize, Fault> {
+    let count = unsafe { data.cast::<i32>().read_unaligned() };
+    usize::try_from(count)
+        .ok()
+        .and_then(|count| count.checked_mul(element))
+        .ok_or(Fault::TooLarge)
+}
+
+/// The elements of a typed buffer, as bytes borrowed for the call. `element`
+/// is the size of one element. A null buffer is empty.
+///
+/// # Safety
+/// `data` is null, or a buffer's `hl.Bytes` that stays alive for `'a`: a
+/// header of [`BUFFER_HEADER`] bytes, then the count it holds of `element`
+/// bytes each.
+pub unsafe fn elements<'a>(data: *const vbyte, element: usize) -> Result<Slice<'a>, Fault> {
+    if data.is_null() {
+        return Ok(Slice::new(&[]));
+    }
+    let length = unsafe { buffer_length(data, element)? };
+    Ok(unsafe { Slice::from_raw(data.add(BUFFER_HEADER), length) })
+}
+
+/// The same, as bytes the call writes into. The garbage collector does not
+/// move them, so the Haxe buffer sees what was written.
+///
+/// # Safety
+/// As for [`elements`], and nothing else reads or writes the elements during
+/// `'a`.
+pub unsafe fn elements_mut<'a>(data: *mut vbyte, element: usize) -> Result<SliceMut<'a>, Fault> {
+    if data.is_null() {
+        return Ok(SliceMut::new(&mut []));
+    }
+    let length = unsafe { buffer_length(data, element)? };
+    Ok(unsafe { SliceMut::from_raw(data.add(BUFFER_HEADER), length) })
+}
+
 /// Copies `text` into VM-owned, null-terminated UTF-16, the input
 /// `String.fromUCS2` accepts. Returns null if it is too long for the VM.
 pub fn utf16(text: &str) -> *mut vbyte {

@@ -21,7 +21,8 @@ using haxe.macro.ExprTools;
 	returned handle a finalizer that releases it.
 
 	A declaration's types are `Bool`, `Int`, `Float`, `haxe.Int64`, `String`,
-	`haxe.io.Bytes`, `hxn.Handle`, `hxn.AtomicInt` or `hxn.AtomicBool`, `Void`
+	`haxe.io.Bytes`, a typed buffer such as `hxn.Float32Buffer`, `hxn.Handle`,
+	`hxn.AtomicInt` or `hxn.AtomicBool`, `Void`
 	for a result, and for a lent function a function type of those: the
 	binding's guard, which reports a failure by returning `false` or `null`.
 	A bytes result is never null unless it is declared `Null<haxe.io.Bytes>`.
@@ -86,6 +87,18 @@ class Native {
 	}
 
 	// The type a declaration's argument or result has, through `Null<T>`.
+	// The typed buffers a declaration may take, and the array each stores its
+	// elements in on hxcpp. A 16-bit buffer stores bytes, because CPPIA has no
+	// 16-bit arrays.
+	public static final buffers:Map<String, String> = [
+		"hxn.Float32Buffer" => "Array<Single>",
+		"hxn.Float64Buffer" => "Array<Float>",
+		"hxn.Int32Buffer" => "Array<Int>",
+		"hxn.UInt32Buffer" => "Array<UInt>",
+		"hxn.Int16Buffer" => "haxe.io.BytesData",
+		"hxn.UInt16Buffer" => "haxe.io.BytesData",
+	];
+
 	public static function kind(type:Null<ComplexType>):String {
 		return switch type {
 			case null: "Void";

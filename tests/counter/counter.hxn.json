@@ -1065,6 +1065,15 @@
           "blocking": false
         },
         {
+          "name": "add",
+          "docs": "Adds each of `from` to the element of `into` at the same index.",
+          "kind": "static",
+          "params": [{ "name": "from", "type": "buffer<i32>" }, { "name": "into", "type": "buffer_mut<i32>" }],
+          "returns": "void",
+          "fallible": false,
+          "blocking": false
+        },
+        {
           "name": "shift",
           "docs": "Adds `by` to each of `values`, in place.",
           "kind": "static",

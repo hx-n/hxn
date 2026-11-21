@@ -164,23 +164,24 @@ inline hxn_slice slice(const ::String &text, hx::strbuf &storage) {
 	return out;
 }
 
-/* Returns `data` as a slice, valid while `data` is alive and not resized. */
-inline hxn_slice slice(const Array<unsigned char> &data) {
+/* Returns the elements of `data` as a slice of bytes, valid while `data` is
+ * alive and not resized. Bytes and typed buffers cross this way. */
+template <typename T> inline hxn_slice slice(const Array<T> &data) {
 	hxn_slice out = { 0, 0 };
 	if (data.mPtr) {
 		out.ptr = (const uint8_t *)data->getBase();
-		out.len = (size_t)data->length;
+		out.len = (size_t)data->length * sizeof(T);
 	}
 	return out;
 }
 
-/* Returns `data` as bytes the call writes into, valid while `data` is alive
- * and not resized. The Haxe bytes see what was written. */
-inline hxn_slice_mut slice_mut(const Array<unsigned char> &data) {
+/* Returns the elements of `data` as bytes the call writes into, valid while
+ * `data` is alive and not resized. The Haxe array sees what was written. */
+template <typename T> inline hxn_slice_mut slice_mut(const Array<T> &data) {
 	hxn_slice_mut out = { 0, 0 };
 	if (data.mPtr) {
 		out.ptr = (uint8_t *)data->getBase();
-		out.len = (size_t)data->length;
+		out.len = (size_t)data->length * sizeof(T);
 	}
 	return out;
 }

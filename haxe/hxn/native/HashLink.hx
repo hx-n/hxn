@@ -56,6 +56,11 @@ import hxn.Native;
 				args.push({name: name + "Length", type: Native.type("Int")});
 				passed.push(macro $i{name});
 				passed.push(macro $i{name}.length);
+			// The buffer's own pointer: the library reads the element count
+			// from its header.
+			case buffer if (Native.buffers.exists(buffer)):
+				args.push({name: name, type: Native.type("hl.Bytes")});
+				passed.push(macro $i{name}.hxnData());
 			case "hxn.Handle":
 				args.push({name: name, type: arg.type});
 				passed.push(macro $i{name});
