@@ -65,9 +65,12 @@ Knowledge.capture reads selected typed values; unannotated fields are excluded.
 Capture dynamic assets after loading. Direct asset-field captures retain only
 logical address/content-ID provenance, excluding transport URIs and credentials.
 
-Publish complete selected snapshots with Knowledge and a configured KnowledgeSink
-using explicit increasing source revisions. Outgoing relations are replaced;
-Knowledge.remove emits a tombstone. Semantic IDs are independent of byte hashes.
+Publish snapshots with Knowledge and a configured KnowledgeSink using explicit
+increasing source revisions. Knowledge.capture takes a complete snapshot, whose
+outgoing relations replace the stored ones. Knowledge.captureFields(value,
+["goal"]) takes a partial snapshot of the named fields for an entity already
+published complete; the rest keeps its stored values, and the spatial field and
+its world relation go together. Knowledge.remove emits a tombstone. Semantic IDs are independent of byte hashes.
 Retry the failed batch's identical bytes before publishing another revision.
 The publisher has no durable outbox and implements no CRDT merging. Namespaces
 organize player/campaign data; authorization and authority policy belong to the app.
