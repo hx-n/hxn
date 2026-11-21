@@ -4,6 +4,7 @@
 //! | Passed across the boundary | Type | Owner |
 //! |---|---|---|
 //! | bytes or UTF-8 text, borrowed for one call | [`Slice`], [`SliceMut`] | the caller |
+//! | a typed buffer's numbers, borrowed for one call | bytes viewed as [`Elements`], [`ElementsMut`] | the caller |
 //! | bytes or UTF-8 text, returned | [`Buf`] | the library, until the host frees it |
 //! | a Rust value the host holds | [`Handle`] behind a [`RawHandle`] | the host's garbage collector |
 //! | a host closure | [`Callback`] | the library, until it drops it |
@@ -29,6 +30,7 @@
 mod atomic;
 mod buf;
 mod callback;
+mod elements;
 mod guard;
 mod handle;
 pub mod log;
@@ -41,6 +43,7 @@ pub mod wire;
 pub use atomic::AtomicFlag;
 pub use buf::Buf;
 pub use callback::Callback;
+pub use elements::{Element, Elements, ElementsMut};
 pub use guard::{catch, guard};
 pub use handle::{Handle, Opaque, RawHandle, Ref, RefMut, release};
 pub use memory::Weight;

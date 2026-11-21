@@ -21,10 +21,26 @@ pub const HAXE: &[(&str, &str)] = &[
         "hxn/Computed.hx",
         include_str!("../../../haxe/hxn/Computed.hx"),
     ),
+    (
+        "hxn/Float32Buffer.hx",
+        include_str!("../../../haxe/hxn/Float32Buffer.hx"),
+    ),
+    (
+        "hxn/Float64Buffer.hx",
+        include_str!("../../../haxe/hxn/Float64Buffer.hx"),
+    ),
     ("hxn/Future.hx", include_str!("../../../haxe/hxn/Future.hx")),
     ("hxn/Gc.hx", include_str!("../../../haxe/hxn/Gc.hx")),
     ("hxn/Handle.hx", include_str!("../../../haxe/hxn/Handle.hx")),
     ("hxn/Inbox.hx", include_str!("../../../haxe/hxn/Inbox.hx")),
+    (
+        "hxn/Int16Buffer.hx",
+        include_str!("../../../haxe/hxn/Int16Buffer.hx"),
+    ),
+    (
+        "hxn/Int32Buffer.hx",
+        include_str!("../../../haxe/hxn/Int32Buffer.hx"),
+    ),
     ("hxn/Log.hx", include_str!("../../../haxe/hxn/Log.hx")),
     (
         "hxn/LogLevel.hx",
@@ -47,6 +63,14 @@ pub const HAXE: &[(&str, &str)] = &[
     (
         "hxn/TupleMacro.hx",
         include_str!("../../../haxe/hxn/TupleMacro.hx"),
+    ),
+    (
+        "hxn/UInt16Buffer.hx",
+        include_str!("../../../haxe/hxn/UInt16Buffer.hx"),
+    ),
+    (
+        "hxn/UInt32Buffer.hx",
+        include_str!("../../../haxe/hxn/UInt32Buffer.hx"),
     ),
     ("hxn/Unit.hx", include_str!("../../../haxe/hxn/Unit.hx")),
     ("hxn/Wire.hx", include_str!("../../../haxe/hxn/Wire.hx")),

@@ -3152,3 +3152,40 @@ fn a_parameter_named_like_a_keyword_is_renamed_where_it_is_one() {
         "{window}"
     );
 }
+
+#[test]
+fn a_slice_of_numbers_is_a_typed_buffer_lent_for_the_call() {
+    let source = "#[hxn::interface]\npub struct Physics;\n\n#[hxn::methods]\nimpl Physics {\n    pub fn step(positions: &mut [f32], masses: &[f64], indices: &[u16]) {}\n    pub async fn later(values: &[i32]) -> i32 { 0 }\n}\n";
+    let library = parse("physics", source).unwrap();
+    let step = &library.interfaces[0].methods[0];
+    assert_eq!(step.params[0].ty, Type::BytesMut);
+    assert!(step.params.iter().all(|param| param.data.is_none()));
+
+    let c = hxn_gen::c_adapter(&library, "physics_core");
+    assert!(c.contains("positions: SliceMut<'_>"));
+    assert!(c.contains(
+        "let mut positions = hxn_abi::ElementsMut::<f32>::new(positions.into_bytes()?)?;"
+    ));
+    assert!(c.contains("let masses = hxn_abi::Elements::<f64>::new(masses.as_bytes()?)?;"));
+    assert!(c.contains("apart(positions.addresses(), masses.addresses())?;"));
+    assert!(c.contains("Physics::step(&mut positions, &masses, &indices)"));
+    assert!(c.contains("let values = <[i32]>::to_vec(&values);"));
+
+    let hl = hxn_gen::hl_adapter(&library, "physics_core");
+    assert!(hl.contains(
+        "let indices = hxn_abi::Elements::<u16>::new(slice(indices, indices_length).as_bytes()?)?;"
+    ));
+
+    let physics = &classes(&library)[0].text;
+    assert!(physics.contains(
+        "public static function step(positions:hxn.Float32Buffer, masses:hxn.Float64Buffer, indices:hxn.UInt16Buffer):Void"
+    ));
+    assert!(physics.contains("physics_step(positions.bytes, masses.bytes, indices.bytes)"));
+
+    let manifest = hxn_gen::manifest(&library);
+    assert!(manifest.contains("{ \"name\": \"positions\", \"type\": \"buffer_mut<f32>\" }"));
+    assert!(manifest.contains("{ \"name\": \"values\", \"type\": \"buffer<i32>\" }"));
+
+    let (_, message) = refused("pub async fn later(values: &mut [f32]) {}");
+    assert!(message.contains("a buffer to write into"), "{message}");
+}

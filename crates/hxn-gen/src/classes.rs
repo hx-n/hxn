@@ -355,6 +355,8 @@ fn method(library: &Library, interface: &Interface, method: &Method) -> String {
                 guards.push(guard(&name, params, returns));
                 arguments.push(lent::guarded(&name));
             }
+            // A typed buffer crosses as its bytes.
+            _ if param.elements.is_some() => arguments.push(format!("{name}.bytes")),
             _ => arguments.push(name),
         }
     }

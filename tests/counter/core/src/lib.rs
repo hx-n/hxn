@@ -18,11 +18,13 @@ use hxn_future::{
 // Interfaces defined in submodules are re-exported at the crate root, where
 // the adapters look for them.
 mod blob;
+mod buffers;
 mod events;
 mod logging;
 mod numbers;
 mod shapes;
 pub use blob::Blob;
+pub use buffers::Buffers;
 pub use events::{CountError, Event, Events, Refusal, Trouble};
 pub use logging::{emit_logs, log_failure, log_large, log_work};
 // Functions defined in submodules are re-exported at the root as well.

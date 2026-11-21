@@ -38,6 +38,8 @@
 | `&str` / `String` | Text input / output. |
 | `&[u8]` / `Vec<u8>` | Bytes input / output. |
 | `&mut [u8]` | Writable `Bytes`; synchronous calls only, not callback parameters. |
+| `&[f32]`, `&[f64]`, `&[i32]`, `&[u32]`, `&[i16]`, `&[u16]` | `hxn.Float32Buffer`, `Float64Buffer`, `Int32Buffer`, `UInt32Buffer`, `Int16Buffer`, `UInt16Buffer`, read in place. An `Array` converts to one by copying. |
+| `&mut` of the same | The same buffer, written in place; synchronous calls only. |
 | `i8`, `i16`, `u8`, `u16`, `i32`, `isize`, `usize` | `Int`, range-checked. |
 | `u32` | `UInt`, same bits. |
 | `i64`, `u64` | `haxe.Int64`, same bits. |
@@ -49,7 +51,8 @@ than 64 bits are unsupported.
 Data structs have named public fields; enums are C-like with discriminants
 or tagged without explicit discriminants. Fields may contain bools, fixed-width
 numbers, text, bytes, data, nonempty tuples and their supported containers.
-Pass data by value or `&`, lists also by `&[T]`; return it by value.
+Pass data by value or `&`, lists also by `&[T]`; return it by value. A
+slice of a number that a typed buffer holds is a buffer, not a list.
 See [data types, collections and defaults](../design/data.md) for the contract.
 Data in signals must be `Clone`; `()` is not a data field.
 
@@ -69,7 +72,7 @@ Data in signals must be `Clone`; `()` is not a data field.
 - Return `hxn_future::Future<T>`, `Stream<T>` or `Signal<T>` immediately.
   See [carried values and scheduling](../design/async.md).
 - `async fn` receivers are moved `self` or shared `&self`. Parameters are
-  scalars, copied text/bytes or shared interfaces. The future is `Send`;
+  scalars, copied text, bytes or buffers, or shared interfaces. The future is `Send`;
   no call-only borrows, `new` or `#[hxn(blocking)]`.
 - Callbacks use `impl Fn`, `FnMut` or `FnOnce` returning `Result<T, E>`;
   `E` is a function type parameter used only by that callback. Parameters

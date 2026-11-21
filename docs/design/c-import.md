@@ -17,7 +17,7 @@
 | Object-returning `new`/`create`; `free`/`destroy` | Constructor; destructor. |
 | Struct containing only numbers/bools; enum | Record; C-like enum. |
 | `const char *`; byte pointer plus length | Text; bytes. Non-`const` bytes use writable Haxe storage. |
-| Numeric pointer plus count | Array; non-`const` arrays return what C fills. |
+| Numeric pointer plus count | A typed buffer, such as `hxn.Float64Buffer`, for `const` elements a buffer holds, otherwise an Array; non-`const` arrays return what C fills. |
 | Trailing output pointer | Return value; C's `int` becomes a status. Later outputs receive `NULL`. |
 | Object returned by another object's method | Borrowed object. |
 | Function pointer plus user data | Callback, lent or retained according to registration naming. |

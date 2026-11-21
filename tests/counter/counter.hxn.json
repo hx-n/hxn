@@ -1010,6 +1010,82 @@
       ]
     },
     {
+      "name": "Buffers",
+      "methods": [
+        {
+          "name": "sum",
+          "kind": "static",
+          "params": [{ "name": "values", "type": "buffer<f32>" }],
+          "returns": "f64",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "scale",
+          "docs": "Multiplies each of `values` by `by`, in place.",
+          "kind": "static",
+          "params": [{ "name": "values", "type": "buffer_mut<f32>" }, { "name": "by", "type": "f64" }],
+          "returns": "void",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "mean",
+          "kind": "static",
+          "params": [{ "name": "values", "type": "buffer<f64>" }],
+          "returns": "f64",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "widen",
+          "docs": "Writes each of `from`, widened, to `into`, and returns how many fit.",
+          "kind": "static",
+          "params": [{ "name": "from", "type": "buffer<i16>" }, { "name": "into", "type": "buffer_mut<i32>" }],
+          "returns": "i32",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "ones",
+          "docs": "The number of bits set across `words`.",
+          "kind": "static",
+          "params": [{ "name": "words", "type": "buffer<u32>" }],
+          "returns": "u32",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "countdown",
+          "docs": "Writes each element's index to it, counting down from `last`.",
+          "kind": "static",
+          "params": [{ "name": "indices", "type": "buffer_mut<u16>" }, { "name": "last", "type": "u16" }],
+          "returns": "void",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "shift",
+          "docs": "Adds `by` to each of `values`, in place.",
+          "kind": "static",
+          "params": [{ "name": "values", "type": "buffer_mut<i32>" }, { "name": "by", "type": "i32" }],
+          "returns": "void",
+          "fallible": false,
+          "blocking": false
+        },
+        {
+          "name": "later_sum",
+          "docs": "The sum of `values`, which the work copies before the call returns.",
+          "kind": "static",
+          "params": [{ "name": "values", "type": "buffer<f32>" }],
+          "returns": "future<f64>",
+          "async": true,
+          "fallible": false,
+          "blocking": false
+        }
+      ]
+    },
+    {
       "name": "Events",
       "docs": "Static functions over events, with no instance.",
       "methods": [

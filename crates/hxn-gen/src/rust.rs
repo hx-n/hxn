@@ -5,7 +5,7 @@
 use crate::data;
 use crate::later;
 use crate::lent;
-use crate::model::{Data, Interface, Library, Method, Number, Param, Receiver, Type};
+use crate::model::{Data, Element, Interface, Library, Method, Number, Param, Receiver, Type};
 use crate::names::{
     abstract_name, cell_abstract, cell_export, export, has_receiver, held_export, local, release,
     thrown_export, wanted_export, weak_abstract,
@@ -64,7 +64,8 @@ fn owned(library: &Library, method: &Method, arguments: &mut [String]) -> Vec<St
                 *argument = format!("&{name}");
             }
             Type::Bytes => {
-                body.push(format!("let {name} = <[u8]>::to_vec({argument});"));
+                let element = param.elements.map_or("u8", Element::name);
+                body.push(format!("let {name} = <[{element}]>::to_vec({argument});"));
                 *argument = format!("&{name}");
             }
             Type::Handle {
@@ -335,6 +336,24 @@ fn apart_checks(method: &Method, addresses: impl Fn(&str) -> String) -> Vec<Stri
     out
 }
 
+// A typed buffer's bytes, `bytes`, viewed as its elements: the statement
+// that makes the view, and the argument that lends it to the call.
+fn viewed(param: &Param, bytes: &str) -> (String, String) {
+    let name = &param.name;
+    let element = param.elements.expect("a typed buffer").name();
+    if param.ty == Type::BytesMut {
+        (
+            format!("let mut {name} = hxn_abi::ElementsMut::<{element}>::new({bytes})?;"),
+            format!("&mut {name}"),
+        )
+    } else {
+        (
+            format!("let {name} = hxn_abi::Elements::<{element}>::new({bytes})?;"),
+            format!("&{name}"),
+        )
+    }
+}
+
 // A list of objects crosses as a stream that has already ended.
 pub(crate) fn list_stream(value: &str) -> String {
     format!(
@@ -390,6 +409,16 @@ fn c_method(library: &Library, interface: &Interface, method: &Method) -> String
             Type::I64 => ("i64", narrowed(param.number, name)),
             Type::F64 => ("f64", narrowed(param.number, name)),
             Type::Str => ("Slice<'_>", format!("{name}.as_str()?")),
+            Type::Bytes | Type::BytesMut if param.elements.is_some() => {
+                let (ty, bytes) = if param.ty == Type::BytesMut {
+                    ("SliceMut<'_>", format!("{name}.into_bytes()?"))
+                } else {
+                    ("Slice<'_>", format!("{name}.as_bytes()?"))
+                };
+                let (statement, argument) = viewed(param, &bytes);
+                body.push(statement);
+                (ty, argument)
+            }
             Type::Bytes => ("Slice<'_>", format!("{name}.as_bytes()?")),
             Type::BytesMut => ("SliceMut<'_>", format!("{name}.into_bytes()?")),
             Type::Handle {
@@ -743,23 +772,23 @@ fn hl_method(library: &Library, interface: &Interface, method: &Method) -> Strin
                 body.push(format!("let {name} = string({name})?.unwrap_or_default();"));
                 arguments.push(format!("&{name}"));
             }
-            Type::Bytes => {
+            Type::Bytes | Type::BytesMut => {
                 params.push(format!("{name}: *mut vbyte"));
                 params.push(format!("{name}_length: i32"));
                 signature.push_str("Bi");
-                body.push(format!(
-                    "let {name} = slice({name}, {name}_length).as_bytes()?;"
-                ));
-                arguments.push(name.clone());
-            }
-            Type::BytesMut => {
-                params.push(format!("{name}: *mut vbyte"));
-                params.push(format!("{name}_length: i32"));
-                signature.push_str("Bi");
-                body.push(format!(
-                    "let {name} = slice_mut({name}, {name}_length).into_bytes()?;"
-                ));
-                arguments.push(name.clone());
+                let bytes = if param.ty == Type::BytesMut {
+                    format!("slice_mut({name}, {name}_length).into_bytes()?")
+                } else {
+                    format!("slice({name}, {name}_length).as_bytes()?")
+                };
+                if param.elements.is_some() {
+                    let (statement, argument) = viewed(param, &bytes);
+                    body.push(statement);
+                    arguments.push(argument);
+                } else {
+                    body.push(format!("let {name} = {bytes};"));
+                    arguments.push(name.clone());
+                }
             }
             Type::Handle {
                 interface,

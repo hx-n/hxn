@@ -8,8 +8,8 @@ use syn::spanned::Spanned;
 use syn::{Attribute, FnArg, ImplItem, Item, Meta, ReturnType, Visibility};
 
 use crate::model::{
-    Case, Data, Enumeration, Error, Field, FieldDefault, Interface, Library, Method, Number, Param,
-    Receiver, Record, Tagged, Type, Variant,
+    Case, Data, Element, Enumeration, Error, Field, FieldDefault, Interface, Library, Method,
+    Number, Param, Receiver, Record, Tagged, Type, Variant,
 };
 use crate::names::{exception_class, pascal, wire_class};
 
@@ -496,6 +496,7 @@ impl Scope<'_> {
             number: None,
             data: None,
             borrowed: false,
+            elements: None,
         };
         if let syn::Type::ImplTrait(lent) = ty {
             return Ok(plain(self.lent(lent)?));
@@ -522,6 +523,22 @@ impl Scope<'_> {
             && path_name(&slice.elem).as_deref() == Some("u8")
         {
             return Ok(plain(Type::BytesMut));
+        }
+        // A slice of numbers is a typed buffer's bytes, borrowed for the call
+        // and viewed as its elements.
+        if let syn::Type::Reference(reference) = ty
+            && let syn::Type::Slice(slice) = &*reference.elem
+            && let Some(element) = path_name(&slice.elem).as_deref().and_then(Element::parse)
+        {
+            let wire = if reference.mutability.is_some() {
+                Type::BytesMut
+            } else {
+                Type::Bytes
+            };
+            return Ok(Param {
+                elements: Some(element),
+                ..plain(wire)
+            });
         }
         if cell(ty).is_some() || wrapped(ty, "Arc").and_then(cell).is_some() {
             return error(
@@ -552,6 +569,7 @@ impl Scope<'_> {
                 number: None,
                 data: None,
                 borrowed: false,
+                elements: None,
             });
         }
         if let Some(interface) = self.pointer(inner) {
@@ -575,6 +593,7 @@ impl Scope<'_> {
                 number: None,
                 data: None,
                 borrowed: false,
+                elements: None,
             });
         }
         if let syn::Type::Reference(reference) = inner
@@ -607,6 +626,7 @@ impl Scope<'_> {
                 number: None,
                 data: None,
                 borrowed: false,
+                elements: None,
             });
         }
         // Data is copied in either way: passed by value, or by a reference
@@ -904,6 +924,7 @@ impl Scope<'_> {
             let lent = match &param.ty {
                 Type::Lent { .. } => Some("a function"),
                 Type::AtomicInt | Type::AtomicBool => Some("a cell"),
+                Type::BytesMut if param.elements.is_some() => Some("a buffer to write into"),
                 Type::BytesMut => Some("bytes to write into"),
                 Type::Handle { interface, .. }
                     if !param.taken && (param.exclusive || !self.is_shared(interface)) =>

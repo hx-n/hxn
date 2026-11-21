@@ -51,7 +51,8 @@ pub enum Fault {
     Busy,
     /// Text that is not valid in its encoding.
     Encoding,
-    /// A length larger than any allocation can be.
+    /// A length larger than any allocation can be, or one that is not a
+    /// whole number of a typed buffer's elements.
     TooLarge,
     /// A number out of range for its target type.
     Range,

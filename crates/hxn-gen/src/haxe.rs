@@ -105,9 +105,10 @@ fn params(method: &Method) -> String {
         .params
         .iter()
         .map(|param| {
-            let ty = match &param.data {
-                Some(data) => data::haxe_type(data),
-                None => number_type(param.number, &param.ty),
+            let ty = match (&param.data, param.elements) {
+                (Some(data), _) => data::haxe_type(data),
+                (None, Some(element)) => element.haxe().to_owned(),
+                (None, None) => number_type(param.number, &param.ty),
             };
             format!("{}:{ty}", haxe_param(&param.name))
         })

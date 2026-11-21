@@ -409,6 +409,36 @@ class Generated {
 		counter.close();
 	}
 
+	static function buffers() {
+		var values = new hxn.Float32Buffer(4);
+		values[0] = 1.5;
+		values[3] = -0.25;
+		check("a library reads a buffer in place", Buffers.sum(values) == 1.25 && Buffers.sum(new hxn.Float32Buffer(0)) == 0);
+		Buffers.scale(values, 2);
+		check("and writes it in place", values[0] == 3 && values[3] == -0.5 && values[1] == 0);
+		check("an array converts to a buffer", Buffers.mean([1.0, 2.0, 4.5]) == 2.5 && Buffers.mean([]) == 0);
+		var from:hxn.Int16Buffer = [-3, 7, 32767];
+		var into = new hxn.Int32Buffer(2);
+		check("two buffers of different elements", Buffers.widen(from, into) == 2 && into[0] == -3 && into[1] == 7);
+		Buffers.shift(into, -10);
+		check("whole ones", into.toArray().join(",") == "-13,-3");
+		var words:hxn.UInt32Buffer = [(0xffffffff : UInt), 1];
+		check("unsigned ones", Buffers.ones(words) == 33);
+		var indices = new hxn.UInt16Buffer(3);
+		Buffers.countdown(indices, 1);
+		check("16-bit ones wrap the same way in both languages", indices.toArray().join(",") == "1,0,65535");
+		var raw = haxe.io.Bytes.alloc(8);
+		throws("one block of bytes written through two buffers", () -> Buffers.widen(hxn.Int16Buffer.ofBytes(raw), hxn.Int32Buffer.ofBytes(raw)),
+			"passed as two arguments");
+		var kept:hxn.Float32Buffer = [1, 2];
+		var later = Buffers.laterSum(kept);
+		kept[0] = 100;
+		check("async work has its own copy", later.await() == 3);
+		var grown = values.resized(6);
+		grown[5] = 1;
+		check("growing makes a new buffer", grown.length == 6 && values.length == 4 && grown[0] == 3 && Buffers.sum(grown) == 3.5);
+	}
+
 	static function numbers() {
 		check("narrow numbers come back as they went", Numbers.byte(200) == 200
 			&& Numbers.small(-100) == -100
@@ -1172,6 +1202,7 @@ class Generated {
 		logging();
 		functions();
 		numbers();
+		buffers();
 		data();
 		atomics();
 		shared();

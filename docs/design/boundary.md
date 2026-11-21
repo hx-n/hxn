@@ -8,6 +8,7 @@
 |---|---|---|
 | Borrowed text or bytes | `Slice` | Caller; text is UTF-8. |
 | Writable bytes | `SliceMut` | Caller; writes affect Haxe `Bytes`. |
+| Typed buffer | Its bytes, as `Slice` or `SliceMut`, viewed as `Elements` or `ElementsMut` | Caller; writes affect the Haxe buffer. |
 | Returned text or bytes | `Buf` | Host frees exactly once through its `free`. |
 | Rust object | Opaque `Handle<T>` pointer | One Haxe owner per handle. |
 | Borrowed host callback | `Callback` | Host, for the call. |
@@ -24,7 +25,23 @@ Invalid UTF-8 or UTF-16 is rejected. Writable bytes must not alias another
 bytes argument; adapters reject overlap with `Status::ALIASED` before
 creating Rust references. Each `Buf` uses its originating allocator.
 
-## Failures
+## Typed buffers
+
+`hxn.Float32Buffer`, `Float64Buffer`, `Int32Buffer`, `UInt32Buffer`,
+`Int16Buffer` and `UInt16Buffer` are abstracts over `haxe.io.Bytes`. They
+hold a fixed number of elements in little-endian order, which is native order
+on every supported platform. A library function that takes `&[f32]` or
+`&mut [f32]` borrows the buffer's bytes for the call, as it would borrow
+`Bytes`, and `hxn_abi::Elements` or `ElementsMut` views them as elements. The
+view is in place when the bytes are aligned for the element type. Otherwise
+the call works on a copy, and `ElementsMut` writes the copy back when the call
+returns. Neither collector moves bytes during a call, so no buffer is pinned.
+
+Indexing reads `hl.Bytes` directly on HashLink and Ash, and hxcpp's raw
+memory accessors on hxcpp. It is bounds-checked only with `-debug`. A buffer
+never changes length: `resized` makes a new one. An async function copies a
+buffer before the call returns, and cannot take one to write into.
+
 
 | Rust failure | Haxe behavior |
 |---|---|

@@ -71,7 +71,10 @@ pub struct Item { pub name: String, pub count: i32 }
   (`Math`, `String`, `Map`, `Date`). `hxn::package!("name")` puts the classes
   in a Haxe package.
 - Values: `bool`; `&str`/`String` as text; `&[u8]`/`Vec<u8>` as `Bytes`;
-  `&mut [u8]` as writable `Bytes` (synchronous calls only); `i32` and
+  `&mut [u8]` as writable `Bytes` (synchronous calls only); `&[f32]`,
+  `&[f64]`, `&[i32]`, `&[u32]`, `&[i16]`, `&[u16]` and their `&mut` forms
+  as `hxn.Float32Buffer`, `hxn.Float64Buffer` and so on, read or written in
+  place without copying; `i32` and
   smaller as range-checked `Int`; `u32` as `UInt`; `i64`/`u64` as
   `haxe.Int64` with the same bits; `f32`/`f64` as `Float`.
 - Data: structs with public fields become record classes; C-like enums

@@ -295,6 +295,63 @@ pub struct Param {
     pub data: Option<Data>,
     /// For data, accepted by reference: `&Options`, or `&[T]` for a list.
     pub borrowed: bool,
+    /// For `&[T]` or `&mut [T]` of a number a typed buffer holds: the
+    /// element type, when `ty` is `Bytes` or `BytesMut`. The Haxe buffer's
+    /// bytes are borrowed for the call and viewed as elements.
+    pub elements: Option<Element>,
+}
+
+/// The element type of a typed buffer: `hxn.Float32Buffer` for `f32`, and
+/// so on. Its bytes are in native byte order, which is little-endian on
+/// every platform hxn supports.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum Element {
+    F32,
+    F64,
+    I32,
+    U32,
+    I16,
+    U16,
+}
+
+impl Element {
+    const ALL: [Self; 6] = [
+        Self::F32,
+        Self::F64,
+        Self::I32,
+        Self::U32,
+        Self::I16,
+        Self::U16,
+    ];
+
+    /// The element type whose Rust name is `name`.
+    pub fn parse(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|element| element.name() == name)
+    }
+
+    /// Its name in Rust and in the manifest.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::F32 => "f32",
+            Self::F64 => "f64",
+            Self::I32 => "i32",
+            Self::U32 => "u32",
+            Self::I16 => "i16",
+            Self::U16 => "u16",
+        }
+    }
+
+    /// The Haxe buffer class that holds it.
+    pub fn haxe(self) -> &'static str {
+        match self {
+            Self::F32 => "hxn.Float32Buffer",
+            Self::F64 => "hxn.Float64Buffer",
+            Self::I32 => "hxn.Int32Buffer",
+            Self::U32 => "hxn.UInt32Buffer",
+            Self::I16 => "hxn.Int16Buffer",
+            Self::U16 => "hxn.UInt16Buffer",
+        }
+    }
 }
 
 /// A Rust numeric type the boundary does not support. It is passed as an
@@ -370,6 +427,14 @@ impl Param {
     pub fn type_name(&self) -> String {
         if let Some(data) = &self.data {
             return data.name();
+        }
+        if let Some(element) = self.elements {
+            let kind = if self.ty == Type::BytesMut {
+                "buffer_mut"
+            } else {
+                "buffer"
+            };
+            return format!("{kind}<{}>", element.name());
         }
         self.number
             .map_or_else(|| self.ty.name(), |number| number.name().to_owned())
