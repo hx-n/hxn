@@ -37,29 +37,34 @@ const USAGE: &str = "usage: hxn <command>
       every build. --source compiles C files into the crate; --link links an
       installed library, found through <NAME>_LIB_DIR if needed.
 
-  hxn build <hl|cpp|cppia> [--wasm] [--target <triple>] [--release]
+  hxn build <hl|cpp|cppia> [<file.hxml>] [--wasm] [--threads] [--target <triple>] [--release] [--ash <command>]
       Generates the library's binding for HashLink or hxcpp and builds it.
-      Prints the haxe arguments for compiling a program against it.
+      Prints the haxe arguments for compiling a program against it. With a
+      program file, builds that program for distribution without running
+      it, and prints how to run it: for `hl`, Ash builds it ahead of time
+      into a native executable; for `cpp`, hxcpp's executable. --ash, or the
+      HXN_ASH environment variable, sets the Ash command and its options:
+      --ash \"ash --no-fma\".
 
-  hxn run <hl|cpp|cppia> [<file.hxml>] [--wasm] [--threads] [--browser] [--release] [--vm <command>] [-- <arguments>]
+  hxn run <hl|cpp|cppia> [<file.hxml>] [--wasm] [--threads] [--browser] [--release] [--ash <command>] [--vm <command>] [-- <arguments>]
       Builds the binding, then compiles the Haxe program in haxe/ and runs
       it. With a program file, compiles and runs that program and builds no
       binding. --vm, or the HXN_VM environment variable, sets the
       HashLink-compatible VM to run it with, including any options:
-      --vm \"ash --mode jit\".
+      --vm ash for Ash's hybrid mode, --vm \"ash --mode jit\".
 
 `cppia` uses the hxcpp binding from a CPPIA script. It also builds a host,
 an hxcpp executable that contains the library's classes. The Haxe program
 is compiled as a script and run by that host.
 
-  hxn check [hl] [cpp] [cppia] [<file.hxml>] [--wasm] [--threads] [--browser] [--release] [--vm <command>]
+  hxn check [hl] [cpp] [cppia] [<file.hxml>] [--wasm] [--threads] [--browser] [--release] [--ash <command>] [--vm <command>]
       Runs the Haxe program, or the program file, on each runtime listed.
       With none listed, it runs on whichever of HashLink and hxcpp are
       installed. Fails unless every run succeeds and all runs print the same
       output. For a library, it also fails before running if the committed
       manifest does not match the source.
 
-  hxn doctor [--vm <command>] [--target <triple>]
+  hxn doctor [--ash <command>] [--vm <command>] [--target <triple>]
       Reports which tools are installed, which targets are ready, and what
       each other target still needs. Lists installed Rust standard libraries.
       --target checks prerequisites for building that Rust static binding.
@@ -79,6 +84,15 @@ is compiled as a script and run by that host.
       another machine, or with --wasm or --target, adds to the same
       directory.
 
+  hxn package <hl|cpp|cppia> <file.hxml> [--target <triple>] [--out <directory>] [--ash <command>]
+      Builds the program file for distribution, as build does, and copies
+      it into one directory with every file it loads: an app package. For
+      `hl`, Ash builds it ahead of time; for `cpp`, it is hxcpp's
+      executable. --target builds it for another desktop triple: Ash builds
+      for each triple it supports, and hxcpp for another machine of this
+      system's kind. The libraries must include that triple. --out names
+      the directory, by default bin/<file name>/<target>-package.
+
 On build or package, --target cross-compiles the binding for a target
 triple, such as `aarch64-apple-ios` or `aarch64-linux-android`, as a static
 library. hxcpp links the `cpp` one into the app; Ash links the `hl` one
@@ -89,7 +103,7 @@ Haxe app may need platform tools and SDKs. On doctor, --target checks the
 Rust binding's prerequisites without building.
 
 With --wasm the binding and the program are built for wasm. `hl --wasm` is
-built and run by Ash; set --vm or HXN_VM if its command is not `ash`.
+built and run by Ash; set --ash or HXN_ASH if its command is not `ash`.
 `cpp --wasm` is built by hxcpp with Emscripten and run by node, or by the
 command given with --vm. With --threads either is threaded: the library and
 the program over one shared memory, each Haxe thread and each of the
@@ -131,6 +145,12 @@ struct Arguments {
     // The target triple given with `--target`, for a cross-compiled binding.
     cross: Option<&'static str>,
     vm: Option<String>,
+    // The Ash command, with its build options, that builds a program ahead
+    // of time.
+    ash: Option<String>,
+    // Set by `build`: the program is built for distribution and not run. A
+    // HashLink program on the desktop is then built ahead of time by Ash.
+    building: bool,
     hxn: Option<PathBuf>,
     out: Option<PathBuf>,
     // For `import`: the library's name, its C sources and what it links.
@@ -150,6 +170,8 @@ fn arguments(mut given: impl Iterator<Item = String>) -> Result<Arguments, Strin
         threads: false,
         cross: None,
         vm: None,
+        ash: None,
+        building: false,
         hxn: None,
         out: None,
         name: None,
@@ -173,6 +195,7 @@ fn arguments(mut given: impl Iterator<Item = String>) -> Result<Arguments, Strin
             // exits.
             "--target" => out.cross = Some(Box::leak(value("--target")?.into_boxed_str())),
             "--vm" => out.vm = Some(value("--vm")?),
+            "--ash" => out.ash = Some(value("--ash")?),
             "--hxn" => out.hxn = Some(PathBuf::from(value("--hxn")?)),
             "--out" => out.out = Some(PathBuf::from(value("--out")?)),
             "--name" => out.name = Some(value("--name")?),
@@ -383,6 +406,16 @@ fn vm_command(arguments: &Arguments, default: &str) -> String {
         .unwrap_or_else(|| default.to_owned())
 }
 
+// The Ash command that builds a program, with its options: the value of
+// `--ash` or `HXN_ASH`, otherwise `ash`.
+fn ash_command(arguments: &Arguments) -> String {
+    arguments
+        .ash
+        .clone()
+        .or_else(|| std::env::var("HXN_ASH").ok())
+        .unwrap_or_else(|| String::from("ash"))
+}
+
 // The HashLink VM's directory, for a native build of the HashLink binding.
 // On Windows the binding is linked against the VM's library, which is in
 // that directory.
@@ -575,10 +608,21 @@ fn program(
                     target,
                     &program,
                     std::slice::from_ref(&built.library),
+                    &built.ash_args,
                     &built.dir,
                 );
             }
-            hashlink_vm(arguments, &program, &built.dir)
+            let name = project.main.rsplit('.').next().unwrap_or(&project.main);
+            let archives: Vec<PathBuf> = built.archive.iter().cloned().collect();
+            desktop(
+                arguments,
+                target,
+                &program,
+                &archives,
+                &built.ash_args,
+                &built.dir,
+                name,
+            )
         }
         Runtime::Cpp => {
             let out = built.dir.join("out");
@@ -634,11 +678,19 @@ fn file_program(
     // the compile, and their Haxe arguments apply to it.
     let plugins = plugins::for_program(file)?;
     let mut flags = make::defines(target);
+    // `hxn.Bind.lib` selects each library's native file for the triple.
+    if let Some(triple) = target.cross {
+        flags.push(("-D", format!("hxn_triple={triple}")));
+        if target.runtime == Runtime::Cpp {
+            flags.push(("-D", hxcpp_machine(triple)?.to_owned()));
+        }
+    }
+    let mut ash = Vec::new();
     let mut pages = Vec::new();
     for phase in ["before-build", "after-build"] {
         let context = plugins::program_context(file, Some(target), Some(&out), None);
         plugins::hooks(&plugins, phase, &context, &file.dir)?
-            .apply_to(&mut flags, &out, &mut pages, &file.dir)?;
+            .apply_to(&mut flags, &mut ash, &out, &mut pages, &file.dir)?;
     }
     let mut haxe = Command::new("haxe");
     haxe.current_dir(&file.dir).arg(&file.file);
@@ -667,9 +719,25 @@ fn file_program(
                     .into_iter()
                     .filter(|path| path.extension().is_some_and(|extension| extension == "a"))
                     .collect();
-                return ash_wasm(arguments, target, &program, &archives, &out);
+                return ash_wasm(arguments, target, &program, &archives, &ash, &out);
             }
-            hashlink_vm(arguments, &program, &out)
+            let archives: Vec<PathBuf> = natives(&out)?
+                .into_iter()
+                .filter(|path| {
+                    !path
+                        .extension()
+                        .is_some_and(|extension| extension == "hdll")
+                })
+                .collect();
+            desktop(
+                arguments,
+                target,
+                &program,
+                &archives,
+                &ash,
+                &out,
+                file.executable(),
+            )
         }
         Runtime::Cpp => {
             hxcpp_flags(&mut haxe, target, arguments);
@@ -693,7 +761,9 @@ fn natives(dir: &Path) -> Result<Vec<PathBuf>, String> {
             .map(|name| name.to_string_lossy().into_owned())
             .unwrap_or_default();
         if path.is_file()
-            && (name.ends_with(".hdll") || (name.starts_with("lib") && name.ends_with(".a")))
+            && (name.ends_with(".hdll")
+                || (name.starts_with("lib") && name.ends_with(".a"))
+                || name.ends_with(".lib"))
         {
             found.push(path);
         }
@@ -710,9 +780,14 @@ fn ash_wasm(
     target: Target,
     program: &Path,
     natives: &[PathBuf],
+    contributed: &[Vec<String>],
     dir: &Path,
 ) -> Result<Program, String> {
-    let vm = vm_command(arguments, "ash");
+    let vm = arguments
+        .ash
+        .clone()
+        .or_else(|| std::env::var("HXN_ASH").ok())
+        .unwrap_or_else(|| vm_command(arguments, "ash"));
     let (ash, options) = words(&vm)?;
     let module = program.with_extension("wasm");
     // Ash links the archives into the program. Without threads,
@@ -723,10 +798,9 @@ fn ash_wasm(
     let mut build = Command::new(ash);
     build
         .env("ASH_WASM_FIBERS", if target.threads { "0" } else { "1" })
-        .args(options)
-        .arg("--build")
-        .arg(&module)
-        .args(["--target", triple]);
+        .args(&options);
+    ash_options(&mut build, &options, contributed);
+    build.arg("--build").arg(&module).args(["--target", triple]);
     for native in natives {
         build.arg("--native-lib").arg(native);
     }
@@ -739,17 +813,84 @@ fn ash_wasm(
     Ok(command.into())
 }
 
+// The command that runs a HashLink program on the desktop. `run` and
+// `check` run the bytecode in the VM. `build` has Ash build the program
+// ahead of time into the executable `name` in `dir`, with each archive in
+// `archives` linked into it, and returns the command that runs it.
+fn desktop(
+    arguments: &Arguments,
+    target: Target,
+    program: &Path,
+    archives: &[PathBuf],
+    contributed: &[Vec<String>],
+    dir: &Path,
+    name: &str,
+) -> Result<Program, String> {
+    if !arguments.building {
+        return hashlink_vm(arguments, program, contributed, dir);
+    }
+    let ash = ash_command(arguments);
+    let (ash, options) = words(&ash)?;
+    let executable = dir.join(if target.windows() {
+        format!("{name}.exe")
+    } else {
+        name.to_owned()
+    });
+    let mut build = Command::new(ash);
+    build.args(&options);
+    ash_options(&mut build, &options, contributed);
+    build.arg("--build").arg(&executable);
+    if let Some(triple) = target.cross {
+        build.args(["--target", triple]);
+    }
+    for archive in archives {
+        build.arg("--native-lib").arg(archive);
+    }
+    make::run(build.arg(program))?;
+    let mut command = Command::new(executable);
+    command.args(&arguments.rest);
+    Ok(command.into())
+}
+
+// Adds the Ash options that build hooks contributed after `given`, the
+// options from the command line. A flag given there is left out, because
+// Ash refuses a repeated flag and the command line's value wins.
+fn ash_options(command: &mut Command, given: &[&str], contributed: &[Vec<String>]) {
+    let mut seen: Vec<&str> = given
+        .iter()
+        .filter(|word| word.starts_with("--"))
+        .map(|word| word.split('=').next().unwrap_or(word))
+        .collect();
+    for entry in contributed {
+        if seen.contains(&entry[0].as_str()) {
+            continue;
+        }
+        seen.push(&entry[0]);
+        command.args(entry);
+    }
+}
+
 // The command that runs HashLink bytecode with the VM. The VM loads a
 // library by name through the system's dynamic loader, and its own shared
 // library from the VM's directory. `libraries` and the VM's directory go on
 // the loader's search path.
-fn hashlink_vm(arguments: &Arguments, program: &Path, libraries: &Path) -> Result<Program, String> {
+fn hashlink_vm(
+    arguments: &Arguments,
+    program: &Path,
+    contributed: &[Vec<String>],
+    libraries: &Path,
+) -> Result<Program, String> {
     let vm = vm_command(arguments, "hl");
     let (vm, options) = words(&vm)?;
     let mut places = vec![libraries.to_owned()];
     places.extend(directory_of(vm));
     let mut command = Command::new(vm);
-    command.args(options).arg(program).args(&arguments.rest);
+    command.args(&options);
+    // The Ash options that build hooks contributed go only to Ash.
+    if Path::new(vm).file_stem().is_some_and(|stem| stem == "ash") {
+        ash_options(&mut command, &options, contributed);
+    }
+    command.arg(program).args(&arguments.rest);
     for variable in ["DYLD_LIBRARY_PATH", "LD_LIBRARY_PATH", "PATH"] {
         if variable == "PATH" && !cfg!(windows) {
             continue;
@@ -816,6 +957,135 @@ fn hxcpp_program(
     Ok(command.into())
 }
 
+// Builds a program file for distribution without running it: the
+// executable Ash builds ahead of time for `hl`, the module or web page for
+// `hl --wasm`, and hxcpp's executable for `cpp`. Prints how to run it.
+fn build_program(file: &hxml::Program, arguments: &Arguments) -> Result<u8, String> {
+    let target = target(arguments)?;
+    let program = file_program(file, target, script(arguments), arguments)?;
+    let command = &program.command;
+    let mut words = vec![command.get_program().to_string_lossy().into_owned()];
+    words.extend(
+        command
+            .get_args()
+            .map(|word| word.to_string_lossy().into_owned()),
+    );
+    println!(
+        "Built {} for {}. To run it:\n  {}",
+        file.name,
+        target.name(),
+        words.join(" ")
+    );
+    Ok(0)
+}
+
+// The hxcpp define that selects the machine of a desktop `triple`. hxcpp
+// builds for another machine of this system's kind, not for another system.
+fn hxcpp_machine(triple: &str) -> Result<&'static str, String> {
+    let system = if cfg!(target_os = "macos") {
+        "apple-darwin"
+    } else if cfg!(windows) {
+        "windows"
+    } else {
+        "linux"
+    };
+    if !triple.contains(system) || triple.contains("android") {
+        return Err(format!(
+            "hxcpp builds a program for {triple} only on that system: build it there, or with `hl`, which Ash builds for any triple it supports"
+        ));
+    }
+    match triple.split('-').next() {
+        Some("x86_64") => Ok("HXCPP_M64"),
+        Some("aarch64") => Ok("HXCPP_ARM64"),
+        Some("i686") => Ok("HXCPP_M32"),
+        _ => Err(format!(
+            "hxn does not know hxcpp's define for the machine of {triple}"
+        )),
+    }
+}
+
+// Whether `path` is Ash's shared runtime, which Ash stages beside an
+// executable that loads an .hdll.
+fn staged_runtime(path: &Path) -> bool {
+    path.file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .is_some_and(|name| {
+            name.starts_with("libhl")
+                && [".dylib", ".so", ".dll"]
+                    .iter()
+                    .any(|end| name.contains(end))
+        })
+}
+
+// Builds a program file for distribution and copies it into the package
+// directory: the executable, and the files it loads from its own directory.
+// For Ash those are the libraries' .hdll files and Ash's runtime, when Ash
+// linked the shared runtime. For `cppia`, the host and the script.
+fn package_program(file: &hxml::Program, arguments: &Arguments) -> Result<u8, String> {
+    let target = target(arguments)?;
+    if target.wasm {
+        return Err(String::from(
+            "an app package is a desktop program: build a wasm program with `hxn build <runtime> --wasm <file.hxml>`",
+        ));
+    }
+    let script = script(arguments);
+    let dir = file.output_for(target, script);
+    // A runtime left from an earlier build is removed, so that one found
+    // after the build is one that Ash staged for it.
+    if let Ok(entries) = std::fs::read_dir(&dir) {
+        for entry in entries.flatten() {
+            if staged_runtime(&entry.path()) {
+                let _ = std::fs::remove_file(entry.path());
+            }
+        }
+    }
+    let program = file_program(file, target, script, arguments)?;
+    let mut files = vec![PathBuf::from(program.command.get_program())];
+    files.extend(
+        program
+            .command
+            .get_args()
+            .map(PathBuf::from)
+            .filter(|path| path.is_file()),
+    );
+    if target.runtime == Runtime::Hl {
+        let beside: Vec<PathBuf> = std::fs::read_dir(&dir)
+            .map_err(|error| format!("{}: {error}", dir.display()))?
+            .flatten()
+            .map(|entry| entry.path())
+            .collect();
+        if beside.iter().any(|path| staged_runtime(path)) {
+            files.extend(beside.into_iter().filter(|path| {
+                staged_runtime(path)
+                    || path
+                        .extension()
+                        .is_some_and(|extension| extension == "hdll")
+            }));
+        }
+    }
+    let out = match &arguments.out {
+        Some(out) => std::path::absolute(out).map_err(|error| error.to_string())?,
+        None => file.output().join(format!("{}-package", target.name())),
+    };
+    let _ = std::fs::remove_dir_all(&out);
+    std::fs::create_dir_all(&out).map_err(|error| format!("{}: {error}", out.display()))?;
+    let mut names = Vec::new();
+    for from in &files {
+        let name = from.file_name().ok_or("a packaged file has no name")?;
+        let into = out.join(name);
+        std::fs::copy(from, &into).map_err(|error| format!("{}: {error}", from.display()))?;
+        names.push(name.to_string_lossy().into_owned());
+    }
+    println!(
+        "Packaged {} for {} in {}:\n  {}",
+        file.name,
+        target.name(),
+        out.display(),
+        names.join("\n  ")
+    );
+    Ok(0)
+}
+
 // Runs the same program on each runtime. Every run must succeed, and all
 // runs must print the same output.
 fn check(source: &Source, arguments: &Arguments) -> Result<u8, String> {
@@ -846,7 +1116,7 @@ fn check(source: &Source, arguments: &Arguments) -> Result<u8, String> {
         }
     }
 
-    let found = doctor::find(&vm_command(arguments, "hl"));
+    let found = doctor::find(&vm_command(arguments, "hl"), &ash_command(arguments));
     let named: Vec<String> = if arguments.positional.is_empty() {
         ["hl", "cpp"]
             .into_iter()
@@ -1022,15 +1292,10 @@ Not imported (listed at the end of {name}.webidl):"
             Ok(0)
         }
         "build" => {
-            let arguments = arguments(given)?;
-            if arguments
-                .positional
-                .iter()
-                .any(|argument| hxml::is_file(argument))
-            {
-                return Err(String::from(
-                    "build builds a library's binding, and a program file has none: compile and run it with `hxn run <runtime> <file.hxml>`",
-                ));
+            let mut arguments = arguments(given)?;
+            if let Some(file) = program_file(&mut arguments)? {
+                arguments.building = true;
+                return build_program(&file, &arguments);
             }
             let target = target(&arguments)?;
             let project = Project::read(&here)?;
@@ -1092,7 +1357,11 @@ Not imported (listed at the end of {name}.webidl):"
             }
         }
         "package" => {
-            let arguments = arguments(given)?;
+            let mut arguments = arguments(given)?;
+            if let Some(file) = program_file(&mut arguments)? {
+                arguments.building = true;
+                return package_program(&file, &arguments);
+            }
             let named: &[String] = &arguments.positional;
             let both = [String::from("hl"), String::from("cpp")];
             let mut targets = Vec::new();
@@ -1156,7 +1425,7 @@ Not imported (listed at the end of {name}.webidl):"
                     "doctor reports both wasm runtimes; do not pass --wasm",
                 ));
             }
-            let found = doctor::find(&vm_command(&arguments, "hl"));
+            let found = doctor::find(&vm_command(&arguments, "hl"), &ash_command(&arguments));
             if let Some(triple) = arguments.cross {
                 print!("{}", found.binding_report(triple));
                 Ok(u8::from(!found.binding_missing(triple).is_empty()))
@@ -1213,6 +1482,20 @@ fn main() -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_flag_on_the_command_line_wins_over_a_hook() {
+        let mut command = Command::new("ash");
+        let contributed = [
+            vec![String::from("--preset"), String::from("game")],
+            vec![String::from("--no-fma")],
+            vec![String::from("--preset"), String::from("server")],
+            vec![String::from("--jit-tier"), String::from("llvm")],
+        ];
+        ash_options(&mut command, &["--jit-tier=cranelift"], &contributed);
+        let added: Vec<_> = command.get_args().collect();
+        assert_eq!(added, ["--preset", "game", "--no-fma"]);
+    }
 
     #[test]
     fn a_vm_is_named_with_its_options() {

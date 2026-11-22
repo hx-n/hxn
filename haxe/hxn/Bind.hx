@@ -90,6 +90,9 @@ class Bind {
 				// an archive, which Ash links into the program it builds.
 				var from = library(wasm ? ['lib$name.a'] : ['$name.hdll', 'lib$name.a', '$name.lib']);
 				var file = Path.withoutDirectory(from);
+				// A host library has both: the .hdll for a VM, and the archive
+				// Ash links into a program it builds ahead of time.
+				var archives = [for (other in ['lib$name.a', '$name.lib']) if (other != file && FileSystem.exists(Path.join([built, other]))) other];
 				// The VM loads an .hdll by name from the program's directory; an
 				// archive is put there too, for Ash's `--native-lib`.
 				// A wasm library's page files go there too, beside the page Ash
@@ -101,6 +104,8 @@ class Bind {
 						return;
 					var dir = Path.directory(FileSystem.absolutePath(output));
 					File.copy(from, Path.join([dir, file]));
+					for (other in archives)
+						File.copy(Path.join([built, other]), Path.join([dir, other]));
 					if (wasm && FileSystem.isDirectory(page))
 						for (entry in FileSystem.readDirectory(page))
 							if (!FileSystem.isDirectory(Path.join([page, entry])))

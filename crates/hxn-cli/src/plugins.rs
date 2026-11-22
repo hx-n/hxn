@@ -34,12 +34,23 @@ pub struct Plugin {
     files: Vec<PathBuf>,
 }
 
+// The namespace a haxelib of the hxn family gets by default: its name after
+// `hxn-` or `hxn`, such as `window` for hxn-window and `me` for hxnme. None
+// for a haxelib outside the family, and for hxn itself.
+fn family(library: &str) -> Option<&str> {
+    let rest = library.strip_prefix("hxn")?;
+    let rest = rest.strip_prefix('-').unwrap_or(rest);
+    (!rest.is_empty()).then_some(rest)
+}
+
 impl Plugin {
     pub fn parse(library: &str, root: &Path, value: &Value) -> Result<Self, String> {
         let error = |why: &str| format!("{library}: invalid hxn CLI plugin: {why}");
-        if !library.starts_with("hxn-") {
-            return Err(error("the haxelib name must start with hxn-"));
-        }
+        let Some(default) = family(library) else {
+            return Err(error(
+                "the haxelib name must start with hxn, as hxn-window and hxnme do",
+            ));
+        };
         let object = value
             .as_object()
             .ok_or_else(|| error("expected an object"))?;
@@ -55,7 +66,7 @@ impl Plugin {
             Some(value) => value
                 .as_str()
                 .ok_or_else(|| error("namespace must be a string"))?,
-            None => &library[4..],
+            None => default,
         };
         if namespace.is_empty()
             || !namespace.as_bytes()[0].is_ascii_lowercase()
@@ -248,6 +259,7 @@ fn copy_files(plugin: Plugin, out: &Path) -> Result<(), String> {
 pub struct Reply {
     haxe: Vec<(&'static str, String)>,
     page: Vec<(PathBuf, String)>,
+    ash: Vec<Vec<String>>,
 }
 impl Reply {
     fn parse(bytes: &[u8], phase: &str) -> Result<Self, String> {
@@ -258,7 +270,7 @@ impl Reply {
             return Err("hook reply version must be 1".into());
         }
         for key in object.keys() {
-            if !["version", "haxe_args", "page_files"].contains(&key.as_str()) {
+            if !["version", "haxe_args", "page_files", "ash_args"].contains(&key.as_str()) {
                 return Err(format!("unknown hook reply field `{key}`"));
             }
         }
@@ -295,18 +307,43 @@ impl Reply {
                 ));
             }
         }
+        if let Some(args) = value.get("ash_args") {
+            for entry in args
+                .as_array()
+                .ok_or("ash_args must be an array of [flag] or [flag, value] entries")?
+            {
+                let words = entry
+                    .as_array()
+                    .filter(|words| matches!(words.len(), 1 | 2))
+                    .and_then(|words| {
+                        words
+                            .iter()
+                            .map(|word| word.as_str().map(String::from))
+                            .collect::<Option<Vec<String>>>()
+                    })
+                    .filter(|words| words[0].starts_with("--"))
+                    .ok_or(
+                        "ash_args must contain [flag] or [flag, value] entries of strings, each flag starting with --",
+                    )?;
+                reply.ash.push(words);
+            }
+        }
         if !["before-build", "after-build"].contains(&phase)
-            && (!reply.haxe.is_empty() || !reply.page.is_empty())
+            && (!reply.haxe.is_empty() || !reply.page.is_empty() || !reply.ash.is_empty())
         {
-            return Err("only build hooks may contribute Haxe arguments or page files".into());
+            return Err(
+                "only build hooks may contribute Haxe arguments, Ash arguments or page files"
+                    .into(),
+            );
         }
         Ok(reply)
     }
 
     pub fn apply(self, built: &mut Built, cwd: &Path) -> Result<(), String> {
         built.plugin_haxe.extend(self.haxe.iter().cloned());
-        let Self { haxe, page } = self;
+        let Self { haxe, page, ash } = self;
         built.arguments.extend(haxe);
+        built.ash_args.extend(ash);
         copy_pages(page, &built.dir, &mut built.plugin_page, cwd)?;
         let lines: Vec<String> = built
             .arguments
@@ -316,16 +353,19 @@ impl Reply {
         make::write(&built.hxml, &lines.concat())
     }
 
-    /// Adds the Haxe arguments of the reply to `arguments`. Copies its page
-    /// files into `into` and adds each copy to `copied`.
+    /// Adds the Haxe arguments of the reply to `arguments` and its Ash
+    /// arguments to `ash`. Copies its page files into `into` and adds each
+    /// copy to `copied`.
     pub fn apply_to(
         self,
         arguments: &mut Vec<(&'static str, String)>,
+        ash: &mut Vec<Vec<String>>,
         into: &Path,
         copied: &mut Vec<PathBuf>,
         cwd: &Path,
     ) -> Result<(), String> {
         arguments.extend(self.haxe);
+        ash.extend(self.ash);
         copy_pages(self.page, into, copied, cwd)
     }
 }
@@ -424,7 +464,7 @@ pub fn installed(cwd: &Path) -> Result<Vec<Plugin>, String> {
         let Some((name, _)) = line.split_once(':') else {
             continue;
         };
-        if !name.starts_with("hxn-") {
+        if family(name).is_none() {
             continue;
         }
         let root = haxelib(&["libpath".into(), name.into()], cwd)?;
@@ -545,6 +585,7 @@ pub fn hooks(
         let next = plugin.hook(phase, context, cwd)?;
         reply.haxe.extend(next.haxe);
         reply.page.extend(next.page);
+        reply.ash.extend(next.ash);
     }
     Ok(reply)
 }
@@ -685,6 +726,44 @@ mod tests {
     }
 
     #[test]
+    fn a_plugin_comes_from_the_hxn_family_and_is_named_after_it() {
+        assert_eq!(family("hxn-window"), Some("window"));
+        assert_eq!(family("hxnme"), Some("me"));
+        assert_eq!(family("hxn"), None);
+        assert_eq!(family("hxn-"), None);
+        assert_eq!(family("format"), None);
+        let root = root();
+        assert_eq!(
+            Plugin::parse("hxnme", &root, &config()).unwrap().namespace,
+            "me"
+        );
+        assert!(Plugin::parse("format", &root, &config()).is_err());
+    }
+
+    #[test]
+    fn build_hooks_give_ash_flags_with_or_without_a_value() {
+        let reply = Reply::parse(
+            br#"{"version":1,"ash_args":[["--preset","game"],["--no-fma"]]}"#,
+            "before-build",
+        )
+        .unwrap();
+        assert_eq!(reply.ash, [vec!["--preset", "game"], vec!["--no-fma"]]);
+        for bad in [
+            r#"{"version":1,"ash_args":[["preset","game"]]}"#,
+            r#"{"version":1,"ash_args":[["--preset","game","x"]]}"#,
+            r#"{"version":1,"ash_args":[[]]}"#,
+            r#"{"version":1,"ash_args":[["--preset",1]]}"#,
+            r#"{"version":1,"ash_args":"--preset game"}"#,
+        ] {
+            assert!(
+                Reply::parse(bad.as_bytes(), "before-build").is_err(),
+                "{bad}"
+            );
+        }
+        assert!(Reply::parse(br#"{"version":1,"ash_args":[["--no-fma"]]}"#, "before-run").is_err());
+    }
+
+    #[test]
     fn argv_and_json_cross_the_process_boundary_without_a_shell_and_failures_keep_the_provider() {
         let root = root();
         let source = root.join("fixture.rs");
@@ -759,6 +838,8 @@ fn main() {
             classes: out.clone(),
             include: out.clone(),
             library: out.join("lib.a"),
+            archive: None,
+            ash_args: Vec::new(),
             linked: make::Linked::default(),
         };
         Reply::parse(

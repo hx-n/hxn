@@ -23,67 +23,62 @@ the [README](../README.md#quick-setup) for installation and a first example.
 
 ## Targets and settings
 
-- `--wasm` builds the selected runtime's wasm form. For Ash, hxn rebuilds
-  Rust's standard library, which needs nightly Rust with `rust-src`, builds
-  the library as `lib<library>.a`, and Ash links it into the program with
-  `--native-lib`. Emscripten requires its SDK and compatible hxcpp.
-- `--threads`, with `--wasm`, builds a threaded library and program over one
-  shared memory, and passes `-D hxn_threads` so `hxn.Bind.lib` selects that
-  library. The library's workers run on threads of their own: Web Workers in
-  a browser, worker threads under node.
-  - With `hl --wasm`, the target is `wasm32-wasip1-threads`. A library that
-    serves a browser API through `ash_host_agent` needs it, since the page's
-    browser agent reads the program's memory. It needs an Ash with that
-    target's runtime object.
-  - With `cpp --wasm`, hxn rebuilds Rust's standard library with atomics,
-    which needs nightly Rust with `rust-src`, and passes
-    `-D HXCPP_MULTI_THREADED_APP`; the library's generated classes compile
-    and link the program with Emscripten's `-pthread`, and `main` runs on a
-    pthread (`-sPROXY_TO_PTHREAD`), as an Ash program runs in a Worker. A
-    library that draws on the web page's canvas has it transferred to that
-    thread with its `link-args` (see [packaging](packaging.md)). `emrun`
-    serves the web page with the cross-origin isolation headers shared memory
-    needs; a server of your own has to send
-    `Cross-Origin-Opener-Policy: same-origin` and
-    `Cross-Origin-Embedder-Policy: require-corp`.
-- `--browser` runs a wasm program in a web page in headless Chrome, and prints
-  what it prints. With `cpp --wasm`, hxcpp writes the page and Emscripten's
-  `emrun` serves it; `HXN_BROWSER` names another browser emrun knows. With
-  `hl --wasm`, Ash writes the page, `ash serve` serves it with the
-  cross-origin isolation headers a threaded program needs, and node 22 or
-  later drives Chrome over the DevTools protocol; `HXN_BROWSER` is Chrome's
-  path when it is not installed where Chrome installs. `HXN_PAGE_TIMEOUT` is
-  the seconds to wait for the program to finish in either, 300 by default.
-  For Ash, `HXN_PAGE_CORES` sets the core count the web page sees, which
-  sizes its pool of thread agents, to reproduce a smaller machine.
-  `HXN_BROWSER_ARGS` adds flags to Chrome's command line, such as
-  `--enable-unsafe-webgpu`. An hxcpp program built without `--threads` runs
-  on the web page's thread and delivers a future with `then`: the browser
-  settles it only while that thread's event loop is free, and `await` blocks
-  it. A threaded hxcpp program, like an Ash one, runs on a thread of its own,
-  where `await` works on a future the library's threads settle. A future the
-  browser settles on that same thread, such as the promise of a browser API
-  called from it, still needs `then`.
-- `--target <triple>` makes `build` and `package` build the binding for
-  another platform, such as `aarch64-linux-android`, as a static library.
-  Install that triple's Rust standard library first with
-  `rustup target add <triple>`. hxn needs no linker for this; the
-  platform's linker and SDK are used when the program is linked.
+| Option | Commands | Effect |
+|---|---|---|
+| `--vm <command>`, `HXN_VM` | `run`, `check` | The VM that runs HashLink bytecode, with its options. `hl` by default. `ash` is Ash's hybrid mode, which starts at once, for development and server workloads. `"ash --mode jit"` and `"ash --mode interp"` are its other modes. |
+| `--ash <command>`, `HXN_ASH` | `build`, `run`, `check` | The Ash command and its options for what Ash builds: a program file that `build` builds ahead of time, and every `hl --wasm` program. For example `"ash --no-fma"`. |
+| `--wasm` | `build`, `run`, `check`, `package` | Builds the runtime's wasm form. |
+| `--threads` | with `--wasm` | Builds a threaded library and program over one shared memory, and passes `-D hxn_threads`, by which `hxn.Bind.lib` selects that library. The library's workers run on threads of their own: Web Workers in a browser, worker threads under node. |
+| `--browser` | `run`, `check`, with `--wasm` | Runs the program in a web page in headless Chrome, and prints what it prints. |
+| `--target <triple>` | `build`, `package` | Builds the binding for another platform, such as `aarch64-linux-android`, as a static library. |
 
-  hxcpp links the `cpp` library into the app. For HashLink, Ash links
-  `lib<library>.a` into the program it builds for that platform:
+### Wasm
 
-  ```
-  ash --build <program> --target <triple> --native-lib lib<library>.a main.hl
-  ```
+| | `hl --wasm`, built by Ash | `cpp --wasm`, built by hxcpp with Emscripten |
+|---|---|---|
+| Needs | Nightly Rust with `rust-src`: hxn rebuilds Rust's standard library. | The Emscripten SDK and a compatible hxcpp. |
+| Library | `lib<library>.a`, which Ash links into the program with `--native-lib`. | Linked by hxcpp. |
+| `--threads` | Target `wasm32-wasip1-threads`, which needs an Ash with that target's runtime object. A library that serves a browser API through `ash_host_agent` needs it, since the page's browser agent reads the program's memory. | Rust's standard library rebuilt with atomics (nightly Rust with `rust-src`), and `-D HXCPP_MULTI_THREADED_APP`. The program links with Emscripten's `-pthread`, and `main` runs on a pthread (`-sPROXY_TO_PTHREAD`), as an Ash program runs in a Worker. |
+| `--browser` | Ash writes the page. `ash serve` serves it with the cross-origin isolation headers that a threaded program needs. node 22 or later drives Chrome over the DevTools protocol. | hxcpp writes the page and Emscripten's `emrun` serves it, with the cross-origin isolation headers shared memory needs. |
+| Futures in a web page | The program runs on a thread of its own, where `await` works on a future the library's threads settle. | Without `--threads`, the program runs on the page's thread, and the browser settles a future only while that thread's event loop is free: use `then`, because `await` blocks it. With `--threads`, as on Ash. |
 
-  `run` and `check` do not accept `--target`, because they run the program
-  on this machine.
-- `cppia` builds an hxcpp host and runs the program as a script. Arguments
-  after the script name go to the program.
-- Set the Haxe directory, main class and `haxe-flags` under
-  `[package.metadata.hxn]`. Choose the VM and its options on the command
-  line or through `HXN_VM`.
+On either runtime, use `then` for a future that the browser settles on the
+program's own thread. The promise of a browser API called from that thread is
+an example.
+
+A threaded hxcpp library that draws on the web page's canvas has it
+transferred to its thread with its `link-args` (see
+[packaging](packaging.md)). A server other than `emrun` must send
+`Cross-Origin-Opener-Policy: same-origin` and
+`Cross-Origin-Embedder-Policy: require-corp`.
+
+| Variable | Effect with `--browser` |
+|---|---|
+| `HXN_BROWSER` | For `cpp`, another browser that emrun knows. For `hl`, the path of Chrome, if Chrome is not in its usual place. |
+| `HXN_BROWSER_ARGS` | Flags added to Chrome's command line, such as `--enable-unsafe-webgpu`. |
+| `HXN_PAGE_TIMEOUT` | Seconds to wait for the program to finish, 300 by default. |
+| `HXN_PAGE_CORES` | For `hl`, the core count the web page sees, which sizes its pool of thread agents, to reproduce a smaller machine. |
+
+### Other platforms
+
+Install the triple's Rust standard library with `rustup target add <triple>`
+before `--target`. hxn needs no linker for this. The program is linked
+with the platform's linker and SDK. hxcpp links the `cpp` library into
+the app. For HashLink, Ash links `lib<library>.a` into the program it builds
+for that platform:
+
+```
+ash --build <program> --target <triple> --native-lib lib<library>.a main.hl
+```
+
+`run` and `check` do not accept `--target`, because they run the program on
+this machine.
+
+### Other settings
+
+`cppia` builds an hxcpp host and runs the program as a script. Arguments
+after the script name go to the program. Set the Haxe directory, main class
+and `haxe-flags` under `[package.metadata.hxn]`.
 
 The command and library's `hxn` versions must match. `check` also requires
 the committed API manifest to match the source before building.
@@ -122,7 +117,18 @@ program, and hxn adds the defines by which it selects that file:
 - `--wasm` and `--threads` work as they do for a library. For `hl --wasm`,
   hxn gives each `lib*.a` file next to the program to Ash with
   `--native-lib`.
-- `--browser` and `--vm` work as they do for a library.
+- `--browser`, `--ash` and `--vm` work as they do for a library.
+- `hxn build <hl|cpp|cppia> <file.hxml>` builds the program for distribution
+  without running it, and prints the command that runs it. For `hl`, Ash
+  builds it ahead of time into a native executable in the output directory.
+  hxn gives Ash each `lib*.a` file next to the program with `--native-lib`.
+  The executable and the files beside it are the program you distribute.
+  For `cpp` it is hxcpp's executable, and with `--wasm` the wasm program.
+- `hxn package <hl|cpp|cppia> <file.hxml>` builds the program the same way
+  and copies it into one directory, an app package. The package holds the
+  executable and every file it loads, and runs after it is moved. `--out`
+  names the directory, by default `bin/<file name>/<target>-package`. See
+  [packaging an app](packaging.md#packaging-an-app).
 - `--release` and `--timings` apply to a binding, so a program file ignores
   them.
 - For `cppia`, the host contains the classes of the libraries that the

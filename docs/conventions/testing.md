@@ -25,7 +25,7 @@ Windows is known to pass only after CI runs.
 
 | Suite | Coverage / modes |
 |---|---|
-| `tests/cli/run.sh` | New, run, check and package; `hl <vm>`, `cpp`, `cppia`, `wasm <ash>`, `emcc`. |
+| `tests/cli/run.sh` | New, run, check, build and package; `hl <vm>`, `cpp`, `cppia`, `wasm <ash>`, `emcc`. With `hl`, `ASH` names the Ash command that builds the program file ahead of time. |
 | `tests/examples/run.sh` | Each example against `expected.txt`; same modes as CLI. |
 | `tests/cimport/run.sh` | Import tally and installed sqlite3; `hl <vm>`, `cpp`, `cppia`, `emcc`; needs clang. |
 | `tests/mobile/run.sh ios-sim` / `android`, each `[cpp\|hl]` | Package, compile, link and run examples on local mobile tools: hxcpp, or HashLink through Ash (`ASH`). Run after changes to how an hxcpp program or a cross-compiled library is built or linked. |
@@ -34,7 +34,7 @@ Windows is known to pass only after CI runs.
 VM strings include options, for example `hl "ash --mode jit"`.
 CI runs unit tests on Linux/macOS/Windows, native HashLink/hxcpp and CPPIA,
 Emscripten, and the iOS simulator with hxcpp and with HashLink through Ash
-(`HXN_ASH` in the workflow names the release). Run Ash on the desktop, Ash
+(`HXN_ASH_RELEASE` in the workflow names the release). Run Ash on the desktop, Ash
 wasm and Android locally.
 
 ## Checks and fixtures

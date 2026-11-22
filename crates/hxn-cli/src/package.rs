@@ -10,7 +10,7 @@
 //! | `sources/` | the crate's own hand-written Haxe, from its `sources` directory, when it has one |
 //! | `page/` | files an Ash program's page needs beside it, from the crate's `page` directory, when it has one |
 //! | `include/` | `hxn.h` and the library's headers, for hxcpp |
-//! | `native/<triple>/` | the built libraries for one target triple, which may be a wasm one; for hxcpp also `link.xml`, the libraries the archive links, with those a build script found outside the system beside it. A HashLink library built with `--target` is the archive `lib<library>.a`, which Ash links into the program |
+//! | `native/<triple>/` | the built libraries for one target triple, which may be a wasm one; for hxcpp also `link.xml`, the libraries the archive links, with those a build script found outside the system beside it. A host HashLink library is `<library>.hdll`, which a VM loads, and the archive `lib<library>.a` (`<library>.lib` on Windows), which Ash links into a program it builds ahead of time; one built for wasm or with `--target` is the archive alone |
 //!
 //! Only `native/` differs between platforms. Packaging on another machine
 //! into the same directory, or copying that machine's `native/<triple>/` into
@@ -118,6 +118,14 @@ pub fn package(
             .map_err(|error| format!("{}: {error}", native.display()))?;
         std::fs::copy(&built.library, native.join(packaged(name, target, &built)))
             .map_err(|error| format!("{}: {error}", built.library.display()))?;
+        // A host HashLink library also has the archive that Ash links into a
+        // program it builds ahead of time.
+        if let Some(archive) = &built.archive
+            && let Some(file) = archive.file_name()
+        {
+            std::fs::copy(archive, native.join(file))
+                .map_err(|error| format!("{}: {error}", archive.display()))?;
+        }
         // What the hxcpp archive links, beside it.
         if target.runtime == Runtime::Cpp {
             let xml = built.linked.package(target.windows(), &native)?;

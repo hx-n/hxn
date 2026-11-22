@@ -189,6 +189,12 @@ pub struct Built {
     /// The build artifact: the library a VM loads, or the static library
     /// hxcpp links.
     pub library: PathBuf,
+    /// For HashLink on the desktop, the static library that Ash links into a
+    /// program it builds ahead of time.
+    pub archive: Option<PathBuf>,
+    /// Options for Ash that build hooks contributed, each a flag and its value
+    /// if it has one.
+    pub ash_args: Vec<Vec<String>>,
     /// For hxcpp, what the static library needs linked with it.
     pub linked: Linked,
 }
@@ -491,14 +497,16 @@ fn manifest(project: &Project, target: Target, later: bool) -> String {
         // cargo cannot link a wasm library whose imports are provided by
         // the program, so it is built as a static library and linked in a
         // later step.
-        Runtime::Hl if target.archive() => ("staticlib", &["hxn-abi", "hxn-hl"]),
-        Runtime::Hl => ("cdylib", &["hxn-abi", "hxn-hl"]),
-        Runtime::Cpp => ("staticlib", &["hxn-abi"]),
+        Runtime::Hl if target.archive() => ("\"staticlib\"", &["hxn-abi", "hxn-hl"]),
+        // On the desktop a VM loads the shared library, and Ash links the
+        // static one into a program it builds ahead of time.
+        Runtime::Hl => ("\"cdylib\", \"staticlib\"", &["hxn-abi", "hxn-hl"]),
+        Runtime::Cpp => ("\"staticlib\"", &["hxn-abi"]),
     };
     let library = &project.library;
     let suffix = target.runtime.name();
     let mut out = format!(
-        "{NOTE}[package]\nname = \"{library}-{suffix}\"\nversion = \"0.0.0\"\nedition = \"2024\"\npublish = false\n\n[lib]\nname = \"{library}_{suffix}\"\ncrate-type = [\"{kind}\"]\ntest = false\ndoctest = false\n\n[dependencies]\n{package} = {{ path = {path} }}\n",
+        "{NOTE}[package]\nname = \"{library}-{suffix}\"\nversion = \"0.0.0\"\nedition = \"2024\"\npublish = false\n\n[lib]\nname = \"{library}_{suffix}\"\ncrate-type = [{kind}]\ntest = false\ndoctest = false\n\n[dependencies]\n{package} = {{ path = {path} }}\n",
         package = project.package,
         path = quoted(&text(&project.dir)),
     );
@@ -899,6 +907,7 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
         arguments.push(("--macro", call.clone()));
     }
     arguments.extend(defines(target));
+    let mut archive = None;
     match runtime {
         Runtime::Hl if target.wasm => {
             // Ash links it into the program it builds, with `--native-lib`.
@@ -931,6 +940,15 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
             let hdll = dir.join(format!("{name}.hdll"));
             std::fs::copy(&built, &hdll)
                 .map_err(|error| format!("{}: {error}", built.display()))?;
+            let (from, to) = if cfg!(windows) {
+                (format!("{name}_hl.lib"), format!("{name}.lib"))
+            } else {
+                (format!("lib{name}_hl.a"), format!("lib{name}.a"))
+            };
+            let from = built.with_file_name(from);
+            let to = dir.join(to);
+            std::fs::copy(&from, &to).map_err(|error| format!("{}: {error}", from.display()))?;
+            archive = Some(to);
             built = hdll;
         }
         Runtime::Cpp => {
@@ -960,6 +978,8 @@ pub fn build(project: &Project, target: Target, options: Options) -> Result<Buil
         classes: haxe,
         include: out.join("include"),
         library: built,
+        archive,
+        ash_args: Vec::new(),
         linked,
     };
     before.apply(&mut result, &project.dir)?;

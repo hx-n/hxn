@@ -3,7 +3,7 @@
 [CLI usage](cli.md) · [Design](design.md)
 
 `hxn package` builds both bindings by default; specify `hl` or `cpp` to select
-one. Use `--release --out <directory>` to create the distributable haxelib.
+one. With a program file it [packages an app](#packaging-an-app) instead. Use `--release --out <directory>` to create the distributable haxelib.
 Haxe programs use it with `-lib <library>` and need no Rust source.
 
 ## Library repository layout
@@ -51,7 +51,9 @@ library for that triple, including iOS and Android; install its Rust target
 first. For hxcpp it is linked into the app. For HashLink on wasm, Android and
 iOS it is `lib<library>.a`, which `hxn.Bind` copies next to `main.hl` and Ash
 links into the program with `--native-lib`, since those programs cannot open
-an `.hdll`. A host `.hdll` must be built on the system it runs on.
+an `.hdll`. A host HashLink library is both `<library>.hdll`, which a VM
+loads, and `lib<library>.a` (`<library>.lib` on Windows), which Ash links into
+the executable it builds ahead of time. Build both on the system they run on.
 
 `hxn.Bind.lib` selects the host, wasm or mobile library from Haxe defines.
 Use `-D hxn_triple=<triple>` to override the selection. Haxelib gives a
@@ -59,6 +61,30 @@ program one hxn, from the first `-lib` that depends on it; `hxn.Bind.lib`
 fails when that hxn is older than the one a package names, or another minor
 version. CPPIA scripts use
 an hxcpp host containing the binding. See [binding generation](design/generation.md).
+
+## Packaging an app
+
+`hxn package` also packages an app: a [program file](cli.md#program-files)
+that uses installed hxn libraries. It builds the program for distribution
+and copies it into one directory with every file it loads:
+
+```
+hxn package hl app.hxml --out dist/hl
+hxn package cpp app.hxml --out dist/cpp
+```
+
+For `hl`, Ash compiles the program ahead of time into a native executable.
+When the program loads a library's `.hdll`, the directory also holds the
+`.hdll` files and Ash's runtime. For `cpp`, the directory holds hxcpp's
+executable. For `cppia`, it holds the host and the script.
+
+`--target <triple>` packages the app for another desktop, such as
+`x86_64-apple-darwin`. Each library that the app uses must include that
+triple, which `hxn package --target <triple>` adds to it. Ash builds for each
+triple that it supports and needs its runtime for that triple. If Ash cannot
+locate the runtime, name it with `--ash "ash --runtime <path>"`. hxcpp
+builds for another machine of the same system, such as an Intel Mac on Apple
+Silicon.
 
 ## Hand-written Haxe
 

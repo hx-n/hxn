@@ -7,6 +7,9 @@
 #   run.sh cppia       as a CPPIA script, in an hxcpp host that contains the library
 #   run.sh wasm [ash]  built and run by Ash
 #   run.sh emcc        hxcpp compiled to wasm, run by node; needs emcc on PATH
+# With hl, ASH names the Ash command, with any options, that `hxn build`
+# uses to build the program file ahead of time; without it, that step is
+# skipped.
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -215,6 +218,29 @@ if (cd "$work/file" && "$hxn" run hl output.hxml) >/dev/null 2>"$work/refused.tx
 	exit 1
 fi
 grep -q 'hxn adds the output' "$work/refused.txt" || { cat "$work/refused.txt" >&2; exit 1; }
+
+# `hxn build` builds the program file for distribution, without running it,
+# and prints the command that runs it: for hl, the executable Ash builds
+# ahead of time; for cpp, hxcpp's executable. `hxn package` puts it in a
+# directory of its own.
+built=()
+case "$runtime" in
+	hl) if [ -n "${ASH:-}" ]; then built=(hl --ash "$ASH"); fi ;;
+	cpp) built=(cpp) ;;
+esac
+if [ ${#built[@]} -gt 0 ]; then
+	(cd "$work/file" && "$hxn" build "${built[@]}" greet.hxml) | tr -d '\r' | tee "$work/built.txt"
+	read -ra start <<<"$(sed -n '/To run it:$/{n;s/^  //;p;}' "$work/built.txt")"
+	[ ${#start[@]} -gt 0 ] || { echo "FAILED: build did not print how to run the program" >&2; exit 1; }
+	(cd "$work/file" && "${start[@]}") | tr -d '\r' | tee "$work/out.txt"
+	greeted "the program file that build built"
+	# `hxn package` copies the built program and the files it loads into one
+	# directory, which runs after it is moved.
+	(cd "$work/file" && "$hxn" package "${built[@]}" greet.hxml --out "$work/app") | tr -d '\r'
+	mv "$work/app" "$work/moved-app"
+	(cd "$work" && ./moved-app/Main) | tr -d '\r' | tee "$work/out.txt"
+	greeted "the packaged program file"
+fi
 
 # Settings from the crate and the command line are passed through: another
 # main class, a haxe flag, and program arguments.

@@ -133,6 +133,10 @@ Hello, Rust!
 refused: nobody to greet
 ```
 
+`hxn run hl` runs the program in a HashLink VM, `hl` unless `--vm` names
+another. `hxn run hl --vm ash` runs it in Ash's hybrid mode, which starts at
+once and compiles the hot code while the program runs.
+
 `hxn build hl` or `hxn build cpp` generates the Haxe classes and builds the
 native library without running anything, and prints the `haxe` arguments for
 compiling your own program against them.
@@ -152,7 +156,8 @@ changes.
 name, and passes only if their output is identical. `hxn doctor` lists the
 targets your machine can build for and what is missing for the others.
 
-Installed `hxn-*` libraries can add CLI commands and workflow hooks.
+Installed `hxn-*` libraries, and others named `hxn*` such as `hxnme`, can
+add CLI commands and workflow hooks.
 `hxn plugins` lists their namespaces, such as `hxn window doctor`.
 Library tools ship in the haxelib; consumers need no source checkout.
 See [CLI extensions](docs/design/cli-extensions.md).
@@ -172,7 +177,8 @@ The package depends on the `hxn` haxelib, this repository, for hxn's own
 classes, so every hxn library a program uses shares them. `-lib greeter`
 runs the macro `hxn.Bind.lib("greeter")`, which adds the package's classes,
 passes hxcpp the header and library paths,
-and for HashLink copies `greeter.hdll` next to `main.hl`. The package
+and for HashLink copies `greeter.hdll`, which a VM loads, and
+`libgreeter.a`, which Ash links into an executable, next to `main.hl`. The package
 contains native libraries for the machine it was built on. To add more, run
 `hxn package` with the same output directory on another machine, or with
 `--wasm`. The hxcpp library can also be cross-compiled, including for iOS
@@ -236,6 +242,25 @@ runtime, and take the same options as for a library:
 hxn run hl app.hxml
 hxn run hl --wasm --threads app.hxml
 hxn check hl cpp cppia app.hxml
+```
+
+`hxn build` builds the program for distribution without running it, and
+prints how to run it. For `hl`, Ash builds it ahead of time into a native
+executable, which with the files beside it is the program you distribute.
+For `cpp`, it is hxcpp's executable:
+
+```
+hxn build hl app.hxml
+hxn build cpp app.hxml
+```
+
+`hxn package` builds it the same way and copies it into one directory with
+every file it loads, ready to ship. `--target` packages it for another
+desktop, such as `x86_64-apple-darwin`:
+
+```
+hxn package hl app.hxml --out dist
+hxn package hl app.hxml --target x86_64-apple-darwin --out dist-x86_64
 ```
 
 `haxelib submit` requires a few more fields. Set `repository` and `license`

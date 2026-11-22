@@ -33,6 +33,8 @@ pub struct Found {
     /// Rust's standard library for Emscripten unwinds with.
     pub hxcpp_wasm_exceptions: bool,
     pub ash: bool,
+    /// The command name used to look for Ash.
+    pub ash_command: String,
     pub emcc: bool,
     pub node: bool,
     pub sccache: bool,
@@ -100,8 +102,8 @@ fn standard_libraries(root: &Path) -> std::io::Result<Vec<String>> {
 }
 
 /// Detects every tool. `vm` is the HashLink VM command given with `--vm` or
-/// `HXN_VM`.
-pub fn find(vm: &str) -> Found {
+/// `HXN_VM`, and `ash` the Ash command given with `--ash` or `HXN_ASH`.
+pub fn find(vm: &str, ash: &str) -> Found {
     let release = first_line(Command::new("rustc").arg("--version")).unwrap_or_default();
     let sysroot = printed(Command::new("rustc").args(["--print", "sysroot"]))
         .map(|sysroot| Path::new(sysroot.trim()).join("lib/rustlib"));
@@ -117,6 +119,7 @@ pub fn find(vm: &str) -> Found {
     let supported_targets = printed(Command::new("rustc").args(["--print", "target-list"]))
         .map(|targets| targets.lines().map(str::to_owned).collect());
     let program = vm.split_whitespace().next().unwrap_or("hl");
+    let ash = ash.split_whitespace().next().unwrap_or("ash");
     let hxcpp = first_line(Command::new("haxelib").args(["libpath", "hxcpp"]))
         .filter(|path| Path::new(path).is_dir());
     Found {
@@ -139,7 +142,8 @@ pub fn find(vm: &str) -> Found {
         hxcpp: hxcpp.clone().map(|path| format!("hxcpp at {path}")),
         hxcpp_old: hxcpp.as_deref().is_some_and(predates_1298),
         hxcpp_wasm_exceptions: hxcpp.as_deref().is_some_and(wasm_exceptions),
-        ash: on_path("ash"),
+        ash: on_path(ash),
+        ash_command: ash.to_owned(),
         emcc: on_path("emcc"),
         node: on_path("node"),
         sccache: on_path("sccache"),
@@ -248,8 +252,9 @@ impl Found {
         };
         let mut hl_wasm = self.wasm_missing();
         if !self.ash {
-            hl_wasm.push(String::from(
-                "`ash`, which builds and runs the wasm program",
+            hl_wasm.push(format!(
+                "`{}`, which builds and runs the wasm program",
+                self.ash_command
             ));
         }
         let mut cpp_wasm = hxcpp.clone();
@@ -297,7 +302,7 @@ impl Found {
             self.haxe.clone(),
             self.vm.clone(),
             self.hxcpp.clone(),
-            self.ash.then(|| String::from("ash")),
+            self.ash.then(|| self.ash_command.clone()),
             self.emcc.then(|| String::from("emcc")),
             self.node.then(|| String::from("node")),
         ];

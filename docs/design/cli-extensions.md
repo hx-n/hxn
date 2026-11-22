@@ -2,8 +2,10 @@
 
 [Design](../design.md) · [CLI usage](../cli.md)
 
-An installed `hxn-*` haxelib can provide a namespace under the hxn command
-and participate in its build, run and package lifecycle. `hxn plugins`
+An installed haxelib of the hxn family, named `hxn-*` or `hxn*` such as
+`hxnme`, can provide a namespace under the hxn command and participate in
+its build, run and package lifecycle. The namespace defaults to the name
+after `hxn-` or `hxn`: `window` for hxn-window, `me` for hxnme. `hxn plugins`
 lists the registrations in the active haxelib repository. A namespaced
 command does not require a Rust crate in the current directory.
 
@@ -66,9 +68,15 @@ Hooks log to standard error and return a JSON object on standard output:
 }
 ```
 
-Only build hooks may contribute `haxe_args` and `page_files`. Haxe flags
-are `-D`, `-cp` and `--macro`; runtime, main class and output selection stay
-with hxn. Arguments reach both the Haxe invocation and `build.hxml`; CPPIA scripts
+A build hook may also return `ash_args`, options for Ash. Each entry is a
+flag with or without its value, such as `["--preset", "game"]` or
+`["--no-fma"]`. hxn passes them to every Ash command a HashLink build or run
+uses: the build ahead of time, the wasm build, and a VM named `ash`. A flag
+already given with `--ash` or `--vm` is left out, so the command line wins.
+
+Only build hooks may contribute `haxe_args`, `ash_args` and `page_files`.
+Haxe flags are `-D`, `-cp` and `--macro`; runtime, main class and output
+selection stay with hxn. Arguments reach both the Haxe invocation and `build.hxml`; CPPIA scripts
 receive the plugin defines used by their compiled host.
 Relative page-file paths refer to the source project. Files are copied
 beside wasm output and into the package's `page/`; conflicting contents

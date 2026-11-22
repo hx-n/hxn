@@ -22,9 +22,15 @@ PowerShell. Both verify release checksums and accept `HXN_VERSION` and
 2. Write the API in `src/lib.rs` (see below). The Haxe program is in `haxe/`
    by default; `[package.metadata.hxn]` in Cargo.toml can set its directory,
    main class and `haxe-flags`.
-3. `hxn run hl` or `hxn run cpp` builds and runs it. `hxn build <hl|cpp>`
-   only builds, and prints the `haxe` arguments for compiling against the
-   binding.
+3. `hxn run hl` or `hxn run cpp` builds and runs it. `hxn run hl` runs the
+   bytecode in a VM, `hl` unless `--vm` names another; `--vm ash` is Ash's
+   hybrid mode, which starts at once, for development and servers.
+   `hxn build <hl|cpp>` only builds, and prints the `haxe` arguments for
+   compiling against the binding. `hxn build hl app.hxml` builds a program
+   file for distribution: Ash builds it ahead of time into a native
+   executable (`--ash "<command>"` or `HXN_ASH` gives Ash's command and
+   options). `hxn package hl app.hxml [--target <desktop triple>] --out dist`
+   copies it with every file it loads into a directory to ship.
 4. `hxn check` runs the program on HashLink and hxcpp, or on the runtimes
    named (`hxn check hl --vm ash`, `hxn check cpp cppia`), and passes only
    when every run passes and prints the same output. This is the test for a
@@ -181,7 +187,7 @@ or compile-only pass does not cover them.
 
 ## CLI extensions
 
-`hxn plugins` lists extensions from installed `hxn-*` haxelibs. A library
+`hxn plugins` lists extensions from installed `hxn-*` and `hxn*` haxelibs. A library
 owns a namespace, such as `hxn window ...`; consumers need no source checkout
 or shell helpers. Workflow hooks activate only for the source library and
 haxelibs selected by its `haxe-flags`, including resolved dependencies.
