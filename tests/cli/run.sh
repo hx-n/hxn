@@ -205,7 +205,13 @@ hxcpp="$(haxelib libpath hxcpp 2>/dev/null || true)"
 	cp -R "$root/haxe" "$root/haxelib.json" "$installed/"
 	printf '%s' "$version" >.haxelib/hxn/.current
 	haxelib dev greeter "$work/package" >/dev/null
-	printf '%s\n' "-lib greeter" "-cp $work/greeter/haxe" "-main Main" >greet.hxml
+	# Git Bash converts paths in the arguments of a Windows program, not in a
+	# file it reads, so the class path is written in Windows form there.
+	classes="$work/greeter/haxe"
+	if command -v cygpath >/dev/null; then
+		classes="$(cygpath -m "$classes")"
+	fi
+	printf '%s\n' "-lib greeter" "-cp $classes" "-main Main" >greet.hxml
 	"$hxn" run "${arguments[@]}" greet.hxml
 ) | tr -d '\r' | tee "$work/out.txt"
 greeted "the program file"
