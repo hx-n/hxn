@@ -17,6 +17,7 @@ import sys.thread.EventLoop.NextEventTime;
 @:cppFileCode("#include <emscripten.h>\n#include <emscripten/eventloop.h>\n#include <stdlib.h>")
 class Emscripten {
 	static var due:Array<() -> Void> = [];
+	static var failed = false;
 
 	/** Runs `f` once, after the host has run whatever else is waiting. **/
 	public static function later(f:() -> Void):Void {
@@ -45,21 +46,30 @@ class Emscripten {
 		catch (error:Exception)
 			if (failure == null)
 				failure = error;
+		var ended = false;
 		switch next {
 			case Now:
 				wake(0);
 			case At(time):
 				wake(Std.int(Math.max(0, (time - haxe.Timer.stamp()) * 1000)));
 			case Never | AnyTime(_):
-				#if hxn_threads
-				// `main` runs on a pthread, where Emscripten ends only the
-				// thread once nothing keeps the runtime alive, so a last turn
-				// with nothing after it ends the program, as it ends on the web
-				// page's thread.
-				if (due.length == 0)
-					untyped __cpp__("if (!emscripten_runtime_keepalive_check()) exit(0)");
-				#end
+				ended = true;
 		}
+		if (failure != null) {
+			failed = true;
+			Sys.stderr().writeString('Uncaught exception: ${failure.details()}\n');
+			Sys.stderr().flush();
+		}
+		// Emscripten ends the program with status 0 once a callback returns or throws with
+		// nothing left to keep the runtime alive. A program whose work threw ends with 1.
+		// On a pthread, where `main` runs with threads, Emscripten ends only the thread, so
+		// the last turn ends the program.
+		var ends = ended && due.length == 0;
+		#if !hxn_threads
+		ends = ends && failed;
+		#end
+		if (ends)
+			untyped __cpp__("if (!emscripten_runtime_keepalive_check()) exit({0})", failed ? 1 : 0);
 		if (failure != null)
 			throw failure;
 	}

@@ -58,6 +58,11 @@ pending value. Watchers run in production order as one batch per inbox.
 requested delivery. For an application-owned loop, set `Loop.manual` and
 call `Loop.sync()`; automatic delivery no longer keeps the event loop alive.
 
+Under hxcpp and Emscripten, `hxn.native.Emscripten.later` runs work from the
+host's event loop. If work throws, the exception is printed to stderr and the
+rest of the work still runs. When nothing keeps the program alive, it exits
+with status 1.
+
 `hxn_future::together(|| { … })` batches related signal writes. Scopes on
 different threads serialize; host reads wait until the scope ends. Rust
 reads never wait. Effects run after the complete batch has been read.

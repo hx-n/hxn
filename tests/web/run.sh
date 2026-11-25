@@ -29,4 +29,18 @@ if [ "$(tail -n "$(wc -l <"$here/expected.txt")" "$out")" != "$(cat "$here/expec
 	echo "FAILED: the timer did not print what expected.txt lists" >&2
 	exit 1
 fi
+# Work that throws ends the program with status 1, after the other work has run. hxn
+# writes its build output into the directory of the program file, so that directory is
+# a temporary one.
+program="$(mktemp -d)"
+trap 'rm -r "$out" "$program"' EXIT
+cp "$here/throws/Throws.hx" "$program/"
+printf '%s\n' "-cp $root/haxe" "-main Throws" >"$program/throws.hxml"
+status=0
+(cd "$program" && "$root/target/debug/hxn" run cpp throws.hxml "${flags[@]}") >"$out" 2>&1 || status=$?
+if [ "$status" -ne 1 ] || ! grep -q "Uncaught exception: .*broken turn" "$out" || ! grep -q "the next turn ran" "$out"; then
+	cat "$out" >&2
+	echo "FAILED: work that threw ended the program with status $status" >&2
+	exit 1
+fi
 echo "PASS"

@@ -21,8 +21,8 @@ for the area you are changing:
   `wasm` and `emcc`, and a VM with its options, as in `hl "ash --mode jit"`;
   the examples also run threaded and in a web page (`wasm-threads`,
   `wasm-page`, `emcc-threads`, `emcc-page` and the others its usage line
-  lists). `tests/web/run.sh` runs futures a JavaScript timer settles, and work
-  on threads, under node and in a web page, threaded or not.
+  lists). `tests/web/run.sh` runs futures a JavaScript timer settles, work on
+  threads, and work that throws, under node and in a web page, threaded or not.
   `tests/mobile/run.sh ios-sim|android [cpp|hl]` runs the examples in an
   iOS simulator and on an Android device or emulator, with hxcpp or with
   HashLink through Ash. Run it after changing how an hxcpp program or a
