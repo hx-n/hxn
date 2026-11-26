@@ -51,7 +51,8 @@ library for that triple, including iOS and Android; install its Rust target
 first. For hxcpp it is linked into the app. For HashLink on wasm, Android and
 iOS it is `lib<library>.a`, which `hxn.Bind` copies next to `main.hl` and Ash
 links into the program with `--native-lib`, since those programs cannot open
-an `.hdll`. A host HashLink library is both `<library>.hdll`, which a VM
+an `.hdll`. The `link.xml` of each triple lists the system libraries and
+frameworks that the library links, and hxn passes them to Ash and hxcpp. A host HashLink library is both `<library>.hdll`, which a VM
 loads, and `lib<library>.a` (`<library>.lib` on Windows), which Ash links into
 the executable it builds ahead of time. Build both on the system they run on.
 

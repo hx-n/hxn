@@ -106,6 +106,12 @@ class Bind {
 					File.copy(from, Path.join([dir, file]));
 					for (other in archives)
 						File.copy(Path.join([built, other]), Path.join([dir, other]));
+					// What the archive links, for hxn to give Ash. The paths it gives relative to
+					// its own directory are made absolute, because the copy is elsewhere.
+					var link = Path.join([built, "link.xml"]);
+					if (!wasm && FileSystem.exists(link))
+						File.saveContent(Path.join([dir, 'lib$name.link.xml']),
+							StringTools.replace(File.getContent(link), "${this_dir}", Path.normalize(FileSystem.absolutePath(built))));
 					if (wasm && FileSystem.isDirectory(page))
 						for (entry in FileSystem.readDirectory(page))
 							if (!FileSystem.isDirectory(Path.join([page, entry])))

@@ -846,10 +846,100 @@ fn desktop(
     for archive in archives {
         build.arg("--native-lib").arg(archive);
     }
+    // Ash loads the libraries on Windows instead of linking them.
+    let linked = if target.windows() {
+        Vec::new()
+    } else {
+        archive_links(archives)?
+    };
+    if !linked.is_empty() {
+        let given = std::env::var("ASH_LINK_ARGS").unwrap_or_default();
+        let quoted: Vec<String> = linked.iter().map(|arg| shell_quote(arg)).collect();
+        build.env(
+            "ASH_LINK_ARGS",
+            format!("{given} {}", quoted.join(" ")).trim(),
+        );
+    }
     make::run(build.arg(program))?;
     let mut command = Command::new(executable);
     command.args(&arguments.rest);
     Ok(command.into())
+}
+
+// The libraries and flags that the archives link, from the `lib<name>.link.xml` that
+// `hxn.Bind.lib` copied next to each one, in order and each once. Ash links the
+// archives into the program, so the program's link needs them too.
+fn archive_links(archives: &[PathBuf]) -> Result<Vec<String>, String> {
+    let mut linked: Vec<String> = Vec::new();
+    for archive in archives {
+        let Some(stem) = archive.file_stem() else {
+            continue;
+        };
+        let xml = archive.with_file_name(format!("{}.link.xml", stem.to_string_lossy()));
+        if !xml.is_file() {
+            continue;
+        }
+        let text =
+            std::fs::read_to_string(&xml).map_err(|error| format!("{}: {error}", xml.display()))?;
+        let mut framework = false;
+        for value in link_values(&text) {
+            // `-framework` and its name are two flags, and the pair is kept once.
+            if framework {
+                framework = false;
+                if !linked
+                    .windows(2)
+                    .any(|pair| pair[0] == "-framework" && pair[1] == value)
+                {
+                    linked.push("-framework".to_owned());
+                    linked.push(value);
+                }
+            } else if value == "-framework" {
+                framework = true;
+            } else if !linked.contains(&value) {
+                linked.push(value);
+            }
+        }
+    }
+    Ok(linked)
+}
+
+// The `name` of each `<lib>` and the `value` of each `<flag>` in hxn's link XML, in order.
+fn link_values(text: &str) -> Vec<String> {
+    let mut values = Vec::new();
+    for element in text.split('<').skip(1) {
+        let attribute = if element.starts_with("lib ") {
+            "name=\""
+        } else if element.starts_with("flag ") {
+            "value=\""
+        } else {
+            continue;
+        };
+        let Some(start) = element.find(attribute) else {
+            continue;
+        };
+        let rest = &element[start + attribute.len()..];
+        let Some(end) = rest.find('"') else { continue };
+        values.push(
+            rest[..end]
+                .replace("&lt;", "<")
+                .replace("&quot;", "\"")
+                .replace("&amp;", "&"),
+        );
+    }
+    values
+}
+
+// `text` as one word for a shell, quoted only when it needs it.
+fn shell_quote(text: &str) -> String {
+    if !text.is_empty()
+        && text
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "-_./=:+,@".contains(c))
+    {
+        text.to_owned()
+    } else {
+        format!("'{}'", text.replace('\'', "'\\''"))
+    }
 }
 
 // Adds the Ash options that build hooks contributed after `given`, the
@@ -1482,6 +1572,57 @@ fn main() -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn archive_links_read_each_library_and_framework_once() {
+        let dir = std::env::temp_dir().join(format!("hxn-links-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let xml = |libs: &str, frameworks: &[&str]| {
+            let mut text = String::from("<xml>\n<target id=\"haxe\">\n");
+            for lib in libs.split_whitespace() {
+                text.push_str(&format!("\t<lib name=\"{lib}\"/>\n"));
+            }
+            for framework in frameworks {
+                text.push_str(&format!(
+                    "\t<flag value=\"-framework\"/>\n\t<flag value=\"{framework}\"/>\n"
+                ));
+            }
+            text + "</target>\n</xml>\n"
+        };
+        std::fs::write(
+            dir.join("libwindow.link.xml"),
+            xml("-lobjc -liconv", &["UIKit", "Foundation"]),
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("libtext.link.xml"),
+            xml("-liconv /a&amp;b/libz.a", &["Foundation", "CoreText"]),
+        )
+        .unwrap();
+        let archives = [
+            dir.join("libwindow.a"),
+            dir.join("libtext.a"),
+            dir.join("libnone.a"),
+        ];
+        let linked = super::archive_links(&archives).unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert_eq!(
+            linked,
+            [
+                "-lobjc",
+                "-liconv",
+                "-framework",
+                "UIKit",
+                "-framework",
+                "Foundation",
+                "/a&b/libz.a",
+                "-framework",
+                "CoreText"
+            ]
+        );
+        assert_eq!(super::shell_quote("-framework"), "-framework");
+        assert_eq!(super::shell_quote("/a b/it's"), "'/a b/it'\\''s'");
+    }
 
     #[test]
     fn a_flag_on_the_command_line_wins_over_a_hook() {
