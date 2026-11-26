@@ -13,10 +13,14 @@
   <url><loc>https://hxn.dev/api/hxn/hxn.AtomicInt/</loc></url>
   <url><loc>https://hxn.dev/api/hxn/hxn.Callback/</loc></url>
   <url><loc>https://hxn.dev/api/hxn/hxn.Computed/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn/hxn.Float32Buffer/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn/hxn.Float64Buffer/</loc></url>
   <url><loc>https://hxn.dev/api/hxn/hxn.Future/</loc></url>
   <url><loc>https://hxn.dev/api/hxn/hxn.Gc/</loc></url>
   <url><loc>https://hxn.dev/api/hxn/hxn.Meter/</loc></url>
   <url><loc>https://hxn.dev/api/hxn/hxn.Inbox/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn/hxn.Int16Buffer/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn/hxn.Int32Buffer/</loc></url>
   <url><loc>https://hxn.dev/api/hxn/hxn.Log/</loc></url>
   <url><loc>https://hxn.dev/api/hxn/hxn.LogLevel/</loc></url>
   <url><loc>https://hxn.dev/api/hxn/hxn.LogRecord/</loc></url>
@@ -26,7 +30,20 @@
   <url><loc>https://hxn.dev/api/hxn/hxn.Signal/</loc></url>
   <url><loc>https://hxn.dev/api/hxn/hxn.Stream/</loc></url>
   <url><loc>https://hxn.dev/api/hxn/hxn.Tuple/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn/hxn.UInt16Buffer/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn/hxn.UInt32Buffer/</loc></url>
   <url><loc>https://hxn.dev/api/hxn/hxn.Unit/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn/hxn.cli.Cli/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn/hxn.cli.Mistake/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn/hxn.cli.Command/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn/hxn.cli.Context/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn/hxn.cli.Failure/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn/hxn.cli.Plugin/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn/hxn.cli.Reply/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn/hxn.cli.Spec/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn/hxn.cli.ArgumentSpec/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn/hxn.cli.OptionSpec/</loc></url>
+  <url><loc>https://hxn.dev/api/hxn/hxn.cli.Kind/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-window/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-window/hxn.window.Attention/</loc></url>
   <url><loc>https://hxn.dev/api/hxn-window/hxn.window.ClipboardItems/</loc></url>

@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en" prefix="og: https://ogp.me/ns#">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#000000">
+  <title>Cli (hxn.cli) · hxn API — hxn</title>
+  <meta name="description" content="Cli runs one of a tool&#x27;s commands with the arguments that the user gave.">
+  <meta name="robots" content="index, follow, max-image-preview:large">
+  <link rel="canonical" href="https://hxn.dev/api/hxn/hxn.cli.Cli/">
+  <link rel="describedby" href="/llms.txt" type="text/markdown">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="hxn">
+  <meta property="og:locale" content="en_GB">
+  <meta property="og:title" content="Cli (hxn.cli) · hxn API — hxn">
+  <meta property="og:description" content="Cli runs one of a tool&#x27;s commands with the arguments that the user gave.">
+  <meta property="og:url" content="https://hxn.dev/api/hxn/hxn.cli.Cli/">
+  <meta property="og:image" content="https://hxn.dev/og-hero.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="2400">
+  <meta property="og:image:height" content="1260">
+  <meta property="og:image:alt" content="hxn — Native Rust bindings for Haxe">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Cli (hxn.cli) · hxn API — hxn">
+  <meta name="twitter:description" content="Cli runs one of a tool&#x27;s commands with the arguments that the user gave.">
+  <meta name="twitter:image" content="https://hxn.dev/og-hero.png">
+  <meta name="twitter:image:alt" content="hxn — Native Rust bindings for Haxe">
+  <link rel="icon" href="/logo.png" type="image/png">
+  <link rel="apple-touch-icon" href="/logo.png">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/script.js" defer></script>
+  <script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "APIReference", "@id": "https://hxn.dev/api/hxn/hxn.cli.Cli/#page", "url": "https://hxn.dev/api/hxn/hxn.cli.Cli/", "name": "Cli (hxn.cli) \u00b7 hxn API \u2014 hxn", "headline": "Cli (hxn.cli) \u00b7 hxn API", "description": "Cli runs one of a tool's commands with the arguments that the user gave.", "inLanguage": "en", "isPartOf": {"@id": "https://hxn.dev/#website"}, "image": "https://hxn.dev/og-hero.png", "programmingLanguage": "Haxe", "executableLibraryName": "hxn", "assemblyVersion": "0.3.11", "targetPlatform": "HashLink, Ash, hxcpp", "about": "hxn.cli.Cli"}, {"@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "hxn", "item": "https://hxn.dev/"}, {"@type": "ListItem", "position": 2, "name": "API", "item": "https://hxn.dev/api/"}, {"@type": "ListItem", "position": 3, "name": "hxn", "item": "https://hxn.dev/api/hxn/"}, {"@type": "ListItem", "position": 4, "name": "Cli", "item": "https://hxn.dev/api/hxn/hxn.cli.Cli/"}]}]}</script>
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="header">
+    <a class="wordmark" href="/" aria-label="hxn home">hxn<span aria-hidden="true"> /</span></a>
+    <nav class="header-links" aria-label="Main"><a href="/tutorials/">Tutorials</a><a href="/api/" aria-current="true">API</a><a class="source-link" href="https://github.com/hx-n/hxn">GitHub ↗</a></nav>
+  </header>
+  <main class="tutorial-layout api-layout">
+    <aside class="tutorial-sidebar api-sidebar"><nav aria-label="hxn types"><a class="tutorial-index-link" href="/api/">API reference</a><a class="api-sidebar-library" href="/api/hxn/">hxn <span>0.3.11</span></a><a href="/api/hxn/hxn.cli.ArgumentSpec/">ArgumentSpec</a><a href="/api/hxn/hxn.AtomicBool/">AtomicBool</a><a href="/api/hxn/hxn.AtomicInt/">AtomicInt</a><a href="/api/hxn/hxn.Callback/">Callback</a><a href="/api/hxn/hxn.cli.Cli/" aria-current="page">Cli</a><a href="/api/hxn/hxn.cli.Command/">Command</a><a href="/api/hxn/hxn.Computed/">Computed</a><a href="/api/hxn/hxn.cli.Context/">Context</a><a href="/api/hxn/hxn.cli.Failure/">Failure</a><a href="/api/hxn/hxn.Float32Buffer/">Float32Buffer</a><a href="/api/hxn/hxn.Float64Buffer/">Float64Buffer</a><a href="/api/hxn/hxn.Future/">Future</a><a href="/api/hxn/hxn.Gc/">Gc</a><a href="/api/hxn/hxn.Inbox/">Inbox</a><a href="/api/hxn/hxn.Int16Buffer/">Int16Buffer</a><a href="/api/hxn/hxn.Int32Buffer/">Int32Buffer</a><a href="/api/hxn/hxn.cli.Kind/">Kind</a><a href="/api/hxn/hxn.Log/">Log</a><a href="/api/hxn/hxn.LogLevel/">LogLevel</a><a href="/api/hxn/hxn.LogRecord/">LogRecord</a><a href="/api/hxn/hxn.Loop/">Loop</a><a href="/api/hxn/hxn.Meter/">Meter</a><a href="/api/hxn/hxn.cli.Mistake/">Mistake</a><a href="/api/hxn/hxn.cli.OptionSpec/">OptionSpec</a><a href="/api/hxn/hxn.cli.Plugin/">Plugin</a><a href="/api/hxn/hxn.Reactive/">Reactive</a><a href="/api/hxn/hxn.cli.Reply/">Reply</a><a href="/api/hxn/hxn.Set/">Set</a><a href="/api/hxn/hxn.Signal/">Signal</a><a href="/api/hxn/hxn.cli.Spec/">Spec</a><a href="/api/hxn/hxn.Stream/">Stream</a><a href="/api/hxn/hxn.Tuple/">Tuple</a><a href="/api/hxn/hxn.UInt16Buffer/">UInt16Buffer</a><a href="/api/hxn/hxn.UInt32Buffer/">UInt32Buffer</a><a href="/api/hxn/hxn.Unit/">Unit</a></nav></aside>
+    <article id="content" class="lesson"><header class="lesson-heading"><nav class="eyebrow api-breadcrumb" aria-label="Breadcrumb"><a href="/api/">API</a> / <a href="/api/hxn/">hxn</a> / class in hxn.cli</nav><h1>Cli</h1></header><nav class="lesson-toc" aria-label="On this page"><a href="#constructor">Constructor</a><a href="#static-methods">Static methods</a><a href="#properties">Properties</a><a href="#methods">Methods</a></nav><div class="api-doc"><p><a href="/api/hxn/hxn.cli.Cli/"><code>Cli</code></a> runs one of a tool's commands with the arguments that the user gave. It picks the command by the first argument, gives the command's fields their values from the rest, and calls its <code>run</code>. <code>--help</code> or <code>-h</code> prints the help of the tool or of a command. A mistake in the arguments prints the mistake and the command's usage to standard error, and ends with status 2.</p><p>Options take their value as the next argument or after <code>=</code>, as in <code>--ash ash</code> or <code>--ash=ash</code>, and can come before, between or after the positional arguments. <code>--</code> ends the options: the arguments after it are positional.</p></div><section class="lesson-section" id="constructor"><h2>Constructor</h2><div class="api-member" id="new"><pre class="api-signature"><code>function new(program:String, doc:String, commands:Array&lt;<a href="/api/hxn/hxn.cli.Command/">Command</a>&gt;)</code></pre></div></section><section class="lesson-section" id="static-methods"><h2>Static methods</h2><div class="api-member" id="assign"><pre class="api-signature"><code>function assign(command:<a href="/api/hxn/hxn.cli.Command/">Command</a>, arguments:Array&lt;String&gt;):Void</code></pre><p>Gives the fields of <code>command</code> their values from <code>arguments</code>. It throws <a href="/api/hxn/hxn.cli.Mistake/"><code>Mistake</code></a> for arguments that do not fit.</p></div></section><section class="lesson-section" id="properties"><h2>Properties</h2><div class="api-member" id="program"><pre class="api-signature"><code>final program:String</code></pre><p>The name that the user types for the tool, such as <code>hxn me</code>.</p></div><div class="api-member" id="doc"><pre class="api-signature"><code>final doc:String</code></pre><p>What the tool does, for its help.</p></div><div class="api-member" id="commands"><pre class="api-signature"><code>final commands:Array&lt;<a href="/api/hxn/hxn.cli.Command/">Command</a>&gt;</code></pre><p>The commands of the tool.</p></div></section><section class="lesson-section" id="methods"><h2>Methods</h2><div class="api-member" id="run"><pre class="api-signature"><code>function run(arguments:Array&lt;String&gt;, context:<a href="/api/hxn/hxn.cli.Context/">Context</a>):Int</code></pre><p>Runs the command that <code>arguments</code> select in <code>context</code>, and returns the exit status.</p></div><div class="api-member" id="usage"><pre class="api-signature"><code>function usage(command:<a href="/api/hxn/hxn.cli.Command/">Command</a>):String</code></pre><p>Returns the usage line of <code>command</code>, without the program's name.</p></div><div class="api-member" id="help"><pre class="api-signature"><code>function help(command:<a href="/api/hxn/hxn.cli.Command/">Command</a>):String</code></pre><p>Returns the help of <code>command</code>: its doc comment, its usage, and its arguments and options.</p></div><div class="api-member" id="overview"><pre class="api-signature"><code>function overview():String</code></pre><p>Returns the help of the tool: what it does, and a summary of each command.</p></div></section></article>
+  </main>
+  <footer><p>HashLink · Ash · hxcpp</p><a href="https://github.com/hx-n/hxn/blob/main/LICENSE">Open source · Apache 2.0</a></footer>
+</body>
+</html>

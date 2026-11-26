@@ -31,7 +31,7 @@ Each library has an agent skill: a SKILL.md whose frontmatter says when to use i
 ## API reference
 
 - [API reference](https://hxn.dev/api/): Every type of every hxn library, at its released version.
-- [hxn 0.3.10](https://hxn.dev/api/hxn/): Shared logging, futures, streams, signals, reactive values, atomics and callbacks: the Haxe classes every hxn library uses.
+- [hxn 0.3.11](https://hxn.dev/api/hxn/): Shared logging, futures, streams, signals, reactive values, atomics and callbacks: the Haxe classes every hxn library uses.
 - [hxn-window 0.2.2](https://hxn.dev/api/hxn-window/): Native and browser windows, input, monitors, gamepads and the clipboard, with handles for GPU surfaces.
 - [hxn-av 0.2.1](https://hxn.dev/api/hxn-av/): Audio and video with the platform's codecs: playback, frames, PCM audio, an equalizer, AAC, H.264 and MP4.
 - [hxn-audio 0.1.2](https://hxn.dev/api/hxn-audio/): Audio output and mixing: voices, bounded PCM streams, buses and effects on native and browser runtimes. The Av and DecoderStream helpers require hxn-av.

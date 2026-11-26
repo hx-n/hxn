@@ -28,7 +28,7 @@ ORIGIN = 'https://hxn.dev'
 # to type. hide: type paths left out, as regular expressions. defines: for a
 # binding without a HashLink library for this machine, a platform it has one for.
 LIBRARIES = [
-    dict(name='hxn', version='0.3.10', prefix='hxn.', roots=['--macro', "include('hxn', true, ['hxn.native'])"],
+    dict(name='hxn', version='0.3.11', prefix='hxn.', roots=['--macro', "include('hxn', true, ['hxn.native'])"],
          hide=[r'^hxn\.(Wire|Native|Bind|Handle|TupleMacro)$', r'^hxn\.native\.', r'^hxn\.reactive\.'],
          summary='Shared logging, futures, streams, signals, reactive values, atomics and callbacks: the Haxe classes every hxn library uses.'),
     dict(name='hxn-window', version='0.2.2', prefix='hxn.window.', roots=['--macro', "include('hxn.window')"],
