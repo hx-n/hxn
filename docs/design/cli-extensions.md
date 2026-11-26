@@ -87,7 +87,10 @@ A hook with no contributions returns `{"version":1}`.
 ## The Haxe library for tools
 
 Tools written in Haxe use `hxn.cli`, which the hxn haxelib contains. The
-registered command selects it with `-lib hxn`:
+registered command selects it with `-lib hxn`, so the hxn haxelib must be
+installed wherever hxn runs the tool. haxelib installs it with the package.
+In a library's own checkout, where hxn runs the library's build hooks, install
+the hxn haxelib of the version that the crate depends on:
 
 ```json
 "command": ["haxe", "-lib", "hxn", "-cp", "{root}/sources", "--run", "assets.Tool"]
