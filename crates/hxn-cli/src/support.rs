@@ -75,6 +75,38 @@ pub const HAXE: &[(&str, &str)] = &[
     ("hxn/Unit.hx", include_str!("../../../haxe/hxn/Unit.hx")),
     ("hxn/Wire.hx", include_str!("../../../haxe/hxn/Wire.hx")),
     (
+        "hxn/cli/Cli.hx",
+        include_str!("../../../haxe/hxn/cli/Cli.hx"),
+    ),
+    (
+        "hxn/cli/Command.hx",
+        include_str!("../../../haxe/hxn/cli/Command.hx"),
+    ),
+    (
+        "hxn/cli/CommandMacro.hx",
+        include_str!("../../../haxe/hxn/cli/CommandMacro.hx"),
+    ),
+    (
+        "hxn/cli/Context.hx",
+        include_str!("../../../haxe/hxn/cli/Context.hx"),
+    ),
+    (
+        "hxn/cli/Failure.hx",
+        include_str!("../../../haxe/hxn/cli/Failure.hx"),
+    ),
+    (
+        "hxn/cli/Plugin.hx",
+        include_str!("../../../haxe/hxn/cli/Plugin.hx"),
+    ),
+    (
+        "hxn/cli/Reply.hx",
+        include_str!("../../../haxe/hxn/cli/Reply.hx"),
+    ),
+    (
+        "hxn/cli/Spec.hx",
+        include_str!("../../../haxe/hxn/cli/Spec.hx"),
+    ),
+    (
         "hxn/native/Emscripten.hx",
         include_str!("../../../haxe/hxn/native/Emscripten.hx"),
     ),
