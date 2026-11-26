@@ -13,8 +13,8 @@
     "wasm"
   ],
   "description": "The Haxe classes of libraries built with hxn: futures, streams, signals, reactive values, shared logging, atomics, and the macro that binds a packaged library.",
-  "version": "0.3.10",
-  "releasenote": "Preserve asynchronous notifications across statically linked libraries while delivering each inbox on its owning Haxe event thread.",
+  "version": "0.3.11",
+  "releasenote": "hxn.cli for the tools that haxelibs register, Haxe program files for hxn run, check and build, HashLink programs built ahead of time with Ash, iOS app bundles, and typed buffers lent to Rust.",
   "contributors": [
     "darmie"
   ],

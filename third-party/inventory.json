@@ -2,7 +2,7 @@
   "inputs": [
     {
       "path": "Cargo.lock",
-      "sha256": "50cfc0b779991b5a4857c32a5ed19ec754d35c88bc31784deaf6c7926cc4c0c6"
+      "sha256": "e868975248865001079678af814be0eec75994ab2b8f4e6a7d5e548d3cbd4096"
     },
     {
       "path": "crates/hxn/Cargo.toml",
@@ -38,31 +38,31 @@
     },
     {
       "path": "examples/document/Cargo.toml",
-      "sha256": "3b6f4a14717d998e30afcfe4da17fdbbcaa52e3d0fd713e00064a12412b39019"
+      "sha256": "bf62ced0043e9c460725cb8af1e91e8537d9b5875a340557d95dbfa065cc4367"
     },
     {
       "path": "examples/downloads/Cargo.toml",
-      "sha256": "2ccfd26ab9de15b2df4fff35d24c304b591f394b32e2d37cf837163ead7890a7"
+      "sha256": "a3525e6057904c0d80dfda7f5781c34c1a62b96326023bcb3a7d01ec4056826c"
     },
     {
       "path": "examples/greeter/Cargo.toml",
-      "sha256": "df9b5f72e7903c3fb6b66a3e23f6acd8d9e0a44e0d56eeaaa77f1cbed0769778"
+      "sha256": "b3791882804b912239b7c28e6eaf544d97e4ad129e2a7e558e1d89a14dce8701"
     },
     {
       "path": "examples/pantry/Cargo.toml",
-      "sha256": "5d5bbb9bcc8a4f7ec5203de172d2e7c98792ce17d77e2d85ebfdc0ee800a4d35"
+      "sha256": "763dc91007039788fd9c1d04f28c711af334421e1c172195e288f68bceb781c0"
     },
     {
       "path": "examples/picture/Cargo.toml",
-      "sha256": "78874179c5a5a8678833ee197d7cd54933ddd850bb4a4ed998e16873e94e80e8"
+      "sha256": "5b4b49d6ce7a2177d406558e656a9e12c5c0c4214c2948f9852aa9e55649c802"
     },
     {
       "path": "examples/primes/Cargo.toml",
-      "sha256": "3838d50833fcdefe7923f4bf0127a3dbc0d008895eec91ebf39e78b1455d31f1"
+      "sha256": "762445cbcd411f93db4a783bfe7861fd1294b70142037ab09671ab6c78516bcd"
     },
     {
       "path": "examples/thermostat/Cargo.toml",
-      "sha256": "7134f911fb5a6111c8f2ea9cf5eacc2e3e8bc993a81a8913099d6dda1ab7ddd0"
+      "sha256": "8387a9acdb66d8b922255f8e7cab2daa08c657821c88511405ed9ca04ca27cb4"
     },
     {
       "path": "tests/counter/c/Cargo.toml",
