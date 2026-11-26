@@ -206,6 +206,13 @@ Also test direct `haxe -lib` use: an installed library must arrange its
 assets through an init macro when it needs them without CLI hooks, including
 unthreaded Emscripten.
 
+Write a Haxe tool with `hxn.cli`, from the hxn haxelib: add `-lib hxn` to
+the command, make each command a class that implements `hxn.cli.Command`
+with `@:arg` and `@:option` fields and a `run(context)` method, and start it
+with `hxn.cli.Plugin.main(new hxn.cli.Cli(program, doc, commands), hook)`.
+The library parses the arguments and writes `--help` from the doc comments,
+and the hook returns a `hxn.cli.Reply`.
+
 Tools receive one versioned JSON request on stdin. Commands print ordinary
 output and return their exit status. Hooks log to stderr and return JSON
 with `version: 1`; build hooks may add `haxe_args` pairs (`-D`, `-cp`,

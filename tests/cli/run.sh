@@ -37,6 +37,9 @@ fi
 cargo build --manifest-path "$root/Cargo.toml" -p hxn-cli
 hxn="$root/target/debug/hxn"
 
+# hxn.cli, the library of the tools that haxelibs register, in Haxe's interpreter.
+(cd "$root" && haxe -cp haxe -cp tests/cli/parse --run Main) </dev/null
+
 # Outside the checkout, because cargo would treat a crate inside it as an
 # unlisted member of the workspace.
 work="$(mktemp -d)"

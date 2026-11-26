@@ -84,6 +84,52 @@ under the same filename are an error. Runtime defaults in a haxelib still
 belong in its `init` macros, rather than transient build-hook arguments.
 A hook with no contributions returns `{"version":1}`.
 
+## The Haxe library for tools
+
+Tools written in Haxe use `hxn.cli`, which the hxn haxelib contains. The
+registered command selects it with `-lib hxn`:
+
+```json
+"command": ["haxe", "-lib", "hxn", "-cp", "{root}/sources", "--run", "assets.Tool"]
+```
+
+Each command is a class that implements `hxn.cli.Command`. Its fields with
+`@:arg` are positional arguments, its fields with `@:option` are options,
+and `run` does the work. A macro reads the fields, their types, their
+initializers and their doc comments at compile time:
+
+```haxe
+/** Copies the bundled files into a directory. **/
+class Stage implements hxn.cli.Command {
+	/** The directory of the files. **/
+	@:option @:value("directory") var source = "assets";
+
+	/** The directory to copy them into. **/
+	@:arg @:value("directory") var out:String;
+
+	/** Gives each file a digest of its contents. **/
+	@:option var contentAddressed = false;
+
+	public function run(context:hxn.cli.Context):Int { ... }
+}
+```
+
+`hxn.cli.Plugin.main` reads the request. For a command request, it runs the
+command that the first argument selects, with the fields set from the other
+arguments. For a hook request, it calls the hook and prints the `Reply`:
+
+```haxe
+static function main()
+	hxn.cli.Plugin.main(new hxn.cli.Cli("hxn assets", "Builds and stages assets.", [new Build(), new Stage()]), hook);
+```
+
+`--help` and `-h` print the help of the tool or of a command, which the
+library writes from the doc comments: the usage line, each argument and
+option, its default and its environment variable. A mistake in the arguments
+prints the mistake and the usage line, and ends with status 2. A
+`hxn.cli.Failure` ends the tool with its message and status. The rules for
+fields are in the documentation of `hxn.cli.Command`.
+
 ## Lifecycle
 
 Hooks run only for the source library and haxelibs selected by its
