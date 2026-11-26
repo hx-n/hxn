@@ -124,7 +124,12 @@ program, and hxn adds the defines by which it selects that file:
   hxn gives Ash each `lib*.a` file next to the program with `--native-lib`,
   and adds the system libraries and frameworks that each one links to
   `ASH_LINK_ARGS`. `hxn.Bind.lib` copies that list from the package's
-  `link.xml` to `lib<library>.link.xml` next to the archive.
+  `link.xml` to `lib<library>.link.xml` next to the archive. For an iOS
+  target, hxn also writes the app bundle `<name>.app`, with the executable,
+  an `Info.plist` and the files next to the program, and signs it without an
+  identity, which the simulator accepts. `-D hxn_bundle_id=<id>` sets its
+  bundle identifier, which is `dev.hxn.<file name>` by default. hxn prints
+  the commands that install and start it in the booted simulator.
   The executable and the files beside it are the program you distribute.
   For `cpp` it is hxcpp's executable, and with `--wasm` the wasm program.
 - `hxn package <hl|cpp|cppia> <file.hxml>` builds the program the same way

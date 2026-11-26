@@ -620,8 +620,11 @@ fn program(
                 &program,
                 &archives,
                 &built.ash_args,
-                &built.dir,
-                name,
+                &Executable {
+                    dir: &built.dir,
+                    name,
+                    bundle: &format!("dev.hxn.{}", bundle_word(&project.haxelib)),
+                },
             )
         }
         Runtime::Cpp => {
@@ -729,14 +732,28 @@ fn file_program(
                         .is_some_and(|extension| extension == "hdll")
                 })
                 .collect();
+            // An app for iOS gets its bundle identifier from `-D hxn_bundle_id`, which
+            // a build hook or the program file can give.
+            let bundle = flags
+                .iter()
+                .find_map(|(flag, value)| {
+                    (*flag == "-D")
+                        .then(|| value.strip_prefix("hxn_bundle_id="))
+                        .flatten()
+                })
+                .map(str::to_owned)
+                .unwrap_or_else(|| format!("dev.hxn.{}", bundle_word(&file.name)));
             desktop(
                 arguments,
                 target,
                 &program,
                 &archives,
                 &ash,
-                &out,
-                file.executable(),
+                &Executable {
+                    dir: &out,
+                    name: file.executable(),
+                    bundle: &bundle,
+                },
             )
         }
         Runtime::Cpp => {
@@ -815,17 +832,18 @@ fn ash_wasm(
 
 // The command that runs a HashLink program on the desktop. `run` and
 // `check` run the bytecode in the VM. `build` has Ash build the program
-// ahead of time into the executable `name` in `dir`, with each archive in
-// `archives` linked into it, and returns the command that runs it.
+// ahead of time into the executable that `output` describes, with each
+// archive in `archives` linked into it, and returns the command that runs
+// it. For iOS, it also writes the app bundle.
 fn desktop(
     arguments: &Arguments,
     target: Target,
     program: &Path,
     archives: &[PathBuf],
     contributed: &[Vec<String>],
-    dir: &Path,
-    name: &str,
+    output: &Executable,
 ) -> Result<Program, String> {
+    let (dir, name, bundle) = (output.dir, output.name, output.bundle);
     if !arguments.building {
         return hashlink_vm(arguments, program, contributed, dir);
     }
@@ -861,9 +879,137 @@ fn desktop(
         );
     }
     make::run(build.arg(program))?;
+    if target
+        .cross
+        .is_some_and(|triple| triple.contains("apple-ios"))
+    {
+        let app = app_bundle(&executable, bundle)?;
+        println!(
+            "The app for iOS is {}. To run it in the booted simulator:\n  xcrun simctl install booted {}\n  xcrun simctl launch --console-pty booted {bundle}",
+            app.display(),
+            app.display()
+        );
+    }
     let mut command = Command::new(executable);
     command.args(&arguments.rest);
     Ok(command.into())
+}
+
+// Writes `<executable>.app`, the bundle that iOS installs and starts: the executable, an
+// Info.plist with the identifier `id`, and the files that the program reads next to it.
+// The bundle is signed without an identity, which the simulator accepts.
+fn app_bundle(executable: &Path, id: &str) -> Result<PathBuf, String> {
+    let dir = executable.parent().unwrap_or(Path::new("."));
+    let name = executable
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let app = dir.join(format!("{name}.app"));
+    if app.exists() {
+        std::fs::remove_dir_all(&app).map_err(|error| format!("{}: {error}", app.display()))?;
+    }
+    std::fs::create_dir_all(&app).map_err(|error| format!("{}: {error}", app.display()))?;
+    for entry in std::fs::read_dir(dir).map_err(|error| format!("{}: {error}", dir.display()))? {
+        let path = entry
+            .map_err(|error| format!("{}: {error}", dir.display()))?
+            .path();
+        let file = path
+            .file_name()
+            .map(|file| file.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        // The build's inputs and objects stay out of the app.
+        let input = [".a", ".hl", ".xml", ".o", ".app", ".txt"]
+            .iter()
+            .any(|ending| file.ends_with(ending));
+        if path == app || input {
+            continue;
+        }
+        copy_tree(&path, &app.join(&file))?;
+    }
+    let plist = format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key>
+	<string>{id}</string>
+	<key>CFBundleExecutable</key>
+	<string>{name}</string>
+	<key>CFBundleName</key>
+	<string>{name}</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>UILaunchScreen</key>
+	<dict/>
+	<key>MinimumOSVersion</key>
+	<string>14.0</string>
+</dict>
+</plist>
+"#
+    );
+    make::write(&app.join("Info.plist"), &plist)?;
+    // The linker already signed the executable, and codesign reports that it replaces that signature.
+    let signed = Command::new("codesign")
+        .args(["--force", "--sign", "-"])
+        .arg(&app)
+        .output()
+        .map_err(|error| format!("codesign: {error}"))?;
+    if !signed.status.success() {
+        return Err(format!(
+            "codesign failed on {}: {}",
+            app.display(),
+            String::from_utf8_lossy(&signed.stderr)
+        ));
+    }
+    Ok(app)
+}
+
+// Copies the file or directory `from` to `to`.
+fn copy_tree(from: &Path, to: &Path) -> Result<(), String> {
+    if from.is_dir() {
+        std::fs::create_dir_all(to).map_err(|error| format!("{}: {error}", to.display()))?;
+        for entry in
+            std::fs::read_dir(from).map_err(|error| format!("{}: {error}", from.display()))?
+        {
+            let path = entry
+                .map_err(|error| format!("{}: {error}", from.display()))?
+                .path();
+            copy_tree(&path, &to.join(path.file_name().unwrap_or_default()))?;
+        }
+        Ok(())
+    } else {
+        std::fs::copy(from, to)
+            .map(|_| ())
+            .map_err(|error| format!("{}: {error}", from.display()))
+    }
+}
+
+// `name` with only the characters that a bundle identifier allows: letters, digits,
+// hyphens and periods.
+fn bundle_word(name: &str) -> String {
+    name.chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '.' {
+                c
+            } else {
+                '-'
+            }
+        })
+        .collect()
+}
+
+// Where `desktop` writes the executable that Ash builds: the directory, the file name,
+// and the bundle identifier of an app for iOS.
+struct Executable<'a> {
+    dir: &'a Path,
+    name: &'a str,
+    bundle: &'a str,
 }
 
 // The libraries and flags that the archives link, from the `lib<name>.link.xml` that
