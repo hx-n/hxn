@@ -625,6 +625,7 @@ fn program(
                     dir: &built.dir,
                     name,
                     bundle: &format!("dev.hxn.{}", bundle_word(&project.haxelib)),
+                    permissions: Vec::new(),
                 },
             )
         }
@@ -735,15 +736,20 @@ fn file_program(
                 .collect();
             // An app for iOS gets its bundle identifier from `-D hxn_bundle_id`, which
             // a build hook or the program file can give.
-            let bundle = flags
-                .iter()
-                .find_map(|(flag, value)| {
-                    (*flag == "-D")
-                        .then(|| value.strip_prefix("hxn_bundle_id="))
-                        .flatten()
-                })
+            let bundle = defined(&flags, &file.flags, "hxn_bundle_id")
+                .into_iter()
+                .next()
                 .map(str::to_owned)
                 .unwrap_or_else(|| format!("dev.hxn.{}", bundle_word(&file.name)));
+            // An app for Android asks for the permissions in `-D hxn_android_permissions`,
+            // separated by commas.
+            let permissions = defined(&flags, &file.flags, "hxn_android_permissions")
+                .into_iter()
+                .flat_map(|list| list.split(','))
+                .map(str::trim)
+                .filter(|name| !name.is_empty())
+                .map(str::to_owned)
+                .collect();
             desktop(
                 arguments,
                 target,
@@ -754,6 +760,7 @@ fn file_program(
                     dir: &out,
                     name: file.executable(),
                     bundle: &bundle,
+                    permissions,
                 },
             )
         }
@@ -897,7 +904,15 @@ fn desktop(
     if let (true, Some(triple)) = (app, android) {
         let files = app_files(dir)?;
         let package = android::package_name(bundle);
-        let apk = android::apk(dir, &executable, &files, name, &package, triple)?;
+        let apk = android::apk(
+            dir,
+            &executable,
+            &files,
+            name,
+            &package,
+            triple,
+            &output.permissions,
+        )?;
         let activity = format!("{package}/android.app.NativeActivity");
         println!(
             "The app for Android is {}. To run it on the connected device or emulator:\n  adb install -r {}\n  adb shell am start -n {activity}\nIts output goes to the device log:\n  adb logcat -s RustStdoutStderr",
@@ -1047,10 +1062,30 @@ fn bundle_word(name: &str) -> String {
 
 // Where `desktop` writes the executable that Ash builds: the directory, the file name,
 // and the bundle identifier of an app for iOS.
+// The values of `-D <name>=<value>` among the hooks' flags `flags`, then among the
+// program file's flags `file`.
+fn defined<'a>(flags: &'a [(&str, String)], file: &'a [String], name: &str) -> Vec<&'a str> {
+    let prefix = format!("{name}=");
+    let hooks = flags
+        .iter()
+        .filter(|(flag, _)| *flag == "-D")
+        .map(|(_, value)| value.as_str());
+    let own = file
+        .windows(2)
+        .filter(|pair| pair[0] == "-D" || pair[0] == "--define")
+        .map(|pair| pair[1].as_str());
+    hooks
+        .chain(own)
+        .filter_map(|value| value.strip_prefix(prefix.as_str()))
+        .collect()
+}
+
 struct Executable<'a> {
     dir: &'a Path,
     name: &'a str,
     bundle: &'a str,
+    // The permissions that an Android app asks for.
+    permissions: Vec<String>,
 }
 
 // The libraries and flags that the archives link, from the `lib<name>.link.xml` that
@@ -1759,6 +1794,29 @@ fn main() -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_define_comes_from_the_hooks_then_the_program_file() {
+        let hooks = [
+            ("-D", String::from("hxn_bundle_id=dev.hxn.hook")),
+            ("-lib", String::from("hxn_bundle_id=no")),
+        ];
+        let file: Vec<String> = [
+            "-lib",
+            "hxnme",
+            "--define",
+            "hxn_bundle_id=dev.hxn.file",
+            "-D",
+            "other=1",
+        ]
+        .map(String::from)
+        .to_vec();
+        assert_eq!(
+            defined(&hooks, &file, "hxn_bundle_id"),
+            ["dev.hxn.hook", "dev.hxn.file"]
+        );
+        assert!(defined(&hooks, &file, "hxn_android_permissions").is_empty());
+    }
 
     #[test]
     fn archive_links_read_each_library_and_framework_once() {

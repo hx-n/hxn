@@ -135,7 +135,9 @@ program, and hxn adds the defines by which it selects that file:
   library that Android's native activity loads, for API level 26 or the
   level in `ASH_ANDROID_API`. hxn writes `<name>.apk` with the library, a
   full-screen `NativeActivity` manifest, and the files next to the program
-  as assets. The window host copies the assets into the app's data directory
+  as assets. `-D hxn_android_permissions=<names>` lists the permissions that
+  the manifest asks for, separated by commas. A name without a `.` is one of
+  Android's, such as `INTERNET`. The window host copies the assets into the app's data directory
   and runs the program there, so it reads them by the same relative paths.
   hxn signs the APK with the debug key, `~/.android/debug.keystore`. If the
   key is missing, hxn creates it with `keytool`. The bundle identifier

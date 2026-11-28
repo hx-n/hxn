@@ -176,14 +176,23 @@ fn newest(dir: &Path, fits: impl Fn(&Path) -> bool) -> Option<PathBuf> {
 }
 
 /// The APK's manifest: one native activity that loads `libmain.so`, full screen, which
-/// keeps running when the screen turns or resizes.
-fn manifest(package: &str, label: &str, level: u32) -> String {
+/// keeps running when the screen turns or resizes, and the permissions in `permissions`.
+fn manifest(package: &str, label: &str, level: u32, permissions: &[String]) -> String {
+    let uses: String = permissions
+        .iter()
+        .map(|name| {
+            format!(
+                "    <uses-permission android:name=\"{}\"/>\n",
+                permission(name)
+            )
+        })
+        .collect();
     format!(
         r#"<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="{package}" android:versionCode="1" android:versionName="1.0">
     <uses-sdk android:minSdkVersion="{MIN_API}" android:targetSdkVersion="{level}"/>
-    <application android:label="{label}" android:hasCode="false" android:extractNativeLibs="false">
+{uses}    <application android:label="{label}" android:hasCode="false" android:extractNativeLibs="false">
         <activity android:name="android.app.NativeActivity" android:exported="true"
             android:theme="@android:style/Theme.NoTitleBar.Fullscreen"
             android:launchMode="singleTask"
@@ -204,6 +213,16 @@ fn manifest(package: &str, label: &str, level: u32) -> String {
     )
 }
 
+/// The full name of the permission `name`: a name without a `.` is one of Android's,
+/// such as `INTERNET`.
+pub fn permission(name: &str) -> String {
+    if name.contains('.') {
+        name.to_owned()
+    } else {
+        format!("android.permission.{name}")
+    }
+}
+
 /// Writes `<dir>/<name>.apk` from the shared library `library` that Ash built for
 /// `triple`, with the files in `files` (paths relative to `dir`) as assets, and returns
 /// its path. The APK is signed with the debug key, which is created when it is missing.
@@ -214,6 +233,7 @@ pub fn apk(
     name: &str,
     package: &str,
     triple: &str,
+    permissions: &[String],
 ) -> Result<PathBuf, String> {
     let sdk = Sdk::find()?;
     let stage = dir.join(format!("{name}.apk.stage"));
@@ -246,7 +266,10 @@ pub fn apk(
     }
     crate::make::write(&assets.join(ASSET_LIST), &list)?;
     let manifest_file = stage.join("AndroidManifest.xml");
-    crate::make::write(&manifest_file, &manifest(package, name, sdk.level))?;
+    crate::make::write(
+        &manifest_file,
+        &manifest(package, name, sdk.level, permissions),
+    )?;
 
     // aapt packs the manifest, the assets and the files under `root`, here lib/<abi>.
     // The library stays uncompressed, so that Android maps it from the APK. aapt's default
@@ -388,6 +411,19 @@ mod tests {
         assert_eq!(package_name("dev.hxn.my-game"), "dev.hxn.my_game");
         assert_eq!(package_name("dev.hxn.2d"), "dev.hxn.a2d");
         assert_eq!(package_name("my-game"), "dev.hxn.my_game");
+    }
+
+    #[test]
+    fn the_manifest_asks_for_each_permission() {
+        let text = manifest(
+            "dev.hxn.game",
+            "game",
+            36,
+            &["INTERNET".into(), "com.example.READ".into()],
+        );
+        assert!(text.contains(r#"<uses-permission android:name="android.permission.INTERNET"/>"#));
+        assert!(text.contains(r#"<uses-permission android:name="com.example.READ"/>"#));
+        assert!(!manifest("dev.hxn.game", "game", 36, &[]).contains("uses-permission"));
     }
 
     #[test]
