@@ -15,7 +15,7 @@ haxe -lib hxn-window -main Main -cpp out        # hxcpp
 
 The haxelib carries prebuilt native libraries for Linux x86-64 and ARM64,
 macOS arm64 and Windows x86-64, and static libraries for Intel macOS (hxcpp
-only), iOS, the iOS simulator and Android arm64; a program needs no Rust. For HashLink the `.hdll` is copied
+only), iOS, the iOS simulator and Android arm64 and x86-64; a program needs no Rust. For HashLink the `.hdll` is copied
 beside the `.hl` output. On Linux, hxcpp links libudev for gamepads, so
 install `libudev-dev`. Browser builds support threaded Ash wasm and hxcpp/Emscripten with or without threads. A
 `haxelib git` install has no native libraries until a release ZIP's
@@ -60,7 +60,10 @@ window.close();
   (`setCursorIcon`, `setCursorGrab`, `setCursorImage`), IME, monitors
   (`primaryMonitor`, `monitor(i)`) and the clipboard (`Window.clipboardText`).
 - `Gamepad` is static: `Gamepad.count()`, `Gamepad.at(i)`, `Gamepad.poll()`
-  for events; each pad has `button`, `axis`, `pressed` and `rumble`.
+  for events; each pad has `button`, `axis`, `pressed` and `rumble`, and
+  `vendorId()` and `productId()`, the USB ids (-1 where the platform does
+  not report them). Tell the controller family from the vendor id, not from
+  `name()`.
 
 ## Rules
 

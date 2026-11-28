@@ -46,13 +46,13 @@ Set `HXN_VERSION` to select a release tag or `HXN_INSTALL_DIR` to choose
 another directory, for example:
 
 ```sh
-curl -fsSL https://hxn.dev/install.sh | HXN_VERSION=v0.3.11 HXN_INSTALL_DIR="$HOME/.local/bin" bash
+curl -fsSL https://hxn.dev/install.sh | HXN_VERSION=v0.3.12 HXN_INSTALL_DIR="$HOME/.local/bin" bash
 ```
 
 To build the command from source, use Cargo:
 
 ```
-cargo install --git https://github.com/hx-n/hxn --tag v0.3.11 hxn-cli
+cargo install --git https://github.com/hx-n/hxn --tag v0.3.12 hxn-cli
 ```
 
 Create a library with `hxn new`:

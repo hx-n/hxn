@@ -45,8 +45,8 @@ Instance.create().requestAdapter().then(adapter -> adapter.requestDevice().then(
 	var layouts = hxn.gpu.webgpu.Shaders.bindGroupLayouts(device, Tinted.LAYOUT);
 	var layout = device.createPipelineLayout(layouts);
 	var pipeline = device.createRenderPipeline(module, "vertex_main", "fragment_main", layout,
-		Format.Rgba8Unorm, Topology.TriangleStrip, 8,
-		[{location: Tinted.INPUT_position, format: VertexFormat.Float32x2, offset: 0}], []);
+		Format.Rgba8Unorm, Topology.TriangleStrip, [{stride: 8, perInstance: false}],
+		[{location: Tinted.INPUT_position, format: VertexFormat.Float32x2, offset: 0, buffer: 0}], [], blend);
 	var target = device.createTexture(w, h, Format.Rgba8Unorm, TextureUsage.RenderAttachment | TextureUsage.CopySrc);
 	var uniforms = device.createBufferWith(params, BufferUsage.Uniform);   // padded to 4 bytes
 	var entries = BindGroupEntries.create();
@@ -54,10 +54,10 @@ Instance.create().requestAdapter().then(adapter -> adapter.requestDevice().then(
 	var group = device.createBindGroup(layouts, Tinted.PARAMS_GROUP, entries);
 
 	var encoder = device.createCommandEncoder();
-	var pass = encoder.beginRenderPass(target, 0, 0, 0, 1);               // cleared first
+	var pass = encoder.beginRenderPass(target, false, 0, 0, 0, 1);        // cleared first
 	pass.setPipeline(pipeline);
 	pass.setBindGroup(Tinted.PARAMS_GROUP, group);
-	pass.setVertexBuffer(0, vertices);                                      // BufferUsage.Vertex
+	pass.setVertexBuffer(0, vertices, 0);                                   // BufferUsage.Vertex
 	pass.draw(4, 1, 0, 0);
 	pass.end();
 	encoder.copyTextureToBuffer(target, readback, 256);                     // rows 256 bytes apart
@@ -76,8 +76,33 @@ event loop, so read a frame back before then.
 Compute: `createComputePipeline(module, "compute_main", layout, constants)`,
 `encoder.beginComputePass()`, `setPipeline`, `setBindGroup`,
 `dispatch(x, y, z)`, `end()`. Textures: `device.writeTexture(texture, bytes,
-bytesPerRow)`, `device.createSampler(Filter.Linear, AddressMode.ClampToEdge)`,
+bytesPerRow)`, or `device.writeTextureRegion(texture, x, y, width, height, bytes,
+bytesPerRow)` for part of one, `device.createSampler(Filter.Linear, AddressMode.ClampToEdge)`,
 `entries.texture(binding, t)`, `entries.sampler(binding + 1, s)`.
+
+Vertex buffers: `createRenderPipeline` takes one `VertexBuffer` record per buffer,
+`{stride, perInstance}`, and each attribute's `buffer` is the index of the buffer it
+reads. `pass.setVertexBuffer(slot, buffer, offset)` starts `offset` bytes in, so one
+buffer can hold several batches of instances. `beginRenderPass(target, true, ...)`
+keeps what the target holds (`loadOp: "load"`) and ignores the color.
+`pass.setViewport(x, y, width, height)` and `pass.setScissorRect(x, y, width,
+height)` take pixels from the target's top-left corner. Several targets and depth: `createRenderPipelineWith(module, vertexEntry, fragmentEntry,
+layout, targets, hasDepth, depthFormat, compare, write, topology, buffers, attributes,
+constants)` takes `ColorTarget` records and compare codes 0 `"never"` to 7 `"always"`;
+`RenderTargets.create()` with `color(texture, keep, r, g, b, a)` and
+`depth(texture, keep, clear)` feeds `encoder.beginRenderPassWith(targets)`.
+
+## Blending
+
+`device.createRenderPipeline` takes a `Blend` record last, which becomes the
+color target's `GPUBlendState`: `enabled`, then the operation and the source
+and destination factors of the color and of the alpha. The factors are hxn-gpu's shared codes: 0 `Zero`, 1 `One`, 2 `Src`,
+3 `OneMinusSrc`, 4 `SrcAlpha`, 5 `OneMinusSrcAlpha`, 6 `Dst`, 7 `OneMinusDst`,
+8 `DstAlpha`, 9 `OneMinusDstAlpha` and 10 `SrcAlphaSaturated`. The operations
+are 0 `Add`, 1 `Subtract`, 2 `ReverseSubtract`, 3 `Min` and 4 `Max`. Straight
+alpha is `{enabled: true, colorOperation: 0, colorSource: 4, colorDestination: 5,
+alphaOperation: 0, alphaSource: 1, alphaDestination: 5}`, and `enabled: false`
+writes the color as it is.
 
 ## Rules
 

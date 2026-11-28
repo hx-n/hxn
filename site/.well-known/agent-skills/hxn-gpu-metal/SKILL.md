@@ -49,11 +49,26 @@ where `slot` finds the entry point in `MSL_SLOTS` by its WGSL name and returns
 `Lambda.find(entry.resources, r -> r.group == group && r.binding == binding).index`.
 
 Render: `device.newTexture({width, height, format: PixelFormat.Rgba8Unorm, usage: TextureUsage.RenderTarget | TextureUsage.ShaderRead, storage: StorageMode.Shared})`,
-`device.newRenderPipeline(vertexFn, fragmentFn, format, attributes, layouts)`,
+`device.newRenderPipeline(vertexFn, fragmentFn, format, attributes, layouts, blend)`,
+where `blend` is a `Blend` record: `enabled`, then the operation and source
+and destination factors of the color and of the alpha, as Metal's
+`MTLBlendOperation` (0 `Add` to 4 `Max`) and `MTLBlendFactor` (0 `Zero` to
+10 `SourceAlphaSaturated`) values. Straight alpha is `{enabled: true,
+colorOperation: 0, colorSource: 4, colorDestination: 5, alphaOperation: 0,
+alphaSource: 1, alphaDestination: 5}`;
 then `commands.renderEncoder(target, LoadAction.Clear, r, g, b, a)`,
 `setPipeline`, `setVertexBuffer`, `setFragmentBytes`/`setFragmentBuffer`,
 `setFragmentTexture`, `setFragmentSampler`, `draw(Primitive.TriangleStrip, 0, 4, 1)`, `end()`.
-`texture.read(bytesPerRow)` reads a shared texture back.
+`texture.read(bytesPerRow)` reads a shared texture back, and
+`texture.writeRegion(x, y, w, h, bytes, bytesPerRow)` writes part of one.
+`LoadAction.Load` keeps what the target holds. `setViewport(x, y, w, h)` and
+`setScissor(x, y, w, h)` take pixels from the target's top-left corner.
+Several targets and depth: `device.newRenderPipelineWith(vertex, fragment, targets,
+hasDepth, depthFormat, attributes, layouts)` takes `ColorTarget` records (a format and the
+`Blend` fields), `device.newDepthState(compare, write)` makes a depth test (codes 0 `Never`
+to 7 `Always`) that `encoder.setDepthState` applies, and `RenderTargets.create()` with
+`color(texture, load, r, g, b, a)` and `depth(texture, load, clear)` feeds
+`commands.renderEncoderWith(targets)`. Depth textures use private storage.
 
 ## Rules
 
@@ -86,7 +101,7 @@ then `commands.renderEncoder(target, LoadAction.Clear, r, g, b, a)`,
 `Layer.attach(device, window.raw(0), PixelFormat.Bgra8Unorm)` with an
 hxn-window `Window` on macOS (AppKit) or iOS (UIKit), on the main thread.
 Each frame: `layer.nextDrawable()`, render to `drawable.texture()`,
-`commands.present(drawable)`, `commit()`. `setDrawableSize` on resize.
+`commands.present(drawable)`, `commit()`. `setDrawableSize` on resize, and `setDisplaySync(vsync)` on macOS.
 
 ## Reference
 

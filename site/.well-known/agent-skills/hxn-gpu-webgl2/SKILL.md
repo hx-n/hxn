@@ -83,12 +83,35 @@ var uniforms = context.createBufferWith(BufferTarget.Uniform, params, Usage.Stat
 context.bindUniformBuffer(bindings.uniformBlock(Tinted.PARAMS_GROUP, Tinted.PARAMS_BINDING), uniforms);
 ```
 
+## Blending
+
+`context.setBlend(blend)` sets how the draws after it blend into the target,
+with `blendEquationSeparate` and `blendFuncSeparate`. The `Blend` record has
+`enabled`, then the operation and the source and destination factors of the
+color and of the alpha. The factors are hxn-gpu's shared codes: 0 `Zero`, 1 `One`, 2 `Src`,
+3 `OneMinusSrc`, 4 `SrcAlpha`, 5 `OneMinusSrcAlpha`, 6 `Dst`, 7 `OneMinusDst`,
+8 `DstAlpha`, 9 `OneMinusDstAlpha` and 10 `SrcAlphaSaturated`. The operations
+are 0 `Add`, 1 `Subtract`, 2 `ReverseSubtract`, 3 `Min` and 4 `Max`. Straight
+alpha is `{enabled: true, colorOperation: 0, colorSource: 4, colorDestination: 5,
+alphaOperation: 0, alphaSource: 1, alphaDestination: 5}`, and `enabled: false`
+writes the color as it is.
+
 ## Rules
 
 - Claim the canvas before drawing on it: `context.claimCanvas().then(...)`,
   which fails when another browser agent holds it. Each frame, draw into the
   default framebuffer and call `context.present()`. Call `readPixels` on the
   canvas before `present` and before returning to the browser.
+- hxnsl's GLSL flips clip space, so a frame drawn into a texture shows upright
+  through `context.blitFlipped(framebuffer, w, h)`, which copies it into the
+  canvas with its rows reversed. Scissor with `context.scissorTest(true)` and
+  `context.scissor(x, y, w, h)`; turn the test off before clearing or copying a
+  whole target.
+- Several targets and depth: `context.attach(framebuffer, texture)` adds the next color
+  attachment, or the depth attachment for a `Depth32f` texture, and sets the draw buffers;
+  `context.clearColorBuffer(index, r, g, b, a)`, `context.clearDepthBuffer(value)` and
+  `context.setDepth(enabled, compare, write)` (codes 0 `Never` to 7 `Always`). One blend
+  state applies to every draw buffer.
 - Draws and copies run in the order they are made. Wait only to read on the
   CPU: `completed()` (an `hxn.Future`, settled once the GPU has finished every
   command issued before the call) or `finish()`. In a threaded build `await`

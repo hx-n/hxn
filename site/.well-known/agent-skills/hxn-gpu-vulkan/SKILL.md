@@ -18,7 +18,7 @@ Prebuilt for Linux x86-64 and ARM64, Windows x86-64 and Apple-silicon macOS
 (HashLink and hxcpp), Intel Macs and Android (hxcpp). A program needs a
 Vulkan driver and loader: on Linux `libvulkan1 mesa-vulkan-drivers`, on macOS
 MoltenVK (set `DYLD_FALLBACK_LIBRARY_PATH=/usr/local/lib` if the loader is
-not found).
+not found). On Ash, it needs Ash 0.1.22 or later.
 
 ## Use
 
@@ -64,13 +64,36 @@ commands.copyImageToBuffer(target, readback);
 commands.bufferBarrier(readback, Stage.Transfer, Access.TransferWrite, Stage.Host, Access.HostRead);
 ```
 
+Inside a rendering, `setViewport(x, y, w, h)` and `setScissor(x, y, w, h)` take
+pixels from the image's top-left corner, and `LoadOp.Load` keeps what the image
+holds. `copyBufferToImage(buffer, image, x, y, w, h, rowLength)` writes part of an
+image in `Layout.TransferDst`, from rows `rowLength` pixels apart, or packed with 0.
+Several targets and depth: `device.createGraphicsPipelineWith(..., targets, hasDepth,
+depthFormat, compare, write, topology, bindings, attributes)` takes `ColorTarget` records
+and compare codes 0 `Never` to 7 `Always`. `Attachments.create()` with
+`color(image, load, r, g, b, a)` and `depth(image, load, clear)` feeds
+`commands.beginRenderingWith(attachments)`; a depth image is in `Layout.DepthAttachment`.
+
 ## Windows
 
 `instance.createSurface(window.platform(), window.raw(0), window.raw(1), window.raw(2), window.raw(3))`
-with an hxn-window window, then `device.createSwapchain(surface, w, h, Format.Bgra8Unorm, vsync)`.
+with an hxn-window window, then `device.createSwapchain(surface, w, h, device.surfaceFormat(surface), vsync)`.
+`surfaceFormat` returns BGRA8 or RGBA8, whichever the surface offers. Android offers RGBA only.
 Each frame: `var image = swapchain.acquire()`, render into it, barrier it to
 `Layout.Present`, submit, then `if (!swapchain.present()) swapchain.resize(w, h)`.
 The images take the window's size in pixels: read `swapchain.width()`.
+
+## Blending
+
+`device.createGraphicsPipeline` takes a `Blend` record last: `enabled`, then
+the operation and the source and destination factors of the color and of the
+alpha. The factors are hxn-gpu's shared codes: 0 `Zero`, 1 `One`, 2 `Src`,
+3 `OneMinusSrc`, 4 `SrcAlpha`, 5 `OneMinusSrcAlpha`, 6 `Dst`, 7 `OneMinusDst`,
+8 `DstAlpha`, 9 `OneMinusDstAlpha` and 10 `SrcAlphaSaturated`. The operations
+are 0 `Add`, 1 `Subtract`, 2 `ReverseSubtract`, 3 `Min` and 4 `Max`. Straight
+alpha is `{enabled: true, colorOperation: 0, colorSource: 4, colorDestination: 5,
+alphaOperation: 0, alphaSource: 1, alphaDestination: 5}`, and `enabled: false`
+writes the color as it is.
 
 ## Rules
 

@@ -30,7 +30,10 @@ PowerShell. Both verify release checksums and accept `HXN_VERSION` and
    file for distribution: Ash builds it ahead of time into a native
    executable (`--ash "<command>"` or `HXN_ASH` gives Ash's command and
    options). `hxn package hl app.hxml [--target <desktop triple>] --out dist`
-   copies it with every file it loads into a directory to ship.
+   copies it with every file it loads into a directory to ship. With
+   `--target aarch64-linux-android` and the hxn-window host, `hxn build`
+   writes an APK, and `-D hxn_android_permissions=INTERNET` lists the
+   permissions that it asks for.
 4. `hxn check` runs the program on HashLink and hxcpp, or on the runtimes
    named (`hxn check hl --vm ash`, `hxn check cpp cppia`), and passes only
    when every run passes and prints the same output. This is the test for a
