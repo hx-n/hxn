@@ -130,7 +130,21 @@ program, and hxn adds the defines by which it selects that file:
   identity, which the simulator accepts. `-D hxn_bundle_id=<id>` sets its
   bundle identifier, which is `dev.hxn.<file name>` by default. hxn prints
   the commands that install and start it in the booted simulator.
-  The executable and the files beside it are the program you distribute.
+- For an Android target, a program whose archives define `android_main`, as
+  the hxn-window host does, is an app. Ash builds it into `libmain.so`, the
+  library that Android's native activity loads, for API level 26 or the
+  level in `ASH_ANDROID_API`. hxn writes `<name>.apk` with the library, a
+  full-screen `NativeActivity` manifest, and the files next to the program
+  as assets. The window host copies the assets into the app's data directory
+  and runs the program there, so it reads them by the same relative paths.
+  hxn signs the APK with the debug key, `~/.android/debug.keystore`. If the
+  key is missing, hxn creates it with `keytool`. The bundle identifier
+  becomes the package name. Each character that Java does not allow becomes
+  `_`. If the identifier has no `.`, the package name starts with `dev.hxn.`. hxn takes `aapt`, `zipalign`, `apksigner` and the newest
+  platform from the Android SDK under `ANDROID_HOME`. It prints the commands
+  that install and start the app and show its output. A program without
+  `android_main` is an executable that runs under `adb shell`.
+  The executable and the files colocated with it are the program you distribute.
   For `cpp` it is hxcpp's executable, and with `--wasm` the wasm program.
 - `hxn package <hl|cpp|cppia> <file.hxml>` builds the program the same way
   and copies it into one directory, an app package. The package holds the

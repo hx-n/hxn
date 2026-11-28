@@ -5,6 +5,7 @@
 //! under cargo's target directory, builds the adapter, and can compile and
 //! run a Haxe program against the result.
 
+mod android;
 mod doctor;
 mod hxml;
 mod import;
@@ -834,7 +835,9 @@ fn ash_wasm(
 // `check` run the bytecode in the VM. `build` has Ash build the program
 // ahead of time into the executable that `output` describes, with each
 // archive in `archives` linked into it, and returns the command that runs
-// it. For iOS, it also writes the app bundle.
+// it. For iOS, it also writes the app bundle. For Android, when an archive defines
+// the window host's `android_main`, it builds the shared library and writes the APK
+// instead, and returns the command that starts the installed app.
 fn desktop(
     arguments: &Arguments,
     target: Target,
@@ -849,7 +852,16 @@ fn desktop(
     }
     let ash = ash_command(arguments);
     let (ash, options) = words(&ash)?;
-    let executable = dir.join(if target.windows() {
+    // A program for Android with a window host is an app: Ash builds the shared library
+    // that the APK's native activity loads.
+    let android = target.cross.filter(|triple| triple.contains("android"));
+    let app = match android {
+        Some(_) => android::has_activity(archives)?,
+        None => false,
+    };
+    let executable = dir.join(if app {
+        String::from("libmain.so")
+    } else if target.windows() {
         format!("{name}.exe")
     } else {
         name.to_owned()
@@ -858,6 +870,9 @@ fn desktop(
     build.args(&options);
     ash_options(&mut build, &options, contributed);
     build.arg("--build").arg(&executable);
+    if app && std::env::var_os("ASH_ANDROID_API").is_none() {
+        build.env("ASH_ANDROID_API", android::MIN_API.to_string());
+    }
     if let Some(triple) = target.cross {
         build.args(["--target", triple]);
     }
@@ -879,6 +894,20 @@ fn desktop(
         );
     }
     make::run(build.arg(program))?;
+    if let (true, Some(triple)) = (app, android) {
+        let files = app_files(dir)?;
+        let package = android::package_name(bundle);
+        let apk = android::apk(dir, &executable, &files, name, &package, triple)?;
+        let activity = format!("{package}/android.app.NativeActivity");
+        println!(
+            "The app for Android is {}. To run it on the connected device or emulator:\n  adb install -r {}\n  adb shell am start -n {activity}\nIts output goes to the device log:\n  adb logcat -s RustStdoutStderr",
+            apk.display(),
+            apk.display()
+        );
+        let mut command = Command::new("adb");
+        command.args(["shell", "am", "start", "-W", "-n", &activity]);
+        return Ok(command.into());
+    }
     if target
         .cross
         .is_some_and(|triple| triple.contains("apple-ios"))
@@ -909,22 +938,8 @@ fn app_bundle(executable: &Path, id: &str) -> Result<PathBuf, String> {
         std::fs::remove_dir_all(&app).map_err(|error| format!("{}: {error}", app.display()))?;
     }
     std::fs::create_dir_all(&app).map_err(|error| format!("{}: {error}", app.display()))?;
-    for entry in std::fs::read_dir(dir).map_err(|error| format!("{}: {error}", dir.display()))? {
-        let path = entry
-            .map_err(|error| format!("{}: {error}", dir.display()))?
-            .path();
-        let file = path
-            .file_name()
-            .map(|file| file.to_string_lossy().into_owned())
-            .unwrap_or_default();
-        // The build's inputs and objects stay out of the app.
-        let input = [".a", ".hl", ".xml", ".o", ".app", ".txt"]
-            .iter()
-            .any(|ending| file.ends_with(ending));
-        if path == app || input {
-            continue;
-        }
-        copy_tree(&path, &app.join(&file))?;
+    for file in app_files(dir)? {
+        copy_tree(&dir.join(&file), &app.join(&file))?;
     }
     let plist = format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -968,6 +983,32 @@ fn app_bundle(executable: &Path, id: &str) -> Result<PathBuf, String> {
         ));
     }
     Ok(app)
+}
+
+// The files and directories in `dir` that an app carries: the executable and the files
+// that the program reads. The build's inputs and objects, and the apps written from
+// them, stay out.
+fn app_files(dir: &Path) -> Result<Vec<PathBuf>, String> {
+    let mut files = Vec::new();
+    for entry in std::fs::read_dir(dir).map_err(|error| format!("{}: {error}", dir.display()))? {
+        let path = entry
+            .map_err(|error| format!("{}: {error}", dir.display()))?
+            .path();
+        let file = path
+            .file_name()
+            .map(|file| file.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let built = [
+            ".a", ".hl", ".xml", ".o", ".app", ".txt", ".so", ".apk", ".idsig", ".stage",
+        ]
+        .iter()
+        .any(|ending| file.ends_with(ending));
+        if !built {
+            files.push(PathBuf::from(file));
+        }
+    }
+    files.sort();
+    Ok(files)
 }
 
 // Copies the file or directory `from` to `to`.
