@@ -6,6 +6,11 @@
 one. With a program file it [packages an app](#packaging-an-app) instead. Use `--release --out <directory>` to create the distributable haxelib.
 Haxe programs use it with `-lib <library>` and need no Rust source.
 
+`--release` builds each binding with fat link-time optimization and one codegen
+unit. A static library then holds only the code that its exported functions
+reach, instead of every object of its dependencies and of Rust's standard
+library.
+
 ## Library repository layout
 
 A library for Haxe consumers keeps its generated `binding/`, `include/`,

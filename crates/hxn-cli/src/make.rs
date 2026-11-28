@@ -522,6 +522,10 @@ fn manifest(project: &Project, target: Target, later: bool) -> String {
         ));
     }
     out.push_str("\n[workspace]\n");
+    // A static library holds every object of its dependencies and of std, and
+    // only the program's linker drops what nothing calls. With fat LTO and one
+    // codegen unit, rustc drops it before it writes the archive.
+    out.push_str("\n[profile.release]\nlto = \"fat\"\ncodegen-units = 1\n");
     out
 }
 
